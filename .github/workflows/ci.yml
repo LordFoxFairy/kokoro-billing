@@ -53,7 +53,7 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts --no-optional
+        run: pnpm install --frozen-lockfile
 
       - name: Apply PostgreSQL migrations
         run: pnpm db:migrate
