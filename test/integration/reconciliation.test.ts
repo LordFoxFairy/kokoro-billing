@@ -1,0 +1,103 @@
+import { randomUUID } from 'node:crypto';
+import { describe, expect, it } from 'vitest';
+import { createBillingConnection } from '../../src/infrastructure/postgres/connection.js';
+import { AdminGrantService } from '../../src/modules/credit/admin-grant-service.js';
+import { ReconciliationService } from '../../src/modules/reconcile/reconciliation-service.js';
+import { BillingSettlementService } from '../../src/modules/payment/billing-settlement-service.js';
+
+const databaseUrl = process.env.DATABASE_URL;
+const integration = describe.skipIf(!databaseUrl);
+
+integration('billing reconciliation', () => {
+  it('detects projection drift against grant and journal facts', async () => {
+    const connection = await createBillingConnection(databaseUrl!);
+    const siteId = randomUUID();
+    const accountId = randomUUID();
+    try {
+      await new AdminGrantService(connection).grant({ siteId, subjectId: randomUUID(), accountId, amountMicros: 10, programKey: 'reconcile', operatorId: 'operator-1', reason: 'test', idempotencyKey: `reconcile-${randomUUID()}` });
+      const service = new ReconciliationService(connection);
+      expect((await service.run(siteId)).status).toBe('ok');
+      await connection.execute('UPDATE entitlement_credit_account SET available_micros = available_micros + 1 WHERE credit_account_id = $1', [accountId]);
+      const report = await service.run(siteId);
+      expect(report.status).toBe('drift');
+      expect(report.accountDrifts).toHaveLength(1);
+    } finally {
+      await connection.end();
+    }
+  });
+
+  it('detects held projection drift against active holds and allocations', async () => {
+    const connection = await createBillingConnection(databaseUrl!);
+    const siteId = randomUUID();
+    const accountId = randomUUID();
+    const holdId = randomUUID();
+    try {
+      await connection.execute(
+        `INSERT INTO entitlement_credit_account (credit_account_id, tenant_id, subject_id, available_micros, held_micros) VALUES ($1, $2, $3, 0, 10)`,
+        [accountId, siteId, `subject-${accountId}`],
+      );
+      await connection.execute(
+        `INSERT INTO entitlement_credit_hold (credit_hold_id, tenant_id, credit_account_id, idempotency_key, requested_micros, expires_at) VALUES ($1, $2, $3, $4, 10, CURRENT_TIMESTAMP(6) + INTERVAL '5 minutes')`,
+        [holdId, siteId, accountId, `reconcile-hold-${holdId}`],
+      );
+      const report = await new ReconciliationService(connection).run(siteId);
+      expect(report.status).toBe('drift');
+      expect(report.accountDrifts[0]).toMatchObject({ heldMicros: '10', activeHoldMicros: '10', activeAllocationMicros: '0' });
+    } finally {
+      await connection.execute('DELETE FROM entitlement_credit_hold WHERE credit_hold_id = $1', [holdId]);
+      await connection.execute('DELETE FROM entitlement_credit_account WHERE credit_account_id = $1', [accountId]);
+      await connection.end();
+    }
+  });
+
+  it('detects payment fulfillment gaps and failed provider events', async () => {
+    const connection = await createBillingConnection(databaseUrl!);
+    const siteId = randomUUID();
+    const settlementId = randomUUID();
+    const providerEventId = randomUUID();
+    try {
+      await connection.execute(
+        `INSERT INTO payment_settlement (settlement_id, tenant_id, external_payment_ref, amount_minor, currency, status)
+         VALUES ($1, $2, $3, 100, 'USD', 'succeeded')`,
+        [settlementId, siteId, `reconcile-payment-${settlementId}`],
+      );
+      await connection.execute(
+        `INSERT INTO payment_provider_event
+          (provider_event_id, tenant_id, provider, external_event_id, event_type, payload_json, payload_hash, signature_valid, processing_status, processing_attempts, last_error)
+         VALUES ($1, $2, 'mock', $3, 'payment.succeeded', '{}', REPEAT('a', 64), true, 'failed', 2, 'temporary')`,
+        [providerEventId, siteId, `evt-${providerEventId}`],
+      );
+      const report = await new ReconciliationService(connection).run(siteId);
+      expect(report.status).toBe('drift');
+      expect(report.settlementDrifts).toHaveLength(1);
+      expect(report.providerEventDrifts).toHaveLength(1);
+    } finally {
+      await connection.execute('DELETE FROM payment_provider_event WHERE provider_event_id = $1', [providerEventId]);
+      await connection.execute('DELETE FROM payment_settlement WHERE settlement_id = $1', [settlementId]);
+      await connection.end();
+    }
+  });
+
+  it('detects a succeeded reversal without a committed fulfillment reversal', async () => {
+    const connection = await createBillingConnection(databaseUrl!);
+    const service = new BillingSettlementService(connection);
+    const siteId = randomUUID();
+    const settlementId = randomUUID();
+    const reversalId = randomUUID();
+    const accountId = randomUUID();
+    try {
+      await service.recordSettlement({ settlementId, siteId, externalPaymentRef: `reconcile-reversal-${settlementId}`, amountMinor: 100, currency: 'USD' });
+      await service.fulfillSettlement({ settlementId, siteId, accountId, subjectId: `subject-${accountId}`, programKey: 'reconcile', grantMicros: 10 });
+      await connection.execute(
+        `INSERT INTO payment_reversal (reversal_id, tenant_id, settlement_id, external_reversal_ref, amount_minor, reason, status)
+         VALUES ($1, $2, $3, $4, 100, 'customer_request', 'succeeded')`,
+        [reversalId, siteId, settlementId, `refund-${reversalId}`],
+      );
+      const report = await new ReconciliationService(connection).run(siteId);
+      expect(report.reversalDrifts).toHaveLength(1);
+      expect(report.reversalDrifts[0]).toMatchObject({ reversalId, fulfillmentReversalId: null });
+    } finally {
+      await connection.end();
+    }
+  });
+});

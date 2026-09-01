@@ -1,0 +1,65 @@
+name: Billing CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: kokoro_billing
+          POSTGRES_USER: kokoro_app
+          POSTGRES_PASSWORD: example-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U kokoro_app -d kokoro_billing"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=20
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=20
+    env:
+      DATABASE_URL: postgresql://kokoro_app:example-password@127.0.0.1:5432/kokoro_billing
+      REDIS_URL: redis://127.0.0.1:6379
+      REDIS_TEST_URL: redis://127.0.0.1:6379
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.2.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts --no-optional
+
+      - name: Apply PostgreSQL migrations
+        run: pnpm db:migrate
+
+      - name: Verify repository
+        run: pnpm verify
+
+      - name: Build production image
+        run: docker build --tag kokoro-billing:ci .
