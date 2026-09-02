@@ -1,16 +1,11 @@
 import { z } from 'zod';
-import { WebhookError, type ParsedSubscriptionEvent, type SubscriptionStatus } from '../provider-types.js';
+import { type ParsedSubscriptionEvent, type SubscriptionStatus } from '../provider-types.js';
 
-export const webhookMetadataSchema = z.object({ tenantId: z.string().min(1).optional(), siteId: z.string().min(1).optional(), orderId: z.string().min(1).optional(), checkoutId: z.string().min(1).optional(), teamId: z.string().min(1).optional(), planId: z.string().min(1).optional() }).passthrough();
+export const webhookMetadataSchema = z.object({ tenantId: z.string().min(1).optional(), orderId: z.string().min(1).optional(), checkoutId: z.string().min(1).optional(), teamId: z.string().min(1).optional(), planId: z.string().min(1).optional() }).passthrough();
 
-/** Canonical provider metadata is tenantId; siteId is a legacy consistency hint and never a tenant source. */
 export const providerPayloadTenantId = (metadata: z.infer<typeof webhookMetadataSchema>): string | null => {
-  if (metadata.tenantId !== undefined && metadata.siteId !== undefined && metadata.tenantId !== metadata.siteId) {
-    throw new WebhookError('payment.webhook_payload_invalid', 'tenantId and legacy siteId metadata disagree', 400);
-  }
   return metadata.tenantId ?? null;
 };
-export const providerPayloadSiteId = (metadata: z.infer<typeof webhookMetadataSchema>): string | null => metadata.siteId ?? null;
 export function unixSecondsToDate(value: unknown): Date | null {
   const seconds = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
   return Number.isFinite(seconds) && seconds > 0 ? new Date(seconds * 1000) : null;

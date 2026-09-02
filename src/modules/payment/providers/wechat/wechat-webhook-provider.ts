@@ -3,7 +3,7 @@ import type { IncomingHttpHeaders } from "node:http";
 import { z } from "zod";
 import type { ParsedWebhookEvent, PaymentWebhookProvider } from "../../provider-types.js";
 import { PAYMENT_WEBHOOK_EVENT, WebhookError } from "../../provider-types.js";
-import { minorAmount, providerPayloadSiteId, providerPayloadTenantId, webhookMetadataSchema } from "../normalize.js";
+import { minorAmount, providerPayloadTenantId, webhookMetadataSchema } from "../normalize.js";
 
 export const WECHAT_TIMESTAMP_HEADER = "wechatpay-timestamp";
 export const WECHAT_NONCE_HEADER = "wechatpay-nonce";
@@ -109,13 +109,13 @@ export class WechatWebhookProvider implements PaymentWebhookProvider {
     const orderId = metadata.orderId ?? metadata.checkoutId ?? resource?.out_trade_no ?? null;
 
     if (event_type === "TRANSACTION.SUCCESS") {
-      return { eventId: id, eventType: PAYMENT_WEBHOOK_EVENT.paymentSucceeded, payloadTenantId: providerPayloadTenantId(metadata), payloadSiteId: providerPayloadSiteId(metadata), providerAccountRef: typeof resource?.mchid === 'string' ? resource.mchid : null, externalPaymentRef: typeof resource?.transaction_id === 'string' ? resource.transaction_id : id, externalReversalRef: null, refundAmountMinor: null, orderId, subscription: null };
+      return { eventId: id, eventType: PAYMENT_WEBHOOK_EVENT.paymentSucceeded, payloadTenantId: providerPayloadTenantId(metadata), providerAccountRef: typeof resource?.mchid === 'string' ? resource.mchid : null, externalPaymentRef: typeof resource?.transaction_id === 'string' ? resource.transaction_id : id, externalReversalRef: null, refundAmountMinor: null, orderId, subscription: null };
     }
     if (event_type === "REFUND.SUCCESS") {
       const amount = resource?.amount as { refund?: unknown } | undefined;
-      return { eventId: id, eventType: PAYMENT_WEBHOOK_EVENT.refundSucceeded, payloadTenantId: providerPayloadTenantId(metadata), payloadSiteId: providerPayloadSiteId(metadata), providerAccountRef: typeof resource?.mchid === 'string' ? resource.mchid : null, externalPaymentRef: null, externalReversalRef: typeof resource?.refund_id === 'string' ? resource.refund_id : id, refundAmountMinor: minorAmount(amount?.refund), orderId, subscription: null };
+      return { eventId: id, eventType: PAYMENT_WEBHOOK_EVENT.refundSucceeded, payloadTenantId: providerPayloadTenantId(metadata), providerAccountRef: typeof resource?.mchid === 'string' ? resource.mchid : null, externalPaymentRef: null, externalReversalRef: typeof resource?.refund_id === 'string' ? resource.refund_id : id, refundAmountMinor: minorAmount(amount?.refund), orderId, subscription: null };
     }
-    return { eventId: id, eventType: event_type, payloadTenantId: providerPayloadTenantId(metadata), payloadSiteId: providerPayloadSiteId(metadata), providerAccountRef: null, externalPaymentRef: null, externalReversalRef: null, refundAmountMinor: null, orderId: null, subscription: null };
+    return { eventId: id, eventType: event_type, payloadTenantId: providerPayloadTenantId(metadata), providerAccountRef: null, externalPaymentRef: null, externalReversalRef: null, refundAmountMinor: null, orderId: null, subscription: null };
   }
 }
 

@@ -21,8 +21,6 @@ export type ParsedWebhookEvent = {
   readonly eventType: string;
   /** Canonical provider metadata is tenantId; neither payload field is allowed to select the tenant. */
   readonly payloadTenantId: string | null;
-  /** Historical siteId metadata, retained only for consistency validation against provider-account authority. */
-  readonly payloadSiteId: string | null;
   readonly providerAccountRef: string | null;
   readonly externalPaymentRef: string | null;
   readonly externalReversalRef: string | null;

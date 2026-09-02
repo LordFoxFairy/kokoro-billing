@@ -33,32 +33,18 @@ describe('payment provider registry', () => {
       payloadTenantId: 'tenant-1',
       externalPaymentRef: 'pi-1',
     });
-    expect(new StripeWebhookProvider().parseEvent({ id: 'evt-payment-intent-1', type: 'payment_intent.succeeded', data: { object: { id: 'pi-1', metadata: { checkoutId: 'checkout-stripe-1', siteId: 'site-1' } } } })).toMatchObject({ eventType: 'payment_intent.succeeded', orderId: null, payloadTenantId: null, payloadSiteId: 'site-1', externalPaymentRef: null });
-  });
-
-  it('rejects conflicting canonical and legacy tenant metadata', () => {
-    const registry = createProviderRegistry(['stripe']);
-    try {
-      parseProviderWebhook(registry, 'stripe', {
-        id: 'evt-conflicting-tenant',
-        type: 'checkout.session.completed',
-        data: { object: { id: 'cs-1', metadata: { tenantId: 'tenant-1', siteId: 'tenant-2', orderId: 'checkout-1' } } },
-      });
-      throw new Error('expected conflicting tenant metadata to fail');
-    } catch (error) {
-      expect(error).toMatchObject({ code: 'payment.webhook_payload_invalid', statusCode: 400 });
-    }
+    expect(new StripeWebhookProvider().parseEvent({ id: 'evt-payment-intent-1', type: 'payment_intent.succeeded', data: { object: { id: 'pi-1', metadata: { checkoutId: 'checkout-stripe-1' } } } })).toMatchObject({ eventType: 'payment_intent.succeeded', orderId: null, payloadTenantId: null, externalPaymentRef: null });
   });
 
   it('uses the latest Stripe refund fact instead of cumulative charge.amount_refunded', () => {
     const provider = new StripeWebhookProvider();
-    expect(provider.parseEvent({ id: 'evt-refund', type: 'charge.refunded', account: 'acct-1', data: { object: { id: 'ch-1', amount_refunded: 1500, refunds: { data: [{ id: 're-2', amount: 500 }] }, metadata: { siteId: 'site-1', checkoutId: 'checkout-1' } } } })).toMatchObject({ externalReversalRef: 're-2', refundAmountMinor: 500 });
+    expect(provider.parseEvent({ id: 'evt-refund', type: 'charge.refunded', account: 'acct-1', data: { object: { id: 'ch-1', amount_refunded: 1500, refunds: { data: [{ id: 're-2', amount: 500 }] }, metadata: { checkoutId: 'checkout-1' } } } })).toMatchObject({ externalReversalRef: 're-2', refundAmountMinor: 500 });
   });
 
   it('does not turn recurring Stripe callbacks into one-time credit grants', () => {
     const provider = new StripeWebhookProvider();
-    expect(provider.parseEvent({ id: 'evt-session-subscription', type: 'checkout.session.completed', data: { object: { id: 'cs-1', subscription: 'sub-1', metadata: { checkoutId: 'checkout-1', siteId: 'site-1' } } } })).toMatchObject({ eventId: 'evt-session-subscription', eventType: 'checkout.session.completed', orderId: null, subscription: null });
-    expect(provider.parseEvent({ id: 'evt-payment-invoice', type: 'payment_intent.succeeded', data: { object: { id: 'pi-1', invoice: 'in-1', metadata: { siteId: 'site-1' } } } })).toMatchObject({ eventId: 'evt-payment-invoice', eventType: 'payment_intent.succeeded', orderId: null, subscription: null });
+    expect(provider.parseEvent({ id: 'evt-session-subscription', type: 'checkout.session.completed', data: { object: { id: 'cs-1', subscription: 'sub-1', metadata: { checkoutId: 'checkout-1' } } } })).toMatchObject({ eventId: 'evt-session-subscription', eventType: 'checkout.session.completed', orderId: null, subscription: null });
+    expect(provider.parseEvent({ id: 'evt-payment-invoice', type: 'payment_intent.succeeded', data: { object: { id: 'pi-1', invoice: 'in-1', metadata: {} } } })).toMatchObject({ eventId: 'evt-payment-invoice', eventType: 'payment_intent.succeeded', orderId: null, subscription: null });
   });
 
   it('supports the local mock HMAC adapter only when explicitly enabled', () => {

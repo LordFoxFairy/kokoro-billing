@@ -503,13 +503,12 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
       const mappedTenantId = providerAccountRef && dependencies.resolveWebhookTenant
         ? await dependencies.resolveWebhookTenant(provider, providerAccountRef)
         : null;
-      // Provider account mapping is the production tenant boundary. Signed
-      // payload tenantId/siteId values are only consistency checks; neither selects the tenant.
+      // Provider account mapping is the production tenant boundary. Signed payload tenantId is only a consistency check; it never selects the tenant.
       // In production the provider-account registry is the sole tenant authority.
       // The header fallback exists only for local fixtures that do not wire the registry.
       const tenantId = dependencies.resolveWebhookTenant ? mappedTenantId : headerTenantId;
       if (!tenantId) throw new Error('billing.provider_tenant_missing');
-      if ((parsed?.payloadTenantId && parsed.payloadTenantId !== tenantId) || (parsed?.payloadSiteId && parsed.payloadSiteId !== tenantId)) throw new Error('billing.provider_tenant_mismatch');
+      if ((parsed?.payloadTenantId && parsed.payloadTenantId !== tenantId)) throw new Error('billing.provider_tenant_mismatch');
       const result = await dependencies.webhook.accept({ siteId: tenantId, provider, providerAccountRef, externalEventId: parsed?.eventId ?? String(body.id ?? ''), eventType: parsed?.eventType ?? String(body.type ?? 'unknown'), rawPayload: body, signatureValid: true });
       const settlement = provider === 'mock' && parsed?.orderId && dependencies.processMockPayment
         ? await dependencies.processMockPayment.process({ siteId: tenantId, providerEventId: result.providerEventId, externalEventId: parsed.eventId, checkoutId: parsed.orderId })

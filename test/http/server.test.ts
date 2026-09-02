@@ -28,8 +28,8 @@ const server = createBillingServer({
   providerEventAdmin: { list: async () => ({ items: [] }), retry: async (input) => ({ providerEventId: input.providerEventId, processingStatus: 'received' as const }) },
   parseWebhook: (_provider, payload) => {
     if ((payload as { invalidPayload?: unknown }).invalidPayload === true) throw new WebhookError('payment.webhook_payload_invalid', 'provider payload is invalid', 400);
-    const body = payload as { id?: unknown; tenantId?: unknown; siteId?: unknown; providerAccountRef?: unknown };
-    return { eventId: String(body.id ?? 'event-1'), eventType: 'payment_succeeded', payloadTenantId: typeof body.tenantId === 'string' ? body.tenantId : null, payloadSiteId: typeof body.siteId === 'string' ? body.siteId : null, providerAccountRef: typeof body.providerAccountRef === 'string' ? body.providerAccountRef : null, externalPaymentRef: null, externalReversalRef: null, refundAmountMinor: null, orderId: null, subscription: null };
+    const body = payload as { id?: unknown; tenantId?: unknown; providerAccountRef?: unknown };
+    return { eventId: String(body.id ?? 'event-1'), eventType: 'payment_succeeded', payloadTenantId: typeof body.tenantId === 'string' ? body.tenantId : null, providerAccountRef: typeof body.providerAccountRef === 'string' ? body.providerAccountRef : null, externalPaymentRef: null, externalReversalRef: null, refundAmountMinor: null, orderId: null, subscription: null };
   },
   account: { getForSubject: async () => ({ accountId: 'account-1', availableMicros: 1 }) },
   accountRead: {
@@ -141,18 +141,6 @@ describe('Billing API surfaces', () => {
     const response = await server.inject({ method: 'POST', url: '/billing/webhooks/stripe', payload: { id: 'event-direct-account' } });
     expect(response.statusCode).toBe(202);
     expect(webhookCalls.at(-1)).toMatchObject({ siteId: 'tenant-direct-1', provider: 'stripe', providerAccountRef: 'acct-direct-1' });
-  });
-
-  it('does not use legacy payload siteId as the tenant authority', async () => {
-    const response = await server.inject({ method: 'POST', url: '/billing/webhooks/stripe', payload: { id: 'event-legacy-site-hint', siteId: 'tenant-direct-1' } });
-    expect(response.statusCode).toBe(202);
-    expect(webhookCalls.at(-1)).toMatchObject({ siteId: 'tenant-direct-1', provider: 'stripe' });
-  });
-
-  it('rejects a legacy payload siteId that disagrees with provider-account authority', async () => {
-    const response = await server.inject({ method: 'POST', url: '/billing/webhooks/stripe', payload: { id: 'event-legacy-site-mismatch', siteId: 'tenant-forged' } });
-    expect(response.statusCode).toBe(400);
-    expect(response.json().error.code).toBe('billing.provider_tenant_mismatch');
   });
 
   it('keeps admin stats site-scoped and behind admin role', async () => {

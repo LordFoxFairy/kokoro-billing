@@ -7,7 +7,7 @@ const signatureHeader = 'x-kokoro-webhook-signature';
 const eventSchema = z.object({
   eventId: z.string().min(1),
   eventType: z.string().min(1),
-  data: z.object({ tenantId: z.string().min(1).optional(), siteId: z.string().min(1).optional(), orderId: z.string().min(1).optional() }).passthrough().optional(),
+  data: z.object({ tenantId: z.string().min(1).optional(), orderId: z.string().min(1).optional() }).passthrough().optional(),
 }).passthrough();
 
 export class MockWebhookProvider implements PaymentWebhookProvider {
@@ -22,6 +22,6 @@ export class MockWebhookProvider implements PaymentWebhookProvider {
 
   public parseEvent(payload: unknown): ParsedWebhookEvent {
     const parsed = eventSchema.parse(payload);
-    return { eventId: parsed.eventId, eventType: parsed.eventType, payloadTenantId: parsed.data?.tenantId ?? null, payloadSiteId: parsed.data?.siteId ?? null, providerAccountRef: null, externalPaymentRef: parsed.eventType === 'payment_succeeded' ? parsed.eventId : null, externalReversalRef: parsed.eventType === 'refund_succeeded' ? parsed.eventId : null, refundAmountMinor: typeof parsed.data?.refundAmountMinor === 'number' ? parsed.data.refundAmountMinor : null, orderId: parsed.data?.orderId ?? null, subscription: null };
+    return { eventId: parsed.eventId, eventType: parsed.eventType, payloadTenantId: parsed.data?.tenantId ?? null, providerAccountRef: null, externalPaymentRef: parsed.eventType === 'payment_succeeded' ? parsed.eventId : null, externalReversalRef: parsed.eventType === 'refund_succeeded' ? parsed.eventId : null, refundAmountMinor: typeof parsed.data?.refundAmountMinor === 'number' ? parsed.data.refundAmountMinor : null, orderId: parsed.data?.orderId ?? null, subscription: null };
   }
 }

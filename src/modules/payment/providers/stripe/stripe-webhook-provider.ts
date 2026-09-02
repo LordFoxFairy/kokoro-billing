@@ -6,7 +6,6 @@ import type { ParsedWebhookEvent, PaymentWebhookProvider } from "../../provider-
 import { PAYMENT_WEBHOOK_EVENT, WebhookError } from "../../provider-types.js";
 import {
   buildSubscriptionEvent,
-  providerPayloadSiteId,
   providerPayloadTenantId,
   unixSecondsToDate,
   webhookMetadataSchema,
@@ -127,21 +126,21 @@ export class StripeWebhookProvider implements PaymentWebhookProvider {
     // Subscription Checkout is fulfilled by customer.subscription.* events. The
     // session/payment-intent callbacks must not be mistaken for one-time credit grants.
     if ((type === "checkout.session.completed" && object?.subscription) || (type === "payment_intent.succeeded" && object?.invoice)) {
-      return { eventId: id, eventType: type, payloadTenantId: providerPayloadTenantId(metadata), payloadSiteId: providerPayloadSiteId(metadata), providerAccountRef, externalPaymentRef: null, externalReversalRef: null, refundAmountMinor: null, orderId: null, subscription: null };
+      return { eventId: id, eventType: type, payloadTenantId: providerPayloadTenantId(metadata), providerAccountRef, externalPaymentRef: null, externalReversalRef: null, refundAmountMinor: null, orderId: null, subscription: null };
     }
 
     if (type === "checkout.session.completed" || type === "checkout.session.async_payment_succeeded") {
-      return { eventId: id, eventType: PAYMENT_WEBHOOK_EVENT.paymentSucceeded, payloadTenantId: providerPayloadTenantId(metadata), payloadSiteId: providerPayloadSiteId(metadata), providerAccountRef, externalPaymentRef: typeof object?.payment_intent === 'string' ? object.payment_intent : object?.id ?? id, externalReversalRef: null, refundAmountMinor: null, orderId: metadata.orderId ?? metadata.checkoutId ?? null, subscription: null };
+      return { eventId: id, eventType: PAYMENT_WEBHOOK_EVENT.paymentSucceeded, payloadTenantId: providerPayloadTenantId(metadata), providerAccountRef, externalPaymentRef: typeof object?.payment_intent === 'string' ? object.payment_intent : object?.id ?? id, externalReversalRef: null, refundAmountMinor: null, orderId: metadata.orderId ?? metadata.checkoutId ?? null, subscription: null };
     }
     if (type === "payment_intent.succeeded") {
       // Checkout Session completion is the canonical acquisition event. The
       // PaymentIntent callback is an acknowledgement and must not create a
       // second settlement for the same checkout.
-      return { eventId: id, eventType: type, payloadTenantId: providerPayloadTenantId(metadata), payloadSiteId: providerPayloadSiteId(metadata), providerAccountRef, externalPaymentRef: null, externalReversalRef: null, refundAmountMinor: null, orderId: null, subscription: null };
+      return { eventId: id, eventType: type, payloadTenantId: providerPayloadTenantId(metadata), providerAccountRef, externalPaymentRef: null, externalReversalRef: null, refundAmountMinor: null, orderId: null, subscription: null };
     }
     if (type === "charge.refunded") {
       const refund = stripeRefundFacts(object);
-      return { eventId: id, eventType: PAYMENT_WEBHOOK_EVENT.refundSucceeded, payloadTenantId: providerPayloadTenantId(metadata), payloadSiteId: providerPayloadSiteId(metadata), providerAccountRef, externalPaymentRef: null, externalReversalRef: refund.externalReversalRef, refundAmountMinor: refund.refundAmountMinor, orderId: metadata.orderId ?? metadata.checkoutId ?? null, subscription: null };
+      return { eventId: id, eventType: PAYMENT_WEBHOOK_EVENT.refundSucceeded, payloadTenantId: providerPayloadTenantId(metadata), providerAccountRef, externalPaymentRef: null, externalReversalRef: refund.externalReversalRef, refundAmountMinor: refund.refundAmountMinor, orderId: metadata.orderId ?? metadata.checkoutId ?? null, subscription: null };
     }
     if (type.startsWith("customer.subscription.")) {
       const { status, grantCredits } =
@@ -156,9 +155,9 @@ export class StripeWebhookProvider implements PaymentWebhookProvider {
         currentPeriodEnd: unixSecondsToDate(object?.current_period_end),
         grantCredits,
       });
-      return { eventId: id, eventType: PAYMENT_WEBHOOK_EVENT.subscriptionUpdated, payloadTenantId: providerPayloadTenantId(metadata), payloadSiteId: providerPayloadSiteId(metadata), providerAccountRef, externalPaymentRef: null, externalReversalRef: null, refundAmountMinor: null, orderId: null, subscription };
+      return { eventId: id, eventType: PAYMENT_WEBHOOK_EVENT.subscriptionUpdated, payloadTenantId: providerPayloadTenantId(metadata), providerAccountRef, externalPaymentRef: null, externalReversalRef: null, refundAmountMinor: null, orderId: null, subscription };
     }
     // 未订阅的事件类型：ack（eventType 保持原样，process 走默认分支不产生副作用）。
-    return { eventId: id, eventType: type, payloadTenantId: providerPayloadTenantId(metadata), payloadSiteId: providerPayloadSiteId(metadata), providerAccountRef, externalPaymentRef: null, externalReversalRef: null, refundAmountMinor: null, orderId: null, subscription: null };
+    return { eventId: id, eventType: type, payloadTenantId: providerPayloadTenantId(metadata), providerAccountRef, externalPaymentRef: null, externalReversalRef: null, refundAmountMinor: null, orderId: null, subscription: null };
   }
 }
