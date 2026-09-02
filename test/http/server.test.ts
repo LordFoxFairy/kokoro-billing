@@ -47,6 +47,7 @@ const server = createBillingServer({
   adminStats: { get: async () => ({ checkouts: {}, settlements: { byStatus: {}, succeededAmountMinorByCurrency: {} }, reversals: { byStatus: {}, succeededAmountMinorByCurrency: {} }, providerEvents: {}, credit: { accountCount: '0', grantCount: '0', remainingMicros: '0' } }), listCreditOperations: async () => [], listPaymentOperations: async () => [] },
   auth: {
     user: async (request) => ({ tenantId: String(request.headers['x-kokoro-tenant-id']), subjectId: String(request.headers['x-kokoro-subject']) }),
+    bff: async () => null,
     internal: async (request) => request.headers['x-kokoro-service'] === 'model' ? { tenantId: String(request.headers['x-kokoro-tenant-id']), serviceId: 'model' } : null,
     admin: async (request) => request.headers['x-kokoro-role'] === 'billing.admin' && typeof request.headers['x-kokoro-operator'] === 'string' ? { tenantId: String(request.headers['x-kokoro-tenant-id']), operatorId: request.headers['x-kokoro-operator'], role: 'billing.admin' } : null,
     webhook: async () => true,

@@ -4,7 +4,7 @@
 
 ## 边界与调用
 
-- Web BFF 只代理 User 路由，透传 `X-Kokoro-Tenant-Id`、`X-Kokoro-Request-Id` 和用户认证上下文；浏览器不直连内部 admission、payment 或 admin 路由。
+- Web BFF 代理 User 路由；catalog/checkout 的 owner 调用使用 Billing 校验的 `web-bff` service-auth（`X-Kokoro-Tenant-Id`、`X-Kokoro-Service`、`X-Kokoro-Internal-Secret`、service bearer，checkout 另带 `X-Kokoro-Subject`），而 `/v1/billing/me/*` 保留 IAM JWT 用户路径。浏览器不直连内部 admission、payment 或 admin 路由。
 - Agent/Model/Studio 仅调用 `/v1/internal/entitlement/admissions` 及其 capture/release 子资源，并使用同一 `invocation_id` 重试。
 - Payment worker 只调用 `/v1/internal/payment/settlements/accept` 或 `/v1/internal/payment/refunds/accept`。
 - Scheduler 不连接 Billing 数据库；只以 service identity 调用 `/v1/internal/commands/expire-credit-holds`。过期释放仍由 PostgreSQL 行锁和事实表完成。

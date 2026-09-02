@@ -4,8 +4,15 @@ import { createBillingServer } from '../../src/interfaces/http/server.js';
 const admissionResult = { admissionId: 'adm-1', holdId: 'hold-1', mode: 'credit' as const, pricePolicyRevisionId: 'price-1', amountMicros: '42', currency: 'CRD' as const, status: 'held' as const };
 const calls: { capture: unknown[]; release: unknown[]; events: unknown[] } = { capture: [], release: [], events: [] };
 const checkoutCalls: unknown[] = [];
+const idempotencyFingerprints = new Map<string, string>();
 
 const server = createBillingServer({
+  idempotencyHint: { claim: async (key, fingerprint) => {
+    const previous = idempotencyFingerprints.get(key);
+    if (previous !== undefined) return previous === fingerprint ? 'replay' : 'conflict';
+    idempotencyFingerprints.set(key, fingerprint);
+    return 'claimed';
+  } },
   catalog: { listSellable: async () => [{ id: 'offer-revision-1', key: 'pro', name: 'Pro', currency: 'USD', amountMinor: '1999', creditMicros: '1000000', billingInterval: 'month' }] },
   checkout: { create: async (input) => { checkoutCalls.push(input); return { checkoutId: 'checkout-1', status: 'created', amountMinor: 1999, currency: 'USD', expiresAt: new Date('2030-01-01') }; } },
   usage: { recordUsageEvent: async () => undefined, authorizeUsage: async () => ({ holdId: 'hold-1', allocations: [] }), settleUsage: async () => ({ settlementId: 's-1', capturedMicros: 1, releasedMicros: 0 }), releaseUsage: async () => ({ holdId: 'hold-1', releasedMicros: 1 }), ensureUsageEventForHold: async () => 'usage-1' },
@@ -21,7 +28,14 @@ const server = createBillingServer({
     recordExecutionEvent: async (...input) => { calls.events.push(input); return { eventId: 'event-1', status: 'received' as const }; },
   },
   auth: {
-    user: async (request) => ({ tenantId: String(request.headers['x-kokoro-tenant-id']), subjectId: 'subject-1' }),
+    user: async (request) => request.headers['x-kokoro-service'] === undefined ? { tenantId: String(request.headers['x-kokoro-tenant-id']), subjectId: 'subject-1' } : null,
+    bff: async (request) => request.headers['x-kokoro-service'] === 'web-bff'
+      && request.headers['x-kokoro-internal-secret'] === 'secret'
+      && request.headers.authorization === 'Bearer secret'
+      && typeof request.headers['x-kokoro-tenant-id'] === 'string'
+      && (request.headers['x-kokoro-subject'] === undefined || typeof request.headers['x-kokoro-subject'] === 'string')
+      ? { tenantId: request.headers['x-kokoro-tenant-id'], serviceId: 'web-bff', ...(typeof request.headers['x-kokoro-subject'] === 'string' ? { subjectId: request.headers['x-kokoro-subject'] } : {}) }
+      : null,
     internal: async (request) => ({ tenantId: String(request.headers['x-kokoro-tenant-id']), serviceId: String(request.headers['x-kokoro-service']) }),
     admin: async () => null,
     webhook: async () => true,
@@ -29,6 +43,7 @@ const server = createBillingServer({
 });
 
 const internalHeaders = { 'x-kokoro-tenant-id': 'tenant-1', 'x-kokoro-service': 'agent', 'idempotency-key': 'key-123456' };
+const bffHeaders = { 'x-kokoro-tenant-id': 'tenant-1', 'x-kokoro-service': 'web-bff', 'x-kokoro-internal-secret': 'secret', authorization: 'Bearer secret', 'x-kokoro-subject': 'subject-1' };
 
 describe('clean-build Billing v1 transport', () => {
   it('uses only the data/meta envelope and snake_case for the user catalog surface', async () => {
@@ -60,6 +75,53 @@ describe('clean-build Billing v1 transport', () => {
     }));
     expect(response.json().data).toEqual({ checkout_id: 'checkout-1', status: 'created', amount_minor: '1999', currency: 'USD', expires_at: '2030-01-01T00:00:00.000Z' });
     expect(response.json()).not.toHaveProperty('requestId');
+  });
+
+  it('allows the authenticated web BFF to read the catalog and create checkout', async () => {
+    const catalog = await server.inject({ method: 'GET', url: '/v1/commerce/catalog', headers: bffHeaders });
+    const checkout = await server.inject({ method: 'POST', url: '/v1/billing/checkout', headers: { ...bffHeaders, 'idempotency-key': 'bff-checkout-123456' }, payload: {
+      offer_revision_id: 'offer-revision-1', amount_minor: '1999', currency: 'USD', quote_snapshot: { key: 'pro', credit_micros: '1000000' },
+    } });
+    expect(catalog.statusCode).toBe(200);
+    expect(checkout.statusCode).toBe(201);
+    expect(checkoutCalls.at(-1)).toMatchObject({ siteId: 'tenant-1', subjectId: 'subject-1', idempotencyKey: 'bff-checkout-123456' });
+  });
+
+  it('requires the BFF subject context for checkout while keeping user-only reads JWT-only', async () => {
+    const checkout = await server.inject({ method: 'POST', url: '/v1/billing/checkout', headers: { ...Object.fromEntries(Object.entries(bffHeaders).filter(([key]) => key !== 'x-kokoro-subject')), 'idempotency-key': 'bff-missing-subject-123456' }, payload: {
+      offer_revision_id: 'offer-revision-1', amount_minor: '1999', currency: 'USD', quote_snapshot: { key: 'pro', credit_micros: '1000000' },
+    } });
+    const account = await server.inject({ method: 'GET', url: '/v1/billing/me/credit-account', headers: bffHeaders });
+    expect(checkout.statusCode).toBe(403);
+    expect(checkout.json().error.code).toBe('billing.service_subject_required');
+    expect(account.statusCode).toBe(401);
+  });
+
+  it('rejects forged or incomplete BFF credentials without downgrading to user auth', async () => {
+    const without = (name: string): Record<string, string> => Object.fromEntries(Object.entries(bffHeaders).filter(([key]) => key !== name));
+    const cases = [
+      { name: 'forged service', headers: { ...bffHeaders, 'x-kokoro-service': 'model' } },
+      { name: 'missing internal secret', headers: without('x-kokoro-internal-secret') },
+      { name: 'missing service bearer', headers: without('authorization') },
+      { name: 'missing tenant context', headers: without('x-kokoro-tenant-id') },
+    ];
+    for (const testCase of cases) {
+      const response = await server.inject({ method: 'GET', url: '/v1/commerce/catalog', headers: testCase.headers });
+      expect(response.statusCode, testCase.name).toBe(403);
+      expect(response.json().error.code, testCase.name).toBe('billing.service_auth_failed');
+    }
+  });
+
+  it('replays a duplicate BFF checkout with the same key and rejects a changed payload', async () => {
+    const payload = { offer_revision_id: 'offer-revision-1', amount_minor: '1999', currency: 'USD', quote_snapshot: { key: 'pro', credit_micros: '1000000' } };
+    const first = await server.inject({ method: 'POST', url: '/v1/billing/checkout', headers: { ...bffHeaders, 'idempotency-key': 'bff-replay-123456' }, payload });
+    const duplicate = await server.inject({ method: 'POST', url: '/v1/billing/checkout', headers: { ...bffHeaders, 'idempotency-key': 'bff-replay-123456' }, payload });
+    const conflict = await server.inject({ method: 'POST', url: '/v1/billing/checkout', headers: { ...bffHeaders, 'idempotency-key': 'bff-replay-123456' }, payload: { ...payload, amount_minor: '2999' } });
+    expect(first.statusCode).toBe(201);
+    expect(duplicate.statusCode).toBe(201);
+    expect(duplicate.json().data.checkout_id).toBe(first.json().data.checkout_id);
+    expect(conflict.statusCode).toBe(409);
+    expect(conflict.json().error.code).toBe('billing.idempotency_conflict');
   });
 
   it('uses the v1 envelope for errors without a top-level requestId', async () => {

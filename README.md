@@ -116,6 +116,9 @@ DATABASE_URL=TARGET pnpm db:seed
 本地入口：`BILLING_AUTH_MODE=header-fixture DATABASE_URL=TARGET pnpm dev`。该入口明确是本地 fixture
 认证适配器；生产入口必须使用 `BILLING_AUTH_MODE=jwks`，通过 `jose` 的 Remote JWKS 验证 IAM
 签发的 RS256 Bearer JWT，并强制校验 `iss`、`exp`、`sub`、`tenant_id` 以及 `x-kokoro-tenant-id` 一致性。
-Internal service 仍使用独立的 service secret；Admin 只接受独立的 operator proxy secret 和
-`billing.admin` 角色。租户上下文统一采用平台标准 `x-kokoro-tenant-id`，不把 header fixture 或旧的
-`x-kokoro-site` 当成生产认证方案。
+Internal service 仍使用 service secret；`/v1/commerce/catalog` 与 `/v1/billing/checkout` 还接受
+仅限 `web-bff` 的 service-auth：必须同时校验 `x-kokoro-service`、`x-kokoro-internal-secret`、
+`Authorization: Bearer` 服务凭据和 `x-kokoro-tenant-id`，checkout 另校验 `x-kokoro-subject`。
+`BILLING_BFF_SERVICE_TOKEN` 可独立配置 bearer，缺省使用 `INTERNAL_SERVICE_SECRET` 以兼容当前 BFF
+出站格式；Admin 只接受独立的 operator proxy secret 和 `billing.admin` 角色。租户上下文统一采用平台
+标准 `x-kokoro-tenant-id`，不把 header fixture 或旧的 `x-kokoro-site` 当成生产认证方案。

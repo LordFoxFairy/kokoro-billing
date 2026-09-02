@@ -75,6 +75,11 @@ const adminStats = new AdminStatsService(connection);
 const auth = createBillingAuth({
   mode: authMode,
   internalServiceSecret,
+  // The current BFF emits one upstream credential in both the internal-secret
+  // header and the Authorization bearer. Keep the fallback for that deployed
+  // shape while allowing a separately rotated bearer when the BFF is configured
+  // to send one.
+  ...(process.env.BILLING_BFF_SERVICE_TOKEN ? { bffServiceToken: process.env.BILLING_BFF_SERVICE_TOKEN } : {}),
   operatorProxySecret,
   ...(process.env.BILLING_AUTH_JWKS_URL ? { jwksUrl: process.env.BILLING_AUTH_JWKS_URL } : {}),
   issuer: process.env.BILLING_AUTH_JWT_ISSUER ?? 'kokoro-iam',

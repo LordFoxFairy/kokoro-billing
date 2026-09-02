@@ -773,13 +773,21 @@ paths:
     get:
       tags:
         - User
+      description: >-
+        The storefront catalog accepts either an IAM user JWT or the trusted web-bff service-auth form. The BFF form requires X-Kokoro-Service=web-bff, X-Kokoro-Internal-Secret, Authorization: Bearer BFF_SERVICE_TOKEN, and X-Kokoro-Tenant-Id.
       security:
         - tenantContext: []
           userBearer: []
+        - tenantContext: []
+          serviceCaller: []
+          internalSecret: []
+          serviceBearer: []
       responses:
         "200":
           $ref: "#/components/responses/V1Plans"
         "401":
+          $ref: "#/components/responses/V1Error"
+        "403":
           $ref: "#/components/responses/V1Error"
   /v1/billing/me/credit-account:
     get:
@@ -975,9 +983,16 @@ paths:
     post:
       tags:
         - User
+      description: >-
+        The storefront checkout accepts either an IAM user JWT or the trusted web-bff service-auth form. The BFF form additionally requires the authenticated X-Kokoro-Subject context so Billing can bind the checkout to the user.
       security:
         - tenantContext: []
           userBearer: []
+        - tenantContext: []
+          serviceCaller: []
+          internalSecret: []
+          serviceBearer: []
+          subjectContext: []
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -985,7 +1000,11 @@ paths:
       responses:
         "201":
           $ref: "#/components/responses/V1Checkout"
+        "401":
+          $ref: "#/components/responses/V1Error"
         "400":
+          $ref: "#/components/responses/V1Error"
+        "403":
           $ref: "#/components/responses/V1Error"
         "409":
           $ref: "#/components/responses/V1Error"
@@ -1013,8 +1032,7 @@ components:
       type: apiKey
       in: header
       name: X-Kokoro-Tenant-Id
-      description: Opaque tenant context
-      at most 191 characters; for User routes it must match the IAM JWT tenant_id claim.: null
+      description: Opaque tenant context at most 191 characters; for User routes it must match the IAM JWT tenant_id claim.
     userBearer:
       type: http
       scheme: bearer
@@ -1030,6 +1048,17 @@ components:
       in: header
       name: X-Kokoro-Internal-Secret
       description: Per-caller internal credential.
+    serviceBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: service
+      description: >-
+        BFF service credential carried as Authorization: Bearer BFF_SERVICE_TOKEN; it is checked together with X-Kokoro-Service and X-Kokoro-Internal-Secret.
+    subjectContext:
+      type: apiKey
+      in: header
+      name: X-Kokoro-Subject
+      description: Trusted subject context injected by web-bff; required for the BFF checkout alternative and never accepted from a browser.
     operatorContext:
       type: apiKey
       in: header

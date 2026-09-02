@@ -6,13 +6,30 @@ Canonical machine-readable contract: [`../contract/openapi/v1/openapi.yaml`](../
 
 | Surface | Routes | Identity |
 |---|---|---|
-| User/BFF | `/v1/commerce/catalog`, `/v1/billing/me/credit-account`, `/v1/billing/me/credit-ledger` | IAM user + tenant match |
+| User/BFF | `/v1/commerce/catalog`, `/v1/billing/me/credit-account`, `/v1/billing/me/credit-ledger`, `/v1/billing/checkout` | User routes: IAM JWT + tenant match; catalog/checkout also accept the trusted `web-bff` service-auth alternative |
 | Internal execution | `/v1/internal/entitlement/admissions`, `/capture`, `/release`, `/v1/internal/billing/execution-events` | registered Agent/Model/Studio service |
 | Internal payment | `/v1/internal/payment/settlements/accept`, `/v1/internal/payment/refunds/accept` | Payment worker service |
 | Scheduler command | `/v1/internal/commands/expire-credit-holds` | Scheduler service only |
 | Provider | `/v1/webhooks/payment/{provider}` | provider signature + account mapping |
 
 Mutations require `Idempotency-Key`. Tenant comes from `X-Kokoro-Tenant-Id`; it is never selected from request JSON, query parameters, provider payload, `account_id`, or runtime namespace. Monetary and credit values are decimal strings. Unknown execution outcomes retain an active hold and are reconciled later.
+
+### Storefront service-auth alternative
+
+`GET /v1/commerce/catalog` and `POST /v1/billing/checkout` keep the public IAM JWT path and additionally expose the owner route to the registered Web BFF. Billing selects the service path whenever an internal marker is present; it never falls back to user authentication after a failed BFF attempt.
+
+The BFF request must contain all of the following:
+
+```text
+X-Kokoro-Service: web-bff
+X-Kokoro-Internal-Secret: INTERNAL_SERVICE_SECRET
+Authorization: Bearer BFF_SERVICE_TOKEN
+X-Kokoro-Tenant-Id: TENANT_ID
+```
+
+Checkout also requires `X-Kokoro-Subject`, which is the trusted subject resolved by the BFF. The catalog only needs the tenant context. `BILLING_BFF_SERVICE_TOKEN` configures the expected bearer; when omitted, it defaults to `INTERNAL_SERVICE_SECRET`, matching the current BFF outbound shape. A wrong service, forged credential, missing required header, invalid tenant, or invalid checkout subject returns a v1 error with `billing.service_auth_failed` or `billing.service_subject_required` and HTTP `403`.
+
+The service-auth alternative is not enabled for `/v1/billing/me/*`; those routes remain user JWT-only.
 
 所有列表接口使用 opaque `cursor` 与 `next_cursor`，游标绑定 tenant、资源和 filter；损坏或越界游标返回统一的
 `billing.invalid_cursor`。
@@ -33,4 +50,11 @@ Error envelope:
 
 ```json
 {"error": {"code": "billing.invalid_request", "message": "...", "request_id": "req_TARGET", "retryable": false, "details": {}}, "meta": {"request_id": "req_TARGET"}}
+```
+
+Service-auth error codes:
+
+```text
+billing.service_auth_failed       403
+billing.service_subject_required  403
 ```

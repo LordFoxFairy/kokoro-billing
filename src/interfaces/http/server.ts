@@ -37,10 +37,12 @@ declare module 'fastify' {
 // current database/legacy vocabulary; this adapter performs the translation.
 export type BillingUserContext = { readonly tenantId: string; readonly subjectId: string };
 export type BillingInternalContext = { readonly tenantId: string; readonly serviceId: string };
+export type BillingBffContext = { readonly tenantId: string; readonly serviceId: 'web-bff'; readonly subjectId?: string };
 export type BillingAdminContext = { readonly tenantId: string; readonly operatorId: string; readonly role: string };
 export type BillingAuth = {
   readonly user: (request: FastifyRequest) => Promise<BillingUserContext | null>;
   readonly internal: (request: FastifyRequest) => Promise<BillingInternalContext | null>;
+  readonly bff: (request: FastifyRequest) => Promise<BillingBffContext | null>;
   readonly admin: (request: FastifyRequest) => Promise<BillingAdminContext | null>;
   readonly webhook: (request: FastifyRequest) => Promise<boolean>;
 };
@@ -187,6 +189,36 @@ const claimIdempotencyHint = async (
     // Redis outage must not turn the fast-path hint into a billing availability dependency.
   }
   return true;
+};
+
+type StorefrontContext = BillingUserContext | BillingBffContext;
+
+const hasStorefrontServiceMarker = (request: FastifyRequest): boolean => {
+  return request.headers['x-kokoro-service'] !== undefined || request.headers['x-kokoro-internal-secret'] !== undefined;
+};
+
+/**
+ * Storefront routes have two explicit authentication modes. A request that
+ * presents an internal marker is never downgraded to the public user path.
+ * This prevents forged or incomplete BFF headers from becoming a fixture/JWT
+ * user request by accident.
+ */
+const storefrontContext = async (
+  dependencies: BillingHttpDependencies,
+  request: FastifyRequest,
+  reply: Parameters<typeof sendError>[0],
+): Promise<StorefrontContext | null> => {
+  const serviceMarker = hasStorefrontServiceMarker(request);
+  const bffContext = await dependencies.auth.bff(request);
+  if (bffContext) return bffContext;
+  if (serviceMarker) {
+    void reply.code(403).send({ error: { code: 'billing.service_auth_failed', message: 'web BFF service authentication failed' } });
+    return null;
+  }
+  const userContext = await dependencies.auth.user(request);
+  if (userContext) return userContext;
+  void reply.code(401).send({ error: { code: 'billing.unauthorized', message: 'user or web BFF context required' } });
+  return null;
 };
 
 export const createBillingServer = (dependencies: BillingHttpDependencies): FastifyInstance => {
@@ -702,8 +734,8 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
   });
 
   app.get('/v1/commerce/catalog', async (request, reply) => {
-    const context = await dependencies.auth.user(request);
-    if (!context) return reply.code(401).send({ error: { code: 'billing.unauthorized', message: 'user context required' } });
+    const context = await storefrontContext(dependencies, request, reply);
+    if (!context) return;
     if (!dependencies.catalog) return reply.code(503).send({ error: { code: 'billing.catalog_not_configured', message: 'catalog is not configured' } });
     try {
       const plans = await dependencies.catalog.listSellable(context.tenantId);
@@ -743,14 +775,18 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
   });
 
   app.post('/v1/billing/checkout', async (request, reply) => {
-    const context = await dependencies.auth.user(request);
-    if (!context) return reply.code(401).send({ error: { code: 'billing.unauthorized', message: 'user context required' } });
+    const context = await storefrontContext(dependencies, request, reply);
+    if (!context) return;
+    const subjectId = context.subjectId;
+    if (subjectId === undefined) {
+      return reply.code(403).send({ error: { code: 'billing.service_subject_required', message: 'web BFF subject context required for checkout' } });
+    }
     const key = requireIdempotency(request, reply); if (!key) return;
     const parsed = z.object({ offer_revision_id: z.string().min(1), amount_minor: positiveDecimalString, currency: z.string().regex(/^[A-Z]{3}$/u), quote_snapshot: z.record(z.string(), z.unknown()) }).strict().safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
     if (!(await claimIdempotencyHint(dependencies, request, key, reply, context.tenantId))) return;
     try {
-      const result = await dependencies.checkout.create({ offerRevisionId: parsed.data.offer_revision_id, amountMinor: safeDecimal(parsed.data.amount_minor, 'amount_minor'), currency: parsed.data.currency, quoteSnapshot: toCamelCase(parsed.data.quote_snapshot), siteId: context.tenantId, subjectId: context.subjectId, idempotencyKey: key, expiresAt: new Date(Date.now() + 300_000) });
+      const result = await dependencies.checkout.create({ offerRevisionId: parsed.data.offer_revision_id, amountMinor: safeDecimal(parsed.data.amount_minor, 'amount_minor'), currency: parsed.data.currency, quoteSnapshot: toCamelCase(parsed.data.quote_snapshot), siteId: context.tenantId, subjectId, idempotencyKey: key, expiresAt: new Date(Date.now() + 300_000) });
       const hosted = dependencies.checkout.createHostedSession ? await dependencies.checkout.createHostedSession(context.tenantId, result.checkoutId) : result;
       return reply.code(201).send({ data: toSnakeCase({ ...hosted, amountMinor: String(hosted.amountMinor) }), requestId: request.id });
     } catch (error) { return sendError(reply, error); }

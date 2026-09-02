@@ -63,6 +63,22 @@ describe('billing production authentication adapter', () => {
     expect(await auth.internal({ headers: { ...headers, 'x-kokoro-service': 'unregistered-service' } } as never)).toBeNull();
   });
 
+  it('requires the registered web BFF, tenant context, internal secret and service bearer', async () => {
+    const auth = createBillingAuth({ mode: 'header-fixture', internalServiceSecret: 'service-secret', bffServiceToken: 'bff-bearer', operatorProxySecret: 'operator-secret', issuer: 'kokoro-iam' });
+    const headers = {
+      'x-kokoro-tenant-id': 'site-1',
+      'x-kokoro-service': 'web-bff',
+      'x-kokoro-internal-secret': 'service-secret',
+      authorization: 'Bearer bff-bearer',
+      'x-kokoro-subject': 'team-1',
+    };
+    expect(await auth.bff({ headers } as never)).toEqual({ tenantId: 'site-1', serviceId: 'web-bff', subjectId: 'team-1' });
+    expect(await auth.bff({ headers: { ...headers, 'x-kokoro-service': 'model' } } as never)).toBeNull();
+    expect(await auth.bff({ headers: { ...headers, 'x-kokoro-internal-secret': 'forged' } } as never)).toBeNull();
+    expect(await auth.bff({ headers: { ...headers, authorization: 'Bearer forged' } } as never)).toBeNull();
+    expect(await auth.bff({ headers: { ...headers, 'x-kokoro-tenant-id': '' } } as never)).toBeNull();
+  });
+
   it('keeps the HTTP tenant boundary aligned with the VARCHAR(191) storage contract', async () => {
     const auth = createBillingAuth({ mode: 'header-fixture', internalServiceSecret: 'service-secret', operatorProxySecret: 'service-secret', issuer: 'kokoro-iam' });
     const accepted = `tenant-${'x'.repeat(184)}`;
