@@ -11,15 +11,9 @@ const server = createBillingServer({
   checkout: {
     create: async () => ({ checkoutId: 'checkout-1', status: 'created', amountMinor: 1999, currency: 'USD', expiresAt: new Date('2030-01-01') }),
   },
-  usage: {
-    recordUsageEvent: async () => undefined,
-    authorizeUsage: async () => ({ holdId: 'hold-1', allocations: [] }),
-    settleUsage: async () => ({ settlementId: 'settlement-1', capturedMicros: 1, releasedMicros: 0 }),
-    releaseUsage: async () => ({ holdId: 'hold-1', releasedMicros: 1 }),
-    ensureUsageEventForHold: async () => 'usage-1',
-  },
+  usage: { expireExpiredHolds: async () => ({ expired: 0, expiredHoldIds: [] }) },
   settlement: { recordSettlement: async () => undefined },
-  reversal: { recordReversal: async () => 'refund-1', reverseCredits: async () => ({ fulfillmentReversalId: 'reversal-1', journalId: 'journal-1' }) },
+  reversal: { recordReversal: async () => 'refund-1' },
   webhook: {
     accept: async (input) => {
       webhookCalls.push(input);
@@ -45,7 +39,7 @@ const server = createBillingServer({
   },
   resolveWebhookTenant: async (provider, accountRef) => provider === 'stripe' && accountRef === 'acct-1' ? 'tenant-1' : null,
   account: { getForSubject: async () => ({ accountId: 'account-1', availableMicros: '42', heldMicros: '0' }) },
-  accountRead: { summaryForSubject: async () => ({ balanceMicros: '42', heldMicros: '0', quotaMicros: null, quotaPeriod: null }), ledgerForSubject: async () => ({ entries: [] }), byModelForSubject: async () => ({ periodStart: '2026-01-01T00:00:00.000Z', items: [] }) },
+  accountRead: { ledgerForSubject: async () => ({ entries: [] }) },
   auth: {
     user: async (request) => typeof request.headers['x-kokoro-tenant-id'] === 'string' && typeof request.headers['x-kokoro-subject'] === 'string'
       ? { tenantId: request.headers['x-kokoro-tenant-id'], subjectId: request.headers['x-kokoro-subject'] }
