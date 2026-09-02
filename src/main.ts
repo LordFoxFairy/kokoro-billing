@@ -5,24 +5,14 @@ import { ProviderEventInboxService } from './modules/payment/provider-event-inbo
 import { BillingReversalService } from './modules/payment/billing-reversal-service.js';
 import { UsageSettlementService } from './modules/metering/usage-settlement-service.js';
 import { CreditAccountQueryService } from './modules/credit/account-query-service.js';
-import { AdminGrantService } from './modules/credit/admin-grant-service.js';
-import { ReconciliationService } from './modules/reconcile/reconciliation-service.js';
 import { createBillingServer } from './interfaces/http/server.js';
 import { createProviderRegistry, parseProviderWebhook, verifyProviderWebhook } from './modules/payment/provider-registry.js';
 import { CatalogService } from './modules/catalog/catalog-service.js';
 import { RedisIdempotencyHint } from './infrastructure/redis/idempotency-hint.js';
-import { MockCheckoutSettlementService } from './modules/payment/mock-checkout-settlement-service.js';
-import { UsagePricingService } from './modules/metering/usage-pricing-service.js';
-import { UsagePricingAdminService } from './modules/metering/usage-pricing-admin-service.js';
-import { CatalogAdminService } from './modules/catalog/catalog-admin-service.js';
 import { StripeCheckoutProvider } from './infrastructure/providers/stripe-checkout-provider.js';
-import { ProviderEventAdminService } from './modules/payment/provider-event-admin-service.js';
 import { assertProviderWebhookSecrets, assertWechatApiV3Key, readEnabledProviders, readProviderWebhookSecrets } from './modules/payment/provider-config.js';
-import { AdminStatsService } from './modules/admin/admin-stats-service.js';
 import { createBillingAuth } from './infrastructure/auth/billing-auth.js';
 import { ProviderAccountService } from './modules/payment/provider-account-service.js';
-import { RedeemService } from './modules/redeem/redeem-service.js';
-import { RedeemAdminService } from './modules/redeem/redeem-admin-service.js';
 import { BillingAdmissionService } from './modules/metering/billing-admission-service.js';
 import { SubscriptionQueryService } from './modules/payment/subscription-query-service.js';
 
@@ -48,30 +38,18 @@ const checkout = new CheckoutService(connection, {
   ...(enabledProviders.includes('stripe') && process.env.STRIPE_SECRET_KEY ? { hostedProvider: new StripeCheckoutProvider(process.env.STRIPE_SECRET_KEY, process.env.BILLING_PROVIDER_ACCOUNT_REF_STRIPE), publicBaseUrl: process.env.BILLING_PUBLIC_BASE_URL ?? 'http://127.0.0.1:3000' } : {}),
 });
 const catalog = new CatalogService(connection);
-const catalogAdmin = new CatalogAdminService(connection);
 const settlement = new BillingSettlementService(connection);
-const mockPayment = new MockCheckoutSettlementService(connection, settlement);
 const usage = new UsageSettlementService(connection);
 const admission = new BillingAdmissionService(connection, usage);
 const subscriptions = new SubscriptionQueryService(connection);
-const pricing = new UsagePricingService(connection);
-const pricingAdmin = new UsagePricingAdminService(connection);
 const webhook = new ProviderEventInboxService(connection);
-const providerEventAdmin = new ProviderEventAdminService(connection);
 const providerAccounts = new ProviderAccountService(connection);
 const reversal = new BillingReversalService(connection);
 const account = new CreditAccountQueryService(connection);
-const adminGrant = new AdminGrantService(connection);
-const redeemSecret = process.env.BILLING_REDEEM_SECRET;
-if (!redeemSecret || redeemSecret.length < 32) throw new Error('BILLING_REDEEM_SECRET must be at least 32 characters');
-const redeem = new RedeemService(connection, redeemSecret);
-const redeemAdmin = new RedeemAdminService(connection, redeemSecret);
 const providerSecrets = readProviderWebhookSecrets();
 assertProviderWebhookSecrets(enabledProviders, providerSecrets);
 assertWechatApiV3Key(enabledProviders);
 const providerRegistry = createProviderRegistry(enabledProviders, process.env.WECHAT_API_V3_KEY ? { wechatApiV3Key: process.env.WECHAT_API_V3_KEY } : {});
-const reconciliation = new ReconciliationService(connection);
-const adminStats = new AdminStatsService(connection);
 const auth = createBillingAuth({
   mode: authMode,
   internalServiceSecret,
@@ -87,11 +65,7 @@ const auth = createBillingAuth({
 });
 const server = createBillingServer({
   idempotencyHint,
-  processMockPayment: mockPayment,
-  pricing,
-  pricingAdmin,
   catalog,
-  catalogAdmin,
   checkout,
   settlement,
   reversal,
@@ -99,7 +73,6 @@ const server = createBillingServer({
   admission,
   subscriptionRead: subscriptions,
   webhook,
-  providerEventAdmin,
   parseWebhook: (provider, payload) => parseProviderWebhook(providerRegistry, provider, payload),
   // Production JWKS mode uses the provider-account registry as the sole tenant
   // authority. Local header-fixture mode intentionally keeps the mock webhook
@@ -107,16 +80,6 @@ const server = createBillingServer({
   ...(authMode === 'jwks' ? { resolveWebhookTenant: (provider: string, externalAccountRef: string) => providerAccounts.resolveTenantId(provider, externalAccountRef) } : {}),
   account,
   accountRead: account,
-  ensureAccount: account,
-  admin: {
-    grant: (input) => adminGrant.grant(input),
-    reconcile: async (siteId) => {
-      return reconciliation.run(siteId);
-    },
-  },
-  adminStats,
-  redeem,
-  redeemAdmin,
   auth: {
     ...auth,
     webhook: async (request) => {

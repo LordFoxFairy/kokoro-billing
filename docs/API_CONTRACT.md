@@ -6,11 +6,12 @@ Canonical machine-readable contract: [`../contract/openapi/v1/openapi.yaml`](../
 
 | Surface | Routes | Identity |
 |---|---|---|
-| User/BFF | `/v1/commerce/catalog`, `/v1/billing/me/credit-account`, `/v1/billing/me/credit-ledger`, `/v1/billing/checkout` | User routes: IAM JWT + tenant match; catalog/checkout also accept the trusted `web-bff` service-auth alternative |
+| User/BFF | `/v1/commerce/catalog`, `/v1/billing/me/credit-account`, `/v1/billing/me/credit-ledger`, `/v1/billing/me/subscriptions`, `/v1/billing/checkout` | User routes: IAM JWT + tenant match; catalog/checkout also accept the trusted `web-bff` service-auth alternative |
 | Internal execution | `/v1/internal/entitlement/admissions`, `/capture`, `/release`, `/v1/internal/billing/execution-events` | registered Agent/Model/Studio service |
 | Internal payment | `/v1/internal/payment/settlements/accept`, `/v1/internal/payment/refunds/accept` | Payment worker service |
 | Scheduler command | `/v1/internal/commands/expire-credit-holds` | Scheduler service only |
 | Provider | `/v1/webhooks/payment/{provider}` | provider signature + account mapping |
+| Admin | `/v1/admin/billing/refunds` | operator proxy + billing admin role |
 
 Mutations require `Idempotency-Key`. Tenant comes from `X-Kokoro-Tenant-Id`; it is never selected from request JSON, query parameters, provider payload, `account_id`, or runtime namespace. Monetary and credit values are decimal strings. Unknown execution outcomes retain an active hold and are reconciled later.
 
@@ -44,7 +45,8 @@ Success envelope:
 
 `quote_snapshot` 至少包含 `key` 与 `credit_micros`，可包含 `name` 及其他报价快照字段。传输层将 snake_case 快照适配到既有 CheckoutService 所需的 `key`、`creditMicros`、`name` 等内部字段后再调用服务。
 
-非 `/v1` 旧路径继续保留原有顶层 `requestId` 与 camelCase payload，不与 v1 wire 契约混用。
+非 `/v1` 路径不属于 Billing API；旧 route alias 已删除。任何新资源必须先进入本文件和
+`contract/openapi/v1/openapi.yaml`，再实现对应的 handler 与 parity test。
 
 Error envelope:
 

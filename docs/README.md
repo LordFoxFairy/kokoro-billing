@@ -10,7 +10,7 @@
 - Scheduler 不连接 Billing 数据库；只以 service identity 调用 `/v1/internal/commands/expire-credit-holds`。过期释放仍由 PostgreSQL 行锁和事实表完成。
 - Provider 通过 `/v1/webhooks/payment/{provider}` 进入签名校验、inbox、去重和异步处理链路。
 
-所有 v1 JSON 成功响应严格使用 `{data, meta: {request_id}}`，不再输出顶层 `requestId`；错误包含 `error.request_id`、`retryable`、`details` 和同级 `meta.request_id`。`quote_snapshot` 使用 snake_case wire 字段（至少 `key`、`credit_micros`，可带 `name` 等），HTTP adapter 在传给既有 CheckoutService 前转换为其 camelCase DTO。非 `/v1` 旧路径继续保留原有顶层 `requestId` 和 camelCase payload，以维持兼容。
+所有 v1 JSON 成功响应严格使用 `{data, meta: {request_id}}`，不再输出顶层 `requestId`；错误包含 `error.request_id`、`retryable`、`details` 和同级 `meta.request_id`。`quote_snapshot` 使用 snake_case wire 字段（至少 `key`、`credit_micros`，可带 `name` 等），HTTP adapter 在传给既有 CheckoutService 前转换为其 camelCase DTO。非 `/v1` 路径不属于 Billing API，旧 route alias 已删除。
 
 ## 账务状态
 

@@ -6,25 +6,15 @@ import type { BillingSettlementService } from '../../modules/payment/billing-set
 import type { ProviderEventInboxService } from '../../modules/payment/provider-event-inbox-service.js';
 import type { UsageSettlementService } from '../../modules/metering/usage-settlement-service.js';
 import type { CreditAccountQueryService } from '../../modules/credit/account-query-service.js';
-import type { AdminGrantService } from '../../modules/credit/admin-grant-service.js';
 import type { BillingReversalService } from '../../modules/payment/billing-reversal-service.js';
 import type { ParsedWebhookEvent } from '../../modules/payment/provider-types.js';
 import type { CatalogService } from '../../modules/catalog/catalog-service.js';
 import type { RedisIdempotencyHint } from '../../infrastructure/redis/idempotency-hint.js';
-import type { MockCheckoutSettlementService } from '../../modules/payment/mock-checkout-settlement-service.js';
-import type { UsagePricingService } from '../../modules/metering/usage-pricing-service.js';
-import type { UsagePricingAdminService } from '../../modules/metering/usage-pricing-admin-service.js';
-import type { CatalogAdminService } from '../../modules/catalog/catalog-admin-service.js';
-import type { ProviderEventAdminService } from '../../modules/payment/provider-event-admin-service.js';
-import type { AdminStatsService } from '../../modules/admin/admin-stats-service.js';
-import type { RedeemService } from '../../modules/redeem/redeem-service.js';
-import type { RedeemAdminService } from '../../modules/redeem/redeem-admin-service.js';
 import type { BillingAdmissionService, BillingAdmissionResult } from '../../modules/metering/billing-admission-service.js';
 import { WebhookError } from '../../modules/payment/provider-types.js';
 import { readSafeInteger } from '../../infrastructure/postgres/safe-integer.js';
 import { recordHttpRequest, registerMetricsRoute } from '../../infrastructure/metrics.js';
 import { runWithBillingContext } from '../../infrastructure/postgres/connection.js';
-import { billingAdminManifest } from '../admin/manifest.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -33,8 +23,9 @@ declare module 'fastify' {
   }
 }
 
-// HTTP contract uses tenantId. The application ports still use siteId as the
-// current database/legacy vocabulary; this adapter performs the translation.
+// HTTP uses the platform tenant vocabulary. Existing application ports still
+// expose the repository's internal siteId value object; this is the only
+// translation point and is not part of the wire contract.
 export type BillingUserContext = { readonly tenantId: string; readonly subjectId: string };
 export type BillingInternalContext = { readonly tenantId: string; readonly serviceId: string };
 export type BillingBffContext = { readonly tenantId: string; readonly serviceId: 'web-bff'; readonly subjectId?: string };
@@ -48,42 +39,28 @@ export type BillingAuth = {
 };
 
 type CheckoutPort = Pick<CheckoutService, 'create'> & Partial<Pick<CheckoutService, 'createHostedSession'>>;
-type UsagePort = Pick<UsageSettlementService, 'recordUsageEvent' | 'authorizeUsage' | 'settleUsage' | 'releaseUsage' | 'ensureUsageEventForHold'> & Partial<Pick<UsageSettlementService, 'expireExpiredHolds'>>;
-type SettlementPort = Pick<BillingSettlementService, 'recordSettlement' | 'fulfillSettlement'>;
+type UsagePort = Pick<UsageSettlementService, 'expireExpiredHolds'>;
 type WebhookPort = Pick<ProviderEventInboxService, 'accept'>;
 type AccountPort = Pick<CreditAccountQueryService, 'getForSubject'>;
-type AccountReadPort = Pick<CreditAccountQueryService, 'summaryForSubject' | 'ledgerForSubject' | 'byModelForSubject'>;
-type AdminGrantPort = Pick<AdminGrantService, 'grant'>;
-type ReversalPort = Pick<BillingReversalService, 'recordReversal' | 'reverseCredits'>;
-type ProviderEventAdminPort = Pick<ProviderEventAdminService, 'list' | 'retry'>;
+type ReversalPort = Pick<BillingReversalService, 'recordReversal'>;
 type AdmissionPort = Pick<BillingAdmissionService, 'create' | 'capture' | 'release' | 'recordExecutionEvent'>;
 type WebhookParser = (provider: string, payload: unknown) => ParsedWebhookEvent;
 
 export type BillingHttpDependencies = {
-  readonly processMockPayment?: Pick<MockCheckoutSettlementService, 'process'>;
   readonly idempotencyHint?: Pick<RedisIdempotencyHint, 'claim'>;
-  readonly catalog?: Pick<CatalogService, 'listSellable'> & Partial<Pick<CatalogService, 'listAdmin'>>;
+  readonly catalog?: Pick<CatalogService, 'listSellable'>;
   readonly checkout: CheckoutPort;
   readonly usage: UsagePort;
-  readonly settlement: SettlementPort;
+  readonly settlement: Pick<BillingSettlementService, 'recordSettlement'>;
   readonly reversal: ReversalPort;
   readonly webhook: WebhookPort;
-  readonly providerEventAdmin?: ProviderEventAdminPort;
   readonly parseWebhook?: WebhookParser;
   readonly resolveWebhookTenant?: (provider: string, externalAccountRef: string) => Promise<string | null>;
   /** For direct provider webhooks whose signed event omits a top-level account ref. */
   readonly resolveWebhookAccountRef?: (provider: string) => string | null;
   readonly account: AccountPort;
-  readonly accountRead?: AccountReadPort;
+  readonly accountRead?: Pick<CreditAccountQueryService, 'ledgerForSubject'>;
   readonly subscriptionRead?: { readonly listForSubject: (tenantId: string, subjectId: string) => Promise<readonly Record<string, unknown>[]> };
-  readonly ensureAccount?: Pick<CreditAccountQueryService, 'ensureForSubject'>;
-  readonly pricing?: Pick<UsagePricingService, 'quote' | 'quoteForHold'> & Partial<Pick<UsagePricingService, 'listActive'>>;
-  readonly pricingAdmin?: Pick<UsagePricingAdminService, 'publish'>;
-  readonly catalogAdmin?: Pick<CatalogAdminService, 'publishPlan'>;
-  readonly admin: { readonly reconcile: (siteId: string) => Promise<unknown>; readonly grant: AdminGrantPort['grant'] };
-  readonly adminStats?: Pick<AdminStatsService, 'get'> & Partial<Pick<AdminStatsService, 'listCreditOperations' | 'listPaymentOperations'>>;
-  readonly redeem?: Pick<RedeemService, 'redeem'>;
-  readonly redeemAdmin?: Pick<RedeemAdminService, 'createCampaign' | 'issueCodes' | 'disableCode'>;
   readonly admission?: AdmissionPort;
   readonly auth: BillingAuth;
   readonly health?: { readonly postgres: () => Promise<void>; readonly redis: () => Promise<void> };
@@ -92,28 +69,7 @@ export type BillingHttpDependencies = {
 const decimalString = z.string().regex(/^(0|[1-9]\d*)$/u).refine((value) => Number.isSafeInteger(Number(value)), 'decimal value exceeds JavaScript safe integer range');
 const positiveDecimalString = decimalString.refine((value) => BigInt(value) > 0n, 'value must be positive');
 const safeDecimal = (value: string, field: string): number => readSafeInteger(value, field);
-const checkoutSchema = z.object({
-  offerRevisionId: z.string().min(1),
-  amountMinor: positiveDecimalString,
-  currency: z.string().regex(/^[A-Z]{3}$/u),
-  quoteSnapshot: z.record(z.string(), z.unknown()),
-});
-const usageEventSchema = z.object({ usageEventId: z.string().min(1), sourceEventId: z.string().min(1), subjectId: z.string().min(1), featureKey: z.string().min(1), quantityMicros: decimalString, dimensions: z.record(z.string(), z.unknown()).optional() });
-const holdSchema = z.object({ accountId: z.string().min(1), requestedMicros: positiveDecimalString, featureKey: z.string().min(1), labelKey: z.string().min(1).nullable().optional(), modelBindingId: z.string().min(1).nullable().optional(), pricingRevisionId: z.string().min(1).nullable().optional() });
-const settleSchema = z.object({ holdId: z.string().min(1), usageEventId: z.string().min(1).optional(), actualMicros: decimalString.optional(), inputTokens: z.number().int().nonnegative().optional(), outputTokens: z.number().int().nonnegative().optional() });
-const quoteSchema = z.object({ featureKey: z.string().min(1), labelKey: z.string().min(1).nullable(), inputTokens: z.number().int().nonnegative().default(0), outputTokens: z.number().int().nonnegative().default(0) });
-const ledgerQuerySchema = z.object({ subjectId: z.string().min(1), limit: z.coerce.number().int().min(1).max(100).default(50), cursor: z.string().min(1).optional() });
-const settlementSchema = z.object({ settlementId: z.string().min(1), provider: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/u).optional(), externalPaymentRef: z.string().min(1), amountMinor: positiveDecimalString, currency: z.string().regex(/^[A-Z]{3}$/u) });
-const adminGrantSchema = z.object({ accountId: z.string().min(1), subjectId: z.string().min(1), amountMicros: positiveDecimalString, programKey: z.string().min(1), reason: z.string().min(1).max(500) });
-const refundSchema = z.object({ accountId: z.string().min(1), externalReversalRef: z.string().min(1), amountMinor: positiveDecimalString, amountMicros: positiveDecimalString, reason: z.string().min(1).max(500) });
-const adminPlanSchema = z.object({ offerKey: z.string().min(1), name: z.string().min(1), currency: z.string().regex(/^[A-Z]{3}$/u), amountMinor: decimalString, creditMicros: decimalString, billingInterval: z.enum(['once', 'month', 'year']), reason: z.string().min(1).max(500) });
-const adminUsagePricingSchema = z.object({ effectiveFrom: z.string().datetime({ offset: true }).optional(), rates: z.array(z.object({ featureKey: z.string().min(1), labelKey: z.string().min(1).nullable().optional(), modelBindingId: z.string().min(1).nullable().optional(), inputMicrosPerMillion: decimalString, outputMicrosPerMillion: decimalString, reservationMicros: positiveDecimalString })).min(1), reason: z.string().min(1).max(500) });
-const providerEventRetrySchema = z.object({ reason: z.string().min(1).max(500) });
-const providerEventListQuerySchema = z.object({ status: z.enum(['received', 'processed', 'ignored', 'failed']).optional(), limit: z.coerce.number().int().min(1).max(100).default(50), cursor: z.string().min(1).max(2048).optional() });
-const redeemSchema = z.object({ code: z.string().min(1).max(64) }).strict();
-const redeemCampaignSchema = z.object({ campaignKey: z.string().regex(/^[a-z0-9][a-z0-9._-]{0,127}$/u), programKey: z.string().min(1).max(255), creditMicros: positiveDecimalString, maxRedemptions: z.number().int().positive().max(1_000_000), startsAt: z.string().datetime({ offset: true }).optional(), endsAt: z.string().datetime({ offset: true }).nullable().optional(), reason: z.string().min(1).max(500) }).strict();
-const redeemBatchSchema = z.object({ campaignId: z.string().uuid(), count: z.number().int().positive().max(10_000), reason: z.string().min(1).max(500) }).strict();
-const disableRedeemCodeSchema = z.object({ reason: z.string().min(1).max(500) }).strict();
+const ledgerPageQuerySchema = z.object({ limit: z.coerce.number().int().min(1).max(100).default(50), cursor: z.string().min(1).optional() }).strict();
 const billingSubjectSchema = z.object({ kind: z.enum(['user', 'project', 'organization', 'service']), ref: z.string().min(1).max(255) }).strict();
 const admissionSchema = z.object({
   billing_subject: billingSubjectSchema,
@@ -295,429 +251,8 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     done(null, Object.fromEntries(new URLSearchParams(rawBody)));
   });
 
-  app.post('/billing/checkout', async (request, reply) => {
-    const context = await dependencies.auth.user(request);
-    if (!context) return reply.code(401).send({ error: { code: 'billing.unauthorized', message: 'user context required' } });
-    const key = requireIdempotency(request, reply);
-    if (!key) return;
-    const parsed = checkoutSchema.safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
-    if (!(await claimIdempotencyHint(dependencies, request, key, reply, context.tenantId))) return;
-    try {
-      const result = await dependencies.checkout.create({ ...parsed.data, amountMinor: safeDecimal(parsed.data.amountMinor, 'amount_minor'), siteId: context.tenantId, subjectId: context.subjectId, idempotencyKey: key, expiresAt: new Date(Date.now() + 300_000) });
-      const hosted = dependencies.checkout.createHostedSession ? await dependencies.checkout.createHostedSession(context.tenantId, result.checkoutId) : result;
-      return reply.code(201).send({ data: { ...hosted, amountMinor: String(hosted.amountMinor) }, requestId: request.id });
-    } catch (error) { return sendError(reply, error); }
-  });
-
-  app.get('/billing/plans', async (request, reply) => {
-    const context = await dependencies.auth.user(request);
-    if (!context) return reply.code(401).send({ error: { code: 'billing.unauthorized', message: 'user context required' } });
-    if (!dependencies.catalog) return reply.code(503).send({ error: { code: 'billing.catalog_not_configured', message: 'catalog is not configured' } });
-    try {
-      const plans = await dependencies.catalog.listSellable(context.tenantId);
-      return reply.code(200).send({ data: { plans }, requestId: request.id });
-    } catch (error) { return sendError(reply, error); }
-  });
-
-  app.get('/billing/me/credit-account', async (request, reply) => {
-    const context = await dependencies.auth.user(request);
-    if (!context) return reply.code(401).send({ error: { code: 'billing.unauthorized', message: 'user context required' } });
-    const account = await dependencies.account.getForSubject(context.tenantId, context.subjectId);
-    if (!account) return reply.code(404).send({ error: { code: 'billing.credit_account_not_found', message: 'credit account not found' } });
-    return reply.code(200).send({ data: account, requestId: request.id });
-  });
-
-  app.post('/billing/redeem', async (request, reply) => {
-    const context = await dependencies.auth.user(request);
-    if (!context) return reply.code(401).send({ error: { code: 'billing.unauthorized', message: 'user context required' } });
-    if (!dependencies.redeem) return reply.code(503).send({ error: { code: 'billing.redeem_not_configured', message: 'redeem is not configured' } });
-    const key = requireIdempotency(request, reply);
-    if (!key) return;
-    const parsed = redeemSchema.safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
-    if (!(await claimIdempotencyHint(dependencies, request, key, reply, context.tenantId))) return;
-    try {
-      const result = await dependencies.redeem.redeem({ siteId: context.tenantId, subjectId: context.subjectId, code: parsed.data.code, idempotencyKey: key });
-      return reply.code(201).send({ data: result, requestId: request.id });
-    } catch (error) { return sendError(reply, error); }
-  });
-
-  app.post('/internal/billing/entitlement/usage/events', async (request, reply) => {
-    const internalContext = await dependencies.auth.internal(request);
-    if (!internalContext) return reply.code(403).send({ error: { code: 'billing.forbidden', message: 'service identity required' } });
-    const key = requireIdempotency(request, reply);
-    if (!key) return;
-    const parsed = usageEventSchema.safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
-    if (!(await claimIdempotencyHint(dependencies, request, key, reply, internalContext.tenantId))) return;
-    try {
-      const { dimensions, ...event } = parsed.data;
-      const usageEvent = { ...event, quantityMicros: safeDecimal(event.quantityMicros, 'quantity_micros'), siteId: internalContext.tenantId };
-      await dependencies.usage.recordUsageEvent(dimensions === undefined ? usageEvent : { ...usageEvent, dimensions });
-      return reply.code(202).send({ data: { accepted: true }, requestId: request.id });
-    } catch (error) { return sendError(reply, error); }
-  });
-
-  app.post('/internal/billing/entitlement/accounts/ensure', async (request, reply) => {
-    const internalContext = await dependencies.auth.internal(request);
-    if (!internalContext) return reply.code(403).send({ error: { code: 'billing.forbidden', message: 'service identity required' } });
-    if (!dependencies.ensureAccount) return reply.code(503).send({ error: { code: 'billing.account_ensure_not_configured', message: 'account ensure is not configured' } });
-    const parsed = z.object({ subjectId: z.string().min(1) }).safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
-    try {
-      const result = await dependencies.ensureAccount.ensureForSubject(internalContext.tenantId, parsed.data.subjectId);
-      return reply.code(200).send({ data: result, requestId: request.id });
-    } catch (error) { return sendError(reply, error); }
-  });
-
-  app.get('/internal/billing/entitlement/accounts/summary', async (request, reply) => {
-    const internalContext = await dependencies.auth.internal(request);
-    if (!internalContext) return reply.code(403).send({ error: { code: 'billing.forbidden', message: 'service identity required' } });
-    if (!dependencies.accountRead) return reply.code(503).send({ error: { code: 'billing.account_read_not_configured', message: 'account read is not configured' } });
-    const subjectId = String((request.query as { subjectId?: string }).subjectId ?? '');
-    if (subjectId.length === 0) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: 'subjectId is required' } });
-    try { return reply.code(200).send({ data: await dependencies.accountRead.summaryForSubject(internalContext.tenantId, subjectId), requestId: request.id }); }
-    catch (error) { return sendError(reply, error); }
-  });
-
-  app.get('/internal/billing/entitlement/accounts/ledger', async (request, reply) => {
-    const internalContext = await dependencies.auth.internal(request);
-    if (!internalContext) return reply.code(403).send({ error: { code: 'billing.forbidden', message: 'service identity required' } });
-    if (!dependencies.accountRead) return reply.code(503).send({ error: { code: 'billing.account_read_not_configured', message: 'account read is not configured' } });
-    const parsed = ledgerQuerySchema.safeParse(request.query);
-    if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
-    try { return reply.code(200).send({ data: await dependencies.accountRead.ledgerForSubject(internalContext.tenantId, parsed.data.subjectId, parsed.data.limit, parsed.data.cursor), requestId: request.id }); }
-    catch (error) { return sendError(reply, error); }
-  });
-
-  app.get('/internal/billing/entitlement/accounts/by-model', async (request, reply) => {
-    const internalContext = await dependencies.auth.internal(request);
-    if (!internalContext) return reply.code(403).send({ error: { code: 'billing.forbidden', message: 'service identity required' } });
-    if (!dependencies.accountRead) return reply.code(503).send({ error: { code: 'billing.account_read_not_configured', message: 'account read is not configured' } });
-    const subjectId = String((request.query as { subjectId?: string }).subjectId ?? '');
-    if (subjectId.length === 0) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: 'subjectId is required' } });
-    try { return reply.code(200).send({ data: await dependencies.accountRead.byModelForSubject(internalContext.tenantId, subjectId), requestId: request.id }); }
-    catch (error) { return sendError(reply, error); }
-  });
-
-  app.post('/internal/billing/entitlement/quotes', async (request, reply) => {
-    const internalContext = await dependencies.auth.internal(request);
-    if (!internalContext) return reply.code(403).send({ error: { code: 'billing.forbidden', message: 'service identity required' } });
-    if (!dependencies.pricing) return reply.code(503).send({ error: { code: 'billing.pricing_not_configured', message: 'usage pricing is not configured' } });
-    const parsed = quoteSchema.safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
-    try {
-      const result = await dependencies.pricing.quote({ ...parsed.data, siteId: internalContext.tenantId });
-      return reply.code(200).send({ data: { ...result, amountMicros: String(result.amountMicros), reservationMicros: String(result.reservationMicros) }, requestId: request.id });
-    } catch (error) { return sendError(reply, error); }
-  });
-
-  app.post('/internal/billing/entitlement/holds', async (request, reply) => {
-    const internalContext = await dependencies.auth.internal(request);
-    if (!internalContext) return reply.code(403).send({ error: { code: 'billing.forbidden', message: 'service identity required' } });
-    const key = requireIdempotency(request, reply);
-    if (!key) return;
-    const parsed = holdSchema.safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
-    if (!(await claimIdempotencyHint(dependencies, request, key, reply, internalContext.tenantId))) return;
-    try {
-      const result = await dependencies.usage.authorizeUsage({
-        accountId: parsed.data.accountId,
-        requestedMicros: safeDecimal(parsed.data.requestedMicros, 'requested_micros'),
-        featureKey: parsed.data.featureKey,
-        siteId: internalContext.tenantId,
-        idempotencyKey: key,
-        ...(parsed.data.labelKey === undefined ? {} : { labelKey: parsed.data.labelKey }),
-        ...(parsed.data.modelBindingId === undefined ? {} : { modelBindingId: parsed.data.modelBindingId }),
-        ...(parsed.data.pricingRevisionId === undefined ? {} : { pricingRevisionId: parsed.data.pricingRevisionId }),
-      });
-      return reply.code(201).send({ data: { ...result, allocations: result.allocations.map((allocation) => ({ ...allocation, amountMicros: String(allocation.amountMicros) })) }, requestId: request.id });
-    } catch (error) { return sendError(reply, error); }
-  });
-
-  app.post('/internal/billing/entitlement/usage/settle', async (request, reply) => {
-    const internalContext = await dependencies.auth.internal(request);
-    if (!internalContext) return reply.code(403).send({ error: { code: 'billing.forbidden', message: 'service identity required' } });
-    const key = requireIdempotency(request, reply);
-    if (!key) return;
-    const parsed = settleSchema.safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
-    if (!(await claimIdempotencyHint(dependencies, request, key, reply, internalContext.tenantId))) return;
-    try {
-      const siteId = internalContext.tenantId;
-      let actualMicros = parsed.data.actualMicros === undefined ? undefined : safeDecimal(parsed.data.actualMicros, 'actual_micros');
-      if (actualMicros === undefined) {
-        if (!dependencies.pricing) throw new Error('billing.pricing_not_configured');
-        const quote = await dependencies.pricing.quoteForHold({ siteId, holdId: parsed.data.holdId, inputTokens: parsed.data.inputTokens ?? 0, outputTokens: parsed.data.outputTokens ?? 0 });
-        actualMicros = quote.amountMicros;
-      }
-      if (actualMicros === undefined) throw new Error('billing.actual_usage_required');
-      const usageEventId = parsed.data.usageEventId ?? await dependencies.usage.ensureUsageEventForHold({ siteId, holdId: parsed.data.holdId, sourceEventId: key });
-      const result = await dependencies.usage.settleUsage({ holdId: parsed.data.holdId, usageEventId, actualMicros, siteId, idempotencyKey: key });
-      return reply.code(200).send({ data: { ...result, capturedMicros: String(result.capturedMicros), releasedMicros: String(result.releasedMicros) }, requestId: request.id });
-    } catch (error) { return sendError(reply, error); }
-  });
-
-  app.post<{ Params: { holdId: string } }>('/internal/billing/entitlement/holds/:holdId/release', async (request, reply) => {
-    const internalContext = await dependencies.auth.internal(request);
-    if (!internalContext) return reply.code(403).send({ error: { code: 'billing.forbidden', message: 'service identity required' } });
-    const key = requireIdempotency(request, reply);
-    if (!key) return;
-    if (!(await claimIdempotencyHint(dependencies, request, key, reply, internalContext.tenantId))) return;
-    try {
-      const result = await dependencies.usage.releaseUsage({ siteId: internalContext.tenantId, holdId: request.params.holdId, idempotencyKey: key });
-      return reply.code(200).send({ data: { ...result, releasedMicros: String(result.releasedMicros) }, requestId: request.id });
-    } catch (error) { return sendError(reply, error); }
-  });
-
-  app.post('/internal/billing/payment/settlements/accept', async (request, reply) => {
-    const internalContext = await dependencies.auth.internal(request);
-    if (!internalContext) return reply.code(403).send({ error: { code: 'billing.forbidden', message: 'service identity required' } });
-    const key = requireIdempotency(request, reply);
-    if (!key) return;
-    const parsed = settlementSchema.safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
-    if (!(await claimIdempotencyHint(dependencies, request, key, reply, internalContext.tenantId))) return;
-    try {
-      await dependencies.settlement.recordSettlement({
-        settlementId: parsed.data.settlementId,
-        externalPaymentRef: parsed.data.externalPaymentRef,
-        amountMinor: safeDecimal(parsed.data.amountMinor, 'amount_minor'),
-        currency: parsed.data.currency,
-        siteId: internalContext.tenantId,
-        ...(parsed.data.provider === undefined ? {} : { provider: parsed.data.provider }),
-      });
-      return reply.code(202).send({ data: { accepted: true }, requestId: request.id });
-    } catch (error) { return sendError(reply, error); }
-  });
-
-  app.post<{ Params: { provider: string } }>('/billing/webhooks/:provider', async (request, reply) => {
-    if (!(await dependencies.auth.webhook(request))) return reply.code(401).send({ error: { code: 'billing.provider_signature', message: 'provider signature required' } });
-    const provider = request.params.provider;
-    const body = request.body as Record<string, unknown>;
-    try {
-      const parsed = dependencies.parseWebhook?.(provider, body);
-      const headerTenantId = typeof request.headers['x-kokoro-tenant-id'] === 'string' ? request.headers['x-kokoro-tenant-id'] : null;
-      const providerAccountRef = parsed?.providerAccountRef ?? dependencies.resolveWebhookAccountRef?.(provider) ?? null;
-      const mappedTenantId = providerAccountRef && dependencies.resolveWebhookTenant
-        ? await dependencies.resolveWebhookTenant(provider, providerAccountRef)
-        : null;
-      // Provider account mapping is the production tenant boundary. Signed payload tenantId is only a consistency check; it never selects the tenant.
-      // In production the provider-account registry is the sole tenant authority.
-      // The header fallback exists only for local fixtures that do not wire the registry.
-      const tenantId = dependencies.resolveWebhookTenant ? mappedTenantId : headerTenantId;
-      if (!tenantId) throw new Error('billing.provider_tenant_missing');
-      if ((parsed?.payloadTenantId && parsed.payloadTenantId !== tenantId)) throw new Error('billing.provider_tenant_mismatch');
-      const result = await dependencies.webhook.accept({ siteId: tenantId, provider, providerAccountRef, externalEventId: parsed?.eventId ?? String(body.id ?? ''), eventType: parsed?.eventType ?? String(body.type ?? 'unknown'), rawPayload: body, signatureValid: true });
-      const settlement = provider === 'mock' && parsed?.orderId && dependencies.processMockPayment
-        ? await dependencies.processMockPayment.process({ siteId: tenantId, providerEventId: result.providerEventId, externalEventId: parsed.eventId, checkoutId: parsed.orderId })
-        : null;
-      return reply.code(202).send({ data: { ...result, settlement }, requestId: request.id });
-    } catch (error) { return sendError(reply, error); }
-  });
-
-  app.get('/admin/billing/reconcile', async (request, reply) => {
-    const adminContext = await dependencies.auth.admin(request);
-    if (!adminContext) return reply.code(403).send({ error: { code: 'billing.forbidden', message: 'admin role required' } });
-    try { return reply.code(200).send({ data: await dependencies.admin.reconcile(adminContext.tenantId), requestId: request.id }); }
-    catch (error) { return sendError(reply, error); }
-  });
-
-  app.get('/admin/billing/stats', async (request, reply) => {
-    const adminContext = await dependencies.auth.admin(request);
-    if (!adminContext) return reply.code(403).send({ error: { code: 'billing.forbidden', message: 'admin role required' } });
-    if (!dependencies.adminStats) return reply.code(503).send({ error: { code: 'billing.admin_stats_not_configured', message: 'admin stats is not configured' } });
-    try { return reply.code(200).send({ data: await dependencies.adminStats.get(adminContext.tenantId), requestId: request.id }); }
-    catch (error) { return sendError(reply, error); }
-  });
-
-  app.get('/admin/billing/credit-operations', async (request, reply) => {
-    const adminContext = await dependencies.auth.admin(request);
-    if (!adminContext) return reply.code(403).send({ error: { code: 'billing.forbidden', message: 'admin role required' } });
-    if (!dependencies.adminStats?.listCreditOperations) return reply.code(503).send({ error: { code: 'billing.credit_operations_not_configured', message: 'credit operations are not configured' } });
-    try { return reply.code(200).send({ data: await dependencies.adminStats.listCreditOperations(adminContext.tenantId), requestId: request.id }); }
-    catch (error) { return sendError(reply, error); }
-  });
-
-  app.get('/admin/billing/payment-operations', async (request, reply) => {
-    const adminContext = await dependencies.auth.admin(request);
-    if (!adminContext) return reply.code(403).send({ error: { code: 'billing.forbidden', message: 'admin role required' } });
-    if (!dependencies.adminStats?.listPaymentOperations) return reply.code(503).send({ error: { code: 'billing.payment_operations_not_configured', message: 'payment operations are not configured' } });
-    try { return reply.code(200).send({ data: await dependencies.adminStats.listPaymentOperations(adminContext.tenantId), requestId: request.id }); }
-    catch (error) { return sendError(reply, error); }
-  });
-
-  app.get('/admin/billing/manifest', async (request, reply) => {
-    const adminContext = await dependencies.auth.admin(request);
-    if (!adminContext) return reply.code(403).send({ error: { code: 'billing.forbidden', message: 'admin role required' } });
-    return reply.code(200).send({
-      data: billingAdminManifest,
-      requestId: request.id,
-    });
-  });
-
-  app.post<{ Params: { providerEventId: string } }>('/admin/billing/provider-events/:providerEventId/retry', async (request, reply) => {
-    const adminContext = await dependencies.auth.admin(request);
-    if (!adminContext) return reply.code(403).send({ error: { code: 'billing.forbidden', message: 'admin role required' } });
-    if (!dependencies.providerEventAdmin) return reply.code(503).send({ error: { code: 'billing.provider_event_admin_not_configured', message: 'provider event admin is not configured' } });
-    const key = requireIdempotency(request, reply);
-    if (!key) return;
-    const parsed = providerEventRetrySchema.safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
-    if (!(await claimIdempotencyHint(dependencies, request, key, reply, adminContext.tenantId))) return;
-    try {
-      const result = await dependencies.providerEventAdmin.retry({ siteId: adminContext.tenantId, providerEventId: request.params.providerEventId, operatorId: adminContext.operatorId, reason: parsed.data.reason, idempotencyKey: key });
-      return reply.code(202).send({ data: result, requestId: request.id });
-    } catch (error) { return sendError(reply, error); }
-  });
-
-  app.get('/admin/billing/provider-events', async (request, reply) => {
-    const adminContext = await dependencies.auth.admin(request);
-    if (!adminContext) return reply.code(403).send({ error: { code: 'billing.forbidden', message: 'admin role required' } });
-    if (!dependencies.providerEventAdmin) return reply.code(503).send({ error: { code: 'billing.provider_event_admin_not_configured', message: 'provider event admin is not configured' } });
-    const parsed = providerEventListQuerySchema.safeParse(request.query);
-    if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
-    try {
-      const listInput = {
-        siteId: adminContext.tenantId,
-        limit: parsed.data.limit,
-        ...(parsed.data.status === undefined ? {} : { status: parsed.data.status }),
-        ...(parsed.data.cursor === undefined ? {} : { cursor: parsed.data.cursor }),
-      };
-      return reply.code(200).send({ data: await dependencies.providerEventAdmin.list(listInput), requestId: request.id });
-    }
-    catch (error) { return sendError(reply, error); }
-  });
-
-  app.post('/admin/billing/grants', async (request, reply) => {
-    const adminContext = await dependencies.auth.admin(request);
-    if (!adminContext) return reply.code(403).send({ error: { code: 'billing.forbidden', message: 'admin role required' } });
-    const key = requireIdempotency(request, reply);
-    if (!key) return;
-    const parsed = adminGrantSchema.safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
-    if (!(await claimIdempotencyHint(dependencies, request, key, reply, adminContext.tenantId))) return;
-    try {
-      const result = await dependencies.admin.grant({ ...parsed.data, amountMicros: safeDecimal(parsed.data.amountMicros, 'amount_micros'), siteId: adminContext.tenantId, operatorId: adminContext.operatorId, idempotencyKey: key });
-      return reply.code(201).send({ data: result, requestId: request.id });
-    } catch (error) { return sendError(reply, error); }
-  });
-
-  app.post('/admin/billing/redeem-campaigns', async (request, reply) => {
-    const adminContext = await dependencies.auth.admin(request);
-    if (!adminContext) return reply.code(403).send({ error: { code: 'billing.forbidden', message: 'admin role required' } });
-    if (!dependencies.redeemAdmin) return reply.code(503).send({ error: { code: 'billing.redeem_not_configured', message: 'redeem is not configured' } });
-    const key = requireIdempotency(request, reply); if (!key) return;
-    const parsed = redeemCampaignSchema.safeParse(request.body); if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
-    try {
-      const input = { campaignKey: parsed.data.campaignKey, programKey: parsed.data.programKey, creditMicros: safeDecimal(parsed.data.creditMicros, 'credit_micros'), maxRedemptions: parsed.data.maxRedemptions, siteId: adminContext.tenantId, operatorId: adminContext.operatorId, idempotencyKey: key, reason: parsed.data.reason, ...(parsed.data.startsAt ? { startsAt: new Date(parsed.data.startsAt) } : {}), ...(parsed.data.endsAt === undefined ? {} : { endsAt: parsed.data.endsAt === null ? null : new Date(parsed.data.endsAt) }) };
-      return reply.code(201).send({ data: await dependencies.redeemAdmin.createCampaign(input), requestId: request.id });
-    }
-    catch (error) { return sendError(reply, error); }
-  });
-
-  app.post('/admin/billing/redeem-campaigns/:campaignId/batches', async (request, reply) => {
-    const adminContext = await dependencies.auth.admin(request);
-    if (!adminContext) return reply.code(403).send({ error: { code: 'billing.forbidden', message: 'admin role required' } });
-    if (!dependencies.redeemAdmin) return reply.code(503).send({ error: { code: 'billing.redeem_not_configured', message: 'redeem is not configured' } });
-    const key = requireIdempotency(request, reply); if (!key) return;
-    const parsed = redeemBatchSchema.safeParse({ ...(request.body as object), campaignId: (request.params as { campaignId: string }).campaignId }); if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
-    try { return reply.code(201).send({ data: await dependencies.redeemAdmin.issueCodes({ ...parsed.data, siteId: adminContext.tenantId, operatorId: adminContext.operatorId, idempotencyKey: key }), requestId: request.id }); }
-    catch (error) { return sendError(reply, error); }
-  });
-
-  app.post<{ Params: { codeId: string } }>('/admin/billing/redeem-codes/:codeId/disable', async (request, reply) => {
-    const adminContext = await dependencies.auth.admin(request);
-    if (!adminContext) return reply.code(403).send({ error: { code: 'billing.forbidden', message: 'admin role required' } });
-    if (!dependencies.redeemAdmin) return reply.code(503).send({ error: { code: 'billing.redeem_not_configured', message: 'redeem is not configured' } });
-    const key = requireIdempotency(request, reply); if (!key) return;
-    const parsed = disableRedeemCodeSchema.safeParse(request.body); if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
-    try { await dependencies.redeemAdmin.disableCode({ ...parsed.data, siteId: adminContext.tenantId, codeId: request.params.codeId, operatorId: adminContext.operatorId, idempotencyKey: key }); return reply.code(204).send(); }
-    catch (error) { return sendError(reply, error); }
-  });
-
-  app.get('/admin/billing/plans', async (request, reply) => {
-    const adminContext = await dependencies.auth.admin(request);
-    if (!adminContext) return reply.code(403).send({ error: { code: 'billing.forbidden', message: 'admin role required' } });
-    if (!dependencies.catalog) return reply.code(503).send({ error: { code: 'billing.catalog_not_configured', message: 'catalog is not configured' } });
-    try { return reply.code(200).send({ data: await (dependencies.catalog.listAdmin ?? dependencies.catalog.listSellable)(adminContext.tenantId), requestId: request.id }); }
-    catch (error) { return sendError(reply, error); }
-  });
-
-  app.get('/admin/billing/usage-pricing', async (request, reply) => {
-    const adminContext = await dependencies.auth.admin(request);
-    if (!adminContext) return reply.code(403).send({ error: { code: 'billing.forbidden', message: 'admin role required' } });
-    if (!dependencies.pricing?.listActive) return reply.code(503).send({ error: { code: 'billing.usage_pricing_not_configured', message: 'usage pricing is not configured' } });
-    try { return reply.code(200).send({ data: await dependencies.pricing.listActive(adminContext.tenantId), requestId: request.id }); }
-    catch (error) { return sendError(reply, error); }
-  });
-
-  app.post('/admin/billing/plans', async (request, reply) => {
-    const adminContext = await dependencies.auth.admin(request);
-    if (!adminContext) return reply.code(403).send({ error: { code: 'billing.forbidden', message: 'admin role required' } });
-    if (!dependencies.catalogAdmin) return reply.code(503).send({ error: { code: 'billing.catalog_admin_not_configured', message: 'catalog admin is not configured' } });
-    const key = requireIdempotency(request, reply);
-    if (!key) return;
-    const parsed = adminPlanSchema.safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
-    if (!(await claimIdempotencyHint(dependencies, request, key, reply, adminContext.tenantId))) return;
-    try {
-      const result = await dependencies.catalogAdmin.publishPlan({ ...parsed.data, amountMinor: safeDecimal(parsed.data.amountMinor, 'amount_minor'), creditMicros: safeDecimal(parsed.data.creditMicros, 'credit_micros'), siteId: adminContext.tenantId, operatorId: adminContext.operatorId, idempotencyKey: key });
-      return reply.code(201).send({ data: result, requestId: request.id });
-    } catch (error) { return sendError(reply, error); }
-  });
-
-  app.post('/admin/billing/usage-pricing', async (request, reply) => {
-    const adminContext = await dependencies.auth.admin(request);
-    if (!adminContext) return reply.code(403).send({ error: { code: 'billing.forbidden', message: 'admin role required' } });
-    if (!dependencies.pricingAdmin) return reply.code(503).send({ error: { code: 'billing.usage_pricing_admin_not_configured', message: 'usage pricing admin is not configured' } });
-    const key = requireIdempotency(request, reply);
-    if (!key) return;
-    const parsed = adminUsagePricingSchema.safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
-    if (!(await claimIdempotencyHint(dependencies, request, key, reply, adminContext.tenantId))) return;
-    try {
-      const result = await dependencies.pricingAdmin.publish({
-        siteId: adminContext.tenantId,
-        operatorId: adminContext.operatorId,
-        effectiveFrom: parsed.data.effectiveFrom === undefined ? new Date() : new Date(parsed.data.effectiveFrom),
-        reason: parsed.data.reason,
-        idempotencyKey: key,
-        rates: parsed.data.rates.map((rate) => ({
-          featureKey: rate.featureKey,
-          inputMicrosPerMillion: safeDecimal(rate.inputMicrosPerMillion, 'input_micros_per_million'),
-          outputMicrosPerMillion: safeDecimal(rate.outputMicrosPerMillion, 'output_micros_per_million'),
-          reservationMicros: safeDecimal(rate.reservationMicros, 'reservation_micros'),
-          ...(rate.labelKey === undefined ? {} : { labelKey: rate.labelKey }),
-          ...(rate.modelBindingId === undefined ? {} : { modelBindingId: rate.modelBindingId }),
-        })),
-      });
-      return reply.code(201).send({ data: result, requestId: request.id });
-    } catch (error) { return sendError(reply, error); }
-  });
-
-  app.post<{ Params: { settlementId: string } }>('/admin/billing/refunds/:settlementId', async (request, reply) => {
-    const adminContext = await dependencies.auth.admin(request);
-    if (!adminContext) return reply.code(403).send({ error: { code: 'billing.forbidden', message: 'admin role required' } });
-    const key = requireIdempotency(request, reply);
-    if (!key) return;
-    const parsed = refundSchema.safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
-    if (!(await claimIdempotencyHint(dependencies, request, key, reply, adminContext.tenantId))) return;
-    const siteId = adminContext.tenantId;
-    try {
-      const amountMinor = safeDecimal(parsed.data.amountMinor, 'amount_minor');
-      const amountMicros = safeDecimal(parsed.data.amountMicros, 'amount_micros');
-      const reversalId = await dependencies.reversal.recordReversal({ ...parsed.data, amountMinor, siteId, settlementId: request.params.settlementId, operatorId: adminContext.operatorId, idempotencyKey: key });
-      const result = await dependencies.reversal.reverseCredits({ siteId, reversalId, settlementId: request.params.settlementId, accountId: parsed.data.accountId, amountMicros });
-      return reply.code(202).send({ data: { reversalId, ...result }, requestId: request.id });
-    } catch (error) { return sendError(reply, error); }
-  });
-
-  // Clean-build v1 transport. The application services above keep the fixture's
-  // existing adapters usable; these routes expose the target snake_case contract
-  // and never accept a caller-selected account or amount for admission.
+  // Canonical v1 transport. These routes expose the snake_case contract and
+  // never accept a caller-selected account or amount for admission.
   const targetInternal = async (request: FastifyRequest, reply: { code: (status: number) => { send: (body: unknown) => unknown } }, allowed: readonly string[]): Promise<BillingInternalContext | null> => {
     const context = await dependencies.auth.internal(request);
     if (!context || !allowed.includes(context.serviceId)) {
@@ -756,7 +291,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     const context = await dependencies.auth.user(request);
     if (!context) return reply.code(401).send({ error: { code: 'billing.unauthorized', message: 'user context required' } });
     if (!dependencies.accountRead) return reply.code(503).send({ error: { code: 'billing.account_read_not_configured', message: 'credit ledger is not configured' } });
-    const parsed = ledgerQuerySchema.omit({ subjectId: true }).safeParse(request.query);
+    const parsed = ledgerPageQuerySchema.safeParse(request.query);
     if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
     try {
       const ledger = await dependencies.accountRead.ledgerForSubject(context.tenantId, context.subjectId, parsed.data.limit, parsed.data.cursor);
@@ -892,7 +427,6 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
   app.post('/v1/internal/commands/expire-credit-holds', async (request, reply) => {
     const context = await targetInternal(request, reply, ['scheduler']);
     if (!context) return;
-    if (!dependencies.usage.expireExpiredHolds) return reply.code(503).send({ error: { code: 'billing.expiry_not_configured', message: 'expiry command is not configured' } });
     const key = requireIdempotency(request, reply); if (!key) return;
     const parsed = z.object({ limit: z.number().int().positive().max(500).optional() }).strict().safeParse(request.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });

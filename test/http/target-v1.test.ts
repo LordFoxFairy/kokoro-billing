@@ -16,11 +16,10 @@ const server = createBillingServer({
   catalog: { listSellable: async () => [{ id: 'offer-revision-1', key: 'pro', name: 'Pro', currency: 'USD', amountMinor: '1999', creditMicros: '1000000', billingInterval: 'month' }] },
   checkout: { create: async (input) => { checkoutCalls.push(input); return { checkoutId: 'checkout-1', status: 'created', amountMinor: 1999, currency: 'USD', expiresAt: new Date('2030-01-01') }; } },
   usage: { recordUsageEvent: async () => undefined, authorizeUsage: async () => ({ holdId: 'hold-1', allocations: [] }), settleUsage: async () => ({ settlementId: 's-1', capturedMicros: 1, releasedMicros: 0 }), releaseUsage: async () => ({ holdId: 'hold-1', releasedMicros: 1 }), ensureUsageEventForHold: async () => 'usage-1' },
-  settlement: { recordSettlement: async () => undefined, fulfillSettlement: async () => ({ fulfillmentId: 'f-1', grantId: 'g-1', journalId: 'j-1' }) },
+  settlement: { recordSettlement: async () => undefined },
   reversal: { recordReversal: async () => 'refund-1', reverseCredits: async () => ({ fulfillmentReversalId: 'r-1', journalId: 'j-1' }) },
   webhook: { accept: async () => ({ providerEventId: 'evt-1', processingStatus: 'received' as const }) },
   account: { getForSubject: async () => ({ accountId: 'account-1', availableMicros: '42', heldMicros: '0' }) },
-  admin: { reconcile: async () => ({ status: 'ok' }), grant: async () => ({ grantId: 'grant-1', journalId: 'journal-1' }) },
   admission: {
     create: async () => admissionResult,
     capture: async (...input) => { calls.capture.push(input); return { ...admissionResult, status: 'accepted_without_charge' as const }; },
