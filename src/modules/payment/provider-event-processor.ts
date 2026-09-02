@@ -85,12 +85,12 @@ export class ProviderEventProcessor {
     const plan = snapshot(checkout.quote_snapshot_json);
     const settlementId = uuidFromKey(`payment-settlement:${event.tenant_id}:${event.provider}:${externalEventId}`);
     await this.settlement.recordSettlement({
-      settlementId, siteId: event.tenant_id, provider: event.provider, providerEventId: event.provider_event_id, checkoutId: checkout.checkout_id,
+      settlementId, tenantId: event.tenant_id, provider: event.provider, providerEventId: event.provider_event_id, checkoutId: checkout.checkout_id,
       externalPaymentRef: externalPaymentRef ?? `${event.provider}:${externalEventId}`,
       amountMinor: readSafeInteger(checkout.amount_minor, 'checkout_amount_minor'), currency: checkout.currency,
     });
     const accountId = await this.accountId(event.tenant_id, checkout.subject_id);
-    if (plan.creditMicros > 0) await this.settlement.fulfillSettlement({ settlementId, siteId: event.tenant_id, accountId, subjectId: checkout.subject_id, programKey: plan.programKey, grantMicros: plan.creditMicros });
+    if (plan.creditMicros > 0) await this.settlement.fulfillSettlement({ settlementId, tenantId: event.tenant_id, accountId, subjectId: checkout.subject_id, programKey: plan.programKey, grantMicros: plan.creditMicros });
   }
 
   private async processRefund(event: EventRow, checkoutId: string | null, externalEventId: string, externalReversalRef: string | null, refundAmountMinor: number | null): Promise<void> {
@@ -106,9 +106,9 @@ export class ProviderEventProcessor {
     if (!grant && plan.creditMicros > 0) throw new Error('billing.refund_grant_not_found');
     if (!grant) return;
     const amountMinor = refundAmountMinor ?? readSafeInteger(settlement.amount_minor, 'settlement_amount_minor');
-    const reversalId = await this.reversal.recordReversal({ provider: event.provider, siteId: event.tenant_id, settlementId: settlement.settlement_id, externalReversalRef: externalReversalRef ?? `${event.provider}:${externalEventId}`, amountMinor, reason: 'provider_refund', idempotencyKey: `provider-refund:${event.provider}:${externalEventId}` });
+    const reversalId = await this.reversal.recordReversal({ provider: event.provider, tenantId: event.tenant_id, settlementId: settlement.settlement_id, externalReversalRef: externalReversalRef ?? `${event.provider}:${externalEventId}`, amountMinor, reason: 'provider_refund', idempotencyKey: `provider-refund:${event.provider}:${externalEventId}` });
     // Leave the credit amount allocation to the locked reversal transaction so concurrent partial refunds cannot over-reverse.
-    await this.reversal.reverseCredits({ siteId: event.tenant_id, reversalId, settlementId: settlement.settlement_id, accountId: grant.credit_account_id });
+    await this.reversal.reverseCredits({ tenantId: event.tenant_id, reversalId, settlementId: settlement.settlement_id, accountId: grant.credit_account_id });
   }
 
   private async processSubscription(event: EventRow, subscription: ParsedSubscriptionEvent): Promise<void> {
@@ -176,7 +176,7 @@ export class ProviderEventProcessor {
     if (subscription.grantCredits) {
       if (amountMicros > 0) {
         const accountId = await this.accountId(event.tenant_id, subscription.teamId);
-        await this.subscriptionGrant.grant({ siteId: event.tenant_id, subjectId: subscription.teamId, accountId, periodId, programKey: revision.offer_key, amountMicros, expiresAt: subscription.currentPeriodEnd });
+        await this.subscriptionGrant.grant({ tenantId: event.tenant_id, subjectId: subscription.teamId, accountId, periodId, programKey: revision.offer_key, amountMicros, expiresAt: subscription.currentPeriodEnd });
       }
     }
   }
@@ -193,15 +193,15 @@ export class ProviderEventProcessor {
     return rows[0].provider_account_id;
   }
   private async getEvent(id: string): Promise<EventRow | undefined> { const [rows] = await this.connection.execute<EventRow[]>(`SELECT provider_event_id, tenant_id, provider, provider_account_ref, processing_status, payload_json FROM payment_provider_event WHERE provider_event_id = $1`, [id]); return rows[0]; }
-  private async getCheckout(siteId: string, checkoutId: string): Promise<CheckoutRow> { const [rows] = await this.connection.execute<CheckoutRow[]>(`SELECT checkout_id, subject_id, amount_minor, currency, provider_account_ref, quote_snapshot_json FROM payment_checkout WHERE tenant_id = $1 AND checkout_id = $2`, [siteId, checkoutId]); if (!rows[0]) throw new Error('billing.checkout_not_found'); return rows[0]; }
-  private async accountId(siteId: string, subjectId: string): Promise<string> {
+  private async getCheckout(tenantId: string, checkoutId: string): Promise<CheckoutRow> { const [rows] = await this.connection.execute<CheckoutRow[]>(`SELECT checkout_id, subject_id, amount_minor, currency, provider_account_ref, quote_snapshot_json FROM payment_checkout WHERE tenant_id = $1 AND checkout_id = $2`, [tenantId, checkoutId]); if (!rows[0]) throw new Error('billing.checkout_not_found'); return rows[0]; }
+  private async accountId(tenantId: string, subjectId: string): Promise<string> {
     const accountId = randomUUID();
-    await this.connection.execute(`INSERT INTO entitlement_credit_account (credit_account_id, tenant_id, subject_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`, [accountId, siteId, subjectId]);
-    const [rows] = await this.connection.execute<(RowDataPacket & { credit_account_id: string })[]>(`SELECT credit_account_id FROM entitlement_credit_account WHERE tenant_id = $1 AND subject_id = $2`, [siteId, subjectId]);
+    await this.connection.execute(`INSERT INTO entitlement_credit_account (credit_account_id, tenant_id, subject_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`, [accountId, tenantId, subjectId]);
+    const [rows] = await this.connection.execute<(RowDataPacket & { credit_account_id: string })[]>(`SELECT credit_account_id FROM entitlement_credit_account WHERE tenant_id = $1 AND subject_id = $2`, [tenantId, subjectId]);
     if (!rows[0]) throw new Error('billing.credit_account_not_found');
     return rows[0].credit_account_id;
   }
-  private async markProcessed(siteId: string, id: string): Promise<void> { await this.connection.execute(`UPDATE payment_provider_event SET processing_status = 'processed', processed_at = CURRENT_TIMESTAMP(6), last_error = NULL WHERE tenant_id = $1 AND provider_event_id = $2`, [siteId, id]); }
-  private async markIgnored(siteId: string, id: string): Promise<void> { await this.connection.execute(`UPDATE payment_provider_event SET processing_status = 'ignored', processed_at = CURRENT_TIMESTAMP(6), last_error = NULL WHERE tenant_id = $1 AND provider_event_id = $2`, [siteId, id]); }
-  private async markFailed(siteId: string, id: string, error: string): Promise<void> { await this.connection.execute(`UPDATE payment_provider_event SET processing_status = 'failed', last_error = $1 WHERE tenant_id = $2 AND provider_event_id = $3`, [error.slice(0, 1024), siteId, id]); }
+  private async markProcessed(tenantId: string, id: string): Promise<void> { await this.connection.execute(`UPDATE payment_provider_event SET processing_status = 'processed', processed_at = CURRENT_TIMESTAMP(6), last_error = NULL WHERE tenant_id = $1 AND provider_event_id = $2`, [tenantId, id]); }
+  private async markIgnored(tenantId: string, id: string): Promise<void> { await this.connection.execute(`UPDATE payment_provider_event SET processing_status = 'ignored', processed_at = CURRENT_TIMESTAMP(6), last_error = NULL WHERE tenant_id = $1 AND provider_event_id = $2`, [tenantId, id]); }
+  private async markFailed(tenantId: string, id: string, error: string): Promise<void> { await this.connection.execute(`UPDATE payment_provider_event SET processing_status = 'failed', last_error = $1 WHERE tenant_id = $2 AND provider_event_id = $3`, [error.slice(0, 1024), tenantId, id]); }
 }

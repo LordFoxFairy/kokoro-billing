@@ -10,12 +10,12 @@ integration('checkout quote snapshot', () => {
   it('creates one checkout and replays the same snapshot idempotently', async () => {
     const connection = await createBillingConnection(databaseUrl!);
     const service = new CheckoutService(connection);
-    const siteId = randomUUID();
+    const tenantId = randomUUID();
     const offerId = randomUUID();
     const revisionId = randomUUID();
     const idempotencyKey = `checkout-${randomUUID()}`;
     const input = {
-      siteId,
+      tenantId,
       subjectId: randomUUID(),
       idempotencyKey,
       offerRevisionId: revisionId,
@@ -25,12 +25,12 @@ integration('checkout quote snapshot', () => {
       expiresAt: new Date(Date.now() + 300_000),
     } as const;
     try {
-      await connection.execute(`INSERT INTO entitlement_offer (offer_id, tenant_id, offer_key, status) VALUES ($1, $2, 'pro', 'active')`, [offerId, siteId]);
+      await connection.execute(`INSERT INTO entitlement_offer (offer_id, tenant_id, offer_key, status) VALUES ($1, $2, 'pro', 'active')`, [offerId, tenantId]);
       await connection.execute(
         `INSERT INTO entitlement_offer_revision
           (offer_revision_id, offer_id, tenant_id, revision, name, currency, amount_minor, credit_micros, billing_interval, status, published_at)
          VALUES ($1, $2, $3, 1, 'Pro', 'USD', 1999, 1000, 'month', 'published', CURRENT_TIMESTAMP(6))`,
-        [revisionId, offerId, siteId],
+        [revisionId, offerId, tenantId],
       );
       const first = await service.create(input);
       // The HTTP layer computes a fresh expiry on every retry. Server-generated
@@ -38,12 +38,12 @@ integration('checkout quote snapshot', () => {
       const replay = await service.create({ ...input, expiresAt: new Date(Date.now() + 300_000) });
       expect(replay).toEqual(first);
       await expect(service.create({ ...input, amountMinor: 2000 })).rejects.toThrow('billing.checkout_quote_mismatch');
-      const [rows] = await connection.query('SELECT checkout_id FROM payment_checkout WHERE tenant_id = $1 AND idempotency_key = $2', [siteId, idempotencyKey]);
+      const [rows] = await connection.query('SELECT checkout_id FROM payment_checkout WHERE tenant_id = $1 AND idempotency_key = $2', [tenantId, idempotencyKey]);
       expect(rows).toHaveLength(1);
     } finally {
-      await connection.execute('DELETE FROM payment_checkout WHERE tenant_id = $1', [siteId]);
-      await connection.execute('DELETE FROM entitlement_offer_revision WHERE tenant_id = $1', [siteId]);
-      await connection.execute('DELETE FROM entitlement_offer WHERE tenant_id = $1', [siteId]);
+      await connection.execute('DELETE FROM payment_checkout WHERE tenant_id = $1', [tenantId]);
+      await connection.execute('DELETE FROM entitlement_offer_revision WHERE tenant_id = $1', [tenantId]);
+      await connection.execute('DELETE FROM entitlement_offer WHERE tenant_id = $1', [tenantId]);
       await connection.end();
     }
   });
@@ -52,7 +52,7 @@ integration('checkout quote snapshot', () => {
     const connection = await createBillingConnection(databaseUrl!);
     const service = new CheckoutService(connection);
     await expect(service.create({
-      siteId: randomUUID(), subjectId: randomUUID(), idempotencyKey: `expired-${randomUUID()}`,
+      tenantId: randomUUID(), subjectId: randomUUID(), idempotencyKey: `expired-${randomUUID()}`,
       offerRevisionId: randomUUID(), amountMinor: 100, currency: 'USD', quoteSnapshot: {}, expiresAt: new Date(Date.now() - 1),
     })).rejects.toThrow('billing.quote_expired');
     await connection.end();
@@ -62,7 +62,7 @@ integration('checkout quote snapshot', () => {
     const connection = await createBillingConnection(databaseUrl!);
     const service = new CheckoutService(connection, { mockEnabled: false });
     await expect(service.create({
-      siteId: randomUUID(), subjectId: randomUUID(), idempotencyKey: randomUUID(), offerRevisionId: randomUUID(),
+      tenantId: randomUUID(), subjectId: randomUUID(), idempotencyKey: randomUUID(), offerRevisionId: randomUUID(),
       amountMinor: 100, currency: 'USD', quoteSnapshot: { key: 'starter', creditMicros: '1000' }, expiresAt: new Date(Date.now() + 60_000),
     })).rejects.toThrow('billing.checkout_provider_unavailable');
     await connection.end();
@@ -70,17 +70,17 @@ integration('checkout quote snapshot', () => {
 
   it('persists a hosted provider session and replays it without creating a second session', async () => {
     const connection = await createBillingConnection(databaseUrl!);
-    const siteId = randomUUID();
+    const tenantId = randomUUID();
     const offerId = randomUUID();
     const revisionId = randomUUID();
     let calls = 0;
     try {
-      await connection.execute(`INSERT INTO entitlement_offer (offer_id, tenant_id, offer_key, status) VALUES ($1, $2, 'hosted', 'active')`, [offerId, siteId]);
+      await connection.execute(`INSERT INTO entitlement_offer (offer_id, tenant_id, offer_key, status) VALUES ($1, $2, 'hosted', 'active')`, [offerId, tenantId]);
       await connection.execute(
         `INSERT INTO entitlement_offer_revision
           (offer_revision_id, offer_id, tenant_id, revision, name, currency, amount_minor, credit_micros, billing_interval, status, published_at)
          VALUES ($1, $2, $3, 1, 'Hosted', 'USD', 1200, 9000, 'once', 'published', CURRENT_TIMESTAMP(6))`,
-        [revisionId, offerId, siteId],
+        [revisionId, offerId, tenantId],
       );
       const service = new CheckoutService(connection, {
         hostedProvider: {
@@ -89,16 +89,16 @@ integration('checkout quote snapshot', () => {
         },
         publicBaseUrl: 'https://app.example',
       });
-      const checkout = await service.create({ siteId, subjectId: randomUUID(), idempotencyKey: randomUUID(), offerRevisionId: revisionId, amountMinor: 1200, currency: 'USD', quoteSnapshot: { key: 'hosted', creditMicros: '9000', name: 'Hosted' }, expiresAt: new Date(Date.now() + 60_000) });
-      const first = await service.createHostedSession(siteId, checkout.checkoutId);
-      const second = await service.createHostedSession(siteId, checkout.checkoutId);
+      const checkout = await service.create({ tenantId, subjectId: randomUUID(), idempotencyKey: randomUUID(), offerRevisionId: revisionId, amountMinor: 1200, currency: 'USD', quoteSnapshot: { key: 'hosted', creditMicros: '9000', name: 'Hosted' }, expiresAt: new Date(Date.now() + 60_000) });
+      const first = await service.createHostedSession(tenantId, checkout.checkoutId);
+      const second = await service.createHostedSession(tenantId, checkout.checkoutId);
       expect(first.checkoutUrl).toBe('https://provider.example/checkout/session');
       expect(second.checkoutUrl).toBe(first.checkoutUrl);
       expect(calls).toBe(1);
     } finally {
-      await connection.execute('DELETE FROM payment_checkout WHERE tenant_id = $1', [siteId]);
-      await connection.execute('DELETE FROM entitlement_offer_revision WHERE tenant_id = $1', [siteId]);
-      await connection.execute('DELETE FROM entitlement_offer WHERE tenant_id = $1', [siteId]);
+      await connection.execute('DELETE FROM payment_checkout WHERE tenant_id = $1', [tenantId]);
+      await connection.execute('DELETE FROM entitlement_offer_revision WHERE tenant_id = $1', [tenantId]);
+      await connection.execute('DELETE FROM entitlement_offer WHERE tenant_id = $1', [tenantId]);
       await connection.end();
     }
   });

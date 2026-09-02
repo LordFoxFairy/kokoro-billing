@@ -13,7 +13,7 @@ export type UsagePriceRateInput = {
 };
 
 export type PublishUsagePricingInput = {
-  readonly siteId: string;
+  readonly tenantId: string;
   readonly operatorId: string;
   readonly effectiveFrom: Date;
   readonly rates: readonly UsagePriceRateInput[];
@@ -48,12 +48,12 @@ export class UsagePricingAdminService {
         `INSERT INTO entitlement_command_receipt (receipt_id, tenant_id, command_name, idempotency_key, payload_hash, status)
          VALUES ($1, $2, 'usage.pricing.publish', $3, $4, 'processing')
          ON CONFLICT DO NOTHING`,
-        [randomUUID(), input.siteId, input.idempotencyKey, payloadHash],
+        [randomUUID(), input.tenantId, input.idempotencyKey, payloadHash],
       );
       const [receipts] = await this.connection.execute<RowDataPacket[]>(
         `SELECT payload_hash, status, result_json FROM entitlement_command_receipt
           WHERE tenant_id = $1 AND command_name = 'usage.pricing.publish' AND idempotency_key = $2 FOR UPDATE`,
-        [input.siteId, input.idempotencyKey],
+        [input.tenantId, input.idempotencyKey],
       );
       const receipt = receipts[0] as { payload_hash: string; status: string; result_json: string | null } | undefined;
       if (!receipt) throw new Error('billing.command_receipt_not_found');
@@ -69,7 +69,7 @@ export class UsagePricingAdminService {
 
       const [revisions] = await this.connection.execute<RowDataPacket[]>(
         `SELECT COALESCE(MAX(revision), 0) AS revision FROM entitlement_usage_price_revision WHERE tenant_id = $1`,
-        [input.siteId],
+        [input.tenantId],
       );
       const revision = Number((revisions[0] as { revision: number } | undefined)?.revision ?? 0) + 1;
       const pricingRevisionId = randomUUID();
@@ -78,7 +78,7 @@ export class UsagePricingAdminService {
         `INSERT INTO entitlement_usage_price_revision
           (usage_price_revision_id, tenant_id, revision, effective_from, status, published_at)
          VALUES ($1, $2, $3, $4, 'published', CURRENT_TIMESTAMP(6))`,
-        [pricingRevisionId, input.siteId, revision, input.effectiveFrom],
+        [pricingRevisionId, input.tenantId, revision, input.effectiveFrom],
       );
       for (const rate of input.rates) {
         await this.connection.execute(
@@ -86,19 +86,19 @@ export class UsagePricingAdminService {
             (usage_price_rate_id, usage_price_revision_id, tenant_id, feature_key, label_key, model_binding_id,
              input_micros_per_million, output_micros_per_million, cached_micros_per_million, reservation_micros, status)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'active')`,
-          [randomUUID(), pricingRevisionId, input.siteId, rate.featureKey, rate.labelKey ?? null, rate.modelBindingId ?? null, rate.inputMicrosPerMillion, rate.outputMicrosPerMillion, rate.cachedMicrosPerMillion ?? 0, rate.reservationMicros],
+          [randomUUID(), pricingRevisionId, input.tenantId, rate.featureKey, rate.labelKey ?? null, rate.modelBindingId ?? null, rate.inputMicrosPerMillion, rate.outputMicrosPerMillion, rate.cachedMicrosPerMillion ?? 0, rate.reservationMicros],
         );
       }
       await this.connection.execute(
         `UPDATE entitlement_command_receipt SET status = 'succeeded', result_json = $1
           WHERE tenant_id = $2 AND command_name = 'usage.pricing.publish' AND idempotency_key = $3`,
-        [JSON.stringify(result), input.siteId, input.idempotencyKey],
+        [JSON.stringify(result), input.tenantId, input.idempotencyKey],
       );
       await this.connection.execute(
         `INSERT INTO entitlement_audit_event
           (audit_event_id, tenant_id, operator_id, action, resource_type, resource_id, reason, payload_json)
          VALUES ($1, $2, $3, 'usage.pricing.publish', 'usage_price_revision', $4, $5, $6)`,
-        [randomUUID(), input.siteId, input.operatorId, pricingRevisionId, input.reason, JSON.stringify({ revision, rateCount: input.rates.length })],
+        [randomUUID(), input.tenantId, input.operatorId, pricingRevisionId, input.reason, JSON.stringify({ revision, rateCount: input.rates.length })],
       );
       await this.connection.commit();
       return result;

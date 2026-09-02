@@ -3,33 +3,33 @@ import type { Connection, RowDataPacket } from '../../../src/infrastructure/post
 type CountRow = RowDataPacket & { status: string; count: string | number };
 type CurrencyTotalRow = RowDataPacket & { currency: string; amount_minor: string | number };
 
-const countByStatus = async (connection: Connection, table: string, statusColumn: string, siteId: string): Promise<Record<string, string>> => {
-  const [rows] = await connection.execute<CountRow[]>(`SELECT ${statusColumn} AS status, COUNT(*) AS count FROM ${table} WHERE tenant_id = $1 GROUP BY ${statusColumn}`, [siteId]);
+const countByStatus = async (connection: Connection, table: string, statusColumn: string, tenantId: string): Promise<Record<string, string>> => {
+  const [rows] = await connection.execute<CountRow[]>(`SELECT ${statusColumn} AS status, COUNT(*) AS count FROM ${table} WHERE tenant_id = $1 GROUP BY ${statusColumn}`, [tenantId]);
   return Object.fromEntries(rows.map((row) => [row.status, String(row.count)]));
 };
 
-const amountByCurrency = async (connection: Connection, table: 'payment_settlement' | 'payment_reversal', siteId: string): Promise<Record<string, string>> => {
+const amountByCurrency = async (connection: Connection, table: 'payment_settlement' | 'payment_reversal', tenantId: string): Promise<Record<string, string>> => {
   const query = table === 'payment_settlement'
     ? 'SELECT currency, COALESCE(SUM(amount_minor), 0) AS amount_minor FROM payment_settlement WHERE tenant_id = $1 AND status = \'succeeded\' GROUP BY currency'
     : 'SELECT s.currency, COALESCE(SUM(r.amount_minor), 0) AS amount_minor FROM payment_reversal r JOIN payment_settlement s ON s.tenant_id = r.tenant_id AND s.settlement_id = r.settlement_id WHERE r.tenant_id = $1 AND r.status = \'succeeded\' GROUP BY s.currency';
-  const [rows] = await connection.execute<CurrencyTotalRow[]>(query, [siteId]);
+  const [rows] = await connection.execute<CurrencyTotalRow[]>(query, [tenantId]);
   return Object.fromEntries(rows.map((row) => [row.currency, String(row.amount_minor)]));
 };
 
 export class AdminStatsService {
   public constructor(private readonly connection: Connection) {}
 
-  public async get(siteId: string) {
+  public async get(tenantId: string) {
     const [checkout, settlement, reversal, providerEvents, creditAccounts, creditGrants, creditRemaining, settlementAmounts, reversalAmounts] = await Promise.all([
-      countByStatus(this.connection, 'payment_checkout', 'status', siteId),
-      countByStatus(this.connection, 'payment_settlement', 'status', siteId),
-      countByStatus(this.connection, 'payment_reversal', 'status', siteId),
-      countByStatus(this.connection, 'payment_provider_event', 'processing_status', siteId),
-      this.connection.execute<RowDataPacket[]>('SELECT COUNT(*) AS count FROM entitlement_credit_account WHERE tenant_id = $1', [siteId]),
-      this.connection.execute<RowDataPacket[]>('SELECT COUNT(*) AS count FROM entitlement_credit_grant WHERE tenant_id = $1', [siteId]),
-      this.connection.execute<RowDataPacket[]>('SELECT COALESCE(SUM(remaining_micros), 0) AS amount FROM entitlement_credit_grant WHERE tenant_id = $1', [siteId]),
-      amountByCurrency(this.connection, 'payment_settlement', siteId),
-      amountByCurrency(this.connection, 'payment_reversal', siteId),
+      countByStatus(this.connection, 'payment_checkout', 'status', tenantId),
+      countByStatus(this.connection, 'payment_settlement', 'status', tenantId),
+      countByStatus(this.connection, 'payment_reversal', 'status', tenantId),
+      countByStatus(this.connection, 'payment_provider_event', 'processing_status', tenantId),
+      this.connection.execute<RowDataPacket[]>('SELECT COUNT(*) AS count FROM entitlement_credit_account WHERE tenant_id = $1', [tenantId]),
+      this.connection.execute<RowDataPacket[]>('SELECT COUNT(*) AS count FROM entitlement_credit_grant WHERE tenant_id = $1', [tenantId]),
+      this.connection.execute<RowDataPacket[]>('SELECT COALESCE(SUM(remaining_micros), 0) AS amount FROM entitlement_credit_grant WHERE tenant_id = $1', [tenantId]),
+      amountByCurrency(this.connection, 'payment_settlement', tenantId),
+      amountByCurrency(this.connection, 'payment_reversal', tenantId),
     ]);
     const scalar = (result: [RowDataPacket[], unknown], key: string): string => String((result[0][0] as Record<string, unknown> | undefined)?.[key] ?? '0');
     return {
@@ -45,18 +45,18 @@ export class AdminStatsService {
     };
   }
 
-  public async listCreditOperations(siteId: string): Promise<Record<string, unknown>[]> {
+  public async listCreditOperations(tenantId: string): Promise<Record<string, unknown>[]> {
     const [rows] = await this.connection.execute<RowDataPacket[]>(
       `SELECT credit_grant_id AS operation_id, tenant_id, 'grant' AS operation_type,
               credit_account_id, source_kind, source_ref, program_key,
               original_micros, remaining_micros, status, issued_at AS created_at
          FROM entitlement_credit_grant WHERE tenant_id = $1
         ORDER BY issued_at DESC, credit_grant_id DESC LIMIT 100`,
-      [siteId],
+      [tenantId],
     );
     return rows.map((row) => ({
       operationId: String(row.operation_id),
-      siteId: String(row.tenant_id),
+      tenantId: String(row.tenant_id),
       operationType: String(row.operation_type),
       creditAccountId: String(row.credit_account_id),
       sourceKind: String(row.source_kind),
@@ -69,7 +69,7 @@ export class AdminStatsService {
     }));
   }
 
-  public async listPaymentOperations(siteId: string): Promise<Record<string, unknown>[]> {
+  public async listPaymentOperations(tenantId: string): Promise<Record<string, unknown>[]> {
     const [rows] = await this.connection.execute<RowDataPacket[]>(
       `SELECT operation_id, tenant_id, operation_type, subject_id, provider, external_ref,
               amount_minor, currency, status, created_at
@@ -88,11 +88,11 @@ export class AdminStatsService {
              FROM payment_reversal WHERE tenant_id = $3
          ) operations
         ORDER BY created_at DESC, operation_id DESC LIMIT 100`,
-      [siteId, siteId, siteId],
+      [tenantId, tenantId, tenantId],
     );
     return rows.map((row) => ({
       operationId: String(row.operation_id),
-      siteId: String(row.tenant_id),
+      tenantId: String(row.tenant_id),
       operationType: String(row.operation_type),
       subjectId: row.subject_id === null ? null : String(row.subject_id),
       provider: row.provider === null ? null : String(row.provider),

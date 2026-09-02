@@ -17,9 +17,9 @@ const root = resolve(new URL('..', import.meta.url).pathname);
 const serverSource = await readFile(resolve(root, 'src/interfaces/http/server.ts'), 'utf8');
 const contract = parse(await readFile(resolve(root, 'contract/openapi/v1/openapi.yaml'), 'utf8')) as OpenApiDocument;
 if (contract.openapi !== '3.0.3') throw new Error(`unsupported OpenAPI version: ${contract.openapi ?? 'missing'}`);
-const externalSiteIdProperties = keysNamed(contract, 'siteId');
+const externalSiteIdProperties = keysNamed(contract, 'tenantId');
 if (externalSiteIdProperties.length > 0) {
-  throw new Error(`external OpenAPI contract must not expose siteId properties: ${externalSiteIdProperties.join(', ')}`);
+  throw new Error(`external OpenAPI contract must not expose tenantId properties: ${externalSiteIdProperties.join(', ')}`);
 }
 const tenantContext = (contract as { readonly components?: { readonly securitySchemes?: Record<string, { readonly name?: string }> } }).components?.securitySchemes?.tenantContext;
 if (tenantContext?.name !== 'X-Kokoro-Tenant-Id') throw new Error('external OpenAPI contract must expose X-Kokoro-Tenant-Id as tenant context');

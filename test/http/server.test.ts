@@ -86,7 +86,7 @@ describe('Billing HTTP surface', () => {
 
     const accepted = await server.inject({ method: 'POST', url: '/v1/webhooks/payment/stripe', payload: { id: 'event-2', providerAccountRef: 'acct-1', tenantId: 'tenant-1' } });
     expect(accepted.statusCode).toBe(202);
-    expect(webhookCalls.at(-1)).toMatchObject({ siteId: 'tenant-1', provider: 'stripe', providerAccountRef: 'acct-1' });
+    expect(webhookCalls.at(-1)).toMatchObject({ tenantId: 'tenant-1', provider: 'stripe', providerAccountRef: 'acct-1' });
   });
 
   it('does not expose retired pre-v1 route aliases', async () => {

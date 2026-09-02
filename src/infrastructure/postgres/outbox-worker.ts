@@ -8,7 +8,7 @@ export type OutboxProcessResult = false | 'published' | 'retrying' | 'dead_lette
 export class OutboxWorker {
   private readonly leaseConnection: Connection;
 
-  public constructor(private readonly connection: Connection, private readonly table: OutboxTable, private readonly leaseSeconds = 30, private readonly eventType?: string, private readonly maxAttempts = 10, private readonly siteId?: string, leaseConnection?: Connection) {
+  public constructor(private readonly connection: Connection, private readonly table: OutboxTable, private readonly leaseSeconds = 30, private readonly eventType?: string, private readonly maxAttempts = 10, private readonly tenantId?: string, leaseConnection?: Connection) {
     this.leaseConnection = leaseConnection ?? connection;
     if (!Number.isSafeInteger(leaseSeconds) || leaseSeconds <= 0) throw new RangeError('outbox lease seconds must be a positive safe integer');
     if (!Number.isSafeInteger(maxAttempts) || maxAttempts <= 0) throw new RangeError('outbox max attempts must be a positive safe integer');
@@ -25,11 +25,11 @@ export class OutboxWorker {
         '(lease_until IS NULL OR lease_until < CURRENT_TIMESTAMP(6))',
         'next_attempt_at <= CURRENT_TIMESTAMP(6)',
         ...(this.eventType === undefined ? [] : ['event_type = ?']),
-        ...(this.siteId === undefined ? [] : ['tenant_id = ?']),
+        ...(this.tenantId === undefined ? [] : ['tenant_id = ?']),
       ];
       const args = [
         ...(this.eventType === undefined ? [] : [this.eventType]),
-        ...(this.siteId === undefined ? [] : [this.siteId]),
+        ...(this.tenantId === undefined ? [] : [this.tenantId]),
       ];
       const [rows] = await this.connection.query<OutboxRow[]>(
         `SELECT outbox_id, event_type, payload_json, attempts

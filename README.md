@@ -27,7 +27,7 @@ Credit 不拆成独立仓库；Billing 是余额、授权、扣费和支付事�
 
 所有 mutation 要求 `Idempotency-Key`。所有 v1 JSON 响应使用 `{data, meta}` 或 `{error, meta}`，`meta.request_id` 是唯一请求追踪字段，外部 JSON 使用 snake_case。租户只来自受信 `X-Kokoro-Tenant-Id` 上下文，不从 body、query、provider payload 或 caller-selected account 取值。
 
-旧的无版本 API、camelCase HTTP payload、旧 `site_id` header 和兼容 route alias 已移除；新增接口必须先更新 OpenAPI，再实现 route parity 和 contract test，不再新增第二套兼容协议。
+旧的无版本 API、camelCase HTTP payload、旧 `tenant_id` header 和兼容 route alias 已移除；新增接口必须先更新 OpenAPI，再实现 route parity 和 contract test，不再新增第二套兼容协议。
 
 ## 运行时组合
 

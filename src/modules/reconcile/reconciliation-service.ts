@@ -11,9 +11,9 @@ export type ReconciliationReport = {
 export class ReconciliationService {
   public constructor(private readonly connection: Connection) {}
 
-  public async run(siteId?: string): Promise<ReconciliationReport> {
-    const sitePredicate = siteId === undefined ? '' : 'WHERE a.tenant_id = ?';
-    const siteArgs = siteId === undefined ? [] : [siteId];
+  public async run(tenantId?: string): Promise<ReconciliationReport> {
+    const sitePredicate = tenantId === undefined ? '' : 'WHERE a.tenant_id = ?';
+    const siteArgs = tenantId === undefined ? [] : [tenantId];
     const [accountRows] = await this.connection.query<RowDataPacket[]>(
       `SELECT a.credit_account_id, a.available_micros, a.held_micros,
               COALESCE((SELECT SUM(g.remaining_micros) FROM entitlement_credit_grant g WHERE g.tenant_id = a.tenant_id AND g.credit_account_id = a.credit_account_id), 0) AS grant_remaining_micros,
@@ -39,7 +39,7 @@ export class ReconciliationService {
       }))
       .filter((row) => row.balanceMicros !== row.grantRemainingMicros || row.balanceMicros !== row.journalMicros || row.heldMicros !== row.activeHoldMicros || row.heldMicros !== row.activeAllocationMicros || row.activeHoldMicros !== row.activeAllocationMicros);
 
-    const settlementPredicate = siteId === undefined ? '' : 'AND s.tenant_id = ?';
+    const settlementPredicate = tenantId === undefined ? '' : 'AND s.tenant_id = ?';
     const [settlementRows] = await this.connection.query<RowDataPacket[]>(
       `SELECT s.settlement_id, s.status, a.acquisition_id, f.fulfillment_id, f.status AS fulfillment_status
          FROM payment_settlement s
@@ -48,11 +48,11 @@ export class ReconciliationService {
         WHERE s.status = 'succeeded'
           AND (a.acquisition_id IS NULL OR f.fulfillment_id IS NULL OR f.status <> 'committed')
           ${settlementPredicate}`,
-      siteId === undefined ? [] : [siteId],
+      tenantId === undefined ? [] : [tenantId],
     );
     const settlementDrifts = settlementRows.map((row) => ({ settlementId: String(row.settlement_id), status: String(row.status), acquisitionId: row.acquisition_id === null ? null : String(row.acquisition_id), fulfillmentId: row.fulfillment_id === null ? null : String(row.fulfillment_id), fulfillmentStatus: row.fulfillment_status === null ? null : String(row.fulfillment_status) }));
 
-    const reversalPredicate = siteId === undefined ? '' : 'AND r.tenant_id = ?';
+    const reversalPredicate = tenantId === undefined ? '' : 'AND r.tenant_id = ?';
     const [reversalRows] = await this.connection.query<RowDataPacket[]>(
       `SELECT r.reversal_id, r.status, fr.fulfillment_reversal_id, fr.status AS fulfillment_reversal_status
          FROM payment_reversal r
@@ -60,16 +60,16 @@ export class ReconciliationService {
         WHERE r.status = 'succeeded'
           AND (fr.fulfillment_reversal_id IS NULL OR fr.status <> 'committed')
           ${reversalPredicate}`,
-      siteId === undefined ? [] : [siteId],
+      tenantId === undefined ? [] : [tenantId],
     );
     const reversalDrifts = reversalRows.map((row) => ({ reversalId: String(row.reversal_id), status: String(row.status), fulfillmentReversalId: row.fulfillment_reversal_id === null ? null : String(row.fulfillment_reversal_id), fulfillmentReversalStatus: row.fulfillment_reversal_status === null ? null : String(row.fulfillment_reversal_status) }));
 
-    const providerEventPredicate = siteId === undefined ? '' : 'AND tenant_id = ?';
+    const providerEventPredicate = tenantId === undefined ? '' : 'AND tenant_id = ?';
     const [providerEventRows] = await this.connection.query<RowDataPacket[]>(
       `SELECT provider_event_id, provider, external_event_id, event_type, processing_attempts, last_error
          FROM payment_provider_event
         WHERE processing_status = 'failed' ${providerEventPredicate}`,
-      siteId === undefined ? [] : [siteId],
+      tenantId === undefined ? [] : [tenantId],
     );
     const providerEventDrifts = providerEventRows.map((row) => ({ providerEventId: String(row.provider_event_id), provider: String(row.provider), externalEventId: String(row.external_event_id), eventType: String(row.event_type), processingAttempts: Number(row.processing_attempts), lastError: row.last_error === null ? null : String(row.last_error) }));
 

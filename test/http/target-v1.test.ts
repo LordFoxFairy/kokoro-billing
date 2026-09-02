@@ -83,7 +83,7 @@ describe('clean-build Billing v1 transport', () => {
     } });
     expect(catalog.statusCode).toBe(200);
     expect(checkout.statusCode).toBe(201);
-    expect(checkoutCalls.at(-1)).toMatchObject({ siteId: 'tenant-1', subjectId: 'subject-1', idempotencyKey: 'bff-checkout-123456' });
+    expect(checkoutCalls.at(-1)).toMatchObject({ tenantId: 'tenant-1', subjectId: 'subject-1', idempotencyKey: 'bff-checkout-123456' });
   });
 
   it('requires the BFF subject context for checkout while keeping user-only reads JWT-only', async () => {

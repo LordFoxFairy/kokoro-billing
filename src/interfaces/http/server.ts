@@ -24,7 +24,7 @@ declare module 'fastify' {
 }
 
 // HTTP uses the platform tenant vocabulary. Existing application ports still
-// expose the repository's internal siteId value object; this is the only
+// expose the repository's internal tenantId value object; this is the only
 // translation point and is not part of the wire contract.
 export type BillingUserContext = { readonly tenantId: string; readonly subjectId: string };
 export type BillingInternalContext = { readonly tenantId: string; readonly serviceId: string };
@@ -320,7 +320,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
     if (!(await claimIdempotencyHint(dependencies, request, key, reply, context.tenantId))) return;
     try {
-      const result = await dependencies.checkout.create({ offerRevisionId: parsed.data.offer_revision_id, amountMinor: safeDecimal(parsed.data.amount_minor, 'amount_minor'), currency: parsed.data.currency, quoteSnapshot: toCamelCase(parsed.data.quote_snapshot), siteId: context.tenantId, subjectId, idempotencyKey: key, expiresAt: new Date(Date.now() + 300_000) });
+      const result = await dependencies.checkout.create({ offerRevisionId: parsed.data.offer_revision_id, amountMinor: safeDecimal(parsed.data.amount_minor, 'amount_minor'), currency: parsed.data.currency, quoteSnapshot: toCamelCase(parsed.data.quote_snapshot), tenantId: context.tenantId, subjectId, idempotencyKey: key, expiresAt: new Date(Date.now() + 300_000) });
       const hosted = dependencies.checkout.createHostedSession ? await dependencies.checkout.createHostedSession(context.tenantId, result.checkoutId) : result;
       return reply.code(201).send({ data: toSnakeCase({ ...hosted, amountMinor: String(hosted.amountMinor) }), requestId: request.id });
     } catch (error) { return sendError(reply, error); }
@@ -393,7 +393,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
     if (!(await claimIdempotencyHint(dependencies, request, key, reply, context.tenantId))) return;
     try {
-      await dependencies.settlement.recordSettlement({ settlementId: parsed.data.settlement_id, externalPaymentRef: parsed.data.external_payment_ref, amountMinor: safeDecimal(parsed.data.amount_minor, 'amount_minor'), currency: parsed.data.currency, siteId: context.tenantId, ...(parsed.data.provider === undefined ? {} : { provider: parsed.data.provider }) });
+      await dependencies.settlement.recordSettlement({ settlementId: parsed.data.settlement_id, externalPaymentRef: parsed.data.external_payment_ref, amountMinor: safeDecimal(parsed.data.amount_minor, 'amount_minor'), currency: parsed.data.currency, tenantId: context.tenantId, ...(parsed.data.provider === undefined ? {} : { provider: parsed.data.provider }) });
       return reply.code(202).send({ data: { accepted: true }, requestId: request.id });
     } catch (error) { return sendError(reply, error); }
   });
@@ -406,7 +406,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
     if (!(await claimIdempotencyHint(dependencies, request, key, reply, context.tenantId))) return;
     try {
-      const reversalId = await dependencies.reversal.recordReversal({ siteId: context.tenantId, settlementId: parsed.data.settlement_id, externalReversalRef: parsed.data.external_ref, amountMinor: safeDecimal(parsed.data.amount_minor, 'amount_minor'), reason: `${parsed.data.allocation_mode}:${parsed.data.reason}`, idempotencyKey: key });
+      const reversalId = await dependencies.reversal.recordReversal({ tenantId: context.tenantId, settlementId: parsed.data.settlement_id, externalReversalRef: parsed.data.external_ref, amountMinor: safeDecimal(parsed.data.amount_minor, 'amount_minor'), reason: `${parsed.data.allocation_mode}:${parsed.data.reason}`, idempotencyKey: key });
       return reply.code(202).send({ data: { refund_id: reversalId, status: 'accepted' }, requestId: request.id });
     } catch (error) { return sendError(reply, error); }
   });
@@ -419,7 +419,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
     if (!(await claimIdempotencyHint(dependencies, request, key, reply, context.tenantId))) return;
     try {
-      const refundId = await dependencies.reversal.recordReversal({ siteId: context.tenantId, settlementId: parsed.data.settlement_id, externalReversalRef: parsed.data.external_ref, amountMinor: safeDecimal(parsed.data.amount_minor, 'amount_minor'), reason: `${parsed.data.allocation_mode}:${parsed.data.reason}`, idempotencyKey: key });
+      const refundId = await dependencies.reversal.recordReversal({ tenantId: context.tenantId, settlementId: parsed.data.settlement_id, externalReversalRef: parsed.data.external_ref, amountMinor: safeDecimal(parsed.data.amount_minor, 'amount_minor'), reason: `${parsed.data.allocation_mode}:${parsed.data.reason}`, idempotencyKey: key });
       return reply.code(202).send({ data: { refund_id: refundId, status: 'accepted' }, requestId: request.id });
     } catch (error) { return sendError(reply, error); }
   });
@@ -431,7 +431,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     const parsed = z.object({ limit: z.number().int().positive().max(500).optional() }).strict().safeParse(request.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
     try {
-      return reply.code(202).send({ data: toSnakeCase(await dependencies.usage.expireExpiredHolds(parsed.data.limit === undefined ? {} : { siteId: context.tenantId, limit: parsed.data.limit })), requestId: request.id });
+      return reply.code(202).send({ data: toSnakeCase(await dependencies.usage.expireExpiredHolds(parsed.data.limit === undefined ? {} : { tenantId: context.tenantId, limit: parsed.data.limit })), requestId: request.id });
     } catch (error) { return sendError(reply, error); }
   });
 
@@ -446,7 +446,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
         : typeof request.headers['x-kokoro-tenant-id'] === 'string' ? request.headers['x-kokoro-tenant-id'] : null;
       if (!tenantId) throw new Error('billing.tenant_mismatch');
       if (parsed?.payloadTenantId && parsed.payloadTenantId !== tenantId) throw new Error('billing.tenant_mismatch');
-      const result = await dependencies.webhook.accept({ siteId: tenantId, provider: request.params.provider, providerAccountRef, externalEventId: parsed?.eventId ?? String(body.id ?? ''), eventType: parsed?.eventType ?? String(body.type ?? 'unknown'), rawPayload: body, signatureValid: true });
+      const result = await dependencies.webhook.accept({ tenantId: tenantId, provider: request.params.provider, providerAccountRef, externalEventId: parsed?.eventId ?? String(body.id ?? ''), eventType: parsed?.eventType ?? String(body.type ?? 'unknown'), rawPayload: body, signatureValid: true });
       return reply.code(202).send({ data: { event_id: result.providerEventId, status: result.processingStatus }, requestId: request.id });
     } catch (error) { return sendError(reply, error); }
   });

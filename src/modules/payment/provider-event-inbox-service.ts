@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Connection, RowDataPacket } from '../../../src/infrastructure/postgres/connection.js';
 
 export type ProviderEventInput = {
-  readonly siteId: string;
+  readonly tenantId: string;
   readonly provider: string;
   readonly providerAccountRef?: string | null;
   readonly externalEventId: string;
@@ -33,13 +33,13 @@ export class ProviderEventInboxService {
           (provider_event_id, tenant_id, provider, provider_account_ref, external_event_id, event_type, payload_json, payload_hash, signature_valid, processing_status)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE, 'received')
          ON CONFLICT DO NOTHING`,
-        [providerEventId, input.siteId, input.provider, input.providerAccountRef ?? null, input.externalEventId, input.eventType, payloadJson, payloadHash],
+        [providerEventId, input.tenantId, input.provider, input.providerAccountRef ?? null, input.externalEventId, input.eventType, payloadJson, payloadHash],
       );
       const [rows] = await this.connection.execute<ProviderEventRow[]>(
         `SELECT provider_event_id, provider_account_ref, processing_status, payload_hash, event_type
            FROM payment_provider_event
           WHERE tenant_id = $1 AND provider = $2 AND external_event_id = $3 FOR UPDATE`,
-        [input.siteId, input.provider, input.externalEventId],
+        [input.tenantId, input.provider, input.externalEventId],
       );
       const row = rows[0];
       if (!row) throw new Error('billing.provider_event_not_found');
@@ -49,7 +49,7 @@ export class ProviderEventInboxService {
           (outbox_id, tenant_id, aggregate_type, aggregate_id, event_type, payload_json)
          VALUES ($1, $2, 'provider_event', $3, 'PaymentProviderEventReceived', $4)
          ON CONFLICT DO NOTHING`,
-        [randomUUID(), input.siteId, row.provider_event_id, JSON.stringify({ providerEventId: row.provider_event_id, provider: input.provider, externalEventId: input.externalEventId, eventType: input.eventType })],
+        [randomUUID(), input.tenantId, row.provider_event_id, JSON.stringify({ providerEventId: row.provider_event_id, provider: input.provider, externalEventId: input.externalEventId, eventType: input.eventType })],
       );
       await this.connection.commit();
       return { providerEventId: row.provider_event_id, processingStatus: row.processing_status };

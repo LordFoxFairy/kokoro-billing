@@ -5,7 +5,7 @@ import { z } from 'zod';
 import type { HostedCheckoutProvider } from './hosted-checkout-provider.js';
 
 export type CreateCheckoutInput = {
-  readonly siteId: string;
+  readonly tenantId: string;
   readonly subjectId: string;
   readonly idempotencyKey: string;
   readonly offerRevisionId: string;
@@ -51,7 +51,7 @@ export class CheckoutService {
          JOIN entitlement_offer o ON o.offer_id = r.offer_id AND o.tenant_id = r.tenant_id
         WHERE r.tenant_id = $1 AND r.offer_revision_id = $2 AND o.status = 'active'
           AND r.status = 'published' AND r.deleted_at IS NULL AND r.published_at IS NOT NULL`,
-      [input.siteId, input.offerRevisionId],
+      [input.tenantId, input.offerRevisionId],
     );
     const revision = revisions[0];
     if (!revision) throw new Error('billing.offer_revision_not_sellable');
@@ -66,12 +66,12 @@ export class CheckoutService {
          quote_snapshot_json, amount_minor, currency, status, expires_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'created', $10)
        ON CONFLICT DO NOTHING`,
-      [checkoutId, input.siteId, input.subjectId, input.idempotencyKey, input.offerRevisionId, quoteHash, JSON.stringify(input.quoteSnapshot), input.amountMinor, input.currency, input.expiresAt],
+      [checkoutId, input.tenantId, input.subjectId, input.idempotencyKey, input.offerRevisionId, quoteHash, JSON.stringify(input.quoteSnapshot), input.amountMinor, input.currency, input.expiresAt],
     );
     const [rows] = await this.connection.execute<CheckoutRow[]>(
       `SELECT checkout_id, quote_hash, amount_minor, currency, expires_at, status
          FROM payment_checkout WHERE tenant_id = $1 AND idempotency_key = $2`,
-      [input.siteId, input.idempotencyKey],
+      [input.tenantId, input.idempotencyKey],
     );
     const row = rows[0];
     if (!row) throw new Error('billing.checkout_not_found');
@@ -79,12 +79,12 @@ export class CheckoutService {
     return { checkoutId: row.checkout_id, status: row.status, amountMinor: readSafeInteger(row.amount_minor, 'checkout_amount_minor'), currency: row.currency, expiresAt: new Date(row.expires_at) };
   }
 
-  public async createHostedSession(siteId: string, checkoutId: string): Promise<Checkout> {
+  public async createHostedSession(tenantId: string, checkoutId: string): Promise<Checkout> {
     const [rows] = await this.connection.execute<(CheckoutRow & { subject_id: string; offer_revision_id: string; quote_snapshot_json: string | Record<string, unknown>; provider: string | null; checkout_url: string | null; billing_interval: 'once' | 'month' | 'year' })[]>(
       `SELECT c.checkout_id, c.tenant_id, c.subject_id, c.offer_revision_id, c.quote_snapshot_json, c.quote_hash, c.amount_minor, c.currency, c.expires_at, c.status, c.provider, c.provider_account_ref, c.checkout_url, r.billing_interval
          FROM payment_checkout c INNER JOIN entitlement_offer_revision r ON r.offer_revision_id = c.offer_revision_id AND r.tenant_id = c.tenant_id
         WHERE c.tenant_id = $1 AND c.checkout_id = $2 FOR UPDATE`,
-      [siteId, checkoutId],
+      [tenantId, checkoutId],
     );
     const row = rows[0];
     if (!row) throw new Error('billing.checkout_not_found');

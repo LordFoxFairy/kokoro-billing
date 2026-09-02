@@ -24,7 +24,7 @@ export class CatalogService {
   public constructor(private readonly connection: Connection) {}
 
   /** Storefront exposes one current published revision per offer; historical revisions remain checkout-addressable. */
-  public async listSellable(siteId: string): Promise<CatalogPlan[]> {
+  public async listSellable(tenantId: string): Promise<CatalogPlan[]> {
     const [rows] = await this.connection.execute<CatalogRow[]>(
       `SELECT r.offer_revision_id, o.offer_key, r.name, r.currency, r.amount_minor,
               r.credit_micros, r.billing_interval
@@ -39,7 +39,7 @@ export class CatalogService {
                AND newer.revision > r.revision
           )
         ORDER BY o.offer_key, r.revision DESC, r.offer_revision_id`,
-      [siteId],
+      [tenantId],
     );
     return rows.map((row) => ({
       id: row.offer_revision_id,
@@ -53,7 +53,7 @@ export class CatalogService {
   }
 
   /** Admin read surface: same published revisions, deliberately no hidden draft rows. */
-  public async listAdmin(siteId: string): Promise<CatalogPlan[]> {
-    return this.listSellable(siteId);
+  public async listAdmin(tenantId: string): Promise<CatalogPlan[]> {
+    return this.listSellable(tenantId);
   }
 }

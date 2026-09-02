@@ -107,7 +107,7 @@ export class BillingAdmissionService {
 
       const accountId = await this.ensureCreditAccount(input.tenantId, input.billingSubject.ref);
       const hold = await this.usage.authorizeUsage({
-        siteId: input.tenantId, accountId, requestedMicros: amountMicros, featureKey: input.featureKey,
+        tenantId: input.tenantId, accountId, requestedMicros: amountMicros, featureKey: input.featureKey,
         idempotencyKey: `admission:${input.invocationId}`,
         pricingRevisionId: rate.usage_price_revision_id,
       });
@@ -143,8 +143,8 @@ export class BillingAdmissionService {
         await this.finishReceipt(tenantId, 'internal', 'CaptureAdmission', idempotencyKey, result);
         return result;
       }
-      const usageEventId = await this.usage.ensureUsageEventForHold({ siteId: tenantId, holdId: admission.hold_id, sourceEventId: `admission:${admission.invocation_id}` });
-      await this.usage.settleUsage({ siteId: tenantId, holdId: admission.hold_id, usageEventId, actualMicros: readSafeInteger(admission.amount_micros, 'admission_amount_micros'), idempotencyKey: `capture:${admission.invocation_id}` });
+      const usageEventId = await this.usage.ensureUsageEventForHold({ tenantId: tenantId, holdId: admission.hold_id, sourceEventId: `admission:${admission.invocation_id}` });
+      await this.usage.settleUsage({ tenantId: tenantId, holdId: admission.hold_id, usageEventId, actualMicros: readSafeInteger(admission.amount_micros, 'admission_amount_micros'), idempotencyKey: `capture:${admission.invocation_id}` });
       const result = { ...this.toResult(admission), status: 'accepted_without_charge' as const };
       await this.markAdmission(tenantId, admissionId, 'captured', receipt);
       await this.finishReceipt(tenantId, 'internal', 'CaptureAdmission', idempotencyKey, result);
@@ -162,7 +162,7 @@ export class BillingAdmissionService {
     const prior = await this.beginReceipt(tenantId, 'internal', 'ReleaseAdmission', idempotencyKey, { admissionId, reason });
     if (prior !== null) return prior as BillingAdmissionResult;
     try {
-      if (admission.hold_id !== null) await this.usage.releaseUsage({ siteId: tenantId, holdId: admission.hold_id, idempotencyKey: `release:${admission.invocation_id}` });
+      if (admission.hold_id !== null) await this.usage.releaseUsage({ tenantId: tenantId, holdId: admission.hold_id, idempotencyKey: `release:${admission.invocation_id}` });
       await this.markAdmission(tenantId, admissionId, 'released');
       const result = this.toResult({ ...admission, status: 'released' });
       await this.finishReceipt(tenantId, 'internal', 'ReleaseAdmission', idempotencyKey, result);

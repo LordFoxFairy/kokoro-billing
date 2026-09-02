@@ -5,7 +5,7 @@ import { readSafeInteger } from '../../infrastructure/postgres/safe-integer.js';
 
 export type UsageEventInput = {
   readonly usageEventId: string;
-  readonly siteId: string;
+  readonly tenantId: string;
   readonly subjectId: string;
   readonly sourceEventId: string;
   readonly featureKey: string;
@@ -14,7 +14,7 @@ export type UsageEventInput = {
 };
 
 export type AuthorizeUsageInput = {
-  readonly siteId: string;
+  readonly tenantId: string;
   readonly accountId: string;
   readonly idempotencyKey: string;
   readonly requestedMicros: number;
@@ -31,7 +31,7 @@ export type UsageHold = {
 };
 
 export type SettleUsageInput = {
-  readonly siteId: string;
+  readonly tenantId: string;
   readonly holdId: string;
   readonly usageEventId: string;
   readonly idempotencyKey: string;
@@ -54,7 +54,7 @@ export class UsageSettlementService {
     if (!Number.isSafeInteger(input.quantityMicros) || input.quantityMicros < 0) throw new RangeError('quantityMicros must be a non-negative safe integer');
     const [sourceRows] = await this.connection.execute<RowDataPacket[]>(
       `SELECT usage_event_id FROM entitlement_usage_event WHERE tenant_id = $1 AND source_event_id = $2`,
-      [input.siteId, input.sourceEventId],
+      [input.tenantId, input.sourceEventId],
     );
     if (sourceRows[0] && String((sourceRows[0] as { usage_event_id: string }).usage_event_id) !== input.usageEventId) throw new Error('billing.idempotency_conflict');
     await this.connection.execute(
@@ -62,37 +62,37 @@ export class UsageSettlementService {
         (usage_event_id, tenant_id, subject_id, source_event_id, feature_key, quantity_micros, dimensions_json, status)
        VALUES ($1, $2, $3, $4, $5, $6, $7, 'recorded')
        ON CONFLICT DO NOTHING`,
-      [input.usageEventId, input.siteId, input.subjectId, input.sourceEventId, input.featureKey, input.quantityMicros, input.dimensions === undefined ? null : JSON.stringify(input.dimensions)],
+      [input.usageEventId, input.tenantId, input.subjectId, input.sourceEventId, input.featureKey, input.quantityMicros, input.dimensions === undefined ? null : JSON.stringify(input.dimensions)],
     );
     const [rows] = await this.connection.execute<RowDataPacket[]>(
       `SELECT usage_event_id, tenant_id, subject_id, source_event_id, feature_key, quantity_micros, dimensions_json
          FROM entitlement_usage_event WHERE tenant_id = $1 AND source_event_id = $2`,
-      [input.siteId, input.sourceEventId],
+      [input.tenantId, input.sourceEventId],
     );
     const row = rows[0] as { usage_event_id: string; tenant_id: string; subject_id: string; source_event_id: string; feature_key: string; quantity_micros: string | number; dimensions_json: Record<string, unknown> | string | null } | undefined;
     if (!row) {
-      const [eventRows] = await this.connection.execute<RowDataPacket[]>('SELECT usage_event_id FROM entitlement_usage_event WHERE tenant_id = $1 AND usage_event_id = $2', [input.siteId, input.usageEventId]);
+      const [eventRows] = await this.connection.execute<RowDataPacket[]>('SELECT usage_event_id FROM entitlement_usage_event WHERE tenant_id = $1 AND usage_event_id = $2', [input.tenantId, input.usageEventId]);
       if (eventRows[0]) throw new Error('billing.idempotency_conflict');
       throw new Error('billing.usage_event_not_found');
     }
     const storedDimensions = row.dimensions_json === null ? undefined : typeof row.dimensions_json === 'string' ? JSON.parse(row.dimensions_json) as Record<string, unknown> : row.dimensions_json;
-    if (row.tenant_id !== input.siteId || row.subject_id !== input.subjectId || row.source_event_id !== input.sourceEventId || row.feature_key !== input.featureKey || String(row.quantity_micros) !== String(input.quantityMicros) || stableJson(storedDimensions) !== stableJson(input.dimensions)) {
+    if (row.tenant_id !== input.tenantId || row.subject_id !== input.subjectId || row.source_event_id !== input.sourceEventId || row.feature_key !== input.featureKey || String(row.quantity_micros) !== String(input.quantityMicros) || stableJson(storedDimensions) !== stableJson(input.dimensions)) {
       throw new Error('billing.idempotency_conflict');
     }
   }
 
-  public async ensureUsageEventForHold(input: { siteId: string; holdId: string; sourceEventId: string }): Promise<string> {
+  public async ensureUsageEventForHold(input: { tenantId: string; holdId: string; sourceEventId: string }): Promise<string> {
     const [rows] = await this.connection.execute<RowDataPacket[]>(
       `SELECT h.credit_account_id, h.feature_key, a.subject_id
          FROM entitlement_credit_hold h
          INNER JOIN entitlement_credit_account a ON a.credit_account_id = h.credit_account_id AND a.tenant_id = h.tenant_id
         WHERE h.credit_hold_id = $1 AND h.tenant_id = $2`,
-      [input.holdId, input.siteId],
+      [input.holdId, input.tenantId],
     );
     const row = rows[0] as { credit_account_id: string; feature_key: string; subject_id: string } | undefined;
     if (!row) throw new Error('billing.credit_hold_not_found');
     const usageEventId = `hold:${input.holdId}`;
-    await this.recordUsageEvent({ usageEventId, siteId: input.siteId, subjectId: row.subject_id, sourceEventId: input.sourceEventId, featureKey: row.feature_key, quantityMicros: 0 });
+    await this.recordUsageEvent({ usageEventId, tenantId: input.tenantId, subjectId: row.subject_id, sourceEventId: input.sourceEventId, featureKey: row.feature_key, quantityMicros: 0 });
     return usageEventId;
   }
 
@@ -103,7 +103,7 @@ export class UsageSettlementService {
       const [prior] = await this.connection.execute<RowDataPacket[]>(
         `SELECT credit_hold_id, credit_account_id, requested_micros, feature_key, label_key, model_binding_id, pricing_revision_id
            FROM entitlement_credit_hold WHERE tenant_id = $1 AND idempotency_key = $2 FOR UPDATE`,
-        [input.siteId, input.idempotencyKey],
+        [input.tenantId, input.idempotencyKey],
       );
       if (prior[0]) {
         const row = prior[0] as { credit_hold_id: string; credit_account_id: string; requested_micros: string | number; feature_key: string | null; label_key: string | null; model_binding_id: string | null; pricing_revision_id: string | null };
@@ -117,7 +117,7 @@ export class UsageSettlementService {
         const holdId = row.credit_hold_id;
         const [allocations] = await this.connection.execute<RowDataPacket[]>(
           `SELECT credit_grant_id, held_micros FROM entitlement_credit_hold_allocation WHERE tenant_id = $1 AND credit_hold_id = $2 ORDER BY credit_grant_id`,
-          [input.siteId, holdId],
+          [input.tenantId, holdId],
         );
         await this.connection.commit();
         return { holdId, allocations: allocations.map((row) => ({ grantId: String(row.credit_grant_id), amountMicros: readSafeInteger(row.held_micros, 'held_micros') })) };
@@ -125,7 +125,7 @@ export class UsageSettlementService {
 
       const [accounts] = await this.connection.execute<RowDataPacket[]>(
         `SELECT credit_account_id FROM entitlement_credit_account WHERE credit_account_id = $1 AND tenant_id = $2 AND status = 'active' FOR UPDATE`,
-        [input.accountId, input.siteId],
+        [input.accountId, input.tenantId],
       );
       if (!accounts[0]) throw new Error('billing.credit_account_not_found');
 
@@ -144,7 +144,7 @@ export class UsageSettlementService {
             AND (g.expires_at IS NULL OR g.expires_at > CURRENT_TIMESTAMP(6))
           ORDER BY (g.expires_at IS NULL), g.expires_at, g.burn_priority, g.issued_at, g.credit_grant_id
           FOR UPDATE`,
-        [input.siteId, input.accountId],
+        [input.tenantId, input.accountId],
       );
       const grants: CreditGrantForAllocation[] = rows
         .map((row) => ({
@@ -163,20 +163,20 @@ export class UsageSettlementService {
         `INSERT INTO entitlement_credit_hold
           (credit_hold_id, tenant_id, credit_account_id, idempotency_key, requested_micros, expires_at, feature_key, label_key, model_binding_id, pricing_revision_id)
          VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP(6) + ($6 * INTERVAL '1 second'), $7, $8, $9, $10)`,
-        [holdId, input.siteId, input.accountId, input.idempotencyKey, input.requestedMicros, ttlSeconds, input.featureKey, input.labelKey ?? null, input.modelBindingId ?? null, input.pricingRevisionId ?? null],
+        [holdId, input.tenantId, input.accountId, input.idempotencyKey, input.requestedMicros, ttlSeconds, input.featureKey, input.labelKey ?? null, input.modelBindingId ?? null, input.pricingRevisionId ?? null],
       );
       for (const allocation of allocations) {
         await this.connection.execute(
           `INSERT INTO entitlement_credit_hold_allocation (credit_hold_id, tenant_id, credit_grant_id, held_micros)
            VALUES ($1, $2, $3, $4)`,
-          [holdId, input.siteId, allocation.grantId, allocation.amountMicros],
+          [holdId, input.tenantId, allocation.grantId, allocation.amountMicros],
         );
       }
       const [accountUpdate] = await this.connection.execute<ResultSetHeader>(
         `UPDATE entitlement_credit_account
             SET available_micros = available_micros - $1, held_micros = held_micros + $2, generation = generation + 1
           WHERE tenant_id = $3 AND credit_account_id = $4 AND available_micros >= $5`,
-        [input.requestedMicros, input.requestedMicros, input.siteId, input.accountId, input.requestedMicros],
+        [input.requestedMicros, input.requestedMicros, input.tenantId, input.accountId, input.requestedMicros],
       );
       if (accountUpdate.affectedRows !== 1) throw new Error('billing.credit_projection_drift');
       await this.connection.commit();
@@ -196,13 +196,13 @@ export class UsageSettlementService {
            FROM entitlement_usage_settlement s
            JOIN entitlement_credit_hold h ON h.credit_hold_id = s.credit_hold_id
           WHERE s.tenant_id = $1 AND s.credit_hold_id = $2 FOR UPDATE`,
-        [input.siteId, input.holdId],
+        [input.tenantId, input.holdId],
       );
       if (prior[0]) {
         const row = prior[0] as { usage_settlement_id: string; tenant_id: string; usage_event_id: string; actual_micros: string | number; requested_micros: string | number };
         const actualMicros = readSafeInteger(row.actual_micros, 'actual_micros');
         const requestedMicros = readSafeInteger(row.requested_micros, 'requested_micros');
-        if (row.tenant_id !== input.siteId || row.usage_event_id !== input.usageEventId || actualMicros !== input.actualMicros) {
+        if (row.tenant_id !== input.tenantId || row.usage_event_id !== input.usageEventId || actualMicros !== input.actualMicros) {
           throw new Error('billing.idempotency_conflict');
         }
         await this.connection.commit();
@@ -215,7 +215,7 @@ export class UsageSettlementService {
            FROM entitlement_credit_hold h
            INNER JOIN entitlement_credit_account a ON a.credit_account_id = h.credit_account_id AND a.tenant_id = h.tenant_id
           WHERE h.credit_hold_id = $1 AND h.tenant_id = $2 FOR UPDATE`,
-        [input.holdId, input.siteId],
+        [input.holdId, input.tenantId],
       );
       const hold = holds[0] as { credit_account_id: string; requested_micros: number; status: string; feature_key: string; subject_id: string } | undefined;
       if (!hold) throw new Error('billing.credit_hold_not_found');
@@ -225,7 +225,7 @@ export class UsageSettlementService {
 
       const [events] = await this.connection.execute<RowDataPacket[]>(
         `SELECT usage_event_id, status, subject_id, feature_key FROM entitlement_usage_event WHERE usage_event_id = $1 AND tenant_id = $2 FOR UPDATE`,
-        [input.usageEventId, input.siteId],
+        [input.usageEventId, input.tenantId],
       );
       const event = events[0] as { usage_event_id: string; status: string; subject_id: string; feature_key: string } | undefined;
       if (!event) throw new Error('billing.usage_event_not_found');
@@ -234,7 +234,7 @@ export class UsageSettlementService {
 
       const [allocations] = await this.connection.execute<RowDataPacket[]>(
         `SELECT credit_grant_id, held_micros FROM entitlement_credit_hold_allocation WHERE tenant_id = $1 AND credit_hold_id = $2 ORDER BY credit_grant_id FOR UPDATE`,
-        [input.siteId, input.holdId],
+        [input.tenantId, input.holdId],
       );
       let remainingCapture = input.actualMicros;
       let releasedMicros = 0;
@@ -247,20 +247,20 @@ export class UsageSettlementService {
         if (captured > 0) {
           const [grantUpdate] = await this.connection.execute<ResultSetHeader>(
             `UPDATE entitlement_credit_grant SET status = CASE WHEN remaining_micros = $1 THEN 'exhausted' ELSE status END, remaining_micros = remaining_micros - $2 WHERE tenant_id = $3 AND credit_grant_id = $4 AND remaining_micros >= $5`,
-            [captured, captured, input.siteId, row.credit_grant_id, captured],
+            [captured, captured, input.tenantId, row.credit_grant_id, captured],
           );
           if (grantUpdate.affectedRows !== 1) throw new Error('billing.usage_allocation_drift');
         }
         await this.connection.execute(
           `UPDATE entitlement_credit_hold_allocation SET captured_micros = $1, released_micros = $2 WHERE tenant_id = $3 AND credit_hold_id = $4 AND credit_grant_id = $5`,
-          [captured, released, input.siteId, input.holdId, row.credit_grant_id],
+          [captured, released, input.tenantId, input.holdId, row.credit_grant_id],
         );
       }
       if (remainingCapture !== 0) throw new Error('billing.usage_allocation_drift');
 
       const [sequences] = await this.connection.execute<RowDataPacket[]>(
         `SELECT COALESCE(MAX(journal_seq), 0) AS journal_seq FROM entitlement_credit_journal WHERE tenant_id = $1 AND credit_account_id = $2`,
-        [input.siteId, hold.credit_account_id],
+        [input.tenantId, hold.credit_account_id],
       );
       const journalSeq = (BigInt(String((sequences[0] as { journal_seq: number | string }).journal_seq)) + 1n).toString();
       if (input.actualMicros > 0) {
@@ -268,7 +268,7 @@ export class UsageSettlementService {
           `INSERT INTO entitlement_credit_journal
             (journal_id, tenant_id, credit_account_id, journal_seq, entry_kind, amount_micros, source_kind, source_ref)
            VALUES ($1, $2, $3, $4, 'debit', $5, 'usage_settlement', $6)`,
-          [randomUUID(), input.siteId, hold.credit_account_id, journalSeq, -input.actualMicros, input.holdId],
+          [randomUUID(), input.tenantId, hold.credit_account_id, journalSeq, -input.actualMicros, input.holdId],
         );
       }
       const settlementId = randomUUID();
@@ -276,28 +276,28 @@ export class UsageSettlementService {
         `INSERT INTO entitlement_usage_settlement
           (usage_settlement_id, tenant_id, credit_hold_id, usage_event_id, actual_micros, status)
          VALUES ($1, $2, $3, $4, $5, 'settled')`,
-        [settlementId, input.siteId, input.holdId, input.usageEventId, input.actualMicros],
+        [settlementId, input.tenantId, input.holdId, input.usageEventId, input.actualMicros],
       );
       await this.connection.execute(
         `UPDATE entitlement_credit_hold SET status = 'captured', captured_micros = $1, released_micros = $2 WHERE tenant_id = $3 AND credit_hold_id = $4`,
-        [input.actualMicros, releasedMicros, input.siteId, input.holdId],
+        [input.actualMicros, releasedMicros, input.tenantId, input.holdId],
       );
       const [accountUpdate] = await this.connection.execute<ResultSetHeader>(
         `UPDATE entitlement_credit_account
             SET available_micros = available_micros + $1, held_micros = held_micros - $2, generation = generation + 1
           WHERE tenant_id = $3 AND credit_account_id = $4 AND held_micros >= $5`,
-        [releasedMicros, requestedMicros, input.siteId, hold.credit_account_id, requestedMicros],
+        [releasedMicros, requestedMicros, input.tenantId, hold.credit_account_id, requestedMicros],
       );
       if (accountUpdate.affectedRows !== 1) throw new Error('billing.credit_projection_drift');
       await this.connection.execute(
         `UPDATE entitlement_usage_event SET status = 'settled' WHERE tenant_id = $1 AND usage_event_id = $2`,
-        [input.siteId, input.usageEventId],
+        [input.tenantId, input.usageEventId],
       );
       await this.connection.execute(
         `INSERT INTO entitlement_outbox
           (outbox_id, tenant_id, aggregate_type, aggregate_id, event_type, payload_json)
          VALUES ($1, $2, 'usage_settlement', $3, 'UsageSettled', $4)`,
-        [randomUUID(), input.siteId, settlementId, JSON.stringify({ holdId: input.holdId, usageEventId: input.usageEventId, actualMicros: input.actualMicros })],
+        [randomUUID(), input.tenantId, settlementId, JSON.stringify({ holdId: input.holdId, usageEventId: input.usageEventId, actualMicros: input.actualMicros })],
       );
       await this.connection.commit();
       return { settlementId, capturedMicros: input.actualMicros, releasedMicros };
@@ -307,13 +307,13 @@ export class UsageSettlementService {
     }
   }
 
-  public async releaseUsage(input: { readonly siteId: string; readonly holdId: string; readonly idempotencyKey: string }): Promise<UsageReleaseResult> {
+  public async releaseUsage(input: { readonly tenantId: string; readonly holdId: string; readonly idempotencyKey: string }): Promise<UsageReleaseResult> {
     await this.connection.beginTransaction();
     try {
       const [holds] = await this.connection.execute<RowDataPacket[]>(
         `SELECT credit_account_id, requested_micros, status, released_micros
            FROM entitlement_credit_hold WHERE credit_hold_id = $1 AND tenant_id = $2 FOR UPDATE`,
-        [input.holdId, input.siteId],
+        [input.holdId, input.tenantId],
       );
       const hold = holds[0] as { credit_account_id: string; requested_micros: number; status: string; released_micros: number } | undefined;
       if (!hold) throw new Error('billing.credit_hold_not_found');
@@ -325,7 +325,7 @@ export class UsageSettlementService {
       const [allocations] = await this.connection.execute<RowDataPacket[]>(
         `SELECT credit_grant_id, held_micros, captured_micros, released_micros
            FROM entitlement_credit_hold_allocation WHERE tenant_id = $1 AND credit_hold_id = $2 FOR UPDATE`,
-          [input.siteId, input.holdId],
+          [input.tenantId, input.holdId],
       );
       let releasedMicros = 0;
       for (const allocation of allocations) {
@@ -335,25 +335,25 @@ export class UsageSettlementService {
         await this.connection.execute(
           `UPDATE entitlement_credit_hold_allocation SET released_micros = released_micros + $1
             WHERE tenant_id = $2 AND credit_hold_id = $3 AND credit_grant_id = $4`,
-          [remainder, input.siteId, input.holdId, allocation.credit_grant_id],
+          [remainder, input.tenantId, input.holdId, allocation.credit_grant_id],
         );
       }
       await this.connection.execute(
         `UPDATE entitlement_credit_hold SET status = 'released', released_micros = requested_micros
           WHERE tenant_id = $1 AND credit_hold_id = $2 AND status = 'active'`,
-        [input.siteId, input.holdId],
+        [input.tenantId, input.holdId],
       );
       const [accountUpdate] = await this.connection.execute<ResultSetHeader>(
         `UPDATE entitlement_credit_account
             SET available_micros = available_micros + $1, held_micros = held_micros - $2, generation = generation + 1
           WHERE tenant_id = $3 AND credit_account_id = $4 AND held_micros >= $5`,
-        [readSafeInteger(hold.requested_micros, 'requested_micros'), readSafeInteger(hold.requested_micros, 'requested_micros'), input.siteId, hold.credit_account_id, readSafeInteger(hold.requested_micros, 'requested_micros')],
+        [readSafeInteger(hold.requested_micros, 'requested_micros'), readSafeInteger(hold.requested_micros, 'requested_micros'), input.tenantId, hold.credit_account_id, readSafeInteger(hold.requested_micros, 'requested_micros')],
       );
       if (accountUpdate.affectedRows !== 1) throw new Error('billing.credit_projection_drift');
       await this.connection.execute(
         `INSERT INTO entitlement_outbox (outbox_id, tenant_id, aggregate_type, aggregate_id, event_type, payload_json)
          VALUES ($1, $2, 'credit_hold', $3, 'UsageHoldReleased', $4)`,
-        [randomUUID(), input.siteId, input.holdId, JSON.stringify({ holdId: input.holdId, idempotencyKey: input.idempotencyKey, releasedMicros })],
+        [randomUUID(), input.tenantId, input.holdId, JSON.stringify({ holdId: input.holdId, idempotencyKey: input.idempotencyKey, releasedMicros })],
       );
       await this.connection.commit();
       return { holdId: input.holdId, releasedMicros };
@@ -368,12 +368,12 @@ export class UsageSettlementService {
    * not a Redis TTL callback: expiration must release allocations and the
    * account projection together, and must be recoverable after process death.
    */
-  public async expireExpiredHolds(input: { readonly siteId?: string; readonly limit?: number } = {}): Promise<UsageExpiryResult> {
+  public async expireExpiredHolds(input: { readonly tenantId?: string; readonly limit?: number } = {}): Promise<UsageExpiryResult> {
     const requestedLimit = input.limit ?? 100;
     if (!Number.isSafeInteger(requestedLimit) || requestedLimit <= 0) throw new RangeError('limit must be a positive safe integer');
     const limit = Math.min(requestedLimit, 500);
-    const sitePredicate = input.siteId === undefined ? '' : 'AND tenant_id = ?';
-    const siteArgs = input.siteId === undefined ? [limit] : [input.siteId, limit];
+    const sitePredicate = input.tenantId === undefined ? '' : 'AND tenant_id = ?';
+    const siteArgs = input.tenantId === undefined ? [limit] : [input.tenantId, limit];
     const [holds] = await this.connection.query<RowDataPacket[]>(
       `SELECT credit_hold_id, tenant_id, credit_account_id, requested_micros
          FROM entitlement_credit_hold

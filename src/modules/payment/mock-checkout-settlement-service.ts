@@ -18,7 +18,7 @@ type SettlementRow = RowDataPacket & { settlement_id: string };
 const quoteSnapshotSchema = z.object({ key: z.string().min(1), creditMicros: z.string().regex(/^\d+$/u) });
 
 export type ProcessMockPaymentInput = {
-  readonly siteId: string;
+  readonly tenantId: string;
   readonly providerEventId: string;
   readonly externalEventId: string;
   readonly checkoutId: string;
@@ -36,7 +36,7 @@ export class MockCheckoutSettlementService {
     const [checkouts] = await this.connection.execute<CheckoutRow[]>(
       `SELECT checkout_id, subject_id, offer_revision_id, amount_minor, currency, status, quote_snapshot_json
          FROM payment_checkout WHERE checkout_id = $1 AND tenant_id = $2`,
-      [input.checkoutId, input.siteId],
+      [input.checkoutId, input.tenantId],
     );
     const checkout = checkouts[0];
     if (!checkout) throw new Error('billing.checkout_not_found');
@@ -50,7 +50,7 @@ export class MockCheckoutSettlementService {
     const externalPaymentRef = `mock:${input.externalEventId}`;
     const [existing] = await this.connection.execute<SettlementRow[]>(
       `SELECT settlement_id FROM payment_settlement WHERE tenant_id = $1 AND provider = 'mock' AND external_payment_ref = $2`,
-      [input.siteId, externalPaymentRef],
+      [input.tenantId, externalPaymentRef],
     );
     const settlementId = existing[0]?.settlement_id ?? randomUUID();
     await this.connection.execute(
@@ -58,35 +58,35 @@ export class MockCheckoutSettlementService {
         (settlement_id, tenant_id, provider_event_id, checkout_id, provider, external_payment_ref, amount_minor, currency, status)
        VALUES ($1, $2, $3, $4, 'mock', $5, $6, $7, 'succeeded')
        ON CONFLICT DO NOTHING`,
-      [settlementId, input.siteId, input.providerEventId, checkout.checkout_id, externalPaymentRef, checkout.amount_minor, checkout.currency],
+      [settlementId, input.tenantId, input.providerEventId, checkout.checkout_id, externalPaymentRef, checkout.amount_minor, checkout.currency],
     );
     await this.connection.execute(
       `UPDATE payment_checkout SET status = 'paid' WHERE checkout_id = $1 AND tenant_id = $2 AND status IN ('created', 'pending_payment')`,
-      [checkout.checkout_id, input.siteId],
+      [checkout.checkout_id, input.tenantId],
     );
 
     const [accounts] = await this.connection.execute<AccountRow[]>(
       `SELECT credit_account_id FROM entitlement_credit_account WHERE tenant_id = $1 AND subject_id = $2`,
-      [input.siteId, checkout.subject_id],
+      [input.tenantId, checkout.subject_id],
     );
     const accountId = accounts[0]?.credit_account_id ?? randomUUID();
     await this.connection.execute(
       `INSERT INTO entitlement_credit_account (credit_account_id, tenant_id, subject_id)
        VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
-      [accountId, input.siteId, checkout.subject_id],
+      [accountId, input.tenantId, checkout.subject_id],
     );
 
     if (Number(snapshot.data.creditMicros) <= 0) {
       await this.connection.execute(
         `UPDATE payment_provider_event SET processing_status = 'processed', processed_at = CURRENT_TIMESTAMP(6)
           WHERE tenant_id = $1 AND provider_event_id = $2`,
-        [input.siteId, input.providerEventId],
+        [input.tenantId, input.providerEventId],
       );
       return null;
     }
     const result = await this.settlement.fulfillSettlement({
       settlementId,
-      siteId: input.siteId,
+      tenantId: input.tenantId,
       accountId,
       subjectId: checkout.subject_id,
       programKey: snapshot.data.key,
@@ -95,7 +95,7 @@ export class MockCheckoutSettlementService {
     await this.connection.execute(
       `UPDATE payment_provider_event SET processing_status = 'processed', processed_at = CURRENT_TIMESTAMP(6)
         WHERE tenant_id = $1 AND provider_event_id = $2`,
-      [input.siteId, input.providerEventId],
+      [input.tenantId, input.providerEventId],
     );
     return result;
   }

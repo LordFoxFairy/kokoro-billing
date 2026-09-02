@@ -12,10 +12,10 @@ integration('admin usage pricing revisions', () => {
     const connection = await createBillingConnection(databaseUrl!);
     const admin = new UsagePricingAdminService(connection);
     const pricing = new UsagePricingService(connection);
-    const siteId = randomUUID();
+    const tenantId = randomUUID();
     const idempotencyKey = `pricing-publish-${randomUUID()}`;
     const input = {
-      siteId,
+      tenantId,
       operatorId: 'operator-1',
       effectiveFrom: new Date(),
       reason: 'initial target pricing',
@@ -26,7 +26,7 @@ integration('admin usage pricing revisions', () => {
       const first = await admin.publish(input);
       const replay = await admin.publish(input);
       expect(replay).toEqual(first);
-      const quote = await pricing.quote({ siteId, featureKey: 'chat', labelKey: 'model-a', inputTokens: 1_000_000, outputTokens: 0 });
+      const quote = await pricing.quote({ tenantId, featureKey: 'chat', labelKey: 'model-a', inputTokens: 1_000_000, outputTokens: 0 });
       expect(quote.pricingRevisionId).toBe(first.pricingRevisionId);
       expect(quote.amountMicros).toBe(2);
       expect(quote.reservationMicros).toBe(10);

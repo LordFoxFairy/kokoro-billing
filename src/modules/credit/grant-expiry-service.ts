@@ -8,12 +8,12 @@ export type GrantExpiryResult = { readonly expiredGrantIds: readonly string[] };
 export class GrantExpiryService {
   public constructor(private readonly connection: Connection) {}
 
-  public async expireExpiredGrants(input: { readonly siteId?: string; readonly limit?: number } = {}): Promise<GrantExpiryResult> {
+  public async expireExpiredGrants(input: { readonly tenantId?: string; readonly limit?: number } = {}): Promise<GrantExpiryResult> {
     const requestedLimit = input.limit ?? 100;
     if (!Number.isSafeInteger(requestedLimit) || requestedLimit <= 0) throw new RangeError('limit must be a positive safe integer');
     const limit = Math.min(requestedLimit, 500);
-    const sitePredicate = input.siteId === undefined ? '' : 'AND g.tenant_id = ?';
-    const siteArgs = input.siteId === undefined ? [limit] : [input.siteId, limit];
+    const sitePredicate = input.tenantId === undefined ? '' : 'AND g.tenant_id = ?';
+    const siteArgs = input.tenantId === undefined ? [limit] : [input.tenantId, limit];
     const [grants] = await this.connection.query<RowDataPacket[]>(
       `SELECT g.credit_grant_id, g.tenant_id
          FROM entitlement_credit_grant g

@@ -29,10 +29,10 @@ try {
         const limit = process.env.BILLING_EXPIRY_LIMIT === undefined ? undefined : Number(process.env.BILLING_EXPIRY_LIMIT);
         if (limit !== undefined && (!Number.isSafeInteger(limit) || limit <= 0)) throw new Error('BILLING_EXPIRY_LIMIT must be a positive integer');
         const holds = usage.expireExpiredHolds({
-          ...(tenantId ? { siteId: tenantId } : {}),
+          ...(tenantId ? { tenantId: tenantId } : {}),
           ...(limit === undefined ? {} : { limit }),
         });
-        return holds.then(async (holdResult) => ({ ...holdResult, ...(await grants.expireExpiredGrants({ ...(tenantId ? { siteId: tenantId } : {}), ...(limit === undefined ? {} : { limit }) })) }));
+        return holds.then(async (holdResult) => ({ ...holdResult, ...(await grants.expireExpiredGrants({ ...(tenantId ? { tenantId: tenantId } : {}), ...(limit === undefined ? {} : { limit }) })) }));
       });
     });
     recordExpiryRun(result === undefined ? 'skipped' : 'completed');

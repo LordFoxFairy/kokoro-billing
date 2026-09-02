@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Connection, RowDataPacket } from '../../../src/infrastructure/postgres/connection.js';
 
 export type ProviderEventRetryInput = {
-  readonly siteId: string;
+  readonly tenantId: string;
   readonly providerEventId: string;
   readonly operatorId: string;
   readonly reason: string;
@@ -34,12 +34,12 @@ type ProviderEventCursor = { readonly receivedAt: string; readonly providerEvent
 export class ProviderEventAdminService {
   public constructor(private readonly connection: Connection) {}
 
-  public async list(input: { readonly siteId: string; readonly status?: ProviderEventRetryResult['processingStatus']; readonly limit?: number; readonly cursor?: string }): Promise<{ readonly items: readonly ProviderEventListItem[]; readonly nextCursor?: string }> {
+  public async list(input: { readonly tenantId: string; readonly status?: ProviderEventRetryResult['processingStatus']; readonly limit?: number; readonly cursor?: string }): Promise<{ readonly items: readonly ProviderEventListItem[]; readonly nextCursor?: string }> {
     const limit = Math.min(Math.max(Math.trunc(input.limit ?? 50), 1), 100);
     const cursor = input.cursor === undefined ? undefined : decodeProviderEventCursor(input.cursor);
     const statusPredicate = input.status === undefined ? '' : 'AND processing_status = ?';
     const cursorPredicate = cursor === undefined ? '' : 'AND (received_at < ? OR (received_at = ? AND provider_event_id < ?))';
-    const args = [input.siteId, ...(input.status === undefined ? [] : [input.status]), ...(cursor === undefined ? [] : [new Date(cursor.receivedAt), new Date(cursor.receivedAt), cursor.providerEventId]), limit + 1];
+    const args = [input.tenantId, ...(input.status === undefined ? [] : [input.status]), ...(cursor === undefined ? [] : [new Date(cursor.receivedAt), new Date(cursor.receivedAt), cursor.providerEventId]), limit + 1];
     const [rows] = await this.connection.query<EventListRow[]>(
       `SELECT provider_event_id, provider, external_event_id, event_type, processing_status, processing_attempts, last_error, received_at, processed_at
          FROM payment_provider_event
@@ -63,7 +63,7 @@ export class ProviderEventAdminService {
       const [prior] = await this.connection.execute<ReceiptRow[]>(
         `SELECT payload_hash, status, result_json FROM payment_command_receipt
           WHERE tenant_id = $1 AND command_name = 'ProviderEventRetry' AND idempotency_key = $2 FOR UPDATE`,
-        [input.siteId, input.idempotencyKey],
+        [input.tenantId, input.idempotencyKey],
       );
       if (prior[0]) {
         if (prior[0].payload_hash !== payloadHash) throw new Error('billing.idempotency_conflict');
@@ -79,12 +79,12 @@ export class ProviderEventAdminService {
         `INSERT INTO payment_command_receipt
           (receipt_id, tenant_id, command_name, idempotency_key, payload_hash, status)
          VALUES ($1, $2, 'ProviderEventRetry', $3, $4, 'processing')`,
-        [receiptId, input.siteId, input.idempotencyKey, payloadHash],
+        [receiptId, input.tenantId, input.idempotencyKey, payloadHash],
       );
       const [events] = await this.connection.execute<EventRow[]>(
         `SELECT provider_event_id, processing_status FROM payment_provider_event
           WHERE tenant_id = $1 AND provider_event_id = $2 FOR UPDATE`,
-        [input.siteId, input.providerEventId],
+        [input.tenantId, input.providerEventId],
       );
       const event = events[0];
       if (!event) throw new Error('billing.provider_event_not_found');
@@ -94,7 +94,7 @@ export class ProviderEventAdminService {
           `UPDATE payment_provider_event
               SET processing_status = 'received', processed_at = NULL, last_error = NULL
             WHERE tenant_id = $1 AND provider_event_id = $2`,
-          [input.siteId, event.provider_event_id],
+          [input.tenantId, event.provider_event_id],
         );
         await this.connection.execute(
           `INSERT INTO payment_outbox
@@ -102,19 +102,19 @@ export class ProviderEventAdminService {
            SELECT $1, tenant_id, 'provider_event', provider_event_id, 'PaymentProviderEventReceived', $2
              FROM payment_provider_event WHERE tenant_id = $3 AND provider_event_id = $4
            ON CONFLICT (aggregate_type, aggregate_id, event_type) DO UPDATE SET published_at = NULL, dead_lettered_at = NULL, attempts = 0, next_attempt_at = CURRENT_TIMESTAMP(6), lease_token = NULL, lease_until = NULL`,
-          [randomUUID(), JSON.stringify({ providerEventId: event.provider_event_id }), input.siteId, event.provider_event_id],
+          [randomUUID(), JSON.stringify({ providerEventId: event.provider_event_id }), input.tenantId, event.provider_event_id],
         );
         result = { providerEventId: event.provider_event_id, processingStatus: 'received' };
       }
       await this.connection.execute(
         `UPDATE payment_command_receipt SET status = 'succeeded', result_json = $1 WHERE tenant_id = $2 AND receipt_id = $3`,
-        [JSON.stringify(result), input.siteId, receiptId],
+        [JSON.stringify(result), input.tenantId, receiptId],
       );
       await this.connection.execute(
         `INSERT INTO entitlement_audit_event
           (audit_event_id, tenant_id, operator_id, action, resource_type, resource_id, reason, payload_json)
          VALUES ($1, $2, $3, 'provider_event_retry', 'payment_provider_event', $4, $5, $6)`,
-        [randomUUID(), input.siteId, input.operatorId, input.providerEventId, input.reason, JSON.stringify({ idempotencyKey: input.idempotencyKey })],
+        [randomUUID(), input.tenantId, input.operatorId, input.providerEventId, input.reason, JSON.stringify({ idempotencyKey: input.idempotencyKey })],
       );
       await this.connection.commit();
       return result;

@@ -4,34 +4,34 @@ import type { Connection, RowDataPacket } from '../../../src/infrastructure/post
 export class CreditAccountQueryService {
   public constructor(private readonly connection: Connection) {}
 
-  public async ensureForSubject(siteId: string, subjectId: string): Promise<{ readonly accountId: string }> {
+  public async ensureForSubject(tenantId: string, subjectId: string): Promise<{ readonly accountId: string }> {
     const accountId = randomUUID();
     await this.connection.execute(
       `INSERT INTO entitlement_credit_account (credit_account_id, tenant_id, subject_id)
        VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
-      [accountId, siteId, subjectId],
+      [accountId, tenantId, subjectId],
     );
     const [rows] = await this.connection.execute<RowDataPacket[]>(
       `SELECT credit_account_id FROM entitlement_credit_account WHERE tenant_id = $1 AND subject_id = $2`,
-      [siteId, subjectId],
+      [tenantId, subjectId],
     );
     const row = rows[0] as { credit_account_id: string } | undefined;
     if (!row) throw new Error('billing.credit_account_not_found');
     return { accountId: row.credit_account_id };
   }
 
-  public async getForSubject(siteId: string, subjectId: string): Promise<Record<string, unknown> | null> {
+  public async getForSubject(tenantId: string, subjectId: string): Promise<Record<string, unknown> | null> {
     const [accounts] = await this.connection.execute<RowDataPacket[]>(
       `SELECT credit_account_id, status, available_micros, held_micros, generation, updated_at
          FROM entitlement_credit_account WHERE tenant_id = $1 AND subject_id = $2`,
-      [siteId, subjectId],
+      [tenantId, subjectId],
     );
     const account = accounts[0] as { credit_account_id: string; status: string; available_micros: number; held_micros: number; generation: number; updated_at: Date } | undefined;
     if (!account) return null;
     const [grants] = await this.connection.execute<RowDataPacket[]>(
       `SELECT credit_grant_id, program_key, original_micros, remaining_micros, effective_at, expires_at, burn_priority, status
          FROM entitlement_credit_grant WHERE tenant_id = $1 AND credit_account_id = $2 ORDER BY expires_at IS NULL, expires_at, burn_priority, issued_at, credit_grant_id`,
-      [siteId, account.credit_account_id],
+      [tenantId, account.credit_account_id],
     );
     return {
       accountId: account.credit_account_id,
@@ -53,16 +53,16 @@ export class CreditAccountQueryService {
     };
   }
 
-  public async summaryForSubject(siteId: string, subjectId: string): Promise<{ balanceMicros: string; heldMicros: string; quotaMicros: string | null; quotaPeriod: string | null }> {
+  public async summaryForSubject(tenantId: string, subjectId: string): Promise<{ balanceMicros: string; heldMicros: string; quotaMicros: string | null; quotaPeriod: string | null }> {
     const [rows] = await this.connection.execute<RowDataPacket[]>(
       `SELECT available_micros, held_micros, quota_micros, quota_period FROM entitlement_credit_account WHERE tenant_id = $1 AND subject_id = $2`,
-      [siteId, subjectId],
+      [tenantId, subjectId],
     );
     const row = rows[0] as { available_micros: string | number; held_micros: string | number; quota_micros: string | number | null; quota_period: string | null } | undefined;
     return { balanceMicros: String(row?.available_micros ?? 0), heldMicros: String(row?.held_micros ?? 0), quotaMicros: row?.quota_micros === null || row?.quota_micros === undefined ? null : String(row.quota_micros), quotaPeriod: row?.quota_period ?? null };
   }
 
-  public async ledgerForSubject(siteId: string, subjectId: string, limit: number, cursor?: string): Promise<{ entries: unknown[]; nextCursor?: string }> {
+  public async ledgerForSubject(tenantId: string, subjectId: string, limit: number, cursor?: string): Promise<{ entries: unknown[]; nextCursor?: string }> {
     const safeLimit = Math.min(Math.max(Math.trunc(limit), 1), 100);
     const decodedCursor = cursor === undefined ? undefined : decodeLedgerCursor(cursor);
     const cursorPredicate = decodedCursor === undefined ? '' : 'WHERE ledger.created_at < ? OR (ledger.created_at = ? AND (ledger.journal_seq < ? OR (ledger.journal_seq = ? AND ledger.journal_id < ?)))';
@@ -78,7 +78,7 @@ export class CreditAccountQueryService {
          ) AS ledger
          ${cursorPredicate}
         ORDER BY ledger.created_at DESC, ledger.journal_seq DESC, ledger.journal_id DESC LIMIT $3`,
-      [siteId, subjectId, ...cursorArgs, safeLimit],
+      [tenantId, subjectId, ...cursorArgs, safeLimit],
     );
     const entries = rows.map((row) => ({ entryId: String(row.journal_id), deltaMicros: String(row.amount_micros), balanceAfterMicros: String(row.balance_after_micros), reason: String(row.source_kind), createdAt: new Date(row.created_at as string | Date).getTime(), runId: null }));
     if (rows.length < safeLimit) return { entries };
@@ -87,7 +87,7 @@ export class CreditAccountQueryService {
     return { entries, nextCursor: encodeLedgerCursor({ createdAt: toCursorDate(last.created_at), journalSeq: String(last.journal_seq), journalId: String(last.journal_id) }) };
   }
 
-  public async byModelForSubject(siteId: string, subjectId: string): Promise<{ periodStart: string; items: unknown[] }> {
+  public async byModelForSubject(tenantId: string, subjectId: string): Promise<{ periodStart: string; items: unknown[] }> {
     const [rows] = await this.connection.execute<RowDataPacket[]>(
       `SELECT h.model_binding_id, COALESCE(h.label_key, h.feature_key) AS model_name,
               COALESCE(SUM(CASE WHEN j.amount_micros < 0 THEN -j.amount_micros ELSE 0 END), 0) AS spent_micros,
@@ -97,7 +97,7 @@ export class CreditAccountQueryService {
          LEFT JOIN entitlement_credit_hold h ON h.tenant_id = a.tenant_id AND h.credit_hold_id = j.source_ref AND j.source_kind = 'usage_settlement'
         WHERE a.tenant_id = $1 AND a.subject_id = $2
         GROUP BY h.model_binding_id, model_name ORDER BY spent_micros DESC, model_name`,
-      [siteId, subjectId],
+      [tenantId, subjectId],
     );
     const now = new Date();
     const periodStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();

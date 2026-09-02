@@ -10,7 +10,7 @@ integration('entitlement catalog', () => {
   it('lists only published, active, non-deleted revisions for a site', async () => {
     const connection = await createBillingConnection(databaseUrl!);
     const service = new CatalogService(connection);
-    const siteId = randomUUID();
+    const tenantId = randomUUID();
     const offerId = randomUUID();
     const publishedRevisionId = randomUUID();
     const latestRevisionId = randomUUID();
@@ -18,7 +18,7 @@ integration('entitlement catalog', () => {
     try {
       await connection.execute(
         `INSERT INTO entitlement_offer (offer_id, tenant_id, offer_key, status) VALUES ($1, $2, 'pro', 'active')`,
-        [offerId, siteId],
+        [offerId, tenantId],
       );
       await connection.execute(
         `INSERT INTO entitlement_offer_revision
@@ -27,9 +27,9 @@ integration('entitlement catalog', () => {
          VALUES ($1, $2, $3, 1, 'Pro', 'USD', 1999, 1000000, 'month', 'published', CURRENT_TIMESTAMP(6)),
                 ($4, $5, $6, 2, 'Pro+', 'USD', 2999, 2000000, 'month', 'published', CURRENT_TIMESTAMP(6)),
                 ($7, $8, $9, 3, 'Pro Draft', 'USD', 3999, 3000000, 'month', 'draft', NULL)`,
-        [publishedRevisionId, offerId, siteId, latestRevisionId, offerId, siteId, draftRevisionId, offerId, siteId],
+        [publishedRevisionId, offerId, tenantId, latestRevisionId, offerId, tenantId, draftRevisionId, offerId, tenantId],
       );
-      await expect(service.listSellable(siteId)).resolves.toEqual([{
+      await expect(service.listSellable(tenantId)).resolves.toEqual([{
         id: latestRevisionId,
         key: 'pro',
         name: 'Pro+',
@@ -39,8 +39,8 @@ integration('entitlement catalog', () => {
         billingInterval: 'month',
       }]);
     } finally {
-      await connection.execute('DELETE FROM entitlement_offer_revision WHERE tenant_id = $1', [siteId]);
-      await connection.execute('DELETE FROM entitlement_offer WHERE tenant_id = $1', [siteId]);
+      await connection.execute('DELETE FROM entitlement_offer_revision WHERE tenant_id = $1', [tenantId]);
+      await connection.execute('DELETE FROM entitlement_offer WHERE tenant_id = $1', [tenantId]);
       await connection.end();
     }
   });

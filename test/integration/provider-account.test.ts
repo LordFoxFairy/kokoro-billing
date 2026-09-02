@@ -9,16 +9,16 @@ const integration = describe.skipIf(!databaseUrl);
 integration('provider account tenant routing', () => {
   it('resolves a provider account to exactly one active site', async () => {
     const connection = await createBillingConnection(databaseUrl!);
-    const siteId = randomUUID();
+    const tenantId = randomUUID();
     const externalAccountRef = `acct-${randomUUID()}`;
     try {
       await connection.execute(
         `INSERT INTO payment_provider_account (provider_account_id, tenant_id, provider, external_account_ref, status)
          VALUES ($1, $2, 'stripe', $3, 'active')`,
-        [randomUUID(), siteId, externalAccountRef],
+        [randomUUID(), tenantId, externalAccountRef],
       );
       const accounts = new ProviderAccountService(connection);
-      await expect(accounts.resolveTenantId('stripe', externalAccountRef)).resolves.toBe(siteId);
+      await expect(accounts.resolveTenantId('stripe', externalAccountRef)).resolves.toBe(tenantId);
       await expect(accounts.resolveTenantId('stripe', 'unknown-account')).resolves.toBeNull();
       await expect(connection.execute(
         `INSERT INTO payment_provider_account (provider_account_id, tenant_id, provider, external_account_ref, status)
@@ -26,7 +26,7 @@ integration('provider account tenant routing', () => {
         [randomUUID(), randomUUID(), externalAccountRef],
       )).rejects.toThrow();
     } finally {
-      await connection.execute('DELETE FROM payment_provider_account WHERE tenant_id = $1', [siteId]);
+      await connection.execute('DELETE FROM payment_provider_account WHERE tenant_id = $1', [tenantId]);
       await connection.end();
     }
   });
