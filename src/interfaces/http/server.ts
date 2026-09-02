@@ -222,18 +222,26 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     try {
       const body = JSON.parse(raw) as { error?: Record<string, unknown>; requestId?: string; meta?: Record<string, unknown> };
       reply.header('x-kokoro-request-id', request.id);
+      const isV1Route = request.url.startsWith('/v1/');
       if (body.error !== undefined) {
         const error = body.error;
-        return JSON.stringify({
-          ...body,
-          requestId: body.requestId ?? request.id,
-          error: {
-            ...error,
-            request_id: error.request_id ?? request.id,
-            retryable: error.retryable ?? (reply.statusCode >= 500 || reply.statusCode === 409 || reply.statusCode === 429),
-            details: error.details ?? {},
-          },
-        });
+        const normalizedError = {
+          ...error,
+          request_id: error.request_id ?? request.id,
+          retryable: error.retryable ?? (reply.statusCode >= 500 || reply.statusCode === 409 || reply.statusCode === 429),
+          details: error.details ?? {},
+        };
+        if (isV1Route) {
+          const v1Body = { ...body };
+          delete v1Body.requestId;
+          return JSON.stringify({ ...v1Body, error: normalizedError, meta: { ...(body.meta ?? {}), request_id: request.id } });
+        }
+        return JSON.stringify({ ...body, requestId: body.requestId ?? request.id, error: normalizedError });
+      }
+      if (reply.statusCode < 400 && isV1Route) {
+        const v1Body = { ...body };
+        delete v1Body.requestId;
+        return JSON.stringify({ ...v1Body, meta: { ...(body.meta ?? {}), request_id: request.id } });
       }
       if (reply.statusCode < 400 && body.meta?.request_id === undefined) {
         return JSON.stringify({ ...body, meta: { ...(body.meta ?? {}), request_id: request.id } });
@@ -699,7 +707,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     if (!dependencies.catalog) return reply.code(503).send({ error: { code: 'billing.catalog_not_configured', message: 'catalog is not configured' } });
     try {
       const plans = await dependencies.catalog.listSellable(context.tenantId);
-      return reply.code(200).send({ data: { offers: plans }, requestId: request.id });
+      return reply.code(200).send({ data: { offers: toSnakeCase(plans) }, requestId: request.id });
     } catch (error) { return sendError(reply, error); }
   });
 
@@ -742,7 +750,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
     if (!(await claimIdempotencyHint(dependencies, request, key, reply, context.tenantId))) return;
     try {
-      const result = await dependencies.checkout.create({ offerRevisionId: parsed.data.offer_revision_id, amountMinor: safeDecimal(parsed.data.amount_minor, 'amount_minor'), currency: parsed.data.currency, quoteSnapshot: parsed.data.quote_snapshot, siteId: context.tenantId, subjectId: context.subjectId, idempotencyKey: key, expiresAt: new Date(Date.now() + 300_000) });
+      const result = await dependencies.checkout.create({ offerRevisionId: parsed.data.offer_revision_id, amountMinor: safeDecimal(parsed.data.amount_minor, 'amount_minor'), currency: parsed.data.currency, quoteSnapshot: toCamelCase(parsed.data.quote_snapshot), siteId: context.tenantId, subjectId: context.subjectId, idempotencyKey: key, expiresAt: new Date(Date.now() + 300_000) });
       const hosted = dependencies.checkout.createHostedSession ? await dependencies.checkout.createHostedSession(context.tenantId, result.checkoutId) : result;
       return reply.code(201).send({ data: toSnakeCase({ ...hosted, amountMinor: String(hosted.amountMinor) }), requestId: request.id });
     } catch (error) { return sendError(reply, error); }
@@ -854,7 +862,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     const parsed = z.object({ limit: z.number().int().positive().max(500).optional() }).strict().safeParse(request.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
     try {
-      return reply.code(202).send({ data: await dependencies.usage.expireExpiredHolds(parsed.data.limit === undefined ? {} : { siteId: context.tenantId, limit: parsed.data.limit }), requestId: request.id });
+      return reply.code(202).send({ data: toSnakeCase(await dependencies.usage.expireExpiredHolds(parsed.data.limit === undefined ? {} : { siteId: context.tenantId, limit: parsed.data.limit })), requestId: request.id });
     } catch (error) { return sendError(reply, error); }
   });
 
@@ -881,4 +889,10 @@ function toSnakeCase(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(toSnakeCase);
   if (value === null || typeof value !== 'object' || value instanceof Date) return value;
   return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => [key.replace(/[A-Z]/gu, (character) => `_${character.toLowerCase()}`), toSnakeCase(item)]));
+}
+
+function toCamelCase(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(toCamelCase);
+  if (value === null || typeof value !== 'object' || value instanceof Date) return value;
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => [key.replace(/_([a-z])/gu, (_match, character: string) => character.toUpperCase()), toCamelCase(item)]));
 }

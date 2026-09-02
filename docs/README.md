@@ -10,7 +10,7 @@
 - Scheduler 不连接 Billing 数据库；只以 service identity 调用 `/v1/internal/commands/expire-credit-holds`。过期释放仍由 PostgreSQL 行锁和事实表完成。
 - Provider 通过 `/v1/webhooks/payment/{provider}` 进入签名校验、inbox、去重和异步处理链路。
 
-所有 v1 JSON 成功响应包含 `{data, meta: {request_id}}`；错误包含 `error.request_id`、`retryable` 和 `details`。当前为了保留本地既有 fixture，响应还保留顶层 `requestId`，新 BFF 代码应只依赖 `meta.request_id`。
+所有 v1 JSON 成功响应严格使用 `{data, meta: {request_id}}`，不再输出顶层 `requestId`；错误包含 `error.request_id`、`retryable`、`details` 和同级 `meta.request_id`。`quote_snapshot` 使用 snake_case wire 字段（至少 `key`、`credit_micros`，可带 `name` 等），HTTP adapter 在传给既有 CheckoutService 前转换为其 camelCase DTO。非 `/v1` 旧路径继续保留原有顶层 `requestId` 和 camelCase payload，以维持兼容。
 
 ## 账务状态
 
@@ -46,7 +46,7 @@ DATABASE_URL=TARGET pnpm test:integration
 REDIS_TEST_URL=TARGET pnpm exec vitest run test/integration/redis-idempotency-hint.test.ts test/integration/redis-lease.test.ts --no-file-parallelism
 ```
 
-最近本地 fixture 验收：`57 passed / 51 skipped`；typecheck、lint、build、SQL 命名门禁和 OpenAPI route parity（45 routes）均通过。集成测试在未提供 PostgreSQL/Redis fixture 时按项目约定跳过，不把跳过结果当作真实依赖验收。
+最近本地 fixture 验收：`61 passed / 52 skipped`；typecheck、lint、build、SQL 命名门禁和 OpenAPI route parity（48 routes）均通过。集成测试在未提供 PostgreSQL/Redis fixture 时按项目约定跳过，不把跳过结果当作真实依赖验收。
 
 ## 当前风险与未完成项
 

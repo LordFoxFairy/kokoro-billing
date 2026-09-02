@@ -778,9 +778,9 @@ paths:
           userBearer: []
       responses:
         "200":
-          $ref: "#/components/responses/Plans"
+          $ref: "#/components/responses/V1Plans"
         "401":
-          $ref: "#/components/responses/Error"
+          $ref: "#/components/responses/V1Error"
   /v1/billing/me/credit-account:
     get:
       tags:
@@ -790,9 +790,9 @@ paths:
           userBearer: []
       responses:
         "200":
-          $ref: "#/components/responses/CreditAccount"
+          $ref: "#/components/responses/V1CreditAccount"
         "401":
-          $ref: "#/components/responses/Error"
+          $ref: "#/components/responses/V1Error"
   /v1/billing/me/credit-ledger:
     get:
       tags:
@@ -813,9 +813,9 @@ paths:
             type: string
       responses:
         "200":
-          $ref: "#/components/responses/Ledger"
+          $ref: "#/components/responses/V1Ledger"
         "401":
-          $ref: "#/components/responses/Error"
+          $ref: "#/components/responses/V1Error"
   /v1/internal/entitlement/admissions:
     post:
       tags:
@@ -828,11 +828,11 @@ paths:
         - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "201":
-          $ref: "#/components/responses/Accepted"
+          $ref: "#/components/responses/V1Accepted"
         "400":
-          $ref: "#/components/responses/Error"
+          $ref: "#/components/responses/V1Error"
         "409":
-          $ref: "#/components/responses/Error"
+          $ref: "#/components/responses/V1Error"
   /v1/internal/entitlement/admissions/{admissionId}/capture:
     post:
       tags:
@@ -850,11 +850,11 @@ paths:
         - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "200":
-          $ref: "#/components/responses/Accepted"
+          $ref: "#/components/responses/V1Accepted"
         "400":
-          $ref: "#/components/responses/Error"
+          $ref: "#/components/responses/V1Error"
         "409":
-          $ref: "#/components/responses/Error"
+          $ref: "#/components/responses/V1Error"
   /v1/internal/entitlement/admissions/{admissionId}/release:
     post:
       tags:
@@ -872,11 +872,11 @@ paths:
         - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "200":
-          $ref: "#/components/responses/Accepted"
+          $ref: "#/components/responses/V1Accepted"
         "400":
-          $ref: "#/components/responses/Error"
+          $ref: "#/components/responses/V1Error"
         "409":
-          $ref: "#/components/responses/Error"
+          $ref: "#/components/responses/V1Error"
   /v1/internal/billing/execution-events:
     post:
       tags:
@@ -889,9 +889,9 @@ paths:
         - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "202":
-          $ref: "#/components/responses/Accepted"
+          $ref: "#/components/responses/V1Accepted"
         "400":
-          $ref: "#/components/responses/Error"
+          $ref: "#/components/responses/V1Error"
   /v1/internal/payment/settlements/accept:
     post:
       tags:
@@ -904,9 +904,9 @@ paths:
         - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "202":
-          $ref: "#/components/responses/Accepted"
+          $ref: "#/components/responses/V1Accepted"
         "400":
-          $ref: "#/components/responses/Error"
+          $ref: "#/components/responses/V1Error"
   /v1/internal/payment/refunds/accept:
     post:
       tags:
@@ -919,9 +919,9 @@ paths:
         - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "202":
-          $ref: "#/components/responses/Accepted"
+          $ref: "#/components/responses/V1Accepted"
         "400":
-          $ref: "#/components/responses/Error"
+          $ref: "#/components/responses/V1Error"
   /v1/internal/commands/expire-credit-holds:
     post:
       tags:
@@ -934,9 +934,9 @@ paths:
         - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "202":
-          $ref: "#/components/responses/Accepted"
+          $ref: "#/components/responses/V1Accepted"
         "400":
-          $ref: "#/components/responses/Error"
+          $ref: "#/components/responses/V1Error"
   /v1/webhooks/payment/{provider}:
     post:
       tags:
@@ -954,11 +954,11 @@ paths:
             type: string
       responses:
         "202":
-          $ref: "#/components/responses/Accepted"
+          $ref: "#/components/responses/V1Accepted"
         "400":
-          $ref: "#/components/responses/Error"
+          $ref: "#/components/responses/V1Error"
         "401":
-          $ref: "#/components/responses/Error"
+          $ref: "#/components/responses/V1Error"
   /v1/billing/me/subscriptions:
     get:
       tags:
@@ -968,9 +968,9 @@ paths:
           userBearer: []
       responses:
         "200":
-          $ref: "#/components/responses/Generic"
+          $ref: "#/components/responses/V1Generic"
         "401":
-          $ref: "#/components/responses/Error"
+          $ref: "#/components/responses/V1Error"
   /v1/billing/checkout:
     post:
       tags:
@@ -980,13 +980,15 @@ paths:
           userBearer: []
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        $ref: "#/components/requestBodies/V1CheckoutRequest"
       responses:
         "201":
-          $ref: "#/components/responses/Checkout"
+          $ref: "#/components/responses/V1Checkout"
         "400":
-          $ref: "#/components/responses/Error"
+          $ref: "#/components/responses/V1Error"
         "409":
-          $ref: "#/components/responses/Error"
+          $ref: "#/components/responses/V1Error"
   /v1/admin/billing/refunds:
     post:
       tags:
@@ -1000,11 +1002,11 @@ paths:
         - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "202":
-          $ref: "#/components/responses/Accepted"
+          $ref: "#/components/responses/V1Accepted"
         "400":
-          $ref: "#/components/responses/Error"
+          $ref: "#/components/responses/V1Error"
         "409":
-          $ref: "#/components/responses/Error"
+          $ref: "#/components/responses/V1Error"
 components:
   securitySchemes:
     tenantContext:
@@ -1088,6 +1090,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/CheckoutRequest"
+    V1CheckoutRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/V1CheckoutRequest"
     HoldRequest:
       required: true
       content:
@@ -2096,6 +2104,298 @@ components:
           $ref: "#/components/schemas/AdminStats"
         requestId:
           type: string
+    V1Meta:
+      type: object
+      required:
+        - request_id
+      properties:
+        request_id:
+          type: string
+    V1GenericData:
+      type: object
+      additionalProperties: true
+    V1SuccessResponse:
+      type: object
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          $ref: "#/components/schemas/V1GenericData"
+        meta:
+          $ref: "#/components/schemas/V1Meta"
+    V1ErrorResponse:
+      type: object
+      required:
+        - error
+        - meta
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+            - request_id
+            - retryable
+            - details
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            request_id:
+              type: string
+            retryable:
+              type: boolean
+            details:
+              type: object
+              additionalProperties: true
+        meta:
+          $ref: "#/components/schemas/V1Meta"
+    V1CheckoutRequest:
+      type: object
+      required:
+        - offer_revision_id
+        - amount_minor
+        - currency
+        - quote_snapshot
+      additionalProperties: false
+      properties:
+        offer_revision_id:
+          type: string
+        amount_minor:
+          type: string
+          pattern: ^[1-9][0-9]*$
+        currency:
+          type: string
+          pattern: ^[A-Z]{3}$
+        quote_snapshot:
+          $ref: "#/components/schemas/V1QuoteSnapshot"
+    V1QuoteSnapshot:
+      type: object
+      required:
+        - key
+        - credit_micros
+      properties:
+        key:
+          type: string
+          minLength: 1
+        credit_micros:
+          type: string
+          pattern: ^[0-9]+$
+        name:
+          type: string
+      additionalProperties: true
+    V1Plan:
+      type: object
+      required:
+        - id
+        - key
+        - name
+        - currency
+        - amount_minor
+        - credit_micros
+        - billing_interval
+      properties:
+        id:
+          type: string
+        key:
+          type: string
+        name:
+          type: string
+        currency:
+          type: string
+          pattern: ^[A-Z]{3}$
+        amount_minor:
+          type: string
+          pattern: ^[0-9]+$
+        credit_micros:
+          type: string
+          pattern: ^[0-9]+$
+        billing_interval:
+          type: string
+          enum:
+            - once
+            - month
+            - year
+    V1PlansData:
+      type: object
+      required:
+        - offers
+      properties:
+        offers:
+          type: array
+          items:
+            $ref: "#/components/schemas/V1Plan"
+    V1CreditAccountData:
+      type: object
+      required:
+        - account_id
+        - status
+        - available_micros
+        - held_micros
+        - generation
+        - grants
+      properties:
+        account_id:
+          type: string
+        status:
+          type: string
+          enum:
+            - active
+            - disabled
+        available_micros:
+          type: string
+          pattern: ^[0-9]+$
+        held_micros:
+          type: string
+          pattern: ^[0-9]+$
+        generation:
+          type: string
+          pattern: ^[0-9]+$
+        grants:
+          type: array
+          items:
+            type: object
+            required:
+              - credit_grant_id
+              - program_key
+              - original_micros
+              - remaining_micros
+              - effective_at
+              - expires_at
+              - burn_priority
+              - status
+            properties:
+              credit_grant_id:
+                type: string
+              program_key:
+                type: string
+              original_micros:
+                type: string
+                pattern: ^[0-9]+$
+              remaining_micros:
+                type: string
+                pattern: ^[0-9]+$
+              effective_at:
+                type: string
+                format: date-time
+              expires_at:
+                type: string
+                format: date-time
+                nullable: true
+              burn_priority:
+                type: integer
+              status:
+                type: string
+    V1LedgerEntry:
+      type: object
+      required:
+        - entry_id
+        - delta_micros
+        - balance_after_micros
+        - reason
+        - created_at
+        - run_id
+      properties:
+        entry_id:
+          type: string
+        delta_micros:
+          type: string
+          pattern: ^-?[0-9]+$
+        balance_after_micros:
+          type: string
+          pattern: ^-?[0-9]+$
+        reason:
+          type: string
+        created_at:
+          type: integer
+          format: int64
+        run_id:
+          type: string
+          nullable: true
+    V1LedgerData:
+      type: object
+      required:
+        - entries
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/V1LedgerEntry"
+        next_cursor:
+          type: string
+    V1CheckoutData:
+      type: object
+      required:
+        - checkout_id
+        - status
+        - amount_minor
+        - currency
+        - expires_at
+      properties:
+        checkout_id:
+          type: string
+        status:
+          type: string
+          enum:
+            - created
+            - pending_payment
+            - paid
+            - cancelled
+            - expired
+        amount_minor:
+          type: string
+          pattern: ^[0-9]+$
+        currency:
+          type: string
+          pattern: ^[A-Z]{3}$
+        expires_at:
+          type: string
+          format: date-time
+        checkout_url:
+          type: string
+          format: uri
+    V1PlansResponse:
+      type: object
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          $ref: "#/components/schemas/V1PlansData"
+        meta:
+          $ref: "#/components/schemas/V1Meta"
+    V1CreditAccountResponse:
+      type: object
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          $ref: "#/components/schemas/V1CreditAccountData"
+        meta:
+          $ref: "#/components/schemas/V1Meta"
+    V1LedgerResponse:
+      type: object
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          $ref: "#/components/schemas/V1LedgerData"
+        meta:
+          $ref: "#/components/schemas/V1Meta"
+    V1CheckoutResponse:
+      type: object
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          $ref: "#/components/schemas/V1CheckoutData"
+        meta:
+          $ref: "#/components/schemas/V1Meta"
   responses:
     Health:
       description: Liveness response
@@ -2115,6 +2415,48 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/GenericResponse"
+    V1Generic:
+      description: v1 response with a snake_case wire payload.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/V1SuccessResponse"
+    V1Accepted:
+      description: v1 response accepted for processing.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/V1SuccessResponse"
+    V1Plans:
+      description: v1 storefront catalog.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/V1PlansResponse"
+    V1CreditAccount:
+      description: v1 credit account.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/V1CreditAccountResponse"
+    V1Ledger:
+      description: v1 credit ledger page.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/V1LedgerResponse"
+    V1Checkout:
+      description: v1 checkout.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/V1CheckoutResponse"
+    V1Error:
+      description: v1 error envelope.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/V1ErrorResponse"
     Plans:
       description: Plans
       content:
