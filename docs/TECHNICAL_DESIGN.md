@@ -11,6 +11,11 @@ Billing is one deployable modular monolith with Commerce, Payment and Entitlemen
 5. Provider and execution events enter an inbox first. Unknown events are retained for replay/reconciliation.
 6. Replays compare payload hashes. A different payload under the same tenant/command/key returns `billing.idempotency_conflict`.
 
+All Billing relationships that point to another aggregate carry `tenant_id` in the PostgreSQL
+foreign key. The `0038-complete-tenant-lineage` migration removes identifier-only foreign keys
+and adds composite lineage constraints across Credit, Payment, Subscription, Checkout, Refund,
+and redeem facts. Application predicates remain tenant-scoped as a second boundary.
+
 ## Credit invariants
 
 `available = gross - held`; each hold has exactly one terminal outcome; capture and release are mutually exclusive; every journal entry is append-only; every grant is burned in the published allocation order; refund reversal creates an exposure fact when already-consumed credit cannot be reversed.

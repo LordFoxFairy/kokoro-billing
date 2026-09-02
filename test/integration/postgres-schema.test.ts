@@ -100,6 +100,7 @@ integration('billing PostgreSQL schema', () => {
         { version: '0035-credit-hold-tenant-lineage' },
         { version: '0036-payment-settlement-checkout-provider-index' },
         { version: '0037-tenant-lineage-composite-foreign-keys' },
+        { version: '0038-complete-tenant-lineage' },
       ]);
       const [targetTables] = await connection.query<(RowDataPacket & { table_name: string })[]>(
         `SELECT table_name FROM information_schema.tables

@@ -7,7 +7,7 @@ const errors: string[] = [];
 const migrationFile = /^\d{4}-[a-z0-9]+(?:-[a-z0-9]+)*\.sql$/u;
 const identifier = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/u;
 const tablePattern = /\b(?:CREATE TABLE(?: IF NOT EXISTS)?|ALTER TABLE)\s+`?([a-zA-Z][a-zA-Z0-9_]*)`?/giu;
-const namedObjectPattern = /\b(?:CONSTRAINT|UNIQUE KEY|KEY)\s+`?([a-zA-Z][a-zA-Z0-9_]*)`?/giu;
+const namedObjectPattern = /\b(?:CONSTRAINT\s+(?!IF\b)|UNIQUE KEY|KEY)\s+`?([a-zA-Z][a-zA-Z0-9_]*)`?/giu;
 
 for (const file of files) {
   if (!migrationFile.test(file)) errors.push(`${file}: migration filename must be NNNN-kebab-case.sql`);
