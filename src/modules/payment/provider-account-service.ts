@@ -1,4 +1,4 @@
-import type { Connection, RowDataPacket } from '../../../src/infrastructure/postgres/connection.js';
+import type { Connection, RowDataPacket } from '../../application/ports.js';
 
 export class ProviderAccountService {
   public constructor(private readonly connection: Connection) {}

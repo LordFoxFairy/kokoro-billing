@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Connection, ResultSetHeader, RowDataPacket } from '../../../src/infrastructure/postgres/connection.js';
+import type { Connection, ResultSetHeader, RowDataPacket } from '../../application/ports.js';
 
 export type RecordSettlementInput = {
   readonly settlementId: string;

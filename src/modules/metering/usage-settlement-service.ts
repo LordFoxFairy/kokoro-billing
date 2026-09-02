@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Connection, ResultSetHeader, RowDataPacket } from '../../../src/infrastructure/postgres/connection.js';
+import type { Connection, ResultSetHeader, RowDataPacket } from '../../application/ports.js';
 import { allocateCreditGrants, type CreditGrantForAllocation } from '../credit/allocate-grants.js';
 import { readSafeInteger } from '../../infrastructure/postgres/safe-integer.js';
 

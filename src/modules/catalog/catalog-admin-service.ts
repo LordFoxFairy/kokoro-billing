@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { createHash } from 'node:crypto';
-import type { Connection, ResultSetHeader, RowDataPacket } from '../../../src/infrastructure/postgres/connection.js';
+import type { Connection, ResultSetHeader, RowDataPacket } from '../../application/ports.js';
 import type { CatalogPlan } from './catalog-service.js';
 
 export type PublishCatalogPlanInput = {

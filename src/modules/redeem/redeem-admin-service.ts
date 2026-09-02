@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import type { Connection, ResultSetHeader, RowDataPacket } from '../../../src/infrastructure/postgres/connection.js';
+import type { Connection, ResultSetHeader, RowDataPacket } from '../../application/ports.js';
 import { generateRedeemCode, hashRedeemCode } from './redeem-code.js';
 
 export type CreateCampaignInput = { readonly tenantId: string; readonly campaignKey: string; readonly programKey: string; readonly creditMicros: number; readonly maxRedemptions: number; readonly startsAt?: Date; readonly endsAt?: Date | null; readonly idempotencyKey: string; readonly operatorId: string; readonly reason: string };

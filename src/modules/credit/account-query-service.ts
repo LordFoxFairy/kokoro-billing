@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Connection, RowDataPacket } from '../../../src/infrastructure/postgres/connection.js';
+import type { Connection, RowDataPacket } from '../../application/ports.js';
 
 export class CreditAccountQueryService {
   public constructor(private readonly connection: Connection) {}

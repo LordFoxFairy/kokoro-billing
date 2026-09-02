@@ -1,4 +1,4 @@
-import type { Connection, RowDataPacket } from '../../../src/infrastructure/postgres/connection.js';
+import type { Connection, RowDataPacket } from '../../application/ports.js';
 
 export type CatalogPlan = {
   readonly id: string;

@@ -1,4 +1,4 @@
-import type { Connection, RowDataPacket } from '../../../src/infrastructure/postgres/connection.js';
+import type { Connection, RowDataPacket } from '../../application/ports.js';
 
 type CountRow = RowDataPacket & { status: string; count: string | number };
 type CurrencyTotalRow = RowDataPacket & { currency: string; amount_minor: string | number };

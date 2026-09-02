@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import type { Connection, RowDataPacket } from '../../../src/infrastructure/postgres/connection.js';
+import type { Connection, RowDataPacket } from '../../application/ports.js';
 import { readSafeInteger } from '../../infrastructure/postgres/safe-integer.js';
 import { parseProviderWebhook } from './provider-registry.js';
 import type { ProviderRegistry } from './provider-registry.js';

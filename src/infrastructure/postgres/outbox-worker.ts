@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Connection, ResultSetHeader, RowDataPacket } from '../../../src/infrastructure/postgres/connection.js';
+import type { Connection, ResultSetHeader, RowDataPacket } from '../../application/ports.js';
 
 type OutboxTable = 'entitlement_outbox' | 'payment_outbox';
 type OutboxRow = RowDataPacket & { outbox_id: string; event_type: string; payload_json: string | Record<string, unknown>; attempts: number };

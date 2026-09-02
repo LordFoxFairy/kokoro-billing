@@ -1,19 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { Pool, type PoolClient, type QueryResultRow } from 'pg';
-
-export type RowDataPacket = Record<string, unknown>;
-export type ResultSetHeader = { readonly affectedRows: number; readonly insertId?: string };
-export type QueryResult = unknown;
-
-export interface Connection {
-  query<T extends QueryResult = RowDataPacket[]>(sql: string, values?: unknown[]): Promise<[T, unknown[]]>;
-  execute<T extends QueryResult = RowDataPacket[]>(sql: string, values?: unknown[]): Promise<[T, unknown[]]>;
-  beginTransaction(): Promise<void>;
-  commit(): Promise<void>;
-  rollback(): Promise<void>;
-  ping(): Promise<void>;
-  end(): Promise<void>;
-}
+import type { Connection, QueryResult, RowDataPacket } from '../../application/ports.js';
+export type { Connection, QueryResult, ResultSetHeader, RowDataPacket } from '../../application/ports.js';
 
 type BillingContext = { transaction: PoolClient | undefined };
 const billingContext = new AsyncLocalStorage<BillingContext>();

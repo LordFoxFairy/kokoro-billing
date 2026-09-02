@@ -15,4 +15,13 @@ describe('billing ownership architecture', () => {
     expect(main).not.toContain('kokoro-payment');
     expect(main).not.toContain('sweeper');
   });
+
+  it('keeps Billing modules behind application persistence ports', async () => {
+    const modules = await text('src/modules/metering/billing-admission-service.ts');
+    const ports = await text('src/application/ports.ts');
+    expect(modules).toContain("../../application/ports.js");
+    expect(modules).not.toContain('infrastructure/postgres/connection.js');
+    expect(ports).toContain('interface Connection');
+    expect(ports).not.toContain("from 'pg'");
+  });
 });

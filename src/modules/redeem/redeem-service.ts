@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Connection, ResultSetHeader, RowDataPacket } from '../../../src/infrastructure/postgres/connection.js';
+import type { Connection, ResultSetHeader, RowDataPacket } from '../../application/ports.js';
 import { hashRedeemCode } from './redeem-code.js';
 
 export type RedeemInput = { readonly tenantId: string; readonly subjectId: string; readonly code: string; readonly idempotencyKey: string };
