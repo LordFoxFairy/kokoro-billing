@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatRedeemCode, generateRedeemCode, hashRedeemCode, normalizeRedeemCode } from '../../src/modules/redeem/redeem-code.js';
+import { formatRedeemCode, generateRedeemCode, hashRedeemCode, normalizeRedeemCode } from '../../src/application/credit/services/redeem-code.js';
 
 describe('redeem code crypto', () => {
   it('normalizes human-entered separators and case', () => expect(normalizeRedeemCode(' koko-abcd-2345-efgh-jkmn ')).toBe('KOKOABCD2345EFGHJKMN'));

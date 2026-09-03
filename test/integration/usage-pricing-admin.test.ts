@@ -1,8 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { createBillingConnection } from '../../src/infrastructure/postgres/connection.js';
-import { UsagePricingAdminService } from '../../src/modules/metering/usage-pricing-admin-service.js';
-import { UsagePricingService } from '../../src/modules/metering/usage-pricing-service.js';
+import { createPostgresUsagePricingAdminService, createPostgresUsagePricingService } from '../../src/infrastructure/postgres/create-postgres-services.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 const integration = describe.skipIf(!databaseUrl);
@@ -10,8 +9,8 @@ const integration = describe.skipIf(!databaseUrl);
 integration('admin usage pricing revisions', () => {
   it('publishes an immutable revision, is idempotent, and serves quotes', async () => {
     const connection = await createBillingConnection(databaseUrl!);
-    const admin = new UsagePricingAdminService(connection);
-    const pricing = new UsagePricingService(connection);
+    const admin = createPostgresUsagePricingAdminService(connection);
+    const pricing = createPostgresUsagePricingService(connection);
     const tenantId = randomUUID();
     const idempotencyKey = `pricing-publish-${randomUUID()}`;
     const input = {

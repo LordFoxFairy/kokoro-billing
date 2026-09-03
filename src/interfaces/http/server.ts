@@ -1,18 +1,19 @@
-import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
+import Fastify, { LogController, type FastifyInstance, type FastifyRequest } from 'fastify';
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import type { CheckoutService } from '../../modules/payment/checkout-service.js';
-import type { BillingSettlementService } from '../../modules/payment/billing-settlement-service.js';
-import type { ProviderEventInboxService } from '../../modules/payment/provider-event-inbox-service.js';
-import type { UsageSettlementService } from '../../modules/metering/usage-settlement-service.js';
-import type { CreditAccountQueryService } from '../../modules/credit/account-query-service.js';
-import type { BillingReversalService } from '../../modules/payment/billing-reversal-service.js';
-import type { ParsedWebhookEvent } from '../../modules/payment/provider-types.js';
-import type { CatalogService } from '../../modules/catalog/catalog-service.js';
+import type { CheckoutService } from '../../application/checkout/commands/checkout-service.js';
+import type { BillingSettlementService } from '../../application/payment/commands/billing-settlement-service.js';
+import type { ProviderEventInboxService } from '../../application/payment/commands/provider-event-inbox-service.js';
+import type { UsageSettlementService } from '../../application/metering/services/usage-settlement-service.js';
+import type { CreditAccountQueryService } from '../../application/credit/services/account-query-service.js';
+import type { BillingReversalService } from '../../application/refund/commands/billing-reversal-service.js';
+import type { ParsedWebhookEvent } from '../../application/payment/ports/provider-types.js';
+import type { CatalogService } from '../../application/checkout/services/catalog-service.js';
+import type { SubscriptionQueryService } from '../../application/subscription/queries/subscription-query-service.js';
 import type { RedisIdempotencyHint } from '../../infrastructure/redis/idempotency-hint.js';
-import type { BillingAdmissionService, BillingAdmissionResult } from '../../modules/metering/billing-admission-service.js';
-import { WebhookError } from '../../modules/payment/provider-types.js';
-import { readSafeInteger } from '../../infrastructure/postgres/safe-integer.js';
+import type { BillingAdmissionService, BillingAdmissionResult } from '../../application/metering/services/billing-admission-service.js';
+import { WebhookError } from '../../application/payment/ports/provider-types.js';
+import { readSafeInteger } from '../../application/ports/safe-integer.js';
 import { recordHttpRequest, registerMetricsRoute } from '../../infrastructure/metrics.js';
 import { runWithBillingContext } from '../../infrastructure/postgres/connection.js';
 
@@ -60,7 +61,7 @@ export type BillingHttpDependencies = {
   readonly resolveWebhookAccountRef?: (provider: string) => string | null;
   readonly account: AccountPort;
   readonly accountRead?: Pick<CreditAccountQueryService, 'ledgerForSubject'>;
-  readonly subscriptionRead?: { readonly listForSubject: (tenantId: string, subjectId: string) => Promise<readonly Record<string, unknown>[]> };
+  readonly subscriptionRead?: Pick<SubscriptionQueryService, 'listForSubject'>;
   readonly admission?: AdmissionPort;
   readonly auth: BillingAuth;
   readonly health?: { readonly postgres: () => Promise<void>; readonly redis: () => Promise<void> };
@@ -69,7 +70,7 @@ export type BillingHttpDependencies = {
 const decimalString = z.string().regex(/^(0|[1-9]\d*)$/u).refine((value) => Number.isSafeInteger(Number(value)), 'decimal value exceeds JavaScript safe integer range');
 const positiveDecimalString = decimalString.refine((value) => BigInt(value) > 0n, 'value must be positive');
 const safeDecimal = (value: string, field: string): number => readSafeInteger(value, field);
-const ledgerPageQuerySchema = z.object({ limit: z.coerce.number().int().min(1).max(100).default(50), cursor: z.string().min(1).optional() }).strict();
+const pageQuerySchema = z.object({ limit: z.coerce.number().int().min(1).max(100).default(50), cursor: z.string().min(1).optional() }).strict();
 const billingSubjectSchema = z.object({ kind: z.enum(['user', 'project', 'organization', 'service']), ref: z.string().min(1).max(255) }).strict();
 const admissionSchema = z.object({
   billing_subject: billingSubjectSchema,
@@ -84,10 +85,15 @@ const acceptedReceiptSchema = z.object({
 const executionEventSchema = z.object({
   event_id: z.string().min(1).max(255), event_type: z.enum(['execution.waiting', 'execution.accepted', 'execution.rejected', 'execution.failed', 'execution.unknown']),
   execution_id: z.string().min(1).max(255), invocation_id: z.string().min(1).max(255), occurred_at: z.string().datetime({ offset: true }),
-  receipt_schema_version: z.string().min(1).max(32), receipt: z.record(z.string(), z.unknown()).optional(), signature: z.string().min(1).max(2048),
+  receipt_schema_version: z.string().min(1).max(32), receipt: z.record(z.string(), z.unknown()).optional(),
 }).strict();
 const targetSettlementSchema = z.object({ settlement_id: z.string().min(1), external_payment_ref: z.string().min(1), amount_minor: positiveDecimalString, currency: z.string().regex(/^[A-Z]{3}$/u), provider: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/u).optional() }).strict();
 const targetRefundSchema = z.object({ settlement_id: z.string().min(1), external_ref: z.string().min(1), amount_minor: positiveDecimalString, allocation_mode: z.enum(['proportional', 'line_specific']), reason: z.string().min(1).max(500) }).strict();
+const unknownRecordSchema = z.record(z.string(), z.unknown());
+
+const isUnknownRecord = (value: unknown): value is Record<string, unknown> => {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+};
 
 const idempotencyKey = (request: FastifyRequest): string | null => {
   const value = request.headers['idempotency-key'];
@@ -156,7 +162,7 @@ const hasStorefrontServiceMarker = (request: FastifyRequest): boolean => {
 /**
  * Storefront routes have two explicit authentication modes. A request that
  * presents an internal marker is never downgraded to the public user path.
- * This prevents forged or incomplete BFF headers from becoming a fixture/JWT
+ * This prevents forged or incomplete BFF headers from becoming an internal-header/JWT
  * user request by accident.
  */
 const storefrontContext = async (
@@ -179,7 +185,23 @@ const storefrontContext = async (
 
 export const createBillingServer = (dependencies: BillingHttpDependencies): FastifyInstance => {
   const app = Fastify({
-    logger: false,
+    logger: {
+      level: process.env.NODE_ENV === 'test' ? 'silent' : (process.env.LOG_LEVEL ?? 'info'),
+      redact: {
+        censor: '[REDACTED]',
+        paths: [
+          'req.headers.authorization',
+          'req.headers.cookie',
+          'req.headers["x-kokoro-internal-secret"]',
+          'req.headers["x-kokoro-service-token"]',
+          'req.headers["stripe-signature"]',
+          'req.headers["x-alipay-signature"]',
+          'req.headers["wechatpay-signature"]',
+        ],
+      },
+    },
+    logController: new LogController({ disableRequestLogging: true, requestIdLogLabel: 'request_id' }),
+    forceCloseConnections: true,
     genReqId: (request) => {
       const incoming = request.headers['x-kokoro-request-id'];
       return typeof incoming === 'string' && /^[\x20-\x7E]{1,128}$/u.test(incoming) ? incoming : randomUUID();
@@ -191,6 +213,16 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     const route = request.routeOptions.url ?? request.url.split('?')[0] ?? 'unknown';
     const durationSeconds = request.billingStartedAt === undefined ? 0 : Number(process.hrtime.bigint() - request.billingStartedAt) / 1e9;
     recordHttpRequest({ method: request.method, route, statusCode: reply.statusCode, durationSeconds });
+    const incomingTraceId = request.headers['x-kokoro-trace-id'] ?? request.headers.traceparent;
+    const traceId = typeof incomingTraceId === 'string' && /^[\x20-\x7E]{1,256}$/u.test(incomingTraceId) ? incomingTraceId : request.id;
+    request.log.info({
+      service: 'kokoro-billing',
+      operation: `${request.method} ${route}`,
+      request_id: request.id,
+      trace_id: traceId,
+      result: reply.statusCode < 400 ? 'success' : reply.statusCode < 500 ? 'client_error' : 'server_error',
+      duration_ms: Number((durationSeconds * 1_000).toFixed(3)),
+    }, 'billing request completed');
   });
   app.get('/healthz', async (_request, reply) => reply.code(200).send({ data: { module: 'kokoro-billing', status: 'ok' } }));
   app.get('/readyz', async (_request, reply) => {
@@ -208,31 +240,22 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     const raw = typeof payload === 'string' ? payload : Buffer.isBuffer(payload) ? payload.toString('utf8') : null;
     if (raw === null) return payload;
     try {
-      const body = JSON.parse(raw) as { error?: Record<string, unknown>; requestId?: string; meta?: Record<string, unknown> };
+      const parsed: unknown = JSON.parse(raw);
+      if (!isUnknownRecord(parsed)) return payload;
+      const body = parsed;
+      const meta = isUnknownRecord(body.meta) ? body.meta : {};
       reply.header('x-kokoro-request-id', request.id);
-      const isV1Route = request.url.startsWith('/v1/');
-      if (body.error !== undefined) {
+      if (isUnknownRecord(body.error)) {
         const error = body.error;
         const normalizedError = {
           ...error,
-          request_id: error.request_id ?? request.id,
           retryable: error.retryable ?? (reply.statusCode >= 500 || reply.statusCode === 409 || reply.statusCode === 429),
           details: error.details ?? {},
         };
-        if (isV1Route) {
-          const v1Body = { ...body };
-          delete v1Body.requestId;
-          return JSON.stringify({ ...v1Body, error: normalizedError, meta: { ...(body.meta ?? {}), request_id: request.id } });
-        }
-        return JSON.stringify({ ...body, requestId: body.requestId ?? request.id, error: normalizedError });
+        return JSON.stringify({ ...body, error: normalizedError, meta: { ...meta, request_id: request.id } });
       }
-      if (reply.statusCode < 400 && isV1Route) {
-        const v1Body = { ...body };
-        delete v1Body.requestId;
-        return JSON.stringify({ ...v1Body, meta: { ...(body.meta ?? {}), request_id: request.id } });
-      }
-      if (reply.statusCode < 400 && body.meta?.request_id === undefined) {
-        return JSON.stringify({ ...body, meta: { ...(body.meta ?? {}), request_id: request.id } });
+      if (reply.statusCode < 400 && meta.request_id === undefined) {
+        return JSON.stringify({ ...body, meta: { ...meta, request_id: request.id } });
       }
     } catch {
       return payload;
@@ -271,9 +294,11 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     const context = await storefrontContext(dependencies, request, reply);
     if (!context) return;
     if (!dependencies.catalog) return reply.code(503).send({ error: { code: 'billing.catalog_not_configured', message: 'catalog is not configured' } });
+    const parsed = pageQuerySchema.safeParse(request.query);
+    if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message }, meta: { request_id: request.id } });
     try {
-      const plans = await dependencies.catalog.listSellable(context.tenantId);
-      return reply.code(200).send({ data: { offers: toSnakeCase(plans) }, requestId: request.id });
+      const page = await dependencies.catalog.listSellable(context.tenantId, parsed.data.limit, parsed.data.cursor);
+      return reply.code(200).send({ data: { offers: toSnakeCase(page.items), ...(page.nextCursor === undefined ? {} : { next_cursor: page.nextCursor }) }, meta: { request_id: request.id } });
     } catch (error) { return sendError(reply, error); }
   });
 
@@ -283,7 +308,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     try {
       const account = await dependencies.account.getForSubject(context.tenantId, context.subjectId);
       if (!account) return reply.code(404).send({ error: { code: 'billing.not_found', message: 'credit account not found' } });
-      return reply.code(200).send({ data: toSnakeCase(account), requestId: request.id });
+      return reply.code(200).send({ data: toSnakeCase(account), meta: { request_id: request.id } });
     } catch (error) { return sendError(reply, error); }
   });
 
@@ -291,11 +316,11 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     const context = await dependencies.auth.user(request);
     if (!context) return reply.code(401).send({ error: { code: 'billing.unauthorized', message: 'user context required' } });
     if (!dependencies.accountRead) return reply.code(503).send({ error: { code: 'billing.account_read_not_configured', message: 'credit ledger is not configured' } });
-    const parsed = ledgerPageQuerySchema.safeParse(request.query);
+    const parsed = pageQuerySchema.safeParse(request.query);
     if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
     try {
       const ledger = await dependencies.accountRead.ledgerForSubject(context.tenantId, context.subjectId, parsed.data.limit, parsed.data.cursor);
-      return reply.code(200).send({ data: toSnakeCase(ledger), requestId: request.id });
+      return reply.code(200).send({ data: toSnakeCase(ledger), meta: { request_id: request.id } });
     } catch (error) { return sendError(reply, error); }
   });
 
@@ -303,8 +328,11 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     const context = await dependencies.auth.user(request);
     if (!context) return reply.code(401).send({ error: { code: 'billing.unauthorized', message: 'user context required' } });
     if (!dependencies.subscriptionRead) return reply.code(503).send({ error: { code: 'billing.subscription_not_configured', message: 'subscription read is not configured' } });
+    const parsed = pageQuerySchema.safeParse(request.query);
+    if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message }, meta: { request_id: request.id } });
     try {
-      return reply.code(200).send({ data: { items: toSnakeCase(await dependencies.subscriptionRead.listForSubject(context.tenantId, context.subjectId)) }, requestId: request.id });
+      const page = await dependencies.subscriptionRead.listForSubject(context.tenantId, context.subjectId, parsed.data.limit, parsed.data.cursor);
+      return reply.code(200).send({ data: { items: toSnakeCase(page.items), ...(page.nextCursor === undefined ? {} : { next_cursor: page.nextCursor }) }, meta: { request_id: request.id } });
     } catch (error) { return sendError(reply, error); }
   });
 
@@ -322,7 +350,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     try {
       const result = await dependencies.checkout.create({ offerRevisionId: parsed.data.offer_revision_id, amountMinor: safeDecimal(parsed.data.amount_minor, 'amount_minor'), currency: parsed.data.currency, quoteSnapshot: toCamelCase(parsed.data.quote_snapshot), tenantId: context.tenantId, subjectId, idempotencyKey: key, expiresAt: new Date(Date.now() + 300_000) });
       const hosted = dependencies.checkout.createHostedSession ? await dependencies.checkout.createHostedSession(context.tenantId, result.checkoutId) : result;
-      return reply.code(201).send({ data: toSnakeCase({ ...hosted, amountMinor: String(hosted.amountMinor) }), requestId: request.id });
+      return reply.code(201).send({ data: toSnakeCase({ ...hosted, amountMinor: String(hosted.amountMinor) }), meta: { request_id: request.id } });
     } catch (error) { return sendError(reply, error); }
   });
 
@@ -336,7 +364,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     if (!(await claimIdempotencyHint(dependencies, request, key, reply, context.tenantId))) return;
     try {
       const result = await dependencies.admission.create({ tenantId: context.tenantId, billingSubject: parsed.data.billing_subject, payerRef: parsed.data.payer_ref, featureKey: parsed.data.feature_key, surface: parsed.data.surface, invocationId: parsed.data.invocation_id, executionId: parsed.data.execution_id, meterKind: parsed.data.meter_kind, ...(parsed.data.requested_model_tier === undefined ? {} : { requestedModelTier: parsed.data.requested_model_tier }), idempotencyKey: key });
-      return reply.code(201).send({ data: admissionWire(result), requestId: request.id });
+      return reply.code(201).send({ data: admissionWire(result), meta: { request_id: request.id } });
     } catch (error) { return sendError(reply, error); }
   });
 
@@ -353,7 +381,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
         invocationId: parsed.data.invocation_id, executionId: parsed.data.execution_id, acceptedProviderRef: parsed.data.accepted_provider_ref,
         acceptedAt: new Date(parsed.data.accepted_at), serviceReceipt: parsed.data.service_receipt, receiptSchemaVersion: parsed.data.receipt_schema_version,
       }, key);
-      return reply.code(200).send({ data: admissionWire(result), requestId: request.id });
+      return reply.code(200).send({ data: admissionWire(result), meta: { request_id: request.id } });
     } catch (error) { return sendError(reply, error); }
   });
 
@@ -367,7 +395,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     if (!(await claimIdempotencyHint(dependencies, request, key, reply, context.tenantId))) return;
     try {
       const result = await dependencies.admission.release(context.tenantId, request.params.admissionId, body.data.reason, key);
-      return reply.code(200).send({ data: admissionWire(result), requestId: request.id });
+      return reply.code(200).send({ data: admissionWire(result), meta: { request_id: request.id } });
     } catch (error) { return sendError(reply, error); }
   });
 
@@ -380,8 +408,8 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
     if (!(await claimIdempotencyHint(dependencies, request, key, reply, context.tenantId))) return;
     try {
-      const result = await dependencies.admission.recordExecutionEvent({ tenantId: context.tenantId, eventId: parsed.data.event_id, eventType: parsed.data.event_type, executionId: parsed.data.execution_id, invocationId: parsed.data.invocation_id, occurredAt: new Date(parsed.data.occurred_at), receiptSchemaVersion: parsed.data.receipt_schema_version, signature: parsed.data.signature, ...(parsed.data.receipt === undefined ? {} : { receipt: parsed.data.receipt }) });
-      return reply.code(202).send({ data: { event_id: result.eventId, status: result.status }, requestId: request.id });
+      const result = await dependencies.admission.recordExecutionEvent({ tenantId: context.tenantId, eventId: parsed.data.event_id, eventType: parsed.data.event_type, executionId: parsed.data.execution_id, invocationId: parsed.data.invocation_id, occurredAt: new Date(parsed.data.occurred_at), receiptSchemaVersion: parsed.data.receipt_schema_version, ...(parsed.data.receipt === undefined ? {} : { receipt: parsed.data.receipt }) });
+      return reply.code(202).send({ data: { event_id: result.eventId, status: result.status }, meta: { request_id: request.id } });
     } catch (error) { return sendError(reply, error); }
   });
 
@@ -394,7 +422,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     if (!(await claimIdempotencyHint(dependencies, request, key, reply, context.tenantId))) return;
     try {
       await dependencies.settlement.recordSettlement({ settlementId: parsed.data.settlement_id, externalPaymentRef: parsed.data.external_payment_ref, amountMinor: safeDecimal(parsed.data.amount_minor, 'amount_minor'), currency: parsed.data.currency, tenantId: context.tenantId, ...(parsed.data.provider === undefined ? {} : { provider: parsed.data.provider }) });
-      return reply.code(202).send({ data: { accepted: true }, requestId: request.id });
+      return reply.code(202).send({ data: { accepted: true }, meta: { request_id: request.id } });
     } catch (error) { return sendError(reply, error); }
   });
 
@@ -407,7 +435,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     if (!(await claimIdempotencyHint(dependencies, request, key, reply, context.tenantId))) return;
     try {
       const reversalId = await dependencies.reversal.recordReversal({ tenantId: context.tenantId, settlementId: parsed.data.settlement_id, externalReversalRef: parsed.data.external_ref, amountMinor: safeDecimal(parsed.data.amount_minor, 'amount_minor'), reason: `${parsed.data.allocation_mode}:${parsed.data.reason}`, idempotencyKey: key });
-      return reply.code(202).send({ data: { refund_id: reversalId, status: 'accepted' }, requestId: request.id });
+      return reply.code(202).send({ data: { refund_id: reversalId, status: 'accepted' }, meta: { request_id: request.id } });
     } catch (error) { return sendError(reply, error); }
   });
 
@@ -420,7 +448,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     if (!(await claimIdempotencyHint(dependencies, request, key, reply, context.tenantId))) return;
     try {
       const refundId = await dependencies.reversal.recordReversal({ tenantId: context.tenantId, settlementId: parsed.data.settlement_id, externalReversalRef: parsed.data.external_ref, amountMinor: safeDecimal(parsed.data.amount_minor, 'amount_minor'), reason: `${parsed.data.allocation_mode}:${parsed.data.reason}`, idempotencyKey: key });
-      return reply.code(202).send({ data: { refund_id: refundId, status: 'accepted' }, requestId: request.id });
+      return reply.code(202).send({ data: { refund_id: refundId, status: 'accepted' }, meta: { request_id: request.id } });
     } catch (error) { return sendError(reply, error); }
   });
 
@@ -431,13 +459,15 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     const parsed = z.object({ limit: z.number().int().positive().max(500).optional() }).strict().safeParse(request.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
     try {
-      return reply.code(202).send({ data: toSnakeCase(await dependencies.usage.expireExpiredHolds(parsed.data.limit === undefined ? {} : { tenantId: context.tenantId, limit: parsed.data.limit })), requestId: request.id });
+      return reply.code(202).send({ data: toSnakeCase(await dependencies.usage.expireExpiredHolds(parsed.data.limit === undefined ? {} : { tenantId: context.tenantId, limit: parsed.data.limit })), meta: { request_id: request.id } });
     } catch (error) { return sendError(reply, error); }
   });
 
   app.post<{ Params: { provider: string } }>('/v1/webhooks/payment/:provider', async (request, reply) => {
     if (!(await dependencies.auth.webhook(request))) return reply.code(401).send({ error: { code: 'billing.provider_event_invalid', message: 'provider signature required' } });
-    const body = request.body as Record<string, unknown>;
+    const parsedBody = unknownRecordSchema.safeParse(request.body);
+    if (!parsedBody.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: 'provider payload must be a JSON object' }, meta: { request_id: request.id } });
+    const body = parsedBody.data;
     try {
       const parsed = dependencies.parseWebhook?.(request.params.provider, body);
       const providerAccountRef = parsed?.providerAccountRef ?? dependencies.resolveWebhookAccountRef?.(request.params.provider) ?? null;
@@ -447,7 +477,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
       if (!tenantId) throw new Error('billing.tenant_mismatch');
       if (parsed?.payloadTenantId && parsed.payloadTenantId !== tenantId) throw new Error('billing.tenant_mismatch');
       const result = await dependencies.webhook.accept({ tenantId: tenantId, provider: request.params.provider, providerAccountRef, externalEventId: parsed?.eventId ?? String(body.id ?? ''), eventType: parsed?.eventType ?? String(body.type ?? 'unknown'), rawPayload: body, signatureValid: true });
-      return reply.code(202).send({ data: { event_id: result.providerEventId, status: result.processingStatus }, requestId: request.id });
+      return reply.code(202).send({ data: { event_id: result.providerEventId, status: result.processingStatus }, meta: { request_id: request.id } });
     } catch (error) { return sendError(reply, error); }
   });
 
@@ -456,12 +486,12 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
 
 function toSnakeCase(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(toSnakeCase);
-  if (value === null || typeof value !== 'object' || value instanceof Date) return value;
-  return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => [key.replace(/[A-Z]/gu, (character) => `_${character.toLowerCase()}`), toSnakeCase(item)]));
+  if (!isUnknownRecord(value) || value instanceof Date) return value;
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key.replace(/[A-Z]/gu, (character) => `_${character.toLowerCase()}`), toSnakeCase(item)]));
 }
 
 function toCamelCase(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(toCamelCase);
-  if (value === null || typeof value !== 'object' || value instanceof Date) return value;
-  return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => [key.replace(/_([a-z])/gu, (_match, character: string) => character.toUpperCase()), toCamelCase(item)]));
+  if (!isUnknownRecord(value) || value instanceof Date) return value;
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key.replace(/_([a-z])/gu, (_match, character: string) => character.toUpperCase()), toCamelCase(item)]));
 }

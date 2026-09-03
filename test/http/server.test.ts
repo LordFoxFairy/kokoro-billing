@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { createBillingServer } from '../../src/interfaces/http/server.js';
-import { WebhookError } from '../../src/modules/payment/provider-types.js';
+import { WebhookError } from '../../src/application/payment/ports/provider-types.js';
 
 const webhookCalls: unknown[] = [];
 
 const server = createBillingServer({
   catalog: {
-    listSellable: async () => [{ id: 'offer-1', key: 'pro', name: 'Pro', currency: 'USD', amountMinor: '1999', creditMicros: '1000000', billingInterval: 'month' }],
+    listSellable: async () => ({ items: [{ id: 'offer-1', key: 'pro', name: 'Pro', currency: 'USD', amountMinor: '1999', creditMicros: '1000000', billingInterval: 'month' }] }),
   },
   checkout: {
     create: async () => ({ checkoutId: 'checkout-1', status: 'created', amountMinor: 1999, currency: 'USD', expiresAt: new Date('2030-01-01') }),
@@ -87,6 +87,12 @@ describe('Billing HTTP surface', () => {
     const accepted = await server.inject({ method: 'POST', url: '/v1/webhooks/payment/stripe', payload: { id: 'event-2', providerAccountRef: 'acct-1', tenantId: 'tenant-1' } });
     expect(accepted.statusCode).toBe(202);
     expect(webhookCalls.at(-1)).toMatchObject({ tenantId: 'tenant-1', provider: 'stripe', providerAccountRef: 'acct-1' });
+  });
+
+  it('rejects a non-object provider payload at the HTTP boundary', async () => {
+    const response = await server.inject({ method: 'POST', url: '/v1/webhooks/payment/stripe', payload: [] });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe('billing.invalid_request');
   });
 
   it('does not expose retired pre-v1 route aliases', async () => {

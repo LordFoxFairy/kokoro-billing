@@ -1,11 +1,12 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { RowDataPacket } from '../src/infrastructure/postgres/connection.js';
 import { createBillingConnection } from '../src/infrastructure/postgres/connection.js';
-import { CatalogAdminService, type PublishCatalogPlanInput } from '../src/modules/catalog/catalog-admin-service.js';
-import { UsagePricingAdminService, type UsagePriceRateInput } from '../src/modules/metering/usage-pricing-admin-service.js';
+import { type PublishCatalogPlanInput } from '../src/application/checkout/services/catalog-admin-service.js';
+import { type UsagePriceRateInput } from '../src/application/metering/services/usage-pricing-admin-service.js';
+import { createPostgresCatalogAdminService, createPostgresUsagePricingAdminService } from '../src/infrastructure/postgres/create-postgres-services.js';
 
 type SeedDocument = {
-  /** External bootstrap vocabulary; translated to the legacy tenant_id storage column below. */
+  /** Canonical bootstrap document; tenantId is written to the tenant_id column. */
   readonly tenantId: string;
   readonly operatorId?: string;
   readonly reason?: string;
@@ -31,16 +32,16 @@ const connection = await createBillingConnection(databaseUrl);
 const digest = createHash('sha256').update(raw).digest('hex').slice(0, 24);
 
 try {
-  const catalog = new CatalogAdminService(connection);
+  const catalog = createPostgresCatalogAdminService(connection);
   for (const account of seed.providerAccounts ?? []) {
     await connection.beginTransaction();
     try {
       await connection.execute(
         `INSERT INTO payment_provider_account
           (provider_account_id, tenant_id, provider, external_account_ref, status)
-         VALUES (UUID(), $1, $2, $3, $4)
+         VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT DO NOTHING`,
-        [tenantId, account.provider, account.externalAccountRef, account.status ?? 'active'],
+        [randomUUID(), tenantId, account.provider, account.externalAccountRef, account.status ?? 'active'],
       );
       const [existing] = await connection.execute<(RowDataPacket & { tenant_id: string })[]>(
         `SELECT tenant_id FROM payment_provider_account WHERE provider = $1 AND external_account_ref = $2 FOR UPDATE`,
@@ -62,7 +63,7 @@ try {
     console.log(JSON.stringify({ kind: 'plan', key: result.key, revisionId: result.id }));
   }
   if (seed.usagePrices && seed.usagePrices.length > 0) {
-    const pricing = new UsagePricingAdminService(connection);
+    const pricing = createPostgresUsagePricingAdminService(connection);
     const effectiveFrom = seed.effectiveFrom ? new Date(seed.effectiveFrom) : new Date(0);
     if (Number.isNaN(effectiveFrom.getTime())) throw new Error('BILLING_SEED_JSON.effectiveFrom must be an ISO date');
     const result = await pricing.publish({ tenantId, operatorId, reason, effectiveFrom, rates: seed.usagePrices, idempotencyKey: `bootstrap:usage-pricing:${digest}` });

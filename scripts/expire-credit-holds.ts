@@ -1,8 +1,7 @@
 import { createBillingConnection, runWithBillingContext } from '../src/infrastructure/postgres/connection.js';
 import { RedisLease } from '../src/infrastructure/redis/lease.js';
-import { UsageSettlementService } from '../src/modules/metering/usage-settlement-service.js';
-import { GrantExpiryService } from '../src/modules/credit/grant-expiry-service.js';
 import { recordExpiryRun, startWorkerMetricsServer } from '../src/infrastructure/worker-metrics.js';
+import { createPostgresGrantExpiryService, createPostgresUsageSettlementService } from '../src/infrastructure/postgres/create-postgres-services.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 const redisUrl = process.env.REDIS_URL;
@@ -23,8 +22,8 @@ try {
   do {
     const result = await lease.runExclusive('credit-hold-expiry', 60, async () => {
       return runWithBillingContext(() => {
-        const usage = new UsageSettlementService(connection);
-        const grants = new GrantExpiryService(connection);
+        const usage = createPostgresUsageSettlementService(connection);
+        const grants = createPostgresGrantExpiryService(connection);
         const tenantId = process.env.BILLING_TENANT_ID;
         const limit = process.env.BILLING_EXPIRY_LIMIT === undefined ? undefined : Number(process.env.BILLING_EXPIRY_LIMIT);
         if (limit !== undefined && (!Number.isSafeInteger(limit) || limit <= 0)) throw new Error('BILLING_EXPIRY_LIMIT must be a positive integer');

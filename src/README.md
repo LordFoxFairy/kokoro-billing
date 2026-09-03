@@ -1,16 +1,19 @@
-# Runtime source layout
+# Billing runtime layout
 
 ```text
-modules/entitlement/  catalog、acquisition、fulfillment、terms
-modules/credit/       account、grant、hold、allocation、journal
-modules/metering/     usage event、price revision、authorize、settle
-modules/payment/      checkout、provider event、settlement、refund/reversal
-modules/metering/     usage、pricing、Billing admission、execution receipt
-interfaces/http/      user、admin、internal、webhook
-infrastructure/postgres/ pool、transaction context 与 repositories
-infrastructure/redis/ fast-path、lease、异步协调
-domain/               Payment/Admission 状态机与合法迁移
-worker/                inbox/outbox、sweep、reconcile
+domain/payment/services/       payment state transitions
+application/payment/           settlement, provider events, provider ports
+application/subscription/      subscription read use cases
+application/checkout/          catalog and checkout use cases
+application/refund/            refund/reversal commands
+application/credit/            account, grant, hold, ledger and redeem use cases
+application/metering/          pricing, admission and usage settlement
+application/reconcile/         reconciliation and admin read models
+infrastructure/postgres/       PostgreSQL pool, transactions and outbox adapter
+infrastructure/redis/          coordination and short-lived idempotency hint
+infrastructure/providers/      payment provider adapters
+interfaces/http/               versioned HTTP transport and runtime validation
+bootstrap/                     composition root
 ```
 
-当前只登记目标边界，不把空目录误报成已完成实现。
+Application use cases own orchestration and transaction boundaries. PostgreSQL/Redis/provider SDKs stay in infrastructure; wire DTOs stay at interfaces and generated contracts stay read-only.

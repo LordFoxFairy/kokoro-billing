@@ -3,13 +3,13 @@ import { timingSafeEqual } from 'node:crypto';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { BillingAuth, BillingAdminContext, BillingBffContext, BillingInternalContext, BillingUserContext } from '../../interfaces/http/server.js';
 
-type AuthMode = 'header-fixture' | 'jwks';
+type AuthMode = 'internal-header' | 'jwks';
 
 export type BillingAuthOptions = {
   readonly mode: AuthMode;
   readonly internalServiceSecret: string;
   /** The bearer credential emitted by the BFF when it calls Billing. */
-  readonly bffServiceToken?: string;
+  readonly bffServiceToken: string;
   readonly operatorProxySecret: string;
   readonly jwksUrl?: string;
   readonly issuer: string;
@@ -54,7 +54,7 @@ const credentialMatches = (candidate: string | undefined, expected: string): boo
 
 const registeredInternalServices = new Set(['agent', 'model', 'studio', 'session', 'web-bff', 'payment-worker', 'scheduler']);
 
-const fixtureUser = (request: FastifyRequest): BillingUserContext | null => {
+const internalHeaderUser = (request: FastifyRequest): BillingUserContext | null => {
   const tenantId = tenantValue(headerValue(request, 'x-kokoro-tenant-id'));
   const subjectId = boundedIdentityValue(headerValue(request, 'x-kokoro-subject'));
   return tenantId !== undefined && subjectId !== undefined ? { tenantId, subjectId } : null;
@@ -93,13 +93,13 @@ const trustedAdmin = (request: FastifyRequest, secret: string): BillingAdminCont
 };
 
 export const createBillingAuth = (options: BillingAuthOptions): BillingAuth => {
-  const bffServiceToken = options.bffServiceToken ?? options.internalServiceSecret;
+  const bffServiceToken = options.bffServiceToken;
   if (options.mode === 'jwks' && options.operatorProxySecret === options.internalServiceSecret) {
     throw new Error('billing auth misconfiguration: production admin proxy secret must be distinct from service secret');
   }
-  if (options.mode === 'header-fixture') {
+  if (options.mode === 'internal-header') {
     return {
-      user: async (request) => fixtureUser(request),
+      user: async (request) => internalHeaderUser(request),
       internal: async (request) => trustedInternal(request, options.internalServiceSecret),
       bff: async (request) => trustedBff(request, options.internalServiceSecret, bffServiceToken),
       admin: async (request) => trustedAdmin(request, options.operatorProxySecret),

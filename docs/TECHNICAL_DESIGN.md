@@ -11,10 +11,9 @@ Billing is one deployable modular monolith with Commerce, Payment and Entitlemen
 5. Provider and execution events enter an inbox first. Unknown events are retained for replay/reconciliation.
 6. Replays compare payload hashes. A different payload under the same tenant/command/key returns `billing.idempotency_conflict`.
 
-All Billing relationships that point to another aggregate carry `tenant_id` in the PostgreSQL
-foreign key. The `0038-complete-tenant-lineage` migration removes identifier-only foreign keys
-and adds composite lineage constraints across Credit, Payment, Subscription, Checkout, Refund,
-and redeem facts. Application predicates remain tenant-scoped as a second boundary.
+All Billing relationships that point to another aggregate carry an explicit `tenant_id` and are
+validated by application transactions, locked repository reads and reconciliation. Cross-context
+relationships are represented by opaque references; application predicates remain tenant-scoped.
 
 ## Credit invariants
 
@@ -26,6 +25,6 @@ and redeem facts. Application predicates remain tenant-scoped as a second bounda
 - `payment-worker`: provider inbox/outbox processing.
 - `entitlement-worker`: fulfillment, admission, credit and expiry commands.
 - `reconciliation-worker`: drift detection and repair commands.
-- `schema-job`: numbered PostgreSQL migrations.
+- `schema-job`: installs the canonical PostgreSQL schema into an empty database.
 
 The process entrypoint is [`../src/main.ts`](../src/main.ts). Scheduler is an external generic command caller and is not a Billing business dependency.

@@ -2,14 +2,10 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { createBillingConnection } from '../../src/infrastructure/postgres/connection.js';
 import type { RowDataPacket } from '../../src/infrastructure/postgres/connection.js';
-import { BillingSettlementService } from '../../src/modules/payment/billing-settlement-service.js';
-import { BillingReversalService } from '../../src/modules/payment/billing-reversal-service.js';
-import { ProviderEventInboxService } from '../../src/modules/payment/provider-event-inbox-service.js';
-import { ProviderEventProcessor } from '../../src/modules/payment/provider-event-processor.js';
-import { createProviderRegistry } from '../../src/modules/payment/provider-registry.js';
-import { CheckoutService } from '../../src/modules/payment/checkout-service.js';
-import { SubscriptionGrantService } from '../../src/modules/credit/subscription-grant-service.js';
+import { createProviderRegistry } from '../../src/infrastructure/providers/payment/provider-registry.js';
+import { MockWebhookProvider } from '../doubles/payment/mock-webhook-provider.js';
 import { OutboxWorker } from '../../src/infrastructure/postgres/outbox-worker.js';
+import { createPostgresBillingReversalService, createPostgresBillingSettlementService, createPostgresCheckoutService, createPostgresProviderEventInboxService, createPostgresProviderEventProcessor, createPostgresSubscriptionGrantService } from '../../src/infrastructure/postgres/create-postgres-services.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 const integration = describe.skipIf(!databaseUrl);
@@ -22,15 +18,15 @@ integration('mock checkout payment processor', () => {
     const offerId = randomUUID();
     const revisionId = randomUUID();
     const externalEventId = `mock-${randomUUID()}`;
-    const checkout = new CheckoutService(connection);
-    const inbox = new ProviderEventInboxService(connection);
-    const processor = new ProviderEventProcessor(connection, createProviderRegistry(['mock']), new BillingSettlementService(connection), new BillingReversalService(connection), new SubscriptionGrantService(connection));
+    const checkout = createPostgresCheckoutService(connection);
+    const inbox = createPostgresProviderEventInboxService(connection);
+      const processor = createPostgresProviderEventProcessor(connection, new Map([['mock', new MockWebhookProvider()]]), createPostgresBillingSettlementService(connection), createPostgresBillingReversalService(connection), createPostgresSubscriptionGrantService(connection));
     try {
       await connection.execute(`INSERT INTO entitlement_offer (offer_id, tenant_id, offer_key, status) VALUES ($1, $2, 'pro', 'active')`, [offerId, tenantId]);
       await connection.execute(
         `INSERT INTO entitlement_offer_revision
           (offer_revision_id, offer_id, tenant_id, revision, name, currency, amount_minor, credit_micros, billing_interval, status, published_at)
-         VALUES ($1, $2, $3, 1, 'Pro', 'USD', 1999, 1000000, 'month', 'published', CURRENT_TIMESTAMP(6))`,
+         VALUES ($1, $2, $3, 1, 'Pro', 'USD', 1999, 1000000, 'month', 'published', CURRENT_TIMESTAMP(3))`,
         [revisionId, offerId, tenantId],
       );
       const created = await checkout.create({
@@ -92,14 +88,14 @@ integration('mock checkout payment processor', () => {
       const externalAccountRef = `acct-${randomUUID()}`;
     const periodStart = new Date(Date.now() + 60 * 60 * 1_000);
     const periodEnd = new Date(periodStart.getTime() + 30 * 24 * 60 * 60 * 1_000);
-    const inbox = new ProviderEventInboxService(connection);
-    const processor = new ProviderEventProcessor(connection, createProviderRegistry(['stripe']), new BillingSettlementService(connection), new BillingReversalService(connection), new SubscriptionGrantService(connection));
+    const inbox = createPostgresProviderEventInboxService(connection);
+    const processor = createPostgresProviderEventProcessor(connection, createProviderRegistry(['stripe']), createPostgresBillingSettlementService(connection), createPostgresBillingReversalService(connection), createPostgresSubscriptionGrantService(connection));
     try {
       await connection.execute(`INSERT INTO entitlement_offer (offer_id, tenant_id, offer_key, status) VALUES ($1, $2, 'pro-sub', 'active')`, [offerId, tenantId]);
       await connection.execute(
         `INSERT INTO entitlement_offer_revision
           (offer_revision_id, offer_id, tenant_id, revision, name, currency, amount_minor, credit_micros, billing_interval, status, published_at)
-         VALUES ($1, $2, $3, 1, 'Pro subscription', 'USD', 1999, 2000000, 'month', 'published', CURRENT_TIMESTAMP(6))`,
+         VALUES ($1, $2, $3, 1, 'Pro subscription', 'USD', 1999, 2000000, 'month', 'published', CURRENT_TIMESTAMP(3))`,
         [revisionId, offerId, tenantId],
       );
       await connection.execute(

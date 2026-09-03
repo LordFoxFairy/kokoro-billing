@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allocateCreditGrants, InsufficientCreditError } from '../../src/modules/credit/allocate-grants.js';
+import { allocateCreditGrants, InsufficientCreditError } from '../../src/application/credit/services/allocate-grants.js';
 
 describe('allocateCreditGrants', () => {
   it('burns earliest expiry, then priority, issue time and id', () => {

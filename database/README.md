@@ -1,6 +1,7 @@
 # Database
 
-PostgreSQL 16 only. 业务表按 `entitlement_*`、`payment_*` 前缀划分 owner；migration 使用 numbered SQL。
+PostgreSQL 16 only. `database/schema.sql` is the sole V1 canonical schema.
 
-实现前遵循根文档：`docs/kokoro-handbook/technical/billing-sql-standard.md` 与
-本仓 `database/migrations/0001-billing-core.sql` 是 PostgreSQL baseline；后续编号文件保留历史版本收敛记录。
+`pnpm db:apply-schema` installs the current schema into a clean database. `CREATE TABLE IF NOT EXISTS` remains available for convenient direct/local SQL execution; the runner rejects a non-empty database, and schema drift is detected separately rather than silently upgraded.
+
+Billing facts remain in PostgreSQL. Redis is limited to coordination and short-lived idempotency hints. All database instants use `TIMESTAMPTZ(3)` and all money/credit values use integer minor units.

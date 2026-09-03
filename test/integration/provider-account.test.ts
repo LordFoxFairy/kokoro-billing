@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { createBillingConnection } from '../../src/infrastructure/postgres/connection.js';
-import { ProviderAccountService } from '../../src/modules/payment/provider-account-service.js';
+import { createPostgresProviderAccountService } from '../../src/infrastructure/postgres/create-postgres-services.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 const integration = describe.skipIf(!databaseUrl);
@@ -17,7 +17,7 @@ integration('provider account tenant routing', () => {
          VALUES ($1, $2, 'stripe', $3, 'active')`,
         [randomUUID(), tenantId, externalAccountRef],
       );
-      const accounts = new ProviderAccountService(connection);
+      const accounts = createPostgresProviderAccountService(connection);
       await expect(accounts.resolveTenantId('stripe', externalAccountRef)).resolves.toBe(tenantId);
       await expect(accounts.resolveTenantId('stripe', 'unknown-account')).resolves.toBeNull();
       await expect(connection.execute(

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { createBillingConnection } from '../../src/infrastructure/postgres/connection.js';
-import { BillingSettlementService } from '../../src/modules/payment/billing-settlement-service.js';
+import { createPostgresBillingSettlementService } from '../../src/infrastructure/postgres/create-postgres-services.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 const integration = describe.skipIf(!databaseUrl);
@@ -9,7 +9,7 @@ const integration = describe.skipIf(!databaseUrl);
 integration('payment settlement to credit fulfillment', () => {
   it('fulfills a settlement exactly once and writes one grant and journal', async () => {
     const connection = await createBillingConnection(databaseUrl!);
-    const service = new BillingSettlementService(connection);
+    const service = createPostgresBillingSettlementService(connection);
     const tenantId = randomUUID();
     const accountId = randomUUID();
     const settlementId = randomUUID();
@@ -41,10 +41,10 @@ integration('payment settlement to credit fulfillment', () => {
     const sourceRef = `test-concurrent-payment-${randomUUID()}`;
     const input = { settlementId, tenantId, accountId, subjectId: `subject-${accountId}`, programKey: 'test-plan', grantMicros: 100 } as const;
     try {
-      await new BillingSettlementService(firstConnection).recordSettlement({ settlementId, tenantId, externalPaymentRef: sourceRef, amountMinor: 1000, currency: 'USD' });
+      await createPostgresBillingSettlementService(firstConnection).recordSettlement({ settlementId, tenantId, externalPaymentRef: sourceRef, amountMinor: 1000, currency: 'USD' });
       const [first, second] = await Promise.all([
-        new BillingSettlementService(firstConnection).fulfillSettlement(input),
-        new BillingSettlementService(secondConnection).fulfillSettlement(input),
+        createPostgresBillingSettlementService(firstConnection).fulfillSettlement(input),
+        createPostgresBillingSettlementService(secondConnection).fulfillSettlement(input),
       ]);
       expect(first.fulfillmentId).toBe(second.fulfillmentId);
       const [grants] = await firstConnection.query('SELECT credit_grant_id FROM entitlement_credit_grant WHERE source_ref = $1', [settlementId]);
@@ -59,7 +59,7 @@ integration('payment settlement to credit fulfillment', () => {
 
   it('rejects reuse of an external payment reference with a different settlement id', async () => {
     const connection = await createBillingConnection(databaseUrl!);
-    const service = new BillingSettlementService(connection);
+    const service = createPostgresBillingSettlementService(connection);
     const tenantId = randomUUID();
     const sourceRef = `test-conflict-payment-${randomUUID()}`;
     try {
@@ -72,7 +72,7 @@ integration('payment settlement to credit fulfillment', () => {
 
   it('scopes external payment references by provider', async () => {
     const connection = await createBillingConnection(databaseUrl!);
-    const service = new BillingSettlementService(connection);
+    const service = createPostgresBillingSettlementService(connection);
     const tenantId = randomUUID();
     const externalPaymentRef = `shared-provider-ref-${randomUUID()}`;
     try {
@@ -85,7 +85,7 @@ integration('payment settlement to credit fulfillment', () => {
 
   it('rejects fulfillment replay with a different grant payload', async () => {
     const connection = await createBillingConnection(databaseUrl!);
-    const service = new BillingSettlementService(connection);
+    const service = createPostgresBillingSettlementService(connection);
     const tenantId = randomUUID();
     const accountId = randomUUID();
     const settlementId = randomUUID();

@@ -58,6 +58,18 @@ paths:
           serviceCaller: []
           internalSecret: []
           serviceBearer: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: cursor
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           $ref: "#/components/responses/V1Plans"
@@ -171,6 +183,8 @@ paths:
           internalSecret: []
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        $ref: "#/components/requestBodies/V1ExecutionEventRequest"
       responses:
         "202":
           $ref: "#/components/responses/V1Accepted"
@@ -250,6 +264,18 @@ paths:
       security:
         - tenantContext: []
           userBearer: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: cursor
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           $ref: "#/components/responses/V1Generic"
@@ -393,6 +419,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/V1CheckoutRequest"
+    V1ExecutionEventRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/V1ExecutionEventRequest"
   schemas:
     HealthResponse:
       type: object
@@ -448,23 +480,7 @@ components:
                   enum:
                     - ok
     Error:
-      type: object
-      required:
-        - error
-        - requestId
-      properties:
-        error:
-          type: object
-          required:
-            - code
-            - message
-          properties:
-            code:
-              type: string
-            message:
-              type: string
-        requestId:
-          type: string
+      $ref: "#/components/schemas/V1ErrorResponse"
     V1Meta:
       type: object
       required:
@@ -496,15 +512,12 @@ components:
           required:
             - code
             - message
-            - request_id
             - retryable
             - details
           properties:
             code:
               type: string
             message:
-              type: string
-            request_id:
               type: string
             retryable:
               type: boolean
@@ -547,6 +560,47 @@ components:
         name:
           type: string
       additionalProperties: true
+    V1ExecutionEventRequest:
+      type: object
+      required:
+        - event_id
+        - event_type
+        - execution_id
+        - invocation_id
+        - occurred_at
+        - receipt_schema_version
+      additionalProperties: false
+      properties:
+        event_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        event_type:
+          type: string
+          enum:
+            - execution.waiting
+            - execution.accepted
+            - execution.rejected
+            - execution.failed
+            - execution.unknown
+        execution_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        invocation_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        occurred_at:
+          type: string
+          format: date-time
+        receipt_schema_version:
+          type: string
+          minLength: 1
+          maxLength: 32
+        receipt:
+          type: object
+          additionalProperties: true
     V1Plan:
       type: object
       required:
@@ -588,6 +642,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/V1Plan"
+        next_cursor:
+          type: string
     V1CreditAccountData:
       type: object
       required:

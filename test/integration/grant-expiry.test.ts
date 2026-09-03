@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { createBillingConnection } from '../../src/infrastructure/postgres/connection.js';
 import type { RowDataPacket } from '../../src/infrastructure/postgres/connection.js';
-import { GrantExpiryService } from '../../src/modules/credit/grant-expiry-service.js';
+import { createPostgresGrantExpiryService } from '../../src/infrastructure/postgres/create-postgres-services.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 const integration = describe.skipIf(!databaseUrl);
@@ -10,7 +10,7 @@ const integration = describe.skipIf(!databaseUrl);
 integration('credit grant expiry', () => {
   it('expires unused grant balance transactionally and is replay-safe', async () => {
     const connection = await createBillingConnection(databaseUrl!);
-    const service = new GrantExpiryService(connection);
+    const service = createPostgresGrantExpiryService(connection);
     const tenantId = randomUUID();
     const accountId = randomUUID();
     const grantId = randomUUID();
@@ -19,7 +19,7 @@ integration('credit grant expiry', () => {
       await connection.execute(
         `INSERT INTO entitlement_credit_grant
           (credit_grant_id, tenant_id, credit_account_id, source_kind, source_ref, program_key, original_micros, remaining_micros, effective_at, expires_at, status)
-         VALUES ($1, $2, $3, 'subscription_period', $4, 'pro', 100, 100, CURRENT_TIMESTAMP(6) - INTERVAL '2 days', CURRENT_TIMESTAMP(6) - INTERVAL '1 day', 'active')`,
+         VALUES ($1, $2, $3, 'subscription_period', $4, 'pro', 100, 100, CURRENT_TIMESTAMP(3) - INTERVAL '2 days', CURRENT_TIMESTAMP(3) - INTERVAL '1 day', 'active')`,
         [grantId, tenantId, accountId, `period-${grantId}`],
       );
       await expect(service.expireExpiredGrants({ tenantId })).resolves.toEqual({ expiredGrantIds: [grantId] });
@@ -41,7 +41,7 @@ integration('credit grant expiry', () => {
 
   it('defers expiry while an active hold still owns grant allocation', async () => {
     const connection = await createBillingConnection(databaseUrl!);
-    const service = new GrantExpiryService(connection);
+    const service = createPostgresGrantExpiryService(connection);
     const tenantId = randomUUID();
     const accountId = randomUUID();
     const grantId = randomUUID();
@@ -51,13 +51,13 @@ integration('credit grant expiry', () => {
       await connection.execute(
         `INSERT INTO entitlement_credit_grant
           (credit_grant_id, tenant_id, credit_account_id, source_kind, source_ref, program_key, original_micros, remaining_micros, effective_at, expires_at, status)
-         VALUES ($1, $2, $3, 'subscription_period', $4, 'pro', 100, 100, CURRENT_TIMESTAMP(6) - INTERVAL '2 days', CURRENT_TIMESTAMP(6) - INTERVAL '1 day', 'active')`,
+         VALUES ($1, $2, $3, 'subscription_period', $4, 'pro', 100, 100, CURRENT_TIMESTAMP(3) - INTERVAL '2 days', CURRENT_TIMESTAMP(3) - INTERVAL '1 day', 'active')`,
         [grantId, tenantId, accountId, `period-${grantId}`],
       );
       await connection.execute(
         `INSERT INTO entitlement_credit_hold
           (credit_hold_id, tenant_id, credit_account_id, idempotency_key, requested_micros, status, expires_at)
-         VALUES ($1, $2, $3, $4, 30, 'active', CURRENT_TIMESTAMP(6) + INTERVAL '1 hour')`,
+         VALUES ($1, $2, $3, $4, 30, 'active', CURRENT_TIMESTAMP(3) + INTERVAL '1 hour')`,
         [holdId, tenantId, accountId, `hold-${holdId}`],
       );
       await connection.execute(
@@ -83,7 +83,7 @@ integration('credit grant expiry', () => {
     }
   });
 
-  it('enforces tenant lineage on hold allocations in PostgreSQL', async () => {
+  it('uses tenant-scoped application predicates instead of database relationship constraints', async () => {
     const connection = await createBillingConnection(databaseUrl!);
     const siteA = randomUUID();
     const siteB = randomUUID();
@@ -95,19 +95,33 @@ integration('credit grant expiry', () => {
       await connection.execute(
         `INSERT INTO entitlement_credit_grant
           (credit_grant_id, tenant_id, credit_account_id, source_kind, source_ref, program_key, original_micros, remaining_micros, effective_at, status)
-         VALUES ($1, $2, $3, 'admin_grant', $4, 'test', 10, 10, CURRENT_TIMESTAMP(6), 'active')`,
+         VALUES ($1, $2, $3, 'admin_grant', $4, 'test', 10, 10, CURRENT_TIMESTAMP(3), 'active')`,
         [grantId, siteA, accountId, `grant-${grantId}`],
       );
       await connection.execute(
         `INSERT INTO entitlement_credit_hold
           (credit_hold_id, tenant_id, credit_account_id, idempotency_key, requested_micros, expires_at)
-         VALUES ($1, $2, $3, $4, 1, CURRENT_TIMESTAMP(6) + INTERVAL '1 hour')`,
+         VALUES ($1, $2, $3, $4, 1, CURRENT_TIMESTAMP(3) + INTERVAL '1 hour')`,
         [holdId, siteA, accountId, `hold-${holdId}`],
       );
-      await expect(connection.execute(
+      const [constraints] = await connection.query<RowDataPacket[]>(
+        `SELECT constraint_name
+           FROM information_schema.table_constraints
+          WHERE table_schema = current_schema() AND table_name = 'entitlement_credit_hold_allocation'
+            AND constraint_type = 'FOREIGN KEY'`,
+      );
+      expect(constraints).toEqual([]);
+      await connection.execute(
         `INSERT INTO entitlement_credit_hold_allocation (credit_hold_id, tenant_id, credit_grant_id, held_micros) VALUES ($1, $2, $3, 1)`,
         [holdId, siteB, grantId],
-      )).rejects.toMatchObject({ code: '23503' });
+      );
+      const [tenantScopedRows] = await connection.query<RowDataPacket[]>(
+        `SELECT credit_hold_id
+           FROM entitlement_credit_hold_allocation
+          WHERE tenant_id = $1 AND credit_hold_id = $2 AND credit_grant_id = $3`,
+        [siteA, holdId, grantId],
+      );
+      expect(tenantScopedRows).toEqual([]);
     } finally {
       await connection.execute('DELETE FROM entitlement_credit_hold_allocation WHERE credit_hold_id = $1', [holdId]);
       await connection.execute('DELETE FROM entitlement_credit_hold WHERE credit_hold_id = $1', [holdId]);

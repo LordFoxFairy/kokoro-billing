@@ -2,8 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { createBillingConnection } from '../../src/infrastructure/postgres/connection.js';
 import type { RowDataPacket } from '../../src/infrastructure/postgres/connection.js';
-import { BillingReversalService } from '../../src/modules/payment/billing-reversal-service.js';
-import { BillingSettlementService } from '../../src/modules/payment/billing-settlement-service.js';
+import { createPostgresBillingReversalService, createPostgresBillingSettlementService } from '../../src/infrastructure/postgres/create-postgres-services.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 const integration = describe.skipIf(!databaseUrl);
@@ -11,8 +10,8 @@ const integration = describe.skipIf(!databaseUrl);
 integration('payment reversal to credit reversal', () => {
   it('reverses only the unconsumed grant amount exactly once', async () => {
     const connection = await createBillingConnection(databaseUrl!);
-    const settlement = new BillingSettlementService(connection);
-    const reversal = new BillingReversalService(connection);
+    const settlement = createPostgresBillingSettlementService(connection);
+    const reversal = createPostgresBillingReversalService(connection);
     const tenantId = randomUUID();
     const accountId = randomUUID();
     const settlementId = randomUUID();
@@ -40,8 +39,8 @@ integration('payment reversal to credit reversal', () => {
 
   it('rejects a reversal replay with a changed financial payload', async () => {
     const connection = await createBillingConnection(databaseUrl!);
-    const service = new BillingReversalService(connection);
-    const settlementService = new BillingSettlementService(connection);
+    const service = createPostgresBillingReversalService(connection);
+    const settlementService = createPostgresBillingSettlementService(connection);
     const tenantId = randomUUID();
     const settlementId = randomUUID();
     const externalRef = `test-conflict-refund-${randomUUID()}`;
@@ -58,8 +57,8 @@ integration('payment reversal to credit reversal', () => {
 
   it('allocates concurrent-safe proportional provider partial refunds', async () => {
     const connection = await createBillingConnection(databaseUrl!);
-    const settlement = new BillingSettlementService(connection);
-    const reversal = new BillingReversalService(connection);
+    const settlement = createPostgresBillingSettlementService(connection);
+    const reversal = createPostgresBillingReversalService(connection);
     const tenantId = randomUUID();
     const accountId = randomUUID();
     const settlementId = randomUUID();

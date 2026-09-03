@@ -15,6 +15,8 @@ Canonical machine-readable contract: [`../contract/openapi/v1/openapi.yaml`](../
 
 Mutations require `Idempotency-Key`. Tenant comes from `X-Kokoro-Tenant-Id`; it is never selected from request JSON, query parameters, provider payload, `account_id`, or runtime namespace. Monetary and credit values are decimal strings. Unknown execution outcomes retain an active hold and are reconciled later.
 
+Internal execution events trust only the authenticated caller service identity, internal credential and tenant context. Their JSON body contains event identity, execution/invocation identity, occurrence time, receipt schema version and optional receipt; it has no message-signature field. Provider webhooks remain a separate external trust boundary with provider-specific signature verification before persistence.
+
 ### Storefront service-auth alternative
 
 `GET /v1/commerce/catalog` and `POST /v1/billing/checkout` keep the public IAM JWT path and additionally expose the owner route to the registered Web BFF. Billing selects the service path whenever an internal marker is present; it never falls back to user authentication after a failed BFF attempt.
@@ -28,7 +30,7 @@ Authorization: Bearer BFF_SERVICE_TOKEN
 X-Kokoro-Tenant-Id: TENANT_ID
 ```
 
-Checkout also requires `X-Kokoro-Subject`, which is the trusted subject resolved by the BFF. The catalog only needs the tenant context. `BILLING_BFF_SERVICE_TOKEN` configures the expected bearer; when omitted, it defaults to `INTERNAL_SERVICE_SECRET`, matching the current BFF outbound shape. A wrong service, forged credential, missing required header, invalid tenant, or invalid checkout subject returns a v1 error with `billing.service_auth_failed` or `billing.service_subject_required` and HTTP `403`.
+Checkout also requires `X-Kokoro-Subject`, which is the trusted subject resolved by the BFF. The catalog only needs the tenant context. `BILLING_BFF_SERVICE_TOKEN` configures the required, independent bearer. A wrong service, forged credential, missing required header, invalid tenant, or invalid checkout subject returns a v1 error with `billing.service_auth_failed` or `billing.service_subject_required` and HTTP `403`.
 
 The service-auth alternative is not enabled for `/v1/billing/me/*`; those routes remain user JWT-only.
 
@@ -51,7 +53,7 @@ Success envelope:
 Error envelope:
 
 ```json
-{"error": {"code": "billing.invalid_request", "message": "...", "request_id": "req_TARGET", "retryable": false, "details": {}}, "meta": {"request_id": "req_TARGET"}}
+{"error": {"code": "billing.invalid_request", "message": "...", "retryable": false, "details": {}}, "meta": {"request_id": "req_TARGET"}}
 ```
 
 Service-auth error codes:

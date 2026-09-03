@@ -2,8 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { createBillingConnection } from '../../src/infrastructure/postgres/connection.js';
 import type { RowDataPacket } from '../../src/infrastructure/postgres/connection.js';
-import { BillingSettlementService } from '../../src/modules/payment/billing-settlement-service.js';
-import { UsageSettlementService } from '../../src/modules/metering/usage-settlement-service.js';
+import { createPostgresBillingSettlementService, createPostgresUsageSettlementService } from '../../src/infrastructure/postgres/create-postgres-services.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 const integration = describe.skipIf(!databaseUrl);
@@ -11,8 +10,8 @@ const integration = describe.skipIf(!databaseUrl);
 integration('usage authorization and settlement', () => {
   it('holds by grant burn order, captures actual usage and releases the difference', async () => {
     const connection = await createBillingConnection(databaseUrl!);
-    const settlement = new BillingSettlementService(connection);
-    const usage = new UsageSettlementService(connection);
+    const settlement = createPostgresBillingSettlementService(connection);
+    const usage = createPostgresUsageSettlementService(connection);
     const tenantId = randomUUID();
     const accountId = randomUUID();
     const settlementId = randomUUID();
@@ -44,8 +43,8 @@ integration('usage authorization and settlement', () => {
 
   it('releases an active hold idempotently without debiting the account', async () => {
     const connection = await createBillingConnection(databaseUrl!);
-    const settlement = new BillingSettlementService(connection);
-    const usage = new UsageSettlementService(connection);
+    const settlement = createPostgresBillingSettlementService(connection);
+    const usage = createPostgresUsageSettlementService(connection);
     const tenantId = randomUUID();
     const accountId = randomUUID();
     try {
@@ -66,8 +65,8 @@ integration('usage authorization and settlement', () => {
 
   it('expires abandoned holds and returns their reservation to the account', async () => {
     const connection = await createBillingConnection(databaseUrl!);
-    const settlement = new BillingSettlementService(connection);
-    const usage = new UsageSettlementService(connection);
+    const settlement = createPostgresBillingSettlementService(connection);
+    const usage = createPostgresUsageSettlementService(connection);
     const tenantId = randomUUID();
     const accountId = randomUUID();
     try {
@@ -75,7 +74,7 @@ integration('usage authorization and settlement', () => {
       await settlement.recordSettlement({ settlementId, tenantId, externalPaymentRef: `expiry-payment-${randomUUID()}`, amountMinor: 1000, currency: 'USD' });
       await settlement.fulfillSettlement({ settlementId, tenantId, accountId, subjectId: `subject-${accountId}`, programKey: 'expiry-plan', grantMicros: 100 });
       const hold = await usage.authorizeUsage({ tenantId, accountId, idempotencyKey: `expiry-hold-${randomUUID()}`, requestedMicros: 30, featureKey: 'model.request' });
-      await connection.execute(`UPDATE entitlement_credit_hold SET expires_at = CURRENT_TIMESTAMP(6) - INTERVAL '1 second' WHERE credit_hold_id = $1`, [hold.holdId]);
+      await connection.execute(`UPDATE entitlement_credit_hold SET expires_at = CURRENT_TIMESTAMP(3) - INTERVAL '1 second' WHERE credit_hold_id = $1`, [hold.holdId]);
       expect(await usage.expireExpiredHolds({ tenantId })).toEqual({ expiredHoldIds: [hold.holdId] });
       expect(await usage.expireExpiredHolds({ tenantId })).toEqual({ expiredHoldIds: [] });
       const [accountRows] = await connection.query<RowDataPacket[]>('SELECT available_micros, held_micros FROM entitlement_credit_account WHERE credit_account_id = $1', [accountId]);
@@ -88,7 +87,7 @@ integration('usage authorization and settlement', () => {
 
   it('rejects a usage event replay with a different payload', async () => {
     const connection = await createBillingConnection(databaseUrl!);
-    const usage = new UsageSettlementService(connection);
+    const usage = createPostgresUsageSettlementService(connection);
     const tenantId = randomUUID();
     try {
       await usage.recordUsageEvent({ usageEventId: randomUUID(), tenantId, subjectId: 'subject-1', sourceEventId: 'provider-event-1', featureKey: 'model.request', quantityMicros: 10, dimensions: { model: 'MODEL', region: 'us-east' } });

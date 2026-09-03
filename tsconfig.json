@@ -6,8 +6,12 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "skipLibCheck": true,
     "types": ["node", "vitest/globals"]
   },
-  "include": ["src", "test"]
+  "include": ["src", "test", "scripts", "vitest.config.ts"]
 }

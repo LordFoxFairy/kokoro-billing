@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { createBillingConnection } from '../../src/infrastructure/postgres/connection.js';
 import type { RowDataPacket } from '../../src/infrastructure/postgres/connection.js';
-import { CatalogAdminService } from '../../src/modules/catalog/catalog-admin-service.js';
+import { createPostgresCatalogAdminService } from '../../src/infrastructure/postgres/create-postgres-services.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 const integration = describe.skipIf(!databaseUrl);
@@ -11,7 +11,7 @@ integration('catalog admin revisions', () => {
   it('publishes a new immutable revision and records operator audit', async () => {
     const connection = await createBillingConnection(databaseUrl!);
     const tenantId = randomUUID();
-    const service = new CatalogAdminService(connection);
+    const service = createPostgresCatalogAdminService(connection);
     try {
       const first = await service.publishPlan({ tenantId, operatorId: 'operator-1', idempotencyKey: 'catalog-1', offerKey: 'pro', name: 'Pro', currency: 'USD', amountMinor: 1999, creditMicros: 1_000_000, billingInterval: 'month', reason: 'initial publish' });
       const replay = await service.publishPlan({ tenantId, operatorId: 'operator-1', idempotencyKey: 'catalog-1', offerKey: 'pro', name: 'Pro', currency: 'USD', amountMinor: 1999, creditMicros: 1_000_000, billingInterval: 'month', reason: 'initial publish' });

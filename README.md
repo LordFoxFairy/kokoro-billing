@@ -37,7 +37,7 @@ Credit 不拆成独立仓库；Billing 是余额、授权、扣费和支付事�
 
 ```bash
 node dist/src/main.js
-node dist/scripts/apply-migrations.js
+node dist/scripts/apply-schema.js
 node dist/scripts/process-payment-events.js
 node dist/scripts/expire-credit-holds.js
 ```
@@ -45,7 +45,7 @@ node dist/scripts/expire-credit-holds.js
 本地开发入口：
 
 ```bash
-BILLING_AUTH_MODE=header-fixture DATABASE_URL=TARGET REDIS_URL=TARGET pnpm dev
+BILLING_AUTH_MODE=internal-header DATABASE_URL=TARGET REDIS_URL=TARGET pnpm dev
 ```
 
 生产必须使用 `BILLING_AUTH_MODE=jwks`、IAM 签发的 RS256 JWT、独立 internal service secret 和 operator proxy secret。Web BFF 的 catalog/checkout owner call 还必须通过 `web-bff` service-auth；浏览器不直连 internal、provider 或 admin owner route。
@@ -59,7 +59,7 @@ pnpm verify
 该命令依次执行 lint、typecheck、build、SQL 命名检查、OpenAPI route parity 和 Vitest。真实 PostgreSQL/Redis 验证需显式提供 fixture：
 
 ```bash
-DATABASE_URL=TARGET pnpm db:migrate
+DATABASE_URL=TARGET pnpm db:apply-schema
 DATABASE_URL=TARGET pnpm test:integration
 REDIS_TEST_URL=TARGET pnpm exec vitest run test/integration/redis-idempotency-hint.test.ts test/integration/redis-lease.test.ts --no-file-parallelism
 ```

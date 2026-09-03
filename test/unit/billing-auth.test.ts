@@ -13,7 +13,7 @@ describe('billing production authentication adapter', () => {
   it('verifies RS256 IAM sessions from the IAM JWKS and binds the tenant header to the token', async () => {
     const { privateKey, publicKey } = await generateKeyPair('RS256');
     const jwk = await exportJWK(publicKey);
-    const server = createServer((request, response) => {
+    const server = createServer((_request, response) => {
       response.setHeader('content-type', 'application/json');
       response.end(JSON.stringify({ keys: [{ ...jwk, kid: 'billing-test-key', alg: 'RS256', use: 'sig' }] }));
     });
@@ -31,6 +31,7 @@ describe('billing production authentication adapter', () => {
     const auth = createBillingAuth({
       mode: 'jwks',
       internalServiceSecret: 'service-secret',
+      bffServiceToken: 'bff-bearer',
       operatorProxySecret: 'operator-secret',
       jwksUrl: `http://127.0.0.1:${address.port}/.well-known/jwks.json`,
       issuer: 'kokoro-iam',
@@ -42,14 +43,14 @@ describe('billing production authentication adapter', () => {
     expect(crossSite).toBeNull();
   });
 
-  it('keeps local fixture auth separate from production JWT auth', async () => {
-    const auth = createBillingAuth({ mode: 'header-fixture', internalServiceSecret: 'service-secret', operatorProxySecret: 'service-secret', issuer: 'kokoro-iam' });
+  it('keeps local internal-header auth separate from production JWT auth', async () => {
+    const auth = createBillingAuth({ mode: 'internal-header', internalServiceSecret: 'service-secret', bffServiceToken: 'bff-bearer', operatorProxySecret: 'service-secret', issuer: 'kokoro-iam' });
     expect(await auth.user({ headers: { 'x-kokoro-tenant-id': 'site-1', 'x-kokoro-subject': 'team-1' } } as never)).toEqual({ tenantId: 'site-1', subjectId: 'team-1' });
     expect(await auth.user({ headers: { authorization: 'Bearer fixture-token', 'x-kokoro-tenant-id': 'site-1' } } as never)).toBeNull();
   });
 
   it('requires the trusted BFF proxy marker for operator calls', async () => {
-    const auth = createBillingAuth({ mode: 'header-fixture', internalServiceSecret: 'service-secret', operatorProxySecret: 'operator-secret', issuer: 'kokoro-iam' });
+    const auth = createBillingAuth({ mode: 'internal-header', internalServiceSecret: 'service-secret', bffServiceToken: 'bff-bearer', operatorProxySecret: 'operator-secret', issuer: 'kokoro-iam' });
     const headers = { 'x-kokoro-tenant-id': 'site-1', 'x-kokoro-operator': 'op-1', 'x-kokoro-role': 'finance', 'x-kokoro-proxy-secret': 'operator-secret' };
     expect(await auth.admin({ headers } as never)).toBeNull();
     expect(await auth.admin({ headers: { ...headers, 'x-kokoro-service': 'admin' } } as never)).toBeNull();
@@ -57,14 +58,14 @@ describe('billing production authentication adapter', () => {
   });
 
   it('accepts only registered internal service identities', async () => {
-    const auth = createBillingAuth({ mode: 'header-fixture', internalServiceSecret: 'service-secret', operatorProxySecret: 'service-secret', issuer: 'kokoro-iam' });
+    const auth = createBillingAuth({ mode: 'internal-header', internalServiceSecret: 'service-secret', bffServiceToken: 'bff-bearer', operatorProxySecret: 'service-secret', issuer: 'kokoro-iam' });
     const headers = { 'x-kokoro-tenant-id': 'site-1', 'x-kokoro-internal-secret': 'service-secret' };
     expect(await auth.internal({ headers: { ...headers, 'x-kokoro-service': 'agent' } } as never)).toEqual({ tenantId: 'site-1', serviceId: 'agent' });
     expect(await auth.internal({ headers: { ...headers, 'x-kokoro-service': 'unregistered-service' } } as never)).toBeNull();
   });
 
   it('requires the registered web BFF, tenant context, internal secret and service bearer', async () => {
-    const auth = createBillingAuth({ mode: 'header-fixture', internalServiceSecret: 'service-secret', bffServiceToken: 'bff-bearer', operatorProxySecret: 'operator-secret', issuer: 'kokoro-iam' });
+    const auth = createBillingAuth({ mode: 'internal-header', internalServiceSecret: 'service-secret', bffServiceToken: 'bff-bearer', operatorProxySecret: 'operator-secret', issuer: 'kokoro-iam' });
     const headers = {
       'x-kokoro-tenant-id': 'site-1',
       'x-kokoro-service': 'web-bff',
@@ -80,7 +81,7 @@ describe('billing production authentication adapter', () => {
   });
 
   it('keeps the HTTP tenant boundary aligned with the VARCHAR(191) storage contract', async () => {
-    const auth = createBillingAuth({ mode: 'header-fixture', internalServiceSecret: 'service-secret', operatorProxySecret: 'service-secret', issuer: 'kokoro-iam' });
+    const auth = createBillingAuth({ mode: 'internal-header', internalServiceSecret: 'service-secret', bffServiceToken: 'bff-bearer', operatorProxySecret: 'service-secret', issuer: 'kokoro-iam' });
     const accepted = `tenant-${'x'.repeat(184)}`;
     expect(accepted.length).toBe(191);
     expect(await auth.user({ headers: { 'x-kokoro-tenant-id': accepted, 'x-kokoro-subject': 'team-1' } } as never)).toMatchObject({ tenantId: accepted });

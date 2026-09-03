@@ -2,8 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import type { RowDataPacket } from '../../src/infrastructure/postgres/connection.js';
 import { createBillingConnection } from '../../src/infrastructure/postgres/connection.js';
-import { ProviderEventInboxService } from '../../src/modules/payment/provider-event-inbox-service.js';
-import { ProviderEventAdminService } from '../../src/modules/payment/provider-event-admin-service.js';
+import { createPostgresProviderEventAdminService, createPostgresProviderEventInboxService } from '../../src/infrastructure/postgres/create-postgres-services.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 const integration = describe.skipIf(!databaseUrl);
@@ -11,7 +10,7 @@ const integration = describe.skipIf(!databaseUrl);
 integration('provider webhook inbox', () => {
   it('stores a signed provider event once and returns the same fact on replay', async () => {
     const connection = await createBillingConnection(databaseUrl!);
-    const service = new ProviderEventInboxService(connection);
+    const service = createPostgresProviderEventInboxService(connection);
     const tenantId = randomUUID();
     const externalEventId = `evt-${randomUUID()}`;
     try {
@@ -41,7 +40,7 @@ integration('provider webhook inbox', () => {
 
   it('rejects an event before persistence when the provider signature is invalid', async () => {
     const connection = await createBillingConnection(databaseUrl!);
-    const service = new ProviderEventInboxService(connection);
+    const service = createPostgresProviderEventInboxService(connection);
     await expect(service.accept({
       tenantId: randomUUID(),
       provider: 'mock',
@@ -55,7 +54,7 @@ integration('provider webhook inbox', () => {
 
   it('rejects the same external event id with a different payload', async () => {
     const connection = await createBillingConnection(databaseUrl!);
-    const service = new ProviderEventInboxService(connection);
+    const service = createPostgresProviderEventInboxService(connection);
     const tenantId = randomUUID();
     const externalEventId = `evt-${randomUUID()}`;
     try {
@@ -68,8 +67,8 @@ integration('provider webhook inbox', () => {
 
   it('requeues a failed event with a durable audited command', async () => {
     const connection = await createBillingConnection(databaseUrl!);
-    const inbox = new ProviderEventInboxService(connection);
-    const admin = new ProviderEventAdminService(connection);
+    const inbox = createPostgresProviderEventInboxService(connection);
+    const admin = createPostgresProviderEventAdminService(connection);
     const tenantId = randomUUID();
     try {
       const accepted = await inbox.accept({ tenantId, provider: 'mock', externalEventId: `evt-${randomUUID()}`, eventType: 'payment.succeeded', rawPayload: { ok: true }, signatureValid: true });
@@ -90,8 +89,8 @@ integration('provider webhook inbox', () => {
 
   it('lists only the current site and supports processing-status filtering', async () => {
     const connection = await createBillingConnection(databaseUrl!);
-    const inbox = new ProviderEventInboxService(connection);
-    const admin = new ProviderEventAdminService(connection);
+    const inbox = createPostgresProviderEventInboxService(connection);
+    const admin = createPostgresProviderEventAdminService(connection);
     const tenantId = randomUUID();
     const otherSiteId = randomUUID();
     try {
@@ -105,8 +104,13 @@ integration('provider webhook inbox', () => {
       const firstPage = await admin.list({ tenantId, status: 'failed', limit: 1 });
       expect(firstPage.items).toHaveLength(1);
       expect(firstPage.nextCursor).toBeTruthy();
-      const result = await admin.list({ tenantId, status: 'failed', limit: 10, cursor: firstPage.nextCursor! });
+      const cursor = firstPage.nextCursor;
+      if (cursor === undefined) throw new Error('expected provider event cursor');
+      await expect(admin.list({ tenantId: otherSiteId, status: 'failed', limit: 10, cursor })).rejects.toThrow('billing.invalid_cursor');
+      await expect(admin.list({ tenantId, status: 'received', limit: 10, cursor })).rejects.toThrow('billing.invalid_cursor');
+      const result = await admin.list({ tenantId, status: 'failed', limit: 10, cursor });
       expect(result.items).toHaveLength(1);
+      expect(result.nextCursor).toBeUndefined();
       expect(new Set([failed.providerEventId, failedAgain.providerEventId])).toContain(firstPage.items[0]?.providerEventId);
       expect(new Set([failed.providerEventId, failedAgain.providerEventId])).toContain(result.items[0]?.providerEventId);
       expect(result.items[0]?.providerEventId).not.toBe(firstPage.items[0]?.providerEventId);

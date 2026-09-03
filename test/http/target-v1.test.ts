@@ -13,7 +13,7 @@ const server = createBillingServer({
     idempotencyFingerprints.set(key, fingerprint);
     return 'claimed';
   } },
-  catalog: { listSellable: async () => [{ id: 'offer-revision-1', key: 'pro', name: 'Pro', currency: 'USD', amountMinor: '1999', creditMicros: '1000000', billingInterval: 'month' }] },
+  catalog: { listSellable: async () => ({ items: [{ id: 'offer-revision-1', key: 'pro', name: 'Pro', currency: 'USD', amountMinor: '1999', creditMicros: '1000000', billingInterval: 'month' }] }) },
   checkout: { create: async (input) => { checkoutCalls.push(input); return { checkoutId: 'checkout-1', status: 'created', amountMinor: 1999, currency: 'USD', expiresAt: new Date('2030-01-01') }; } },
   usage: { expireExpiredHolds: async () => ({ expired: 0, expiredHoldIds: [] }) },
   settlement: { recordSettlement: async () => undefined },
@@ -126,7 +126,8 @@ describe('clean-build Billing v1 transport', () => {
   it('uses the v1 envelope for errors without a top-level requestId', async () => {
     const response = await server.inject({ method: 'POST', url: '/v1/billing/checkout', headers: { 'x-kokoro-tenant-id': 'tenant-1' }, payload: {} });
     expect(response.statusCode).toBe(400);
-    expect(response.json()).toMatchObject({ error: { code: 'billing.idempotency_required', request_id: expect.any(String), retryable: false, details: {} }, meta: { request_id: expect.any(String) } });
+    expect(response.json()).toMatchObject({ error: { code: 'billing.idempotency_required', retryable: false, details: {} }, meta: { request_id: expect.any(String) } });
+    expect(response.json().error).not.toHaveProperty('request_id');
     expect(response.json()).not.toHaveProperty('requestId');
   });
 
@@ -152,9 +153,25 @@ describe('clean-build Billing v1 transport', () => {
     expect(release.statusCode).toBe(200);
     expect(calls.release[0]).toEqual(['tenant-1', 'adm-1', 'execution.failed', 'release-123456']);
 
-    const event = await server.inject({ method: 'POST', url: '/v1/internal/billing/execution-events', headers: { ...internalHeaders, 'idempotency-key': 'event-123456' }, payload: { event_id: 'event-1', event_type: 'execution.unknown', execution_id: 'exec-1', invocation_id: 'inv-1', occurred_at: '2026-09-01T00:00:00Z', receipt_schema_version: '1', signature: 'signature' } });
+    const event = await server.inject({ method: 'POST', url: '/v1/internal/billing/execution-events', headers: { ...internalHeaders, 'idempotency-key': 'event-123456' }, payload: { event_id: 'event-1', event_type: 'execution.unknown', execution_id: 'exec-1', invocation_id: 'inv-1', occurred_at: '2026-09-01T00:00:00Z', receipt_schema_version: '1' } });
     expect(event.statusCode).toBe(202);
     expect(calls.events[0]).toEqual([expect.objectContaining({ tenantId: 'tenant-1', eventId: 'event-1', eventType: 'execution.unknown' })]);
+  });
+
+  it('rejects the retired execution-event signature field instead of persisting an unverified claim', async () => {
+    const priorEventCalls = calls.events.length;
+    const event = await server.inject({
+      method: 'POST',
+      url: '/v1/internal/billing/execution-events',
+      headers: { ...internalHeaders, 'idempotency-key': 'event-retired-signature' },
+      payload: {
+        event_id: 'event-2', event_type: 'execution.unknown', execution_id: 'exec-2', invocation_id: 'inv-2',
+        occurred_at: '2026-09-01T00:00:00Z', receipt_schema_version: '1', signature: 'unverified',
+      },
+    });
+    expect(event.statusCode).toBe(400);
+    expect(event.json().error.code).toBe('billing.invalid_request');
+    expect(calls.events).toHaveLength(priorEventCalls);
   });
 
   it('limits the scheduler surface to its generic expiry command', async () => {

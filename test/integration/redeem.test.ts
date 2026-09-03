@@ -2,9 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import type { RowDataPacket } from '../../src/infrastructure/postgres/connection.js';
 import { createBillingConnection } from '../../src/infrastructure/postgres/connection.js';
-import { RedeemAdminService } from '../../src/modules/redeem/redeem-admin-service.js';
-import { RedeemService } from '../../src/modules/redeem/redeem-service.js';
-import { hashRedeemCode } from '../../src/modules/redeem/redeem-code.js';
+import { hashRedeemCode } from '../../src/application/credit/services/redeem-code.js';
+import { createPostgresRedeemAdminService, createPostgresRedeemService } from '../../src/infrastructure/postgres/create-postgres-services.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 const integration = describe.skipIf(!databaseUrl);
@@ -13,8 +12,8 @@ const secret = 'integration-redeem-secret-012345678901234567890123';
 integration('redeem card keys', () => {
   it('issues plaintext once, stores only HMAC, and atomically grants once', async () => {
     const connection = await createBillingConnection(databaseUrl!);
-    const admin = new RedeemAdminService(connection, secret);
-    const redeem = new RedeemService(connection, secret);
+    const admin = createPostgresRedeemAdminService(connection, secret);
+    const redeem = createPostgresRedeemService(connection, secret);
     const tenantId = randomUUID();
     try {
       const campaign = await admin.createCampaign({ tenantId, campaignKey: `test-${randomUUID()}`, programKey: 'ai-pro', creditMicros: 1000, maxRedemptions: 10, operatorId: 'test-operator', reason: 'integration test', idempotencyKey: `campaign-${randomUUID()}` });

@@ -1,13 +1,12 @@
 import { createDedicatedBillingConnection } from '../src/infrastructure/postgres/connection.js';
-import { UsageSettlementService } from '../src/modules/metering/usage-settlement-service.js';
-import { BillingAdmissionService } from '../src/modules/metering/billing-admission-service.js';
 import type { RowDataPacket } from '../src/infrastructure/postgres/connection.js';
+import { createPostgresBillingAdmissionService, createPostgresUsageSettlementService } from '../src/infrastructure/postgres/create-postgres-services.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL is required');
 const connection = await createDedicatedBillingConnection(databaseUrl);
-const usage = new UsageSettlementService(connection);
-const admission = new BillingAdmissionService(connection, usage);
+const usage = createPostgresUsageSettlementService(connection);
+const admission = createPostgresBillingAdmissionService(connection, usage);
 const limit = Math.min(Math.max(Number(process.env.BILLING_EVENT_BATCH_SIZE ?? 100), 1), 500);
 try {
   const [events] = await connection.query<(RowDataPacket & { tenant_id: string; event_id: string })[]>(

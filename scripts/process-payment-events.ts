@@ -1,13 +1,10 @@
 import { createBillingConnection, runWithBillingContext } from '../src/infrastructure/postgres/connection.js';
 import { OutboxWorker } from '../src/infrastructure/postgres/outbox-worker.js';
-import { BillingSettlementService } from '../src/modules/payment/billing-settlement-service.js';
-import { BillingReversalService } from '../src/modules/payment/billing-reversal-service.js';
-import { ProviderEventProcessor } from '../src/modules/payment/provider-event-processor.js';
-import { SubscriptionGrantService } from '../src/modules/credit/subscription-grant-service.js';
-import { createProviderRegistry } from '../src/modules/payment/provider-registry.js';
-import { ALL_PAYMENT_PROVIDERS } from '../src/modules/payment/provider-config.js';
+import { createProviderRegistry } from '../src/infrastructure/providers/payment/provider-registry.js';
+import { ALL_PAYMENT_PROVIDERS } from '../src/config/provider-config.js';
 import { recordWorkerResult, setOldestPendingAgeSeconds, startWorkerMetricsServer, type WorkerResult } from '../src/infrastructure/worker-metrics.js';
 import type { RowDataPacket } from '../src/infrastructure/postgres/connection.js';
+import { createPostgresBillingReversalService, createPostgresBillingSettlementService, createPostgresProviderEventProcessor, createPostgresSubscriptionGrantService } from '../src/infrastructure/postgres/create-postgres-services.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL is required');
@@ -19,14 +16,14 @@ const leaseConnection = await createBillingConnection(databaseUrl);
 const metricsPort = Number(process.env.BILLING_WORKER_METRICS_PORT ?? 9095);
 if (!Number.isSafeInteger(metricsPort) || metricsPort < 1 || metricsPort > 65535) throw new Error('BILLING_WORKER_METRICS_PORT must be an integer between 1 and 65535');
 const metricsServer = await startWorkerMetricsServer(metricsPort, process.env.BILLING_WORKER_METRICS_HOST ?? '127.0.0.1');
-const processor = new ProviderEventProcessor(
+const processor = createPostgresProviderEventProcessor(
   connection,
   // Processing is deliberately broader than ingress: disabling a provider must
   // not strand already-inboxed events. Main validates the enabled ingress list.
   createProviderRegistry(ALL_PAYMENT_PROVIDERS, process.env.WECHAT_API_V3_KEY ? { wechatApiV3Key: process.env.WECHAT_API_V3_KEY } : {}),
-  new BillingSettlementService(connection),
-  new BillingReversalService(connection),
-  new SubscriptionGrantService(connection),
+  createPostgresBillingSettlementService(connection),
+  createPostgresBillingReversalService(connection),
+  createPostgresSubscriptionGrantService(connection),
 );
 const once = process.env.ONCE === 'true';
 const pollMs = Number(process.env.BILLING_WORKER_POLL_MS ?? 1_000);

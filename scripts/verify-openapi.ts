@@ -21,6 +21,25 @@ const externalSiteIdProperties = keysNamed(contract, 'tenantId');
 if (externalSiteIdProperties.length > 0) {
   throw new Error(`external OpenAPI contract must not expose tenantId properties: ${externalSiteIdProperties.join(', ')}`);
 }
+const camelCaseRequestIds = keysNamed(contract, 'requestId');
+if (camelCaseRequestIds.length > 0) {
+  throw new Error(`OpenAPI contract must use meta.request_id instead of requestId: ${camelCaseRequestIds.join(', ')}`);
+}
+const v1Error = (contract as { readonly components?: { readonly schemas?: { readonly V1ErrorResponse?: { readonly properties?: { readonly error?: { readonly properties?: Record<string, unknown> } } } } } }).components?.schemas?.V1ErrorResponse;
+if (v1Error?.properties?.error?.properties?.request_id !== undefined) {
+  throw new Error('OpenAPI error.request_id is forbidden; request_id belongs only in meta');
+}
+const executionEventSchema = (contract as { readonly components?: { readonly schemas?: { readonly V1ExecutionEventRequest?: unknown } } }).components?.schemas?.V1ExecutionEventRequest;
+if (executionEventSchema === undefined) throw new Error('OpenAPI must define V1ExecutionEventRequest');
+const retiredExecutionSignatures = keysNamed(executionEventSchema, 'signature');
+if (retiredExecutionSignatures.length > 0) {
+  throw new Error(`trusted execution events must not expose an unverified signature field: ${retiredExecutionSignatures.join(', ')}`);
+}
+const executionEventPost = contract.paths?.['/v1/internal/billing/execution-events']?.post;
+const executionEventRequestBody = executionEventPost !== null && typeof executionEventPost === 'object' && 'requestBody' in executionEventPost
+  ? executionEventPost.requestBody
+  : undefined;
+if (executionEventRequestBody === undefined) throw new Error('execution-events must reference its OpenAPI request body');
 const tenantContext = (contract as { readonly components?: { readonly securitySchemes?: Record<string, { readonly name?: string }> } }).components?.securitySchemes?.tenantContext;
 if (tenantContext?.name !== 'X-Kokoro-Tenant-Id') throw new Error('external OpenAPI contract must expose X-Kokoro-Tenant-Id as tenant context');
 

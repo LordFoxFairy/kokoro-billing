@@ -4,6 +4,8 @@
 
 - [本仓 API Contract](API_CONTRACT.md)
 - [本仓 Technical Design](TECHNICAL_DESIGN.md)
+- [SLO、错误预算与告警基线](SLO.md)
+- [运行与故障处置](RUNBOOK.md)
 - [实现、BFF 接入与验收说明](README.md)
 
 - [总体架构](../../docs/kokoro-handbook/technical/31-billing-subrepository-architecture.md)
@@ -23,8 +25,5 @@
 - [事务矩阵](../../docs/kokoro-handbook/technical/billing-transaction-matrix.md)
 - [PostgreSQL Schema](../database/README.md)
 - [SQL 规范](../../docs/kokoro-handbook/technical/billing-sql-standard.md)
-- [迁移映射](../../docs/kokoro-handbook/technical/billing-migration-map.md)
 - [Provider Event / Worker](../../docs/kokoro-handbook/technical/billing-event-processing.md)
-- [CI 与迁移门禁](../../docs/kokoro-handbook/technical/billing-ci-and-migration-gates.md)
-- Legacy 切流/旧 writer 文档不属于 clean-build 方案，不作为当前工作入口。
 - [实现闭环证据](../../docs/kokoro-handbook/technical/billing-closure-evidence.md)

@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { createCipheriv, createHmac, generateKeyPairSync, randomBytes } from 'node:crypto';
-import { createProviderRegistry, parseProviderWebhook, verifyProviderWebhook } from '../../src/modules/payment/provider-registry.js';
-import { signStripeWebhook, StripeWebhookProvider } from '../../src/modules/payment/providers/stripe/stripe-webhook-provider.js';
-import { WechatWebhookProvider } from '../../src/modules/payment/providers/wechat/wechat-webhook-provider.js';
-import { AlipayWebhookProvider, signAlipayNotification } from '../../src/modules/payment/providers/alipay/alipay-webhook-provider.js';
+import { parseProviderWebhook, verifyProviderWebhook } from '../../src/application/payment/ports/provider-registry.js';
+import { createProviderRegistry } from '../../src/infrastructure/providers/payment/provider-registry.js';
+import { signStripeWebhook, StripeWebhookProvider } from '../../src/infrastructure/providers/payment/adapters/stripe/stripe-webhook-provider.js';
+import { WechatWebhookProvider } from '../../src/infrastructure/providers/payment/adapters/wechat/wechat-webhook-provider.js';
+import { AlipayWebhookProvider, signAlipayNotification } from '../../src/infrastructure/providers/payment/adapters/alipay/alipay-webhook-provider.js';
+import { MockWebhookProvider } from '../doubles/payment/mock-webhook-provider.js';
 
 describe('payment provider registry', () => {
   it('reuses the mature Stripe adapter only when explicitly enabled', () => {
@@ -47,8 +49,8 @@ describe('payment provider registry', () => {
     expect(provider.parseEvent({ id: 'evt-payment-invoice', type: 'payment_intent.succeeded', data: { object: { id: 'pi-1', invoice: 'in-1', metadata: {} } } })).toMatchObject({ eventId: 'evt-payment-invoice', eventType: 'payment_intent.succeeded', orderId: null, subscription: null });
   });
 
-  it('supports the local mock HMAC adapter only when explicitly enabled', () => {
-    const registry = createProviderRegistry(['mock']);
+  it('keeps test webhook doubles outside the production provider registry', () => {
+    const registry = new Map([['mock', new MockWebhookProvider()]]);
     const rawBody = Buffer.from(JSON.stringify({ eventId: 'mock-1', eventType: 'payment_succeeded', data: { orderId: 'checkout-1' } }));
     const signature = createHmac('sha256', 'secret').update(rawBody).digest('hex');
     expect(verifyProviderWebhook(registry, 'mock', { 'x-kokoro-webhook-signature': signature }, rawBody, 'secret')).toBe(true);

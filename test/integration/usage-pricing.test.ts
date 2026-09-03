@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { createBillingConnection } from '../../src/infrastructure/postgres/connection.js';
-import { UsagePricingService } from '../../src/modules/metering/usage-pricing-service.js';
+import { createPostgresUsagePricingService } from '../../src/infrastructure/postgres/create-postgres-services.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 const integration = describe.skipIf(!databaseUrl);
@@ -12,12 +12,12 @@ integration('usage pricing revisions', () => {
     const tenantId = randomUUID();
     const revisionId = randomUUID();
     const rateId = randomUUID();
-    const service = new UsagePricingService(connection);
+    const service = createPostgresUsagePricingService(connection);
     try {
       await connection.execute(
         `INSERT INTO entitlement_usage_price_revision
           (usage_price_revision_id, tenant_id, revision, effective_from, status, published_at)
-         VALUES ($1, $2, 1, CURRENT_TIMESTAMP(6), 'published', CURRENT_TIMESTAMP(6))`,
+         VALUES ($1, $2, 1, CURRENT_TIMESTAMP(3), 'published', CURRENT_TIMESTAMP(3))`,
         [revisionId, tenantId],
       );
       await connection.execute(

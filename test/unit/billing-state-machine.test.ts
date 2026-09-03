@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assertTransition, canTransition } from '../../src/domain/billing-state-machine.js';
+import { assertTransition, canTransition } from '../../src/domain/payment/services/billing-state-machine.js';
 
 describe('Billing state machines', () => {
   it('permits only forward payment and admission transitions', () => {

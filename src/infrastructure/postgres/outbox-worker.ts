@@ -1,14 +1,15 @@
 import { randomUUID } from 'node:crypto';
-import type { Connection, ResultSetHeader, RowDataPacket } from '../../application/ports.js';
+import type { ResultSetHeader, RowDataPacket, SqlConnection } from './database.js';
+import { jsonRecordSchema, parsePersistedJson } from './json.js';
 
 type OutboxTable = 'entitlement_outbox' | 'payment_outbox';
 type OutboxRow = RowDataPacket & { outbox_id: string; event_type: string; payload_json: string | Record<string, unknown>; attempts: number };
 export type OutboxProcessResult = false | 'published' | 'retrying' | 'dead_lettered' | 'lease_lost';
 
 export class OutboxWorker {
-  private readonly leaseConnection: Connection;
+  private readonly leaseConnection: SqlConnection;
 
-  public constructor(private readonly connection: Connection, private readonly table: OutboxTable, private readonly leaseSeconds = 30, private readonly eventType?: string, private readonly maxAttempts = 10, private readonly tenantId?: string, leaseConnection?: Connection) {
+  public constructor(private readonly connection: SqlConnection, private readonly table: OutboxTable, private readonly leaseSeconds = 30, private readonly eventType?: string, private readonly maxAttempts = 10, private readonly tenantId?: string, leaseConnection?: SqlConnection) {
     this.leaseConnection = leaseConnection ?? connection;
     if (!Number.isSafeInteger(leaseSeconds) || leaseSeconds <= 0) throw new RangeError('outbox lease seconds must be a positive safe integer');
     if (!Number.isSafeInteger(maxAttempts) || maxAttempts <= 0) throw new RangeError('outbox max attempts must be a positive safe integer');
@@ -22,10 +23,10 @@ export class OutboxWorker {
       const predicates = [
         'published_at IS NULL',
         'dead_lettered_at IS NULL',
-        '(lease_until IS NULL OR lease_until < CURRENT_TIMESTAMP(6))',
-        'next_attempt_at <= CURRENT_TIMESTAMP(6)',
-        ...(this.eventType === undefined ? [] : ['event_type = ?']),
-        ...(this.tenantId === undefined ? [] : ['tenant_id = ?']),
+        '(lease_until IS NULL OR lease_until < CURRENT_TIMESTAMP(3))',
+        'next_attempt_at <= CURRENT_TIMESTAMP(3)',
+        ...(this.eventType === undefined ? [] : ['event_type = $1']),
+        ...(this.tenantId === undefined ? [] : [`tenant_id = $${this.eventType === undefined ? 1 : 2}`]),
       ];
       const args = [
         ...(this.eventType === undefined ? [] : [this.eventType]),
@@ -46,7 +47,7 @@ export class OutboxWorker {
       }
       await this.connection.execute(
         `UPDATE ${this.table}
-            SET lease_token = $1, lease_until = CURRENT_TIMESTAMP(6) + ($2 * INTERVAL '1 second'), attempts = attempts + 1
+            SET lease_token = $1, lease_until = CURRENT_TIMESTAMP(3) + ($2 * INTERVAL '1 second'), attempts = attempts + 1
           WHERE outbox_id = $3 AND published_at IS NULL`,
         [leaseToken, this.leaseSeconds, row.outbox_id],
       );
@@ -56,12 +57,12 @@ export class OutboxWorker {
       throw error;
     }
 
-    const payload = typeof row.payload_json === 'string' ? JSON.parse(row.payload_json) as Record<string, unknown> : row.payload_json;
+    const payload = parsePersistedJson(row.payload_json, jsonRecordSchema, 'billing.outbox_payload_invalid');
     let leaseLost = false;
     const renewLease = async (): Promise<void> => {
       const [renewal] = await this.leaseConnection.execute<ResultSetHeader>(
         `UPDATE ${this.table}
-            SET lease_until = CURRENT_TIMESTAMP(6) + ($1 * INTERVAL '1 second')
+            SET lease_until = CURRENT_TIMESTAMP(3) + ($1 * INTERVAL '1 second')
           WHERE outbox_id = $2 AND lease_token = $3 AND published_at IS NULL AND dead_lettered_at IS NULL`,
         [this.leaseSeconds, row!.outbox_id, leaseToken],
       );
@@ -77,7 +78,7 @@ export class OutboxWorker {
       if (leaseLost) return 'lease_lost';
       const [published] = await this.leaseConnection.execute<ResultSetHeader>(
         `UPDATE ${this.table}
-            SET published_at = CURRENT_TIMESTAMP(6), lease_token = NULL, lease_until = NULL
+            SET published_at = CURRENT_TIMESTAMP(3), lease_token = NULL, lease_until = NULL
           WHERE outbox_id = $1 AND lease_token = $2 AND published_at IS NULL`,
         [row.outbox_id, leaseToken],
       );
@@ -89,7 +90,7 @@ export class OutboxWorker {
       if (attemptNumber >= this.maxAttempts) {
         const [deadLettered] = await this.leaseConnection.execute<ResultSetHeader>(
           `UPDATE ${this.table}
-              SET dead_lettered_at = CURRENT_TIMESTAMP(6), lease_token = NULL, lease_until = NULL
+              SET dead_lettered_at = CURRENT_TIMESTAMP(3), lease_token = NULL, lease_until = NULL
             WHERE outbox_id = $1 AND lease_token = $2 AND published_at IS NULL`,
           [row.outbox_id, leaseToken],
         );
@@ -99,7 +100,7 @@ export class OutboxWorker {
       }
       const [retry] = await this.leaseConnection.execute<ResultSetHeader>(
         `UPDATE ${this.table}
-            SET lease_token = NULL, lease_until = NULL, next_attempt_at = CURRENT_TIMESTAMP(6) + (LEAST(attempts, 60) * INTERVAL '1 second')
+            SET lease_token = NULL, lease_until = NULL, next_attempt_at = CURRENT_TIMESTAMP(3) + (LEAST(attempts, 60) * INTERVAL '1 second')
           WHERE outbox_id = $1 AND lease_token = $2 AND published_at IS NULL`,
         [row.outbox_id, leaseToken],
       );

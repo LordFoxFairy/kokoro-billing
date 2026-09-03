@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { createBillingConnection } from '../../src/infrastructure/postgres/connection.js';
-import { CheckoutService } from '../../src/modules/payment/checkout-service.js';
+import { createPostgresCheckoutService } from '../../src/infrastructure/postgres/create-postgres-services.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 const integration = describe.skipIf(!databaseUrl);
@@ -9,7 +9,7 @@ const integration = describe.skipIf(!databaseUrl);
 integration('checkout quote snapshot', () => {
   it('creates one checkout and replays the same snapshot idempotently', async () => {
     const connection = await createBillingConnection(databaseUrl!);
-    const service = new CheckoutService(connection);
+    const service = createPostgresCheckoutService(connection);
     const tenantId = randomUUID();
     const offerId = randomUUID();
     const revisionId = randomUUID();
@@ -29,7 +29,7 @@ integration('checkout quote snapshot', () => {
       await connection.execute(
         `INSERT INTO entitlement_offer_revision
           (offer_revision_id, offer_id, tenant_id, revision, name, currency, amount_minor, credit_micros, billing_interval, status, published_at)
-         VALUES ($1, $2, $3, 1, 'Pro', 'USD', 1999, 1000, 'month', 'published', CURRENT_TIMESTAMP(6))`,
+         VALUES ($1, $2, $3, 1, 'Pro', 'USD', 1999, 1000, 'month', 'published', CURRENT_TIMESTAMP(3))`,
         [revisionId, offerId, tenantId],
       );
       const first = await service.create(input);
@@ -50,7 +50,7 @@ integration('checkout quote snapshot', () => {
 
   it('does not create a checkout from an expired quote', async () => {
     const connection = await createBillingConnection(databaseUrl!);
-    const service = new CheckoutService(connection);
+    const service = createPostgresCheckoutService(connection);
     await expect(service.create({
       tenantId: randomUUID(), subjectId: randomUUID(), idempotencyKey: `expired-${randomUUID()}`,
       offerRevisionId: randomUUID(), amountMinor: 100, currency: 'USD', quoteSnapshot: {}, expiresAt: new Date(Date.now() - 1),
@@ -58,13 +58,13 @@ integration('checkout quote snapshot', () => {
     await connection.end();
   });
 
-  it('fails closed when no hosted or local checkout provider is enabled', async () => {
+  it('requires a current sellable offer before creating a checkout', async () => {
     const connection = await createBillingConnection(databaseUrl!);
-    const service = new CheckoutService(connection, { mockEnabled: false });
+    const service = createPostgresCheckoutService(connection);
     await expect(service.create({
       tenantId: randomUUID(), subjectId: randomUUID(), idempotencyKey: randomUUID(), offerRevisionId: randomUUID(),
       amountMinor: 100, currency: 'USD', quoteSnapshot: { key: 'starter', creditMicros: '1000' }, expiresAt: new Date(Date.now() + 60_000),
-    })).rejects.toThrow('billing.checkout_provider_unavailable');
+    })).rejects.toThrow('billing.offer_revision_not_sellable');
     await connection.end();
   });
 
@@ -79,10 +79,10 @@ integration('checkout quote snapshot', () => {
       await connection.execute(
         `INSERT INTO entitlement_offer_revision
           (offer_revision_id, offer_id, tenant_id, revision, name, currency, amount_minor, credit_micros, billing_interval, status, published_at)
-         VALUES ($1, $2, $3, 1, 'Hosted', 'USD', 1200, 9000, 'once', 'published', CURRENT_TIMESTAMP(6))`,
+         VALUES ($1, $2, $3, 1, 'Hosted', 'USD', 1200, 9000, 'once', 'published', CURRENT_TIMESTAMP(3))`,
         [revisionId, offerId, tenantId],
       );
-      const service = new CheckoutService(connection, {
+      const service = createPostgresCheckoutService(connection, {
         hostedProvider: {
           provider: 'fake',
           createSession: async (input) => { calls += 1; return { provider: 'fake', sessionId: `session-${input.checkoutId}`, checkoutUrl: 'https://provider.example/checkout/session' }; },

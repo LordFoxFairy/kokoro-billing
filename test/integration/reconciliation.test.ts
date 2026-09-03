@@ -1,9 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { createBillingConnection } from '../../src/infrastructure/postgres/connection.js';
-import { AdminGrantService } from '../../src/modules/credit/admin-grant-service.js';
-import { ReconciliationService } from '../../src/modules/reconcile/reconciliation-service.js';
-import { BillingSettlementService } from '../../src/modules/payment/billing-settlement-service.js';
+import { createPostgresAdminGrantService, createPostgresBillingSettlementService, createPostgresReconciliationService } from '../../src/infrastructure/postgres/create-postgres-services.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 const integration = describe.skipIf(!databaseUrl);
@@ -14,8 +12,8 @@ integration('billing reconciliation', () => {
     const tenantId = randomUUID();
     const accountId = randomUUID();
     try {
-      await new AdminGrantService(connection).grant({ tenantId, subjectId: randomUUID(), accountId, amountMicros: 10, programKey: 'reconcile', operatorId: 'operator-1', reason: 'test', idempotencyKey: `reconcile-${randomUUID()}` });
-      const service = new ReconciliationService(connection);
+      await createPostgresAdminGrantService(connection).grant({ tenantId, subjectId: randomUUID(), accountId, amountMicros: 10, programKey: 'reconcile', operatorId: 'operator-1', reason: 'test', idempotencyKey: `reconcile-${randomUUID()}` });
+      const service = createPostgresReconciliationService(connection);
       expect((await service.run(tenantId)).status).toBe('ok');
       await connection.execute('UPDATE entitlement_credit_account SET available_micros = available_micros + 1 WHERE credit_account_id = $1', [accountId]);
       const report = await service.run(tenantId);
@@ -37,10 +35,10 @@ integration('billing reconciliation', () => {
         [accountId, tenantId, `subject-${accountId}`],
       );
       await connection.execute(
-        `INSERT INTO entitlement_credit_hold (credit_hold_id, tenant_id, credit_account_id, idempotency_key, requested_micros, expires_at) VALUES ($1, $2, $3, $4, 10, CURRENT_TIMESTAMP(6) + INTERVAL '5 minutes')`,
+        `INSERT INTO entitlement_credit_hold (credit_hold_id, tenant_id, credit_account_id, idempotency_key, requested_micros, expires_at) VALUES ($1, $2, $3, $4, 10, CURRENT_TIMESTAMP(3) + INTERVAL '5 minutes')`,
         [holdId, tenantId, accountId, `reconcile-hold-${holdId}`],
       );
-      const report = await new ReconciliationService(connection).run(tenantId);
+      const report = await createPostgresReconciliationService(connection).run(tenantId);
       expect(report.status).toBe('drift');
       expect(report.accountDrifts[0]).toMatchObject({ heldMicros: '10', activeHoldMicros: '10', activeAllocationMicros: '0' });
     } finally {
@@ -57,8 +55,8 @@ integration('billing reconciliation', () => {
     const providerEventId = randomUUID();
     try {
       await connection.execute(
-        `INSERT INTO payment_settlement (settlement_id, tenant_id, external_payment_ref, amount_minor, currency, status)
-         VALUES ($1, $2, $3, 100, 'USD', 'succeeded')`,
+        `INSERT INTO payment_settlement (settlement_id, tenant_id, provider, external_payment_ref, amount_minor, currency, status)
+         VALUES ($1, $2, 'stripe', $3, 100, 'USD', 'succeeded')`,
         [settlementId, tenantId, `reconcile-payment-${settlementId}`],
       );
       await connection.execute(
@@ -67,7 +65,7 @@ integration('billing reconciliation', () => {
          VALUES ($1, $2, 'mock', $3, 'payment.succeeded', '{}', REPEAT('a', 64), true, 'failed', 2, 'temporary')`,
         [providerEventId, tenantId, `evt-${providerEventId}`],
       );
-      const report = await new ReconciliationService(connection).run(tenantId);
+      const report = await createPostgresReconciliationService(connection).run(tenantId);
       expect(report.status).toBe('drift');
       expect(report.settlementDrifts).toHaveLength(1);
       expect(report.providerEventDrifts).toHaveLength(1);
@@ -80,7 +78,7 @@ integration('billing reconciliation', () => {
 
   it('detects a succeeded reversal without a committed fulfillment reversal', async () => {
     const connection = await createBillingConnection(databaseUrl!);
-    const service = new BillingSettlementService(connection);
+    const service = createPostgresBillingSettlementService(connection);
     const tenantId = randomUUID();
     const settlementId = randomUUID();
     const reversalId = randomUUID();
@@ -89,11 +87,11 @@ integration('billing reconciliation', () => {
       await service.recordSettlement({ settlementId, tenantId, externalPaymentRef: `reconcile-reversal-${settlementId}`, amountMinor: 100, currency: 'USD' });
       await service.fulfillSettlement({ settlementId, tenantId, accountId, subjectId: `subject-${accountId}`, programKey: 'reconcile', grantMicros: 10 });
       await connection.execute(
-        `INSERT INTO payment_reversal (reversal_id, tenant_id, settlement_id, external_reversal_ref, amount_minor, reason, status)
-         VALUES ($1, $2, $3, $4, 100, 'customer_request', 'succeeded')`,
+        `INSERT INTO payment_reversal (reversal_id, tenant_id, settlement_id, provider, external_reversal_ref, amount_minor, reason, status)
+         VALUES ($1, $2, $3, 'internal', $4, 100, 'customer_request', 'succeeded')`,
         [reversalId, tenantId, settlementId, `refund-${reversalId}`],
       );
-      const report = await new ReconciliationService(connection).run(tenantId);
+      const report = await createPostgresReconciliationService(connection).run(tenantId);
       expect(report.reversalDrifts).toHaveLength(1);
       expect(report.reversalDrifts[0]).toMatchObject({ reversalId, fulfillmentReversalId: null });
     } finally {
