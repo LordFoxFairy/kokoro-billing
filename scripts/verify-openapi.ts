@@ -1,8 +1,32 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { createHash } from 'node:crypto';
 import { parse } from 'yaml';
 
 type OpenApiDocument = { readonly openapi?: string; readonly paths?: Record<string, Record<string, unknown>> };
+type OperationGovernance = Readonly<{ idempotency: string; permission: string }>;
+
+const expectedOperationGovernance: Readonly<Record<string, OperationGovernance>> = {
+  'get /healthz': { idempotency: 'inherent', permission: 'none' },
+  'get /readyz': { idempotency: 'inherent', permission: 'none' },
+  'get /metrics': { idempotency: 'inherent', permission: 'none' },
+  'get /v1/commerce/catalog': { idempotency: 'read-only', permission: 'authenticated-user-or-web-bff' },
+  'get /v1/billing/me/credit-account': { idempotency: 'read-only', permission: 'authenticated-user' },
+  'get /v1/billing/me/credit-ledger': { idempotency: 'read-only', permission: 'authenticated-user' },
+  'post /v1/internal/entitlement/admissions': { idempotency: 'required', permission: 'agent-model-studio-service' },
+  'post /v1/internal/entitlement/admissions/{admissionId}/capture': { idempotency: 'required', permission: 'agent-model-studio-service' },
+  'post /v1/internal/entitlement/admissions/{admissionId}/release': { idempotency: 'required', permission: 'agent-model-studio-service' },
+  'post /v1/internal/billing/execution-events': { idempotency: 'required', permission: 'agent-model-studio-service' },
+  'post /v1/internal/payment/settlements/accept': { idempotency: 'required', permission: 'payment-worker-or-scheduler' },
+  'post /v1/internal/payment/refunds/accept': { idempotency: 'required', permission: 'payment-worker-service' },
+  'post /v1/internal/commands/expire-credit-holds': { idempotency: 'required', permission: 'scheduler-service' },
+  'post /v1/webhooks/payment/{provider}': { idempotency: 'provider-event-id', permission: 'provider-signature' },
+  'get /v1/billing/me/subscriptions': { idempotency: 'read-only', permission: 'authenticated-user' },
+  'post /v1/billing/checkout': { idempotency: 'required', permission: 'authenticated-user-or-web-bff' },
+  'post /v1/admin/billing/refunds': { idempotency: 'required', permission: 'billing-admin' },
+};
+
+const httpMethod = /^(get|post|put|patch|delete|options|head)$/u;
 
 const keysNamed = (value: unknown, target: string, path = '$'): string[] => {
   if (Array.isArray(value)) return value.flatMap((item, index) => keysNamed(item, target, `${path}[${index}]`));
@@ -15,7 +39,11 @@ const keysNamed = (value: unknown, target: string, path = '$'): string[] => {
 
 const root = resolve(new URL('..', import.meta.url).pathname);
 const serverSource = await readFile(resolve(root, 'src/interfaces/http/server.ts'), 'utf8');
-const contract = parse(await readFile(resolve(root, 'contract/openapi/v1/openapi.yaml'), 'utf8')) as OpenApiDocument;
+const contractSource = await readFile(resolve(root, 'contract/openapi/v1/openapi.yaml'), 'utf8');
+const contractReadme = await readFile(resolve(root, 'contract/README.md'), 'utf8');
+const contractDigest = createHash('sha256').update(contractSource).digest('hex');
+if (!contractReadme.includes(contractDigest)) throw new Error(`contract/README.md provenance digest must be ${contractDigest}`);
+const contract = parse(contractSource) as OpenApiDocument;
 if (contract.openapi !== '3.0.3') throw new Error(`unsupported OpenAPI version: ${contract.openapi ?? 'missing'}`);
 const externalSiteIdProperties = keysNamed(contract, 'tenantId');
 if (externalSiteIdProperties.length > 0) {
@@ -43,6 +71,40 @@ if (executionEventRequestBody === undefined) throw new Error('execution-events m
 const tenantContext = (contract as { readonly components?: { readonly securitySchemes?: Record<string, { readonly name?: string }> } }).components?.securitySchemes?.tenantContext;
 if (tenantContext?.name !== 'X-Kokoro-Tenant-Id') throw new Error('external OpenAPI contract must expose X-Kokoro-Tenant-Id as tenant context');
 
+const governanceErrors: string[] = [];
+const governedOperations = new Set<string>();
+for (const [path, methods] of Object.entries(contract.paths ?? {})) {
+  for (const [method, rawOperation] of Object.entries(methods)) {
+    if (!httpMethod.test(method)) continue;
+    const operationKey = `${method} ${path}`;
+    const expected = expectedOperationGovernance[operationKey];
+    if (expected === undefined) {
+      governanceErrors.push(`${operationKey}: governance expectation is missing`);
+      continue;
+    }
+    governedOperations.add(operationKey);
+    if (rawOperation === null || typeof rawOperation !== 'object' || Array.isArray(rawOperation)) {
+      governanceErrors.push(`${operationKey}: operation must be an object`);
+      continue;
+    }
+    const operation = rawOperation;
+    const expectedMetadata: Readonly<Record<string, string>> = {
+      'x-kokoro-owner': 'kokoro-billing',
+      'x-kokoro-visibility': 'internal-owner',
+      'x-kokoro-stability': 'stable',
+      'x-kokoro-idempotency': expected.idempotency,
+      'x-kokoro-permission': expected.permission,
+    };
+    for (const [field, value] of Object.entries(expectedMetadata)) {
+      if (Reflect.get(operation, field) !== value) governanceErrors.push(`${operationKey}: ${field} must be ${JSON.stringify(value)}`);
+    }
+  }
+}
+for (const operationKey of Object.keys(expectedOperationGovernance)) {
+  if (!governedOperations.has(operationKey)) governanceErrors.push(`${operationKey}: documented operation is missing`);
+}
+if (governanceErrors.length > 0) throw new Error(`OpenAPI governance failed:\n${governanceErrors.join('\n')}`);
+
 const implementation = new Set<string>();
 const routePattern = /app\.(get|post|put|patch|delete|options|head)(?:<[^>]+>)?\(['"]([^'"]+)['"]/gu;
 for (const match of serverSource.matchAll(routePattern)) {
@@ -58,7 +120,7 @@ implementation.add('get /metrics');
 const documented = new Set<string>();
 for (const [path, methods] of Object.entries(contract.paths ?? {})) {
   for (const method of Object.keys(methods)) {
-    if (/^(get|post|put|patch|delete|options|head)$/u.test(method)) documented.add(`${method} ${path}`);
+    if (httpMethod.test(method)) documented.add(`${method} ${path}`);
   }
 }
 
@@ -67,4 +129,4 @@ const stale = [...documented].filter((route) => !implementation.has(route)).sort
 if (missing.length > 0 || stale.length > 0) {
   throw new Error(JSON.stringify({ missing, stale }, null, 2));
 }
-console.log(`OpenAPI route parity passed: ${implementation.size} routes`);
+console.log(`OpenAPI governance and route parity passed: ${implementation.size} routes`);

@@ -17,6 +17,11 @@ paths:
     get:
       tags:
         - Operations
+      x-kokoro-owner: kokoro-billing
+      x-kokoro-visibility: internal-owner
+      x-kokoro-stability: stable
+      x-kokoro-idempotency: inherent
+      x-kokoro-permission: none
       security: []
       responses:
         "200":
@@ -25,6 +30,11 @@ paths:
     get:
       tags:
         - Operations
+      x-kokoro-owner: kokoro-billing
+      x-kokoro-visibility: internal-owner
+      x-kokoro-stability: stable
+      x-kokoro-idempotency: inherent
+      x-kokoro-permission: none
       security: []
       responses:
         "200":
@@ -35,6 +45,11 @@ paths:
     get:
       tags:
         - Operations
+      x-kokoro-owner: kokoro-billing
+      x-kokoro-visibility: internal-owner
+      x-kokoro-stability: stable
+      x-kokoro-idempotency: inherent
+      x-kokoro-permission: none
       security: []
       responses:
         "200":
@@ -47,6 +62,11 @@ paths:
     get:
       tags:
         - User
+      x-kokoro-owner: kokoro-billing
+      x-kokoro-visibility: internal-owner
+      x-kokoro-stability: stable
+      x-kokoro-idempotency: read-only
+      x-kokoro-permission: authenticated-user-or-web-bff
       description: "The storefront catalog accepts either an IAM user JWT or the
         trusted web-bff service-auth form. The BFF form requires
         X-Kokoro-Service=web-bff, X-Kokoro-Internal-Secret, Authorization:
@@ -81,6 +101,11 @@ paths:
     get:
       tags:
         - User
+      x-kokoro-owner: kokoro-billing
+      x-kokoro-visibility: internal-owner
+      x-kokoro-stability: stable
+      x-kokoro-idempotency: read-only
+      x-kokoro-permission: authenticated-user
       security:
         - tenantContext: []
           userBearer: []
@@ -93,6 +118,11 @@ paths:
     get:
       tags:
         - User
+      x-kokoro-owner: kokoro-billing
+      x-kokoro-visibility: internal-owner
+      x-kokoro-stability: stable
+      x-kokoro-idempotency: read-only
+      x-kokoro-permission: authenticated-user
       security:
         - tenantContext: []
           userBearer: []
@@ -116,6 +146,11 @@ paths:
     post:
       tags:
         - Internal
+      x-kokoro-owner: kokoro-billing
+      x-kokoro-visibility: internal-owner
+      x-kokoro-stability: stable
+      x-kokoro-idempotency: required
+      x-kokoro-permission: agent-model-studio-service
       security:
         - tenantContext: []
           serviceCaller: []
@@ -133,6 +168,11 @@ paths:
     post:
       tags:
         - Internal
+      x-kokoro-owner: kokoro-billing
+      x-kokoro-visibility: internal-owner
+      x-kokoro-stability: stable
+      x-kokoro-idempotency: required
+      x-kokoro-permission: agent-model-studio-service
       security:
         - tenantContext: []
           serviceCaller: []
@@ -155,6 +195,11 @@ paths:
     post:
       tags:
         - Internal
+      x-kokoro-owner: kokoro-billing
+      x-kokoro-visibility: internal-owner
+      x-kokoro-stability: stable
+      x-kokoro-idempotency: required
+      x-kokoro-permission: agent-model-studio-service
       security:
         - tenantContext: []
           serviceCaller: []
@@ -177,6 +222,11 @@ paths:
     post:
       tags:
         - Internal
+      x-kokoro-owner: kokoro-billing
+      x-kokoro-visibility: internal-owner
+      x-kokoro-stability: stable
+      x-kokoro-idempotency: required
+      x-kokoro-permission: agent-model-studio-service
       security:
         - tenantContext: []
           serviceCaller: []
@@ -194,6 +244,11 @@ paths:
     post:
       tags:
         - Internal
+      x-kokoro-owner: kokoro-billing
+      x-kokoro-visibility: internal-owner
+      x-kokoro-stability: stable
+      x-kokoro-idempotency: required
+      x-kokoro-permission: payment-worker-or-scheduler
       security:
         - tenantContext: []
           serviceCaller: []
@@ -209,6 +264,11 @@ paths:
     post:
       tags:
         - Internal
+      x-kokoro-owner: kokoro-billing
+      x-kokoro-visibility: internal-owner
+      x-kokoro-stability: stable
+      x-kokoro-idempotency: required
+      x-kokoro-permission: payment-worker-service
       security:
         - tenantContext: []
           serviceCaller: []
@@ -224,6 +284,11 @@ paths:
     post:
       tags:
         - Internal
+      x-kokoro-owner: kokoro-billing
+      x-kokoro-visibility: internal-owner
+      x-kokoro-stability: stable
+      x-kokoro-idempotency: required
+      x-kokoro-permission: scheduler-service
       security:
         - tenantContext: []
           serviceCaller: []
@@ -239,6 +304,11 @@ paths:
     post:
       tags:
         - Webhook
+      x-kokoro-owner: kokoro-billing
+      x-kokoro-visibility: internal-owner
+      x-kokoro-stability: stable
+      x-kokoro-idempotency: provider-event-id
+      x-kokoro-permission: provider-signature
       security:
         - stripeSignature: []
         - wechatSignature: []
@@ -261,6 +331,11 @@ paths:
     get:
       tags:
         - User
+      x-kokoro-owner: kokoro-billing
+      x-kokoro-visibility: internal-owner
+      x-kokoro-stability: stable
+      x-kokoro-idempotency: read-only
+      x-kokoro-permission: authenticated-user
       security:
         - tenantContext: []
           userBearer: []
@@ -285,6 +360,11 @@ paths:
     post:
       tags:
         - User
+      x-kokoro-owner: kokoro-billing
+      x-kokoro-visibility: internal-owner
+      x-kokoro-stability: stable
+      x-kokoro-idempotency: required
+      x-kokoro-permission: authenticated-user-or-web-bff
       description: The storefront checkout accepts either an IAM user JWT or the
         trusted web-bff service-auth form. The BFF form additionally requires
         the authenticated X-Kokoro-Subject context so Billing can bind the
@@ -316,6 +396,11 @@ paths:
     post:
       tags:
         - Admin
+      x-kokoro-owner: kokoro-billing
+      x-kokoro-visibility: internal-owner
+      x-kokoro-stability: stable
+      x-kokoro-idempotency: required
+      x-kokoro-permission: billing-admin
       security:
         - tenantContext: []
           operatorContext: []
@@ -352,7 +437,7 @@ components:
       type: apiKey
       in: header
       name: X-Kokoro-Internal-Secret
-      description: Per-caller internal credential.
+      description: Shared internal credential checked together with an allow-listed caller identity.
     serviceBearer:
       type: http
       scheme: bearer
