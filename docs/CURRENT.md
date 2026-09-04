@@ -25,8 +25,8 @@
   `billing.idempotency_conflict`。
 - Expiry replay 读取已持久化的 hold ID 列表，不会重新扫描后续 eligible hold；receipt、hold/allocation/account 与 outbox 在同一
   PostgreSQL use-case transaction 内提交。
-- Settlement 与 expiry HTTP route 不使用 raw-body Redis fingerprint 作为冲突裁决，避免 JSON 字段顺序和默认 `limit` 表达差异
-  覆盖 PostgreSQL 的规范化 digest。Redis 仍只承担其他入口的短期提示和 worker lease。
+- 所有带 `Idempotency-Key` 的 HTTP mutation 都只把 tenant/route/key 的短 TTL presence marker 作为可丢失 Redis 提示；Redis 不接收 body/digest，
+  不返回 replay/conflict 裁决。JSON 字段顺序、Redis miss/timeout/坏记录不会绕过规范化 command 与 PostgreSQL receipt/owner fact。
 
 ### Webhook contract 与 runtime
 
@@ -49,8 +49,8 @@
 ### 本轮可执行覆盖
 
 - Contract test 固定 settlement/expiry body、response、provider enum 和 webhook signature location。
-- HTTP test 固定 batch/key 传递、缺失 batch 拒绝、Redis raw-body false conflict 回归、unsupported provider 拒绝及真实 Alipay RSA2
-  form-body 验签。
+- HTTP test 固定 batch/key 传递、缺失 batch 拒绝、等价 JSON 与 Redis timeout 均继续进入 durable authority、unsupported provider
+  拒绝及真实 Alipay RSA2 form-body 验签；真实 Redis integration 固定 marker-only 与坏记录非权威语义。
 - Real-PostgreSQL integration 固定 receipt replay、request drift conflict、并发 settlement、identity replay、同 key 下一批拒绝及
   expiry 不消费后续 hold。
 - Architecture/SQL gate 固定 canonical Schema、无 FK、receipt identity index、依赖方向与 route metadata。

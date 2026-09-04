@@ -41,9 +41,9 @@ Redis 仅对可重复 operation 最多尝试两次，并受 overall deadline 限
 | Reversal | stable reversal identity/receipt |
 | Expiry | `entitlement_command_receipt`：tenant + command + key、`batch_id` identity、normalized limit digest/result |
 
-Settlement/expiry route 刻意不让 raw-body Redis fingerprint 决定 replay/conflict：JSON 属性顺序以及省略/显式默认 `limit` 都不应
-改变语义。PostgreSQL 在事务中同时核对 key、command identity 与规范化 digest；成功后重放持久化 result。调用方遇到
-timeout/409/unknown 时复用原 identity，不得用新 batch/settlement 猜测重试。
+Redis idempotency hint 只写 tenant/route/key 的短 TTL presence marker，不接收 body/digest，也不判定 replay/conflict。Redis
+miss、timeout、坏记录、JSON 属性顺序以及省略/显式默认值都不改变 command 结果。PostgreSQL 在事务中核对 key、command
+identity 与规范化 digest；成功后重放持久化 result。调用方遇到 timeout/409/unknown 时复用原 identity，不得猜测性换 key。
 
 ## 4. Inbox、outbox 与 worker
 
@@ -92,8 +92,7 @@ publisher/consumer routing 尚未装配，不能把表存在当作已交付集�
 
 | 故障 | 当前行为 | 正确性约束 |
 |---|---|---|
-| Settlement/expiry Redis hint | 不参与这两个 command 的冲突裁决 | normalized PostgreSQL receipt 决定 replay/conflict |
-| 其他 Redis hint timeout | 忽略 hint，继续 PostgreSQL | durable receipt/fact 决定 replay/conflict |
+| Redis idempotency marker write/timeout | 忽略 marker 结果或错误，继续 PostgreSQL | normalized command 与 durable receipt/fact 决定 replay/conflict |
 | Redis expiry lease operation timeout | 已连接后允许 sweep 继续 | PostgreSQL batch receipt/row lock/status 防重复记账 |
 | Redis initial connect failure | API/expiry worker 当前启动失败 | 账务不降级；恢复 Redis 后按原 identity 重启 |
 | PostgreSQL unavailable | readiness 503；账务路径失败 | 不降级到 Redis/内存写事实 |

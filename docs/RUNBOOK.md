@@ -100,7 +100,7 @@ Billing owner，不执行临时 UPDATE。
 ## 6. Redis 不可用
 
 - API readiness 当前会失败；初始 Redis connect 失败也会阻止 API/expiry worker 启动。
-- 已连接后的 idempotency hint operation 可 fail-open 到 PostgreSQL；settlement/expiry 不使用 raw-body hint 裁决冲突。
+- 已连接后的 idempotency marker operation 可 fail-open 到 PostgreSQL；marker 不含 body/digest，也不裁决 replay/conflict。
 - 已连接后的 expiry lease operation 失败会继续 sweep，正确性依赖 PostgreSQL batch receipt、row lock/status；避免人为启动大量并发 sweep。
 - 检查 URL 是否明确为 `/4`、connect/read/overall timeout 与网络。
 - 恢复后不需要从 Redis 回填账务数据；不要把 Redis key 当作 receipt。

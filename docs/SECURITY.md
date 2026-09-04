@@ -71,8 +71,8 @@ runtime，其他仓库和人工查询使用独立最小权限角色。
 
 - 已定义 JSON route 使用 Zod strict schema；未知字段在主要 mutation 上被拒绝。
 - Idempotency-Key 限制为 8–128 printable ASCII；金额/currency/identity/limit 有边界检查。
-- Settlement/expiry 的 security boundary 是 tenant-scoped PostgreSQL receipt：key、command identity 与规范化 digest 必须同时一致；
-  raw-body Redis fingerprint 不得因字段顺序或默认值表达差异否决等价命令。
+- Mutation 的幂等 security boundary 是 tenant-scoped PostgreSQL receipt/owner fact：key、command identity 与规范化 digest 必须
+  一致；Redis 仅接收 scoped key-presence marker，不接收 body/digest，也不因字段顺序、坏记录或故障否决命令。
 - v1 外部字段 snake_case，错误归一为稳定 `billing.*` code；内部异常不回传 SQL、stack 或 provider 原文。
 - Provider body 以原始字符串保留用于签名，再解析为 object。
 - Request ID/trace ID 只接受有限长度 printable value，否则生成/回退本地 ID。

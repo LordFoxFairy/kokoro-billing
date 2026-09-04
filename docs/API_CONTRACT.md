@@ -93,8 +93,8 @@ v1 成功和失败分别为：
 - Expiry command name 是 `entitlement.credit-holds.expire`，identity 是 `batch_id`。Digest 覆盖版本化 command、batch 与规范化后的
   `limit`（缺省值 100）；成功结果保存精确 `expired_hold_ids`，重放不再次扫描。
 - 对这两个 command，同 identity 换 key 仍读取同一 receipt；同 key 换 batch/settlement 必须 409，不能消费下一批事实。
-- Settlement/expiry 不通过 Redis raw-body fingerprint 做冲突短路，因为字段顺序或显式/隐式默认值不是业务 payload drift；
-  PostgreSQL receipt 是唯一裁决。其他已接入 hint 的入口也必须以自己的 PostgreSQL fact/receipt 为最终权威。
+- Redis hint 只写 tenant/route/key 的短 TTL presence marker，不接收或比较请求 body/digest，也不返回 replay/conflict 裁决。
+  Redis miss、timeout、坏记录和 JSON 字段顺序不改变结果；规范化 command 与 PostgreSQL receipt/owner fact 是唯一裁决。
 - Provider webhook 不要求 caller 生成 Idempotency-Key，以签名后的稳定 external event ID 去重。
 - 只有已知 retryable 结果可使用原 key 重试；不确定结果先查询/reconcile，不创建新 key。
 

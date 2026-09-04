@@ -1,5 +1,5 @@
 import Fastify, { LogController, type FastifyInstance, type FastifyRequest } from 'fastify';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { CheckoutService } from '../../application/checkout/commands/checkout-service.js';
 import type { BillingSettlementService } from '../../application/payment/commands/billing-settlement-service.js';
@@ -10,7 +10,7 @@ import type { BillingReversalService } from '../../application/refund/commands/b
 import type { ParsedWebhookEvent } from '../../application/payment/ports/provider-types.js';
 import type { CatalogService } from '../../application/checkout/services/catalog-service.js';
 import type { SubscriptionQueryService } from '../../application/subscription/queries/subscription-query-service.js';
-import type { RedisIdempotencyHint } from '../../infrastructure/redis/idempotency-hint.js';
+import type { IdempotencyHint } from '../../application/ports/idempotency-hint.js';
 import type { BillingAdmissionService, BillingAdmissionResult } from '../../application/metering/services/billing-admission-service.js';
 import { WebhookError } from '../../application/payment/ports/provider-types.js';
 import { readSafeInteger } from '../../application/ports/safe-integer.js';
@@ -48,7 +48,7 @@ type AdmissionPort = Pick<BillingAdmissionService, 'create' | 'capture' | 'relea
 type WebhookParser = (provider: string, payload: unknown) => ParsedWebhookEvent;
 
 export type BillingHttpDependencies = {
-  readonly idempotencyHint?: Pick<RedisIdempotencyHint, 'claim'>;
+  readonly idempotencyHint?: IdempotencyHint;
   readonly catalog?: Pick<CatalogService, 'listSellable'>;
   readonly checkout: CheckoutPort;
   readonly usage: UsagePort;
@@ -130,29 +130,19 @@ const requireIdempotency = (request: FastifyRequest, reply: Parameters<typeof se
   return value;
 };
 
-const claimIdempotencyHint = async (
+const markIdempotencyKeySeen = async (
   dependencies: BillingHttpDependencies,
   request: FastifyRequest,
   key: string,
-  reply: Parameters<typeof sendError>[0],
   tenantId?: string,
-): Promise<boolean> => {
-  if (!dependencies.idempotencyHint) return true;
-  const raw = request.rawBody ?? JSON.stringify(request.body ?? null);
-  const fingerprint = createHash('sha256').update(raw).digest('hex');
+): Promise<void> => {
+  if (!dependencies.idempotencyHint) return;
   const scopedKey = `${request.method}:${request.url}:${tenantId ?? String(request.headers['x-kokoro-tenant-id'] ?? '')}:${key}`;
   try {
-    const claim = await dependencies.idempotencyHint.claim(scopedKey, fingerprint, 300);
-    // Redis is only an early conflict detector. Replays continue to PostgreSQL, which remains
-    // the authority and returns the durable result even after Redis TTL expiry.
-    if (claim === 'conflict') {
-      void reply.code(409).send({ error: { code: 'billing.idempotency_conflict', message: 'Idempotency-Key payload conflict' } });
-      return false;
-    }
+    await dependencies.idempotencyHint.markSeen(scopedKey, 300);
   } catch {
-    // Redis outage must not turn the fast-path hint into a billing availability dependency.
+    // A lossy optimization never changes command availability or durable semantics.
   }
-  return true;
 };
 
 type StorefrontContext = BillingUserContext | BillingBffContext;
@@ -348,7 +338,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     const key = requireIdempotency(request, reply); if (!key) return;
     const parsed = z.object({ offer_revision_id: z.string().min(1), amount_minor: positiveDecimalString, currency: z.string().regex(/^[A-Z]{3}$/u), quote_snapshot: z.record(z.string(), z.unknown()) }).strict().safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
-    if (!(await claimIdempotencyHint(dependencies, request, key, reply, context.tenantId))) return;
+    await markIdempotencyKeySeen(dependencies, request, key, context.tenantId);
     try {
       const result = await dependencies.checkout.create({ offerRevisionId: parsed.data.offer_revision_id, amountMinor: safeDecimal(parsed.data.amount_minor, 'amount_minor'), currency: parsed.data.currency, quoteSnapshot: toCamelCase(parsed.data.quote_snapshot), tenantId: context.tenantId, subjectId, idempotencyKey: key, expiresAt: new Date(Date.now() + 300_000) });
       const hosted = dependencies.checkout.createHostedSession ? await dependencies.checkout.createHostedSession(context.tenantId, result.checkoutId) : result;
@@ -363,7 +353,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     const key = requireIdempotency(request, reply); if (!key) return;
     const parsed = admissionSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
-    if (!(await claimIdempotencyHint(dependencies, request, key, reply, context.tenantId))) return;
+    await markIdempotencyKeySeen(dependencies, request, key, context.tenantId);
     try {
       const result = await dependencies.admission.create({ tenantId: context.tenantId, billingSubject: parsed.data.billing_subject, payerRef: parsed.data.payer_ref, featureKey: parsed.data.feature_key, surface: parsed.data.surface, invocationId: parsed.data.invocation_id, executionId: parsed.data.execution_id, meterKind: parsed.data.meter_kind, ...(parsed.data.requested_model_tier === undefined ? {} : { requestedModelTier: parsed.data.requested_model_tier }), idempotencyKey: key });
       return reply.code(201).send({ data: admissionWire(result), meta: { request_id: request.id } });
@@ -377,7 +367,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     const key = requireIdempotency(request, reply); if (!key) return;
     const parsed = acceptedReceiptSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
-    if (!(await claimIdempotencyHint(dependencies, request, key, reply, context.tenantId))) return;
+    await markIdempotencyKeySeen(dependencies, request, key, context.tenantId);
     try {
       const result = await dependencies.admission.capture(context.tenantId, request.params.admissionId, {
         invocationId: parsed.data.invocation_id, executionId: parsed.data.execution_id, acceptedProviderRef: parsed.data.accepted_provider_ref,
@@ -394,7 +384,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     const key = requireIdempotency(request, reply); if (!key) return;
     const body = z.object({ invocation_id: z.string().min(1), reason: z.string().min(1).max(255), service_receipt: z.record(z.string(), z.unknown()).optional() }).strict().safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: body.error.message } });
-    if (!(await claimIdempotencyHint(dependencies, request, key, reply, context.tenantId))) return;
+    await markIdempotencyKeySeen(dependencies, request, key, context.tenantId);
     try {
       const result = await dependencies.admission.release(context.tenantId, request.params.admissionId, body.data.reason, key);
       return reply.code(200).send({ data: admissionWire(result), meta: { request_id: request.id } });
@@ -408,7 +398,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     const key = requireIdempotency(request, reply); if (!key) return;
     const parsed = executionEventSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
-    if (!(await claimIdempotencyHint(dependencies, request, key, reply, context.tenantId))) return;
+    await markIdempotencyKeySeen(dependencies, request, key, context.tenantId);
     try {
       const result = await dependencies.admission.recordExecutionEvent({ tenantId: context.tenantId, eventId: parsed.data.event_id, eventType: parsed.data.event_type, executionId: parsed.data.execution_id, invocationId: parsed.data.invocation_id, occurredAt: new Date(parsed.data.occurred_at), receiptSchemaVersion: parsed.data.receipt_schema_version, ...(parsed.data.receipt === undefined ? {} : { receipt: parsed.data.receipt }) });
       return reply.code(202).send({ data: { event_id: result.eventId, status: result.status }, meta: { request_id: request.id } });
@@ -421,8 +411,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     const key = requireIdempotency(request, reply); if (!key) return;
     const parsed = targetSettlementSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
-    // PostgreSQL normalizes and authoritatively hashes this command. A raw-body Redis
-    // fingerprint could reject a semantically identical replay with reordered JSON fields.
+    await markIdempotencyKeySeen(dependencies, request, key, context.tenantId);
     try {
       const result = await dependencies.settlement.recordSettlement({ settlementId: parsed.data.settlement_id, externalPaymentRef: parsed.data.external_payment_ref, amountMinor: safeDecimal(parsed.data.amount_minor, 'amount_minor'), currency: parsed.data.currency, tenantId: context.tenantId, idempotencyKey: key, provider: parsed.data.provider });
       return reply.code(202).send({ data: { settlement_id: result.settlementId, accepted: result.accepted }, meta: { request_id: request.id } });
@@ -435,7 +424,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     const key = requireIdempotency(request, reply); if (!key) return;
     const parsed = targetRefundSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
-    if (!(await claimIdempotencyHint(dependencies, request, key, reply, context.tenantId))) return;
+    await markIdempotencyKeySeen(dependencies, request, key, context.tenantId);
     try {
       const reversalId = await dependencies.reversal.recordReversal({ tenantId: context.tenantId, settlementId: parsed.data.settlement_id, externalReversalRef: parsed.data.external_ref, amountMinor: safeDecimal(parsed.data.amount_minor, 'amount_minor'), reason: `${parsed.data.allocation_mode}:${parsed.data.reason}`, idempotencyKey: key });
       return reply.code(202).send({ data: { refund_id: reversalId, status: 'accepted' }, meta: { request_id: request.id } });
@@ -448,7 +437,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     const key = requireIdempotency(request, reply); if (!key) return;
     const parsed = targetRefundSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
-    if (!(await claimIdempotencyHint(dependencies, request, key, reply, context.tenantId))) return;
+    await markIdempotencyKeySeen(dependencies, request, key, context.tenantId);
     try {
       const refundId = await dependencies.reversal.recordReversal({ tenantId: context.tenantId, settlementId: parsed.data.settlement_id, externalReversalRef: parsed.data.external_ref, amountMinor: safeDecimal(parsed.data.amount_minor, 'amount_minor'), reason: `${parsed.data.allocation_mode}:${parsed.data.reason}`, idempotencyKey: key });
       return reply.code(202).send({ data: { refund_id: refundId, status: 'accepted' }, meta: { request_id: request.id } });
@@ -461,8 +450,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     const key = requireIdempotency(request, reply); if (!key) return;
     const parsed = expireCreditHoldsSchema.safeParse(request.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
-    // The durable receipt normalizes the default limit and binds the key to batch_id;
-    // Redis byte fingerprints are deliberately bypassed for this command.
+    await markIdempotencyKeySeen(dependencies, request, key, context.tenantId);
     try {
       return reply.code(202).send({ data: toSnakeCase(await dependencies.usage.expireExpiredHolds({ tenantId: context.tenantId, batchId: parsed.data.batch_id, idempotencyKey: key, ...(parsed.data.limit === undefined ? {} : { limit: parsed.data.limit }) })), meta: { request_id: request.id } });
     } catch (error) { return sendError(reply, error); }

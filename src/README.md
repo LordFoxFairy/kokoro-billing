@@ -10,7 +10,7 @@ application/credit/            account, grant, hold, ledger and redeem use cases
 application/metering/          pricing, admission and usage settlement
 application/reconcile/         reconciliation and admin read models
 infrastructure/postgres/       PostgreSQL pool, transactions and outbox adapter
-infrastructure/redis/          coordination and short-lived idempotency hint
+infrastructure/redis/          coordination and short-lived key-presence hint adapter
 infrastructure/providers/      payment provider adapters
 interfaces/http/               versioned HTTP transport and runtime validation
 bootstrap/                     composition root

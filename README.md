@@ -9,8 +9,8 @@ Reconcile 与 Billing command receipt；不拥有 Tenant、Identity、Agent Run�
 ## 边界
 
 - PostgreSQL 是支付、余额、账本、幂等 receipt、inbox/outbox 与对账事实源。
-- Redis 仅用于部分写入口的短 TTL idempotency hint 和 expiry worker lease；settlement/expiry 的 replay、冲突与结果完全由
-  PostgreSQL durable receipt 决定，Redis 故障或 raw-body 差异不得改变账务结果。
+- Redis 仅保存可丢失的短 TTL idempotency key-presence marker，并承担 expiry worker lease；它不保存或比较请求 body/digest，
+  不决定 replay、冲突或结果。规范化 command 与 PostgreSQL durable receipt/owner fact 是唯一裁决。
 - Browser 通过 Web/BFF 调用；BFF、Agent、Model、Studio、Payment worker 与 Scheduler 只能使用 Billing 拥有的协议，
   不读取本仓数据库。
 - Credit 是 Billing 内部 bounded context，不存在独立 Credit writer。

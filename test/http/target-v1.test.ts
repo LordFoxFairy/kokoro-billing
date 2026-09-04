@@ -4,19 +4,29 @@ import { createBillingServer } from '../../src/interfaces/http/server.js';
 const admissionResult = { admissionId: 'adm-1', holdId: 'hold-1', mode: 'credit' as const, pricePolicyRevisionId: 'price-1', amountMicros: '42', currency: 'CRD' as const, status: 'held' as const };
 const calls: { capture: unknown[]; release: unknown[]; events: unknown[] } = { capture: [], release: [], events: [] };
 const checkoutCalls: unknown[] = [];
+const checkoutReceiptAmounts = new Map<string, number>();
 const settlementCalls: unknown[] = [];
 const expiryCalls: unknown[] = [];
-const idempotencyFingerprints = new Map<string, string>();
+const lossyHintMarks: Array<{ readonly key: string; readonly ttlSeconds: number }> = [];
+
+const idempotencyHintDouble = {
+  markSeen: async (key: string, ttlSeconds: number) => {
+    if (key.includes('hint-timeout')) throw new Error('redis timeout');
+    lossyHintMarks.push({ key, ttlSeconds });
+  },
+};
 
 const server = createBillingServer({
-  idempotencyHint: { claim: async (key, fingerprint) => {
-    const previous = idempotencyFingerprints.get(key);
-    if (previous !== undefined) return previous === fingerprint ? 'replay' : 'conflict';
-    idempotencyFingerprints.set(key, fingerprint);
-    return 'claimed';
-  } },
+  idempotencyHint: idempotencyHintDouble,
   catalog: { listSellable: async () => ({ items: [{ id: 'offer-revision-1', key: 'pro', name: 'Pro', currency: 'USD', amountMinor: '1999', creditMicros: '1000000', billingInterval: 'month' }] }) },
-  checkout: { create: async (input) => { checkoutCalls.push(input); return { checkoutId: 'checkout-1', status: 'created', amountMinor: 1999, currency: 'USD', expiresAt: new Date('2030-01-01') }; } },
+  checkout: { create: async (input) => {
+    checkoutCalls.push(input);
+    const receiptKey = `${input.tenantId}:${input.idempotencyKey}`;
+    const priorAmount = checkoutReceiptAmounts.get(receiptKey);
+    if (priorAmount !== undefined && priorAmount !== input.amountMinor) throw new Error('billing.idempotency_conflict');
+    checkoutReceiptAmounts.set(receiptKey, input.amountMinor);
+    return { checkoutId: 'checkout-1', status: 'created', amountMinor: 1999, currency: 'USD', expiresAt: new Date('2030-01-01') };
+  } },
   usage: { expireExpiredHolds: async (input) => {
     expiryCalls.push(input);
     return { batchId: input.batchId, expiredHoldIds: ['hold-1'] };
@@ -120,6 +130,7 @@ describe('clean-build Billing v1 transport', () => {
   });
 
   it('replays a duplicate BFF checkout with the same key and rejects a changed payload', async () => {
+    const callsBefore = checkoutCalls.length;
     const payload = { offer_revision_id: 'offer-revision-1', amount_minor: '1999', currency: 'USD', quote_snapshot: { key: 'pro', credit_micros: '1000000' } };
     const first = await server.inject({ method: 'POST', url: '/v1/billing/checkout', headers: { ...bffHeaders, 'idempotency-key': 'bff-replay-123456' }, payload });
     const duplicate = await server.inject({ method: 'POST', url: '/v1/billing/checkout', headers: { ...bffHeaders, 'idempotency-key': 'bff-replay-123456' }, payload });
@@ -129,6 +140,40 @@ describe('clean-build Billing v1 transport', () => {
     expect(duplicate.json().data.checkout_id).toBe(first.json().data.checkout_id);
     expect(conflict.statusCode).toBe(409);
     expect(conflict.json().error.code).toBe('billing.idempotency_conflict');
+    expect(checkoutCalls).toHaveLength(callsBefore + 3);
+  });
+
+  it('delegates reordered checkout JSON to the durable command authority', async () => {
+    const callsBefore = checkoutCalls.length;
+    const marksBefore = lossyHintMarks.length;
+    const headers = { ...bffHeaders, 'idempotency-key': 'bff-reordered-123456' };
+    const first = await server.inject({ method: 'POST', url: '/v1/billing/checkout', headers, payload: {
+      offer_revision_id: 'offer-revision-1', amount_minor: '1999', currency: 'USD', quote_snapshot: { key: 'pro', credit_micros: '1000000' },
+    } });
+    const reordered = await server.inject({ method: 'POST', url: '/v1/billing/checkout', headers, payload: {
+      quote_snapshot: { credit_micros: '1000000', key: 'pro' }, currency: 'USD', amount_minor: '1999', offer_revision_id: 'offer-revision-1',
+    } });
+
+    expect(first.statusCode).toBe(201);
+    expect(reordered.statusCode).toBe(201);
+    expect(checkoutCalls).toHaveLength(callsBefore + 2);
+    expect(lossyHintMarks.slice(marksBefore)).toEqual([
+      { key: 'POST:/v1/billing/checkout:tenant-1:bff-reordered-123456', ttlSeconds: 300 },
+      { key: 'POST:/v1/billing/checkout:tenant-1:bff-reordered-123456', ttlSeconds: 300 },
+    ]);
+  });
+
+  it('continues to the durable command authority when the Redis hint times out', async () => {
+    const callsBefore = checkoutCalls.length;
+    const response = await server.inject({
+      method: 'POST',
+      url: '/v1/billing/checkout',
+      headers: { ...bffHeaders, 'idempotency-key': 'checkout-hint-timeout-123456' },
+      payload: { offer_revision_id: 'offer-revision-1', amount_minor: '1999', currency: 'USD', quote_snapshot: { key: 'pro', credit_micros: '1000000' } },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(checkoutCalls).toHaveLength(callsBefore + 1);
   });
 
   it('uses the v1 envelope for errors without a top-level requestId', async () => {

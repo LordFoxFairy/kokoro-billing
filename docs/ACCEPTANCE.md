@@ -133,7 +133,7 @@ TDD 证据至少包含：
 1. settlement 无 durable replay 时的失败测试；
 2. expiry 缺少 batch result/identity 时的失败测试；
 3. OpenAPI 缺 request body/provider enum 时的失败测试；
-4. Redis raw-body hint 对等价 payload 返回 409 的失败测试；
+4. Redis raw-body authority 曾对等价 payload 提前返回 409、且未调用 durable command 的失败测试；
 5. 实现后的 targeted GREEN 与最终全量 GREEN。
 
 只有以下条件同时满足才可报告本切片完成：

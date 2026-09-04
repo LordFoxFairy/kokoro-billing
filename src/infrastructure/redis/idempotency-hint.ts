@@ -1,5 +1,5 @@
 import { createClient, type RedisClientType } from 'redis';
-import { z } from 'zod';
+import type { IdempotencyHint } from '../../application/ports/idempotency-hint.js';
 import {
   DEFAULT_REDIS_TIMEOUT_POLICY,
   closeRedisWithDeadline,
@@ -8,15 +8,11 @@ import {
   type RedisTimeoutPolicy,
 } from './timeout-policy.js';
 
-type ClaimRecord = { readonly fingerprint: string; readonly response?: unknown };
-const claimRecordSchema = z.object({ fingerprint: z.string().min(1), response: z.unknown().optional() }).strict();
-export type IdempotencyClaim = 'claimed' | 'replay' | 'conflict';
-
 /**
- * Redis is only a fast-path hint. The PostgreSQL command receipt remains the final
- * idempotency authority and must be checked by every mutating use case.
+ * Redis stores only a lossy key-presence marker. PostgreSQL command receipts and
+ * owner facts remain the only replay and conflict authority.
  */
-export class RedisIdempotencyHint {
+export class RedisIdempotencyHint implements IdempotencyHint {
   private readonly client: RedisClientType;
   private connected = false;
 
@@ -50,41 +46,11 @@ export class RedisIdempotencyHint {
     await runIdempotentRedisOperation('ping', this.timeouts, () => this.client.ping());
   }
 
-  public async claim(key: string, fingerprint: string, ttlSeconds: number): Promise<IdempotencyClaim> {
-    const redisKey = this.key(key);
-    const value = JSON.stringify({ fingerprint });
-    const claimed = await runIdempotentRedisOperation('claim', this.timeouts, () => this.client.set(redisKey, value, { NX: true, EX: ttlSeconds }));
-    if (claimed === 'OK') return 'claimed';
-
-    const current = await this.readRecord(redisKey);
-    return current?.fingerprint === fingerprint ? 'replay' : 'conflict';
-  }
-
-  public async remember(key: string, response: unknown, ttlSeconds: number): Promise<void> {
-    const redisKey = this.key(key);
-    const current = await this.readRecord(redisKey);
-    if (!current) return;
-    const value = JSON.stringify({ fingerprint: current.fingerprint, response });
-    await runIdempotentRedisOperation('remember', this.timeouts, () => this.client.set(redisKey, value, { EX: ttlSeconds }));
-  }
-
-  public async read(key: string): Promise<ClaimRecord | null> {
-    return this.readRecord(this.key(key));
+  public async markSeen(key: string, ttlSeconds: number): Promise<void> {
+    await runIdempotentRedisOperation('mark-seen', this.timeouts, () => this.client.set(this.key(key), 'seen', { NX: true, EX: ttlSeconds }));
   }
 
   private key(key: string): string {
     return `${this.namespace}:${key}`;
-  }
-
-  private async readRecord(redisKey: string): Promise<ClaimRecord | null> {
-    const value = await runIdempotentRedisOperation('read', this.timeouts, () => this.client.get(redisKey));
-    if (value === null) return null;
-    try {
-      const parsed: unknown = JSON.parse(value);
-      const record = claimRecordSchema.safeParse(parsed);
-      return record.success ? record.data : null;
-    } catch {
-      return null;
-    }
   }
 }

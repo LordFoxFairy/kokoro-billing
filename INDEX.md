@@ -48,7 +48,7 @@ domain -> no HTTP/PostgreSQL/Redis/provider SDK
 - `src/config/`：环境变量解析、auth/provider/timeout 启动约束。
 - `src/infrastructure/auth/`：JWT、service/BFF/admin context 验证。
 - `src/infrastructure/postgres/`：pool、request/worker-scoped transaction、JSON 解析、outbox worker。
-- `src/infrastructure/redis/`：非权威 idempotency hint、lease、deadline/retry policy；settlement/expiry 不使用 raw-body hint 判定冲突。
+- `src/infrastructure/redis/`：非权威 idempotency key-presence marker、lease、deadline/retry policy；不接收 body/digest，不判定 replay/conflict。
 - `src/infrastructure/metrics.ts`、`worker-metrics.ts`：HTTP 与 worker Prometheus metrics。
 - `src/infrastructure/providers/`：Stripe/Alipay/WeChat webhook adapter 与 Stripe checkout adapter。
 
