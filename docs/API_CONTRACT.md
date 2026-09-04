@@ -1,64 +1,124 @@
-# Billing API Contract
+# kokoro-billing API 契约策略
 
-Canonical machine-readable contract: [`../contract/openapi/v1/openapi.yaml`](../contract/openapi/v1/openapi.yaml).
+Canonical machine-readable source：[`../contract/openapi/v1/openapi.yaml`](../contract/openapi/v1/openapi.yaml)。本文件解释
+owner、身份、幂等、错误与 consumer 规则，不复制字段级 Schema。Contract 的 version/generation/breaking/provenance 见
+[`../contract/README.md`](../contract/README.md)。
 
-## v1 surfaces
+## Visibility 与版本
 
-| Surface | Routes | Identity |
+- Owner：`kokoro-billing`。
+- Visibility：全部 operation 为 `internal-owner`。Provider webhook 虽接收外部 provider 流量，仍是 Billing 的受控 ingress，
+  不是 Kokoro Developer Product API。
+- Stability：当前 operation 标为 `stable`，wire document `info.version=1.0.0`。
+- 非探针路径必须位于 `/v1/**`；`/healthz`、`/readyz`、`/metrics` 是内部运行端点。
+- Root Developer API 门户只发布 BFF 的 `public` contract，不发布本契约。
+
+## Operation 与身份
+
+| Operation | 当前 caller / permission | Idempotency metadata |
 |---|---|---|
-| User/BFF | `/v1/commerce/catalog`, `/v1/billing/me/credit-account`, `/v1/billing/me/credit-ledger`, `/v1/billing/me/subscriptions`, `/v1/billing/checkout` | User routes: IAM JWT + tenant match; catalog/checkout also accept the trusted `web-bff` service-auth alternative |
-| Internal execution | `/v1/internal/entitlement/admissions`, `/capture`, `/release`, `/v1/internal/billing/execution-events` | registered Agent/Model/Studio service |
-| Internal payment | `/v1/internal/payment/settlements/accept`, `/v1/internal/payment/refunds/accept` | Payment worker service |
-| Scheduler command | `/v1/internal/commands/expire-credit-holds` | Scheduler service only |
-| Provider | `/v1/webhooks/payment/{provider}` | provider signature + account mapping |
-| Admin | `/v1/admin/billing/refunds` | operator proxy + billing admin role |
+| `GET /healthz`、`GET /readyz`、`GET /metrics` | network policy 下的 probe/scraper；应用层无 auth | `inherent` |
+| `GET /v1/commerce/catalog` | IAM user，或完整 `web-bff` service-auth | `read-only` |
+| `GET /v1/billing/me/credit-account` | IAM user JWT + matching tenant | `read-only` |
+| `GET /v1/billing/me/credit-ledger` | IAM user JWT + matching tenant | `read-only` |
+| `GET /v1/billing/me/subscriptions` | IAM user JWT + matching tenant | `read-only` |
+| `POST /v1/billing/checkout` | IAM user，或含 subject 的完整 `web-bff` service-auth | required header + checkout fact/hash |
+| `POST /v1/internal/entitlement/admissions` | `agent`、`model`、`studio` | required + durable Billing receipt |
+| `POST .../admissions/{admissionId}/capture` | `agent`、`model`、`studio` | required + durable Billing receipt |
+| `POST .../admissions/{admissionId}/release` | `agent`、`model`、`studio` | required + durable Billing receipt |
+| `POST /v1/internal/billing/execution-events` | `agent`、`model`、`studio` | required header；event ID + payload hash 是 durable identity |
+| `POST /v1/internal/payment/settlements/accept` | 当前实现允许 `payment-worker` 或 `scheduler` | required header；settlement/external identity 收敛 |
+| `POST /v1/internal/payment/refunds/accept` | `payment-worker` | required + reversal fact/receipt |
+| `POST /v1/internal/commands/expire-credit-holds` | `scheduler` | required header；状态条件使重复过期收敛 |
+| `POST /v1/webhooks/payment/{provider}` | provider-specific signature + account-to-tenant mapping | provider + external event ID |
+| `POST /v1/admin/billing/refunds` | trusted admin proxy + role `billing.admin` | required + reversal fact/receipt |
 
-Mutations require `Idempotency-Key`. Tenant comes from `X-Kokoro-Tenant-Id`; it is never selected from request JSON, query parameters, provider payload, `account_id`, or runtime namespace. Monetary and credit values are decimal strings. Unknown execution outcomes retain an active hold and are reconciled later.
+`X-Kokoro-Tenant-Id` 是受信 tenant context，不从 JSON、query、provider payload、account ID 或 runtime namespace 推导。
 
-Internal execution events trust only the authenticated caller service identity, internal credential and tenant context. Their JSON body contains event identity, execution/invocation identity, occurrence time, receipt schema version and optional receipt; it has no message-signature field. Provider webhooks remain a separate external trust boundary with provider-specific signature verification before persistence.
+## Storefront 的两条互斥身份路径
 
-### Storefront service-auth alternative
-
-`GET /v1/commerce/catalog` and `POST /v1/billing/checkout` keep the public IAM JWT path and additionally expose the owner route to the registered Web BFF. Billing selects the service path whenever an internal marker is present; it never falls back to user authentication after a failed BFF attempt.
-
-The BFF request must contain all of the following:
+用户路径使用 IAM RS256 JWT；JWT 的 `tenant_id` 必须与 `X-Kokoro-Tenant-Id` 相同，subject 来自 `sub`。BFF 路径同时要求：
 
 ```text
 X-Kokoro-Service: web-bff
-X-Kokoro-Internal-Secret: INTERNAL_SERVICE_SECRET
-Authorization: Bearer BFF_SERVICE_TOKEN
-X-Kokoro-Tenant-Id: TENANT_ID
+X-Kokoro-Internal-Secret: TOKEN
+Authorization: Bearer TOKEN
+X-Kokoro-Tenant-Id: TENANT
+X-Kokoro-Subject: SUBJECT    # checkout 必需；catalog 可省略
 ```
 
-Checkout also requires `X-Kokoro-Subject`, which is the trusted subject resolved by the BFF. The catalog only needs the tenant context. `BILLING_BFF_SERVICE_TOKEN` configures the required, independent bearer. A wrong service, forged credential, missing required header, invalid tenant, or invalid checkout subject returns a v1 error with `billing.service_auth_failed` or `billing.service_subject_required` and HTTP `403`.
+一旦请求包含内部 marker，Billing 就锁定 service-auth 分支；失败不会降级为用户 JWT。BFF alternative 不适用于
+`/v1/billing/me/*`。
 
-The service-auth alternative is not enabled for `/v1/billing/me/*`; those routes remain user JWT-only.
+## Internal、admin 与 webhook
 
-所有列表接口使用 opaque `cursor` 与 `next_cursor`，游标绑定 tenant、资源和 filter；损坏或越界游标返回统一的
-`billing.invalid_cursor`。
+- Internal service 必须携带 registered `X-Kokoro-Service`、`X-Kokoro-Internal-Secret` 与 tenant context；每条 route 再做
+  allow-list。
+- Admin 必须由 `X-Kokoro-Service: admin`、独立 proxy secret、operator identity 和精确 role `billing.admin` 组成。
+- Provider webhook 在持久化前做 provider-specific raw-body signature 验证。生产 `jwks` 模式从 provider account mapping
+  解析 tenant；payload tenant 若存在必须一致。
+- Execution event 不携带第二套 caller-selected signature 字段；信任来自已认证 service context。
 
-Success envelope:
+## Envelope、命名与数值
+
+v1 成功和失败分别为：
 
 ```json
 {"data": {}, "meta": {"request_id": "req_TARGET"}}
 ```
 
-所有 `/v1` 成功响应只包含 `data` 与 `meta` 两个顶层字段；`requestId` 不再作为 v1 顶层字段返回。v1 `data` 内的公开字段统一使用 snake_case，例如 catalog 使用 `offers[].amount_minor`、`offers[].credit_micros`、`offers[].billing_interval`，checkout 请求使用 `offer_revision_id`、`amount_minor` 与 `quote_snapshot`。
-
-`quote_snapshot` 至少包含 `key` 与 `credit_micros`，可包含 `name` 及其他报价快照字段。传输层将 snake_case 快照适配到既有 CheckoutService 所需的 `key`、`creditMicros`、`name` 等内部字段后再调用服务。
-
-非 `/v1` 路径不属于 Billing API；旧 route alias 已删除。任何新资源必须先进入本文件和
-`contract/openapi/v1/openapi.yaml`，再实现对应的 handler 与 parity test。
-
-Error envelope:
-
 ```json
 {"error": {"code": "billing.invalid_request", "message": "...", "retryable": false, "details": {}}, "meta": {"request_id": "req_TARGET"}}
 ```
 
-Service-auth error codes:
+外部 JSON 使用 snake_case。金额与 credit 通过 decimal string 传输，进入 application 前检查 JavaScript safe integer 范围；
+数据库使用整数。当前例外是 ledger `created_at` 使用 epoch milliseconds，见“缺口”。
+
+## 幂等、并发与重试
+
+- 声明 `required` 的 operation 要求 8–128 个 printable ASCII 字符的 `Idempotency-Key`。
+- 同一 tenant/command/key + 同一 payload 返回原事实；同 key 不同 payload 返回 `billing.idempotency_conflict`（409）。
+- Redis claim 仅提前发现冲突；Redis timeout/failure 时继续访问 PostgreSQL durable fact。
+- Provider webhook 不要求 caller 生成 Idempotency-Key，以签名后的稳定 external event ID 去重。
+- 只有已知 retryable 结果可使用原 key 重试；不确定结果先查询/reconcile，不创建新 key。
+
+## 分页
+
+Catalog、credit ledger、subscription 使用 `limit`（1–100）与 opaque `cursor`。Cursor 绑定 resource scope 和 tenant；ledger
+还绑定 subject 及稳定排序键。损坏、跨 tenant/subject 或非法 cursor 返回 `billing.invalid_cursor`。Consumer 不解析 cursor，
+只回传 `next_cursor`。
+
+## 错误策略
+
+稳定错误 namespace 为 `billing.*`。当前重要类别：
+
+| 类别 | 示例 | HTTP/重试语义 |
+|---|---|---|
+| 身份/权限 | `billing.unauthorized`、`billing.forbidden`、`billing.service_auth_failed` | 401/403；修正身份，不自动重试 |
+| 输入/协议 | `billing.invalid_request`、`billing.idempotency_required`、`billing.invalid_cursor` | 400；修正请求 |
+| 额度 | `billing.insufficient_credit` | 402；业务终态 |
+| 冲突/未知 | `billing.idempotency_conflict`、`billing.command_in_progress`、`billing.command_unknown` | 409；按原 key 查询/重放/对账 |
+| 依赖/配置 | `billing.dependencies_not_ready`、`billing.*_not_configured` | 503；受控退避 |
+| 内部错误 | `billing.internal_error` | 500；不泄漏 provider/SQL/stack |
+
+Transport 会补齐 `retryable`、`details` 与 `meta.request_id`；consumer 只依赖稳定 code，不解析 message。
+
+## Contract-first 变更
 
 ```text
-billing.service_auth_failed       403
-billing.service_subject_required  403
+Billing OpenAPI source
+  -> contract governance/route/shape checks
+  -> implementation + transport/contract tests
+  -> versioned artifact (commit/tag + digest)
+  -> pinned consumer update
+  -> integration/smoke
 ```
+
+不手改 generated artifact，不从 Root 或 consumer 复制第二份 editable DTO。
+
+## 当前 contract 缺口
+
+- 多个 mutation 尚未在 OpenAPI 中声明完整 request body、精确 response 与完整错误集合；部分 response 使用 generic schema。
+- 当前 checker 不执行 historical OpenAPI breaking diff，也没有机器 provenance manifest/artifact publish job。
+- Ledger `created_at` 是 epoch milliseconds，不符合平台 RFC 3339 UTC 目标。
+- Route parity 不能证明运行时 Zod 与 OpenAPI 字段语义完全一致；在补齐 shape 前需人工逐 route review。

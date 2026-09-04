@@ -1,57 +1,82 @@
 # kokoro-billing SLO 与告警基线
 
-本文定义生产目标、测量口径和告警阈值，不代表当前环境已经达到这些数值。上线前必须由生产遥测建立基线；
-看板应同时展示目标、实际值、样本量和统计窗口，不使用测试或本地 fixture 数据冒充生产实测。
+本文定义生产目标和测量口径，不代表当前环境已经达到这些数值。仓库目前没有生产 traffic、dashboard、alert rule 或
+SLO attainment 证据；任何达标声明必须附带部署版本、统计窗口、样本量和可复核数据源。
 
-## SLI 与目标
+## 1. SLI 与目标
 
-| Surface | Availability SLI / 30 天目标 | 延迟或队列目标 | 统计口径 |
+| Surface | 30 天目标 | 延迟/队列目标 | 统计口径 |
 |---|---|---|---|
-| Billing API | 合格请求中非 Billing 5xx 的比例 `>= 99.90%` | p95 `<= 300 ms`，p99 `<= 800 ms` | `/v1/**`；排除客户端取消、契约内 4xx 与 `/healthz`、`/readyz`、`/metrics` |
-| Ledger read/write | 合格 ledger 读请求成功率 `>= 99.95%`；已确认账务命令原子写入成功率 `>= 99.99%` | 读 p95 `<= 200 ms`，p99 `<= 500 ms`；账务事务 p95 `<= 500 ms`，p99 `<= 1.5 s` | 读由 HTTP histogram；写由命令结果与 journal/receipt 对账；projection drift 必须为 `0` |
-| Outbox | 在投递期限内完成 publish 的 outbox 比例 `>= 99.90%` | pending age p95 `<= 30 s`，p99 `<= 120 s` | `created_at` 到 published/dead-letter 终态；按 outbox 类型分组，不把重试重复计为新事件 |
-| Payment event | 已通过签名并持久化的 provider event 最终处理成功率 `>= 99.95%` | webhook 接收 p95 `<= 150 ms`、p99 `<= 500 ms`；received→processed p95 `<= 30 s`、p99 `<= 120 s` | 排除签名失败、tenant mismatch 和 provider 明确拒绝的无效事件；重复事件按稳定 provider event ID 去重 |
+| Billing API | 合格请求 availability `>=99.90%` | p95 `<=300 ms`，p99 `<=800 ms` | `/v1/**`；排除客户端取消、契约内 4xx 与运行探针 |
+| Ledger read/write | 读 `>=99.95%`；已确认原子写入 `>=99.99%` | 读 p95 `<=200 ms`；事务 p95 `<=500 ms`、p99 `<=1.5 s` | read HTTP；write receipt/journal/reconcile；drift 必须为 0 |
+| Payment outbox | deadline 内 publish `>=99.90%` | pending age p95 `<=30 s`、p99 `<=120 s` | created 到 published/dead-letter；retry 不计新 event |
+| Provider event | 已验证并入 inbox 的事件最终处理 `>=99.95%` | ingress p95 `<=150 ms`；received→processed p95 `<=30 s`、p99 `<=120 s` | 按稳定 provider event ID 去重，排除签名失败/无效事件 |
+| Execution event | 已认证并入 inbox 的事件最终处理 `>=99.95%` | received→processed p95 `<=30 s`、p99 `<=120 s` | tenant + event ID 去重；unknown 单独计数 |
+| Credit expiry | 到期后 5 分钟内收敛 `>=99.90%` | oldest overdue hold p99 `<=300 s` | active hold expires_at 到 captured/released/expired |
 
-延迟分位数使用滚动 30 分钟窗口告警、30 天窗口报告；低流量窗口必须同时展示样本量，样本不足时只告警绝对失败或
-队列年龄。Availability 按请求/事件计数，不用进程存活时间代替。
+Availability 以请求/event 计数，不用进程 uptime 代替。低流量窗口同时展示样本量；样本不足时只用绝对 failure、oldest age
+和账务不变量 page。
 
-## Provider 错误 SLI
+## 2. 当前 instrumentation
 
-- `provider_retryable_error_ratio = retryable provider failures / provider attempts`，按 provider、operation 分组。
-- 客户主动取消、支付方式拒绝等契约内业务终态不计入 provider 可用性错误；连接/读取/总 deadline、HTTP 429、
-  provider 5xx 与连接重置计入。
-- warning：任一 provider 在至少 20 次尝试下，10 分钟错误率 `> 5%`。
-- critical：任一 provider 在至少 20 次尝试下，5 分钟错误率 `> 10%`，或 15 分钟连续无成功请求。
-- 重试只针对具备稳定幂等键的可重试操作；告警和 SLI 同时观察初次尝试与最终结果，避免重试掩盖退化。
+| 信号 | 当前状态 | 数据源 |
+|---|---|---|
+| HTTP count/status | 已实现 | `billing_http_requests_total` |
+| HTTP latency | 已实现 | `billing_http_request_duration_seconds` |
+| Payment worker result | 已实现 | `billing_worker_results_total{result}` |
+| Payment oldest pending | 已实现 | `billing_worker_oldest_pending_age_seconds` |
+| Expiry run completed/skipped | 已实现 | `billing_expiry_runs_total{result}` |
+| Default process metrics | 已实现 | API/worker Prometheus registry |
+| Provider retryable error ratio | 缺口 | 无直接 metric |
+| Execution event lag/oldest | 缺口 | 无直接 metric |
+| Entitlement outbox lag | 缺口 | 未装配 publisher/metric |
+| Reconciliation drift | 缺口 | 有 query/report，无 runtime metric |
+| Receipt/journal invariant | 缺口 | 无连续 metric/alert |
+| PostgreSQL pool/lock saturation | 缺口 | 依赖外部数据库 telemetry，仓内未声明 dashboard |
 
-## 错误预算
+Metrics 存在只证明可采集，不证明 scraper、dashboard 或 alert 已部署。
 
-| 目标 | 30 天最大不可用预算（时间等价值） | 事件/请求预算 |
+## 3. Provider 错误 SLI
+
+`provider_retryable_error_ratio = retryable provider failures / provider attempts`，按 provider/operation 分组。Client cancel、
+支付方式拒绝等业务终态不计入 provider availability；connect/read/overall timeout、429、5xx 与连接重置计入。
+
+- Warning：至少 20 次尝试时，10 分钟比率 `>5%`。
+- Critical：至少 20 次尝试时，5 分钟比率 `>10%`，或 15 分钟无成功。
+- 初次尝试与最终结果分开观测，避免 retry 掩盖退化。
+
+该 metric 当前未实现，阈值是目标门禁。
+
+## 4. 错误预算
+
+| 目标 | 30 天时间等价值 | 事件/请求预算 |
 |---|---:|---:|
-| 99.90% | 43 分 49 秒 | 最多 0.10% 不合格事件/请求 |
-| 99.95% | 21 分 55 秒 | 最多 0.05% 不合格事件/请求 |
-| 99.99% | 4 分 23 秒 | 最多 0.01% 不合格事件/请求 |
+| 99.90% | 43 分 49 秒 | 0.10% |
+| 99.95% | 21 分 55 秒 | 0.05% |
+| 99.99% | 4 分 23 秒 | 0.01% |
 
-预算是发布决策约束，不是允许丢账。Ledger 重复、丢失、跨 tenant 污染或 projection drift 属于账务不变量事故；出现
-一例即按 critical 处理，不以剩余 availability 预算抵扣。30 天预算消耗 `>= 50%` 时暂停非必要风险发布，`>= 75%`
-时只允许可靠性/安全修复，耗尽时冻结常规发布直至恢复窗口并完成复盘。
+Ledger 重复、丢失、跨 tenant 污染、receipt mismatch 或任一 reconciliation drift 是正确性事故，出现一例立即 critical，
+不由 availability 预算抵扣。30 天预算消耗 `>=50%` 暂停非必要高风险发布，`>=75%` 只允许可靠性/安全修复，耗尽时冻结
+常规发布并复盘。
 
-## 告警阈值
+## 5. 告警目标
 
 | 信号 | Warning | Critical / page |
 |---|---|---|
-| Availability burn rate | 6 小时窗口 `> 2x` 持续 30 分钟 | 1 小时 `> 14.4x` 且 5 分钟同样超限；或 6 小时 `> 6x` 且 30 分钟同样超限 |
-| API/ledger latency | p95 超目标 15 分钟 | p99 超目标 10 分钟，或 deadline 错误率 5 分钟 `> 2%` |
-| Outbox pending age | oldest pending `> 60 s` 持续 10 分钟 | oldest pending `> 300 s` 持续 5 分钟，或新增 dead-letter `> 0` |
-| Payment event lag | p95 `> 60 s` 持续 10 分钟 | p99 `> 300 s` 持续 5 分钟，或最老 received event `> 10 min` |
-| Provider errors | 10 分钟 `> 5%`（满足最小样本） | 5 分钟 `> 10%`（满足最小样本）或 15 分钟无成功 |
-| Ledger correctness | reconciliation drift 始终为 `0` | 任一 drift、重复 journal sequence、跨 tenant 关联或 receipt/journal 不一致立即 page |
+| Availability burn | 6h `>2x` 持续 30m | 1h `>14.4x` 且 5m 同超；或 6h `>6x` 且 30m 同超 |
+| API/ledger latency | p95 超目标 15m | p99 超目标 10m；或 deadline error 5m `>2%` |
+| Payment outbox | oldest `>60 s` 持续 10m | oldest `>300 s` 持续 5m；或新增 dead-letter |
+| Execution event | p95 `>60 s` 持续 10m | oldest received `>10 min` 或 failed 增长 |
+| Credit expiry | oldest overdue `>120 s` | oldest overdue `>300 s` 或 projection drift |
+| Provider errors | 10m `>5%` 且样本足 | 5m `>10%` 且样本足；或 15m 无成功 |
+| Ledger correctness | drift 始终为 0 | 任一 drift/重复 sequence/跨 tenant/receipt mismatch |
 
-告警必须带 `service`、`operation`、`request_id`/`trace_id`（可用时）、provider、队列类型、最老事件年龄与部署版本；
-日志和告警标签不得包含 token、签名、secret 或完整支付载荷。
+告警至少携带 service、operation、部署版本、provider/queue、oldest age 与可用的 request_id/trace_id；不得把 tenant、token、
+signature、secret 或完整 payment payload 放入高基数 label。
 
-## 响应与 Runbook
+## 6. 发布与复核
 
-处置步骤见 [kokoro-billing 运行说明](RUNBOOK.md)：先判定 API、PostgreSQL、Redis、provider 或 worker 故障域，再按
-outbox/payment event/ledger 专项步骤止损、重放或对账。所有重放必须使用原稳定幂等标识；账务不变量告警禁止通过
-手工改余额消警。
+- 周报/发布评审展示目标、实际值、样本量、窗口、缺失数据和 deploy digest。
+- Alert rule 与 dashboard 变更需代码审查；当前仓库尚无这些配置。
+- 每次 critical 事件关联 [`RUNBOOK.md`](RUNBOOK.md)、timeline、影响 tenant 范围、账务不变量检查与 follow-up owner。
+- SLO 目标只有在至少一个完整 30 天生产窗口后才可评估；本地/CI 数据不参与达标计算。

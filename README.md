@@ -1,71 +1,97 @@
 # kokoro-billing
 
-Kokoro 的商业账务子仓库，统一承载 Payment、Subscription、Credit、Entitlement 和 Metering。
-Credit 不拆成独立仓库；Billing 是余额、授权、扣费和支付事实的唯一 owner。
+Kokoro 的 Billing 事实 owner。仓库拥有 Payment、Subscription、Checkout、Refund、Credit、Ledger、Metering、
+Reconcile 与 Billing command receipt；不拥有 Tenant、Identity、Agent Run、ScheduledTask 或对象存储事实。
 
-## 设计边界
+> 当前状态、已验证能力与缺口见 [`docs/CURRENT.md`](docs/CURRENT.md)。本文是启动入口，不把目标架构或本地测试结果
+> 表述为生产证据。
 
-- **Payment**：checkout、provider account、provider event inbox、settlement、subscription period 和 reversal。
-- **Entitlement/Credit**：catalog、acquisition、fulfillment、grant、hold、journal 和 usage settlement。
-- 两个 bounded context 共享进程，但不共享 repository、表 owner 或事务边界。
-- PostgreSQL 是账务事实；Redis 只用于短 TTL 幂等提示和异步协调，不承载余额、账本或支付状态。
-- Scheduler 只调用 Billing 的过期命令，不连接 Billing 数据库；Agent/Model 通过 admission、capture、release 和 execution event 接入。
+## 边界
 
-## v1 HTTP 契约
+- PostgreSQL 是支付、余额、账本、幂等 receipt、inbox/outbox 与对账事实源。
+- Redis 仅用于短 TTL idempotency hint 和 expiry worker lease；Redis 故障不得改变账务结果。
+- Browser 通过 Web/BFF 调用；BFF、Agent、Model、Studio、Payment worker 与 Scheduler 只能使用 Billing 拥有的协议，
+  不读取本仓数据库。
+- Credit 是 Billing 内部 bounded context，不存在独立 Credit writer。
+- 唯一 canonical Schema 是 [`database/schema.sql`](database/schema.sql)；V1 只支持空数据库安装，不维护 migration 链。
 
-唯一机器可读契约是 [`contract/openapi/v1/openapi.yaml`](contract/openapi/v1/openapi.yaml)。HTTP 只暴露以下版本化资源：
+## 五分钟启动
 
-| Surface | Routes |
-|---|---|
-| Operations | `GET /healthz`、`GET /readyz`、`GET /metrics` |
-| User/BFF | `GET /v1/commerce/catalog`、`GET /v1/billing/me/credit-account`、`GET /v1/billing/me/credit-ledger`、`GET /v1/billing/me/subscriptions`、`POST /v1/billing/checkout` |
-| Internal execution | `POST /v1/internal/entitlement/admissions`、`.../{admissionId}/capture`、`.../{admissionId}/release`、`POST /v1/internal/billing/execution-events` |
-| Internal payment | `POST /v1/internal/payment/settlements/accept`、`POST /v1/internal/payment/refunds/accept` |
-| Scheduler command | `POST /v1/internal/commands/expire-credit-holds` |
-| Provider | `POST /v1/webhooks/payment/{provider}` |
-| Admin | `POST /v1/admin/billing/refunds` |
-
-所有 mutation 要求 `Idempotency-Key`。所有 v1 JSON 响应使用 `{data, meta}` 或 `{error, meta}`，`meta.request_id` 是唯一请求追踪字段，外部 JSON 使用 snake_case。租户只来自受信 `X-Kokoro-Tenant-Id` 上下文，不从 body、query、provider payload 或 caller-selected account 取值。
-
-旧的无版本 API、camelCase HTTP payload、旧 `tenant_id` header 和兼容 route alias 已移除；新增接口必须先更新 OpenAPI，再实现 route parity 和 contract test，不再新增第二套兼容协议。
-
-## 运行时组合
-
-唯一服务入口是 [`src/main.ts`](src/main.ts)。它只装配当前 v1 HTTP surface 所需的 application services；Credit redeem、catalog admin、usage pricing admin、reconciliation 和 provider-event admin 保留为 Billing 内部业务能力，不能通过未登记的旧 HTTP 路径暴露。
-
-生产使用已编译入口：
+要求 Node.js 22、`pnpm@11.25.0`，并复用 Root 的 PostgreSQL 与 Redis。Billing 使用独立 PostgreSQL database/schema
+和 Redis logical DB `4`。
 
 ```bash
-node dist/src/main.js
-node dist/scripts/apply-schema.js
-node dist/scripts/process-payment-events.js
-node dist/scripts/expire-credit-holds.js
+cd /Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing
+pnpm install --frozen-lockfile
+cp .env.example .env
 ```
 
-本地开发入口：
+将 `.env` 中的 `DATABASE_URL`、`REDIS_URL` 和凭据占位符替换为本地 fixture。`db:apply-schema` 会拒绝已有业务表的
+database，因此只对 Billing 的空 database 执行：
 
 ```bash
-BILLING_AUTH_MODE=internal-header DATABASE_URL=TARGET REDIS_URL=TARGET pnpm dev
+set -a; source .env; set +a
+pnpm db:apply-schema
+pnpm dev
 ```
 
-生产必须使用 `BILLING_AUTH_MODE=jwks`、IAM 签发的 RS256 JWT、独立 internal service secret 和 operator proxy secret。Web BFF 的 catalog/checkout owner call 还必须通过 `web-bff` service-auth；浏览器不直连 internal、provider 或 admin owner route。
+默认监听 `127.0.0.1:4245`：
+
+```bash
+curl --fail http://127.0.0.1:4245/healthz
+curl --fail http://127.0.0.1:4245/readyz
+```
+
+`BILLING_AUTH_MODE=internal-header` 只用于本地 fixture；`NODE_ENV=production` 强制使用 `jwks`。
+
+## 契约
+
+Canonical machine-readable source 是
+[`contract/openapi/v1/openapi.yaml`](contract/openapi/v1/openapi.yaml)，治理与 consumer 流程见
+[`contract/README.md`](contract/README.md)。Billing 的全部 HTTP operation 都是 `internal-owner`；即使 storefront route
+可由受信 BFF 代调用，也不是 Root Developer API 门户的 `public` Product API。
+
+当前实现包含 17 个 HTTP operation：3 个运行探针/指标、5 个用户或 BFF surface、4 个 execution/admission surface、
+2 个 payment worker surface、1 个 Scheduler command、1 个 provider webhook 和 1 个 admin refund command。
+字段级请求/响应以 OpenAPI 为准；人类可读的身份、幂等、错误与分页规则见
+[`docs/API_CONTRACT.md`](docs/API_CONTRACT.md)。
+
+## 运行单元
+
+| 单元 | 源码入口 | 当前职责 |
+|---|---|---|
+| Billing API | `src/main.ts` | Fastify v1 transport、auth、PostgreSQL/Redis/provider 装配、health/ready/metrics |
+| Payment event worker | `scripts/process-payment-events.ts` | 领取 `payment_outbox`，处理 provider event，重试或 dead-letter |
+| Execution event batch | `scripts/process-execution-events.ts` | 处理 `entitlement_execution_event.status=received` |
+| Credit expiry worker | `scripts/expire-credit-holds.ts` | 在 Redis lease 下过期 hold/grant；账务修改仍在 PostgreSQL 事务中 |
+| Schema installer | `scripts/apply-schema.ts` | 在空 PostgreSQL database 安装 canonical Schema |
+
+构建后的入口位于 `dist/src/` 与 `dist/scripts/`，`dist/` 不是可编辑事实源。
 
 ## 质量门禁
 
 ```bash
-pnpm verify
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm build
+pnpm sql:check
+pnpm contract:check
 ```
 
-该命令依次执行 lint、typecheck、build、SQL 命名检查、OpenAPI route parity 和 Vitest。真实 PostgreSQL/Redis 验证需显式提供 fixture：
+真实依赖验证必须显式连接 PostgreSQL/Redis；被跳过的 integration test 不算依赖验收：
 
 ```bash
-DATABASE_URL=TARGET pnpm db:apply-schema
-DATABASE_URL=TARGET pnpm test:integration
-REDIS_TEST_URL=TARGET pnpm exec vitest run test/integration/redis-idempotency-hint.test.ts test/integration/redis-lease.test.ts --no-file-parallelism
+DATABASE_URL=TARGET REDIS_TEST_URL=redis://HOST:PORT/4 pnpm test:integration
 ```
 
-## 相关文档
+完整验收矩阵、Root 静态审计切片与结果判定见 [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md)。
 
-- [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md)：v1 wire contract 与认证边界。
-- [`docs/BFF_INTEGRATION.md`](docs/BFF_INTEGRATION.md)：BFF owner call 要求。
-- [`../docs/kokoro-handbook/technical/50-billing-commerce-rearchitecture.md`](../docs/kokoro-handbook/technical/50-billing-commerce-rearchitecture.md)：bounded context 与数据 owner 设计。
+## 导航
+
+- [`INDEX.md`](INDEX.md)：代码、contract、Schema、测试和运行入口地图。
+- [`docs/INDEX.md`](docs/INDEX.md)：当前有效文档的阅读顺序。
+- [`docs/TECHNICAL_DESIGN.md`](docs/TECHNICAL_DESIGN.md)：依赖方向、事务与状态机。
+- [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md)：表 owner、不变量、关系与 retention。
+- [`docs/SECURITY.md`](docs/SECURITY.md) / [`docs/RELIABILITY.md`](docs/RELIABILITY.md)：信任边界与故障语义。
+- [`docs/SLO.md`](docs/SLO.md) / [`docs/RUNBOOK.md`](docs/RUNBOOK.md)：目标、告警与处置。

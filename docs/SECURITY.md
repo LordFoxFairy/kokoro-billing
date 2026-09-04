@@ -1,0 +1,118 @@
+# kokoro-billing 安全边界
+
+## 1. 资产与威胁面
+
+高价值资产包括 tenant 隔离、payment/provider identity、checkout quote、credit balance、journal、receipt、provider payload、
+operator audit 与签名/服务凭据。主要风险是跨 tenant 访问、伪造内部身份、webhook 重放或错绑 tenant、幂等键碰撞、金额篡改、
+secret 泄漏、直接数据库改账和 provider/queue 滥用。
+
+## 2. 信任边界
+
+```text
+Browser -> Web same-origin adapter -> BFF -> Billing internal-owner API
+Agent/Model/Studio -----------------------> admission/execution routes
+Payment worker / Scheduler --------------> allow-listed internal routes
+Admin gateway ---------------------------> admin refund route
+Payment providers -----------------------> signed webhook ingress
+Billing ---------------------------------> PostgreSQL / Redis / Stripe
+```
+
+Browser 不直连 internal/admin/webhook route。BFF、Scheduler 与其他 owner 不读取 Billing database。Provider payload 不直接决定
+tenant；生产从 `payment_provider_account` 映射 external account，payload tenant 若存在只作一致性检查。
+
+## 3. 身份与授权
+
+### 用户 JWT
+
+生产模式使用远程 JWKS 验证 RS256、issuer 和可选 audience。`sub` 是 subject，`tenant_id` 必须是合法 tenant value，且必须
+与 `X-Kokoro-Tenant-Id` 完全一致。验证失败返回空 context，不将未验证 claim 传入 application。
+
+### Web BFF
+
+Catalog/checkout 的 BFF alternative 同时验证：
+
+- 精确 caller `web-bff`；
+- `X-Kokoro-Internal-Secret`；
+- 独立 Bearer `BILLING_BFF_SERVICE_TOKEN`；
+- 合法 tenant；checkout 还要求合法 subject。
+
+出现任何 internal marker 后不会回退到用户路径，避免伪造/残缺 service header 降级。
+
+### Internal service
+
+`X-Kokoro-Service` 必须来自注册集合，且 shared internal secret 与 tenant context 均有效；route 再限制允许的 service：
+admission/execution 是 agent/model/studio，refund accept 是 payment-worker，expiry 是 scheduler，settlement accept 当前允许
+payment-worker 或 scheduler。
+
+### Admin
+
+Admin route 要求 caller `admin`、独立 `BILLING_OPERATOR_PROXY_SECRET`、operator identity、tenant 和精确
+`billing.admin` role。生产启动会拒绝 operator proxy secret 与 internal service secret 相同。
+
+### Provider webhook
+
+Enabled provider 必须配置 non-empty webhook secret；Stripe/Alipay/WeChat adapter 对 raw body/headers 执行 provider-specific
+校验。WeChat 启用时 APIv3 key 必须恰好 32 UTF-8 bytes。验证成功后才写 inbox；provider + external event ID 与 payload hash
+用于重放/冲突判断。
+
+## 4. Tenant 与数据访问
+
+- Tenant 只从已验证 JWT/service/admin context 或 provider-account mapping 进入 application。
+- HTTP body/query 不接受 caller-selected tenant/account。
+- Repository 的 SELECT/INSERT/UPDATE/DELETE 显式带 tenant predicate；同 owner JOIN 同时连接两侧 tenant。
+- 无 FK 的关系在 application transaction 中做 existence/state/permission 检查、固定顺序锁、UNIQUE/CHECK 与 reconciliation。
+- PostgreSQL connection 通过 request/worker context 隔离事务，避免跨请求共享 transaction client。
+
+当前 Schema 没有 PostgreSQL RLS；tenant 安全依赖应用/repository predicate 与测试门禁。数据库 credential 必须只授予 Billing
+runtime，其他仓库和人工查询使用独立最小权限角色。
+
+## 5. 输入、输出与错误
+
+- 已定义 JSON route 使用 Zod strict schema；未知字段在主要 mutation 上被拒绝。
+- Idempotency-Key 限制为 8–128 printable ASCII；金额/currency/identity/limit 有边界检查。
+- v1 外部字段 snake_case，错误归一为稳定 `billing.*` code；内部异常不回传 SQL、stack 或 provider 原文。
+- Provider body 以原始字符串保留用于签名，再解析为 object。
+- Request ID/trace ID 只接受有限长度 printable value，否则生成/回退本地 ID。
+
+## 6. Secret 与日志
+
+Secret 只能由部署 secret store 注入，不写入 Git、contract、日志、metric label 或 incident ticket：
+
+| 配置 | 用途 |
+|---|---|
+| `INTERNAL_SERVICE_SECRET` | internal service credential |
+| `BILLING_BFF_SERVICE_TOKEN` | BFF 独立 bearer |
+| `BILLING_OPERATOR_PROXY_SECRET` | admin gateway credential |
+| `PROVIDER_WEBHOOK_SECRETS_JSON` | provider webhook verification material |
+| `WECHAT_API_V3_KEY` | WeChat resource decrypt key |
+| `STRIPE_SECRET_KEY` | Stripe API credential |
+
+Fastify 禁用默认 request logging，只记录 service、operation、request_id、trace_id、result、duration。Logger redaction 已覆盖
+Authorization、cookie、internal secret 与主要 provider signature headers。Provider payload、receipt、quote snapshot、subject 和
+tenant 不应进入普通 info 日志。
+
+`.env.example` 中的 `BILLING_REDEEM_SECRET` 当前没有被 API runtime config 读取；它不是已验证的生产配置要求，后续应随 redeem
+surface 决策删除或接入 secret validation。
+
+## 7. 供应链与发布
+
+- pnpm 与 Node major 固定；lockfile 是依赖事实。
+- Docker base 以 SHA-256 digest 固定，production install 使用 `--ignore-scripts`，runtime 为 non-root 且有 HEALTHCHECK。
+- CI 使用 Trivy 阻断 HIGH/CRITICAL dependency、misconfiguration 与 secret 发现。
+- Release 先 build/load candidate，再 image scan 与 health/ready smoke；之后才 push，生成 SBOM/max provenance 并用 Cosign 签名 digest。
+- GitHub Actions 均固定完整 commit SHA。
+
+这些是配置中的门禁，不等于某次 release 已实际执行；实际证据必须引用 workflow run 与 image digest。
+
+## 8. 已知安全缺口
+
+1. 没有显式 HTTP rate limit、总体 request deadline、response-size limit、per-route body limit 或取消传播门禁。
+2. PostgreSQL 没有 RLS，append-only 表也没有数据库 privilege/trigger 防止 runtime role UPDATE/DELETE。
+3. 当前 redaction 列表未显式列出 `x-kokoro-proxy-secret`；默认 request logging 已关闭，但仍应补防御性 redaction test。
+4. 生产只强制 admin proxy secret 与 internal secret 不同，未显式验证 BFF token 与其他 secret 的互异/最小强度。
+5. `internal-header` 只在 `NODE_ENV=production` 时被禁止；部署环境必须确保 production flag 不可遗漏。
+6. 没有仓内 threat model test、DAST、rate-abuse test、credential rotation drill 或 production audit evidence。
+7. Contract 对若干 body/error shape 尚不完整，自动验证不能覆盖全部边界收紧/放宽风险。
+8. Retention、数据主体删除、backup encryption 与 restore access policy 尚未落地。
+
+处置和 secret 泄漏步骤见 [`RUNBOOK.md`](RUNBOOK.md)。

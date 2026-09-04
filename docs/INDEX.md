@@ -1,29 +1,32 @@
 # kokoro-billing 文档索引
 
-当前仓库按 clean build 设计：不导入旧数据、不保留旧 API/表/兼容 writer。唯一目标架构是 [商业系统重构版最终架构](../../docs/kokoro-handbook/technical/50-billing-commerce-rearchitecture.md)，其实现级目标契约是 [目标 API 与 SQL 契约](../../docs/kokoro-handbook/technical/51-billing-target-api-and-sql-contract.md)；其余 Billing 文档为历史审阅记录或待清理的实现细则。
+本目录只描述当前 Billing owner 实现、协议策略、运行和缺口。字段级 API 事实源是
+[`../contract/openapi/v1/openapi.yaml`](../contract/openapi/v1/openapi.yaml)，持久化事实源是
+[`../database/schema.sql`](../database/schema.sql)；Markdown 不复制为第二份可编辑 Schema。
 
-- [本仓 API Contract](API_CONTRACT.md)
-- [本仓 Technical Design](TECHNICAL_DESIGN.md)
-- [SLO、错误预算与告警基线](SLO.md)
-- [运行与故障处置](RUNBOOK.md)
-- [实现、BFF 接入与验收说明](README.md)
+## 阅读顺序
 
-- [总体架构](../../docs/kokoro-handbook/technical/31-billing-subrepository-architecture.md)
-- [成熟方案调研](../../docs/kokoro-handbook/technical/32-billing-mature-systems-research.md)
-- [套餐、积分与卡密兑换码目标方案](../../docs/kokoro-handbook/technical/46-billing-package-credit-redeem-architecture.md)
-- [Repository / Service / 设计模式总方案](../../docs/kokoro-handbook/technical/47-billing-repository-service-architecture.md)
-- [需求闭环与验收标准](../../docs/kokoro-handbook/technical/48-billing-requirements-and-acceptance.md)
-- [最终业务与技术架构](../../docs/kokoro-handbook/technical/49-billing-final-technical-architecture.md)
-- [商业系统重构版最终架构](../../docs/kokoro-handbook/technical/50-billing-commerce-rearchitecture.md)
-- [目标 API 与 SQL 契约](../../docs/kokoro-handbook/technical/51-billing-target-api-and-sql-contract.md)
-- [ADR-023：模块化单体与 Redis 正确性边界](../../docs/kokoro-handbook/decisions/ADR-023-billing-modular-monolith-and-redis-correctness.md)
-- [ADR-024：BillingSubject 与 PayerAccount 分离](../../docs/kokoro-handbook/decisions/ADR-024-billing-subject-payer-separation.md)
-- [ADR-025：云厂商费用中心模式复用](../../docs/kokoro-handbook/decisions/ADR-025-cloud-billing-patterns.md)
-- [ADR-026：商城 Order/Adjustment/PaymentCollection 事实层](../../docs/kokoro-handbook/decisions/ADR-026-commerce-order-payment-facts.md)
-- [ADR-027：Billing API 版本与传输边界](../../docs/kokoro-handbook/decisions/ADR-027-billing-api-versioning-and-transport-boundary.md)
-- [API 契约](../../docs/kokoro-handbook/technical/billing-api-contract-v1.md)
-- [事务矩阵](../../docs/kokoro-handbook/technical/billing-transaction-matrix.md)
-- [PostgreSQL Schema](../database/README.md)
-- [SQL 规范](../../docs/kokoro-handbook/technical/billing-sql-standard.md)
-- [Provider Event / Worker](../../docs/kokoro-handbook/technical/billing-event-processing.md)
-- [实现闭环证据](../../docs/kokoro-handbook/technical/billing-closure-evidence.md)
+1. [`CURRENT.md`](CURRENT.md)：当前实现、证据边界和待办缺口。
+2. [`TECHNICAL_DESIGN.md`](TECHNICAL_DESIGN.md)：分层、bounded context、事务、状态机与运行单元。
+3. [`API_CONTRACT.md`](API_CONTRACT.md)：visibility、认证、幂等、错误和分页策略。
+4. [`DATA_MODEL.md`](DATA_MODEL.md)：35 张表的 owner、不变量、关系与 retention。
+5. [`SECURITY.md`](SECURITY.md)：信任边界、身份、tenant、secret 与 abuse control。
+6. [`RELIABILITY.md`](RELIABILITY.md)：timeout、retry、receipt、outbox、恢复与降级。
+7. [`ACCEPTANCE.md`](ACCEPTANCE.md)：可执行验收矩阵和 Root 静态审计切片。
+8. [`SLO.md`](SLO.md)：目标 SLI/SLO、错误预算、告警与当前测量缺口。
+9. [`RUNBOOK.md`](RUNBOOK.md)：启动、诊断、止损、恢复和回滚。
+10. [`ADR/`](ADR/)：本仓仍有效的架构决策。
+
+## 补充说明
+
+- [`BFF_INTEGRATION.md`](BFF_INTEGRATION.md)：BFF storefront owner-call 约束。
+- [`RISKS.md`](RISKS.md)：短版风险索引；详细控制与缺口分别在 Security/Reliability。
+- [`README.md`](README.md)：旧实现入口已收敛为本索引的辅助说明。
+- [`../contract/README.md`](../contract/README.md)：contract owner、version、generation、breaking、provenance 与 consumer workflow。
+- [`../database/README.md`](../database/README.md)：canonical Schema 安装语义。
+
+## 权威顺序
+
+当前代码、machine contract、canonical Schema 与上述 CURRENT/设计文档优先。Root 的
+`docs/ARCHITECTURE_STANDARD.md` 是跨仓工程基线；Root handbook 中的 Billing 文章和历史 ADR 可用于背景与考古，
+但不覆盖本仓当前 contract、Schema、代码或缺口清单。
