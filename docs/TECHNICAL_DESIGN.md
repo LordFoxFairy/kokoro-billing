@@ -76,16 +76,49 @@ provider signature + provider account mapping
 
 Provider call/verification 不在持有账务事务时执行。外部 event 使用 provider + external event ID 去重。
 
+Webhook ingress 只承认 production registry 的 `stripe|alipay|wechat`。Stripe/WeChat 从 provider header 验证 raw JSON；Alipay
+从同一份 form-urlencoded raw body 解码并验证 `sign`/`sign_type=RSA2`，query 参数和 fixture signature 不进入 runtime contract。
+
+### Settlement acceptance
+
+```text
+payment-worker|scheduler + tenant + Idempotency-Key
+  -> strict body / normalized command
+  -> lock-or-create payment_command_receipt
+  -> reconcile idempotency key + settlement_id identity + request digest
+  -> write settlement + payment outbox
+  -> persist exact acceptance result
+  -> commit / replay persisted result
+```
+
+`payment.settlement.accept` 的 command identity 是 `settlement_id`。Receipt key 与 identity 各有 tenant/command scoped unique
+constraint；payload drift、key 指向另一 identity，或 identity 指向另一 payload 都不会进入业务写入。
+
 ### Expiry
 
-Expiry worker 先获取 Redis lease；每个到期 hold 再由 PostgreSQL 锁定 hold/allocation/account，原子释放 projection 并写 outbox。
-Redis lease 只减少并发工作，不是过期或余额事实。
+```text
+scheduler + tenant + Idempotency-Key + batch_id
+  -> normalize limit
+  -> lock-or-create entitlement_command_receipt
+  -> reconcile key + batch identity + request digest
+  -> stable scan + lock hold/allocation/account
+  -> release projection + write outbox
+  -> persist exact expired hold IDs
+  -> commit / replay persisted result
+```
+
+Expiry worker 先尝试 Redis lease，但 lease 只减少并发工作，不是过期或余额事实。`entitlement.credit-holds.expire` 的 identity 是
+caller/worker 生成的 `batch_id`；一次 daemon tick 生成一个新 identity，一次性重试可显式复用
+`BILLING_EXPIRY_BATCH_ID`。同 key 不能绑定下一批，同 batch 换 key 仍重放原结果。
 
 ## 5. 事务与并发
 
 - `PostgresConnection` 通过 `AsyncLocalStorage` 将一个 request/worker operation 绑定到一个 session；嵌套事务使用 savepoint。
 - Repository SQL 使用 PostgreSQL `$1...` 参数；动态 outbox table 只来自封闭 union。
 - 写路径按 tenant-scoped receipt/事实、聚合、allocation/journal、outbox 的固定业务顺序锁定。
+- Settlement receipt、settlement/outbox/result 在一个 use-case transaction 内提交；expiry receipt、选中 hold 的
+  allocation/account/outbox 与 result 也在一个 use-case transaction 内提交，内部 savepoint 不改变外层原子性。
+- 两类 receipt 同时受 key unique 与非空 command identity partial unique 约束；查询使用 `FOR UPDATE` 串行化并发重试。
 - Payment outbox 使用 `FOR UPDATE SKIP LOCKED`，lease 更新使用独立连接，避免与 handler 事务一起回滚。
 - 无数据库 FK；Application/Repository 通过 tenant existence、state check、row lock、同事务写入、UNIQUE/CHECK 与 reconciliation
   维护关系。
@@ -114,6 +147,6 @@ Payment worker 续租失败返回 `lease_lost`，handler 失败按 attempts back
 
 ## 8. 已知设计缺口
 
-完整列表见 [`CURRENT.md`](CURRENT.md)。最直接影响技术闭环的是：OpenAPI shape/历史 breaking 比较不完整、
+完整列表见 [`CURRENT.md`](CURRENT.md)。Settlement/expiry durable receipt 与 webhook provider contract 已闭环；剩余直接影响技术闭环的是：其余 OpenAPI shape/历史 breaking 比较不完整、
 reconciliation 未装配、execution batch 无跨进程 lease、HTTP overall deadline/size/rate limit 未显式配置，以及 production
 observability/DR 证据缺失。

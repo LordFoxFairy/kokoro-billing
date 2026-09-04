@@ -15,7 +15,7 @@
 | `scripts/apply-schema.ts` | Schema job | advisory lock + blank-database guard + 单事务安装 |
 | `scripts/process-payment-events.ts` | Payment event worker | PostgreSQL row lease、重试、dead-letter 与 worker metrics |
 | `scripts/process-execution-events.ts` | Execution event batch | 顺序处理 received inbox event |
-| `scripts/expire-credit-holds.ts` | Expiry worker | Redis lease 协调；PostgreSQL 事务维护账务事实 |
+| `scripts/expire-credit-holds.ts` | Expiry worker | 显式 tenant/batch identity；Redis lease 协调；PostgreSQL receipt/事务维护事实 |
 
 ## 依赖方向
 
@@ -48,7 +48,7 @@ domain -> no HTTP/PostgreSQL/Redis/provider SDK
 - `src/config/`：环境变量解析、auth/provider/timeout 启动约束。
 - `src/infrastructure/auth/`：JWT、service/BFF/admin context 验证。
 - `src/infrastructure/postgres/`：pool、request/worker-scoped transaction、JSON 解析、outbox worker。
-- `src/infrastructure/redis/`：idempotency hint、lease、deadline/retry policy。
+- `src/infrastructure/redis/`：非权威 idempotency hint、lease、deadline/retry policy；settlement/expiry 不使用 raw-body hint 判定冲突。
 - `src/infrastructure/metrics.ts`、`worker-metrics.ts`：HTTP 与 worker Prometheus metrics。
 - `src/infrastructure/providers/`：Stripe/Alipay/WeChat webhook adapter 与 Stripe checkout adapter。
 

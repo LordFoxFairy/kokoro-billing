@@ -1,19 +1,25 @@
 # kokoro-billing 验收矩阵
 
-验收必须在待交付 commit 的干净工作树上重新执行。历史报告、旧 CI、Agent 自报、跳过的 integration test 和本地 fixture
-都不等于当前结果或生产证据。
+验收必须在待交付 commit 的干净工作树上重新执行。历史报告、旧 CI、Agent 自报、被 skip 的 integration 和本地 fixture
+均不等于生产证据。
 
-## 1. 范围门禁
+## 1. 本切片范围
 
-本阶段允许修改：
+允许修改：
 
-- repository/docs/contract Markdown；
-- `contract/openapi/v1/openapi.yaml` 的治理 metadata；
-- `scripts/verify-openapi.ts` 的 contract 治理验证；
-- `tsconfig.json` 的 `useUnknownInCatchVariables`；
-- `test/architecture/` 的治理门禁。
+- settlement/expiry application port、PostgreSQL repository、HTTP adapter 与 worker；
+- `database/schema.sql` 中 command receipt identity；
+- Billing owner OpenAPI、contract checker、architecture/HTTP/integration test；
+- 本仓运行、API、数据、可靠性和验收文档。
 
-不得修改业务 runtime、Schema、generated 或跨仓文件。检查：
+边界：
+
+- 工作目录仅 `kokoro-billing`，不修改 consumer 或 Root；
+- 只有一个 canonical Schema，无 migration、`FOREIGN KEY`、`REFERENCES`；
+- 不增加兼容 alias、双轨实现或 production Fake/InMemory；
+- 复用 Root PostgreSQL/Redis，不启动重复容器。
+
+检查：
 
 ```bash
 git status --short
@@ -21,7 +27,32 @@ git diff --name-only main...HEAD
 git diff --check
 ```
 
-## 2. 静态与行为验收
+## 2. 行为验收
+
+### Durable settlement
+
+- `POST /v1/internal/payment/settlements/accept` 必须有 strict request body 和 `Idempotency-Key`。
+- `payment.settlement.accept` 以 `settlement_id` 为 command identity。
+- Receipt 保存 SHA-256 request digest 与精确成功 result；同 key 或同 identity 的等价重放返回同一结果。
+- 同 key/identity 下 payload drift 返回 `billing.idempotency_conflict`；并发请求只形成一个 receipt/fact。
+- Raw JSON 字段顺序不同不得被 Redis hint 误判为业务冲突。
+
+### Durable expiry batch
+
+- `POST /v1/internal/commands/expire-credit-holds` 必须显式提供 `batch_id`；`limit` 缺省规范化为 100。
+- `entitlement.credit-holds.expire` 以 `batch_id` 为 command identity。
+- Receipt 与 hold/allocation/account/outbox/result 同事务提交，result 保存精确 `expired_hold_ids`。
+- 同 batch 换 key 重放原 result；同 key 换 batch/limit 返回冲突，不扫描或消费下一批 eligible hold。
+- Worker 必须显式 tenant scope；daemon 每 tick 生成新 batch，一次性重试可复用固定 batch。
+
+### Webhook
+
+- Provider path 与 production registry 精确等于 `stripe|alipay|wechat`，其他值在处理前拒绝。
+- Stripe/WeChat 使用 contract 声明的 raw-body headers。
+- Alipay 只使用 form-urlencoded body 的 `sign` + `sign_type=RSA2`；query signature 不得通过。
+- OpenAPI 不得包含 `mockSignature` 或把 Alipay body signature 声明成 query security scheme。
+
+## 3. 静态与行为门禁
 
 | Gate | 命令 | 通过标准 |
 |---|---|---|
@@ -29,15 +60,42 @@ git diff --check
 | TypeScript | `pnpm typecheck` | exit 0 |
 | Vitest | `pnpm test` | exit 0，0 failed；记录 skipped 数量 |
 | Build | `pnpm build` | exit 0 |
-| SQL governance | `pnpm sql:check` | canonical Schema naming/time/FK gate 通过 |
-| Contract | `pnpm contract:check` | OpenAPI 3.0.3、关键边界、17 route parity 与精确 metadata 通过 |
-| Combined local | `pnpm verify` | 上述 repository-local gate 全部通过 |
+| SQL governance | `pnpm sql:check` | canonical Schema naming/time/no-FK gate 通过 |
+| Contract | `pnpm contract:check` | OpenAPI、command shape、webhook matrix、17 route parity 通过 |
+| Combined | `pnpm verify` | repository-local gate 全部通过 |
+| Diff | `git diff --check` | exit 0 |
 
-`pnpm test` 在未设置依赖 URL 时会 skip integration suites；这时只证明 unit/HTTP/architecture，不证明 PostgreSQL/Redis。
+`pnpm test` 未设置依赖 URL 时会 skip integration；skip 不能计为 PostgreSQL/Redis 验收。
 
-## 3. Root 十仓静态审计的 Billing 切片
+## 4. 真实 PostgreSQL/Redis 验收
 
-Root verifier 当前没有 repository filter，先输出 JSON，再仅以 Billing violation 判定本仓：
+前置条件：
+
+- 使用 Root 已有 PostgreSQL `127.0.0.1:55433`，为本轮创建 Billing 专用空 fixture database；
+- 使用 Root 已有 Redis `127.0.0.1:56380/4`；
+- 应用/测试从源码运行，不启动第二套数据库、Redis 或 Billing application container。
+
+```bash
+cd /Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing
+export DATABASE_URL=postgresql://kokoro:TOKEN@127.0.0.1:55433/DATABASE
+export REDIS_URL=redis://127.0.0.1:56380/4
+export REDIS_TEST_URL=redis://127.0.0.1:56380/4
+
+pnpm db:apply-schema
+pnpm test:integration
+```
+
+通过标准：
+
+- Schema job 在 fresh database 成功，第二次安装因非空 guard 拒绝；
+- integration 0 failed、0 skipped；
+- `durable-command-receipts.test.ts` 覆盖 settlement replay/conflict/concurrency 与 expiry identity/replay/next-batch；
+- Redis hint/lease suite 真实连接 DB 4；
+- 所有 SQL 参数化且 tenant-scoped。
+
+## 5. Root 十仓静态审计的 Billing 切片
+
+Root verifier 没有 repository filter，因此只读取结果，不在本仓任务中修复其他仓：
 
 ```bash
 cd /Users/nako/WebstormProjects/github/thefoxfairy/Kokoro
@@ -59,80 +117,30 @@ print('PASS kokoro-billing Root static-audit slice')
 PY
 ```
 
-其他仓的失败不归入本阶段结果，也不得在本仓分支修复。
+## 6. Contract、Schema 与文档验收
 
-## 4. 真实 PostgreSQL/Redis 验收
+- Contract、runtime 与 registry 的 provider 集合一致。
+- Settlement/expiry 的 request body、response、400/409 与 runtime Zod/application DTO 一致。
+- `contract/README.md` digest 等于当前 OpenAPI bytes。
+- Schema 两张 receipt 表均有 nullable `command_identity` 和非空 partial unique index；nullable 只服务没有独立 identity 的其他命令。
+- Required 文档集存在，CURRENT 明确区分实现、缺口和生产证据；API/DATA_MODEL/RELIABILITY/RUNBOOK 与当前行为一致。
+- 不生成或手改 `src/generated/`。
 
-前置条件：
+## 7. TDD 与完成判定
 
-- Root 共享 PostgreSQL 可用；为 Billing 提供空的独立 database/schema；
-- Root 共享 Redis 可用，URL 明确以 logical DB `/4` 结尾；
-- 不新建第二套 repository-local PostgreSQL/Redis；
-- fixture 只含测试数据，命令不得指向生产。
+TDD 证据至少包含：
 
-```bash
-cd /Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing
-export DATABASE_URL=postgresql://USER:TOKEN@HOST:PORT/DATABASE
-export REDIS_URL=redis://HOST:PORT/4
-export REDIS_TEST_URL=redis://HOST:PORT/4
+1. settlement 无 durable replay 时的失败测试；
+2. expiry 缺少 batch result/identity 时的失败测试；
+3. OpenAPI 缺 request body/provider enum 时的失败测试；
+4. Redis raw-body hint 对等价 payload 返回 409 的失败测试；
+5. 实现后的 targeted GREEN 与最终全量 GREEN。
 
-pnpm db:apply-schema
-pnpm test:integration
-```
+只有以下条件同时满足才可报告本切片完成：
 
-通过标准：
-
-- Schema job 在空库成功，第二次对非空库必须拒绝；
-- integration 0 failed、0 skipped；
-- PostgreSQL Schema、tenant lineage、checkout、settlement/reversal、credit/usage、receipt、outbox、reconciliation 测试通过；
-- Redis hint/lease 测试实际执行且通过。
-
-## 5. Contract 验收
-
-- 每个 operation 精确声明 owner、visibility、stability、idempotency、permission。
-- metadata 与 `src/interfaces/http/server.ts` 的现有 route allow-list 一致。
-- contract route 集合与 Fastify route 集合一致。
-- wire property 继续使用 snake_case，tenant header 继续是 `X-Kokoro-Tenant-Id`。
-- execution event 没有未验证 `signature` 字段。
-- `contract/README.md` 包含 owner、visibility、version、generation、breaking、provenance 与 consumer workflow。
-- 本阶段不生成或手改 `src/generated/`。
-
-## 6. 文档验收
-
-必需文件：
-
-```text
-README.md
-INDEX.md
-docs/INDEX.md
-docs/CURRENT.md
-docs/TECHNICAL_DESIGN.md
-docs/API_CONTRACT.md
-docs/DATA_MODEL.md
-docs/SECURITY.md
-docs/RELIABILITY.md
-docs/ACCEPTANCE.md
-docs/SLO.md
-docs/RUNBOOK.md
-docs/ADR/*.md
-contract/README.md
-```
-
-人工复核：
-
-- CURRENT 明确区分已实现、目标、缺口与生产证据；
-- API 文档不复制为第二份字段级契约；
-- DATA_MODEL 覆盖 35 张表、UNIQUE 语义、无 FK 关系维护和 retention；
-- SECURITY/RELIABILITY/RUNBOOK 的控制均能定位到源码或明确标为缺口；
-- SLO 数值标为目标，不写成本地或生产实测。
-
-## 7. 完成判定
-
-只有以下条件同时满足才可报告本阶段完成：
-
-1. 分支是 `codex/production-closure-docs`；
-2. 工作树干净，逻辑小提交可审查；
-3. repository-local 六项 gate 与 `pnpm verify` 使用最终内容重新执行；
-4. Root Billing 静态切片为 0 violation；
-5. 真实依赖若不可用，明确报告“未执行/未证明”，不把 skip 计为通过；
-6. 最终报告列出 branch、commit、文件、命令结果和仍存缺口。
+1. 分支是 `codex/billing-durable-command-webhook`；
+2. 工作树干净，提交按 durable command、webhook contract、authority regression、文档逻辑分组；
+3. repository-local 全部门禁在最终内容上重跑；
+4. Root Billing 静态切片 0 violation；
+5. fresh Schema + real PostgreSQL/Redis integration 0 failed、0 skipped；
+6. 最终报告列出 commit、命令结果、RED→GREEN 证据和剩余风险。

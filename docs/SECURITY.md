@@ -51,9 +51,10 @@ Admin route 要求 caller `admin`、独立 `BILLING_OPERATOR_PROXY_SECRET`、ope
 
 ### Provider webhook
 
-Enabled provider 必须配置 non-empty webhook secret；Stripe/Alipay/WeChat adapter 对 raw body/headers 执行 provider-specific
-校验。WeChat 启用时 APIv3 key 必须恰好 32 UTF-8 bytes。验证成功后才写 inbox；provider + external event ID 与 payload hash
-用于重放/冲突判断。
+Enabled provider 必须属于 production registry `stripe|alipay|wechat` 并配置 non-empty verification material。Stripe 从 raw JSON 与
+`Stripe-Signature` 验证；WeChat 从 raw JSON 与 timestamp/nonce/signature headers 验证；Alipay 只从 form-urlencoded raw body
+读取 `sign` 和 `sign_type=RSA2`。Query signature、合成 header 与 fixture `mockSignature` 都不属于生产入口。WeChat 启用时 APIv3
+key 必须恰好 32 UTF-8 bytes。验证成功后才写 inbox；provider + external event ID 与 payload hash 用于重放/冲突判断。
 
 ## 4. Tenant 与数据访问
 
@@ -70,6 +71,8 @@ runtime，其他仓库和人工查询使用独立最小权限角色。
 
 - 已定义 JSON route 使用 Zod strict schema；未知字段在主要 mutation 上被拒绝。
 - Idempotency-Key 限制为 8–128 printable ASCII；金额/currency/identity/limit 有边界检查。
+- Settlement/expiry 的 security boundary 是 tenant-scoped PostgreSQL receipt：key、command identity 与规范化 digest 必须同时一致；
+  raw-body Redis fingerprint 不得因字段顺序或默认值表达差异否决等价命令。
 - v1 外部字段 snake_case，错误归一为稳定 `billing.*` code；内部异常不回传 SQL、stack 或 provider 原文。
 - Provider body 以原始字符串保留用于签名，再解析为 object。
 - Request ID/trace ID 只接受有限长度 printable value，否则生成/回退本地 ID。
@@ -112,7 +115,8 @@ surface 决策删除或接入 secret validation。
 4. 生产只强制 admin proxy secret 与 internal secret 不同，未显式验证 BFF token 与其他 secret 的互异/最小强度。
 5. `internal-header` 只在 `NODE_ENV=production` 时被禁止；部署环境必须确保 production flag 不可遗漏。
 6. 没有仓内 threat model test、DAST、rate-abuse test、credential rotation drill 或 production audit evidence。
-7. Contract 对若干 body/error shape 尚不完整，自动验证不能覆盖全部边界收紧/放宽风险。
+7. Settlement/expiry 与 webhook provider/signature 已有精确 gate；其余 contract body/error shape 尚不完整，自动验证不能覆盖全部
+   边界收紧/放宽风险。
 8. Retention、数据主体删除、backup encryption 与 restore access policy 尚未落地。
 
 处置和 secret 泄漏步骤见 [`RUNBOOK.md`](RUNBOOK.md)。

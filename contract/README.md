@@ -45,8 +45,9 @@ V1 内只接受 backward-compatible 变更；仅修改 `info.version` 不能使 
 pnpm contract:check
 ```
 
-该命令校验 OpenAPI 版本、tenant/request ID/execution-event 边界、全部 operation metadata 与 Fastify route parity。HTTP runtime
-仍由手写 Zod/mapper 实现；生成物若未来引入，只能从本 source 生成到明确的 read-only directory，并在同一 commit 校验 drift。
+该命令校验 OpenAPI 版本、tenant/request ID/execution-event 边界、settlement/expiry command body、production webhook provider/
+signature location、全部 operation metadata 与 Fastify route parity。HTTP runtime 仍由手写 Zod/mapper 实现；生成物若未来引入，
+只能从本 source 生成到明确的 read-only directory，并在同一 commit 校验 drift。
 
 ## Breaking policy
 
@@ -65,6 +66,9 @@ review、consumer migration、并行窗口与明确退役条件。
 
 当前没有 automated historical OpenAPI breaking-diff tool；review 与版本纪律仍是缺口，governance-key 检查不能替代 semantic
 compatibility comparison。
+
+当前 webhook machine contract 只包含 `stripe|alipay|wechat`。Stripe/WeChat 的 header security scheme 与 Alipay 的
+form-body `sign`/`sign_type=RSA2` 由 `x-kokoro-provider-signatures` 区分；fixture `mockSignature` 不属于生产 contract。
 
 ## Provenance
 
@@ -111,6 +115,7 @@ allow-list 内的 operation。
 
 ## Validation scope and gaps
 
-当前 `contract:check` 能证明 YAML 可解析、核心禁用字段、metadata 与 route 集合；它不能证明所有 request/response 与运行时 Zod
-逐字段相等。部分 mutation body、generic response、错误集合与 ledger time format 仍需在后续 contract-first 变更中补齐，详见
+当前 `contract:check` 能证明 YAML 可解析、settlement/expiry shape、webhook provider/signature、核心禁用字段、metadata 与 route
+集合；它不能证明所有 request/response 与运行时 Zod 逐字段相等。其余 mutation body、generic response、错误集合与 ledger time
+format 仍需在后续 contract-first 变更中补齐，详见
 [`../docs/CURRENT.md`](../docs/CURRENT.md)。

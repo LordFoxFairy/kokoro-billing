@@ -9,7 +9,8 @@ Reconcile 与 Billing command receipt；不拥有 Tenant、Identity、Agent Run�
 ## 边界
 
 - PostgreSQL 是支付、余额、账本、幂等 receipt、inbox/outbox 与对账事实源。
-- Redis 仅用于短 TTL idempotency hint 和 expiry worker lease；Redis 故障不得改变账务结果。
+- Redis 仅用于部分写入口的短 TTL idempotency hint 和 expiry worker lease；settlement/expiry 的 replay、冲突与结果完全由
+  PostgreSQL durable receipt 决定，Redis 故障或 raw-body 差异不得改变账务结果。
 - Browser 通过 Web/BFF 调用；BFF、Agent、Model、Studio、Payment worker 与 Scheduler 只能使用 Billing 拥有的协议，
   不读取本仓数据库。
 - Credit 是 Billing 内部 bounded context，不存在独立 Credit writer。
@@ -63,7 +64,7 @@ Canonical machine-readable source 是
 | Billing API | `src/main.ts` | Fastify v1 transport、auth、PostgreSQL/Redis/provider 装配、health/ready/metrics |
 | Payment event worker | `scripts/process-payment-events.ts` | 领取 `payment_outbox`，处理 provider event，重试或 dead-letter |
 | Execution event batch | `scripts/process-execution-events.ts` | 处理 `entitlement_execution_event.status=received` |
-| Credit expiry worker | `scripts/expire-credit-holds.ts` | 在 Redis lease 下过期 hold/grant；账务修改仍在 PostgreSQL 事务中 |
+| Credit expiry worker | `scripts/expire-credit-holds.ts` | tenant-scoped batch；Redis lease 只协调，PostgreSQL receipt/事务决定结果 |
 | Schema installer | `scripts/apply-schema.ts` | 在空 PostgreSQL database 安装 canonical Schema |
 
 构建后的入口位于 `dist/src/` 与 `dist/scripts/`，`dist/` 不是可编辑事实源。
@@ -77,6 +78,7 @@ pnpm test
 pnpm build
 pnpm sql:check
 pnpm contract:check
+pnpm verify
 ```
 
 真实依赖验证必须显式连接 PostgreSQL/Redis；被跳过的 integration test 不算依赖验收：

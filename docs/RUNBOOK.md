@@ -58,8 +58,17 @@ DATABASE_URL=$DATABASE_URL node dist/scripts/process-payment-events.js
 # Execution event：一次性 batch，当前不要并行运行多个实例
 DATABASE_URL=$DATABASE_URL node dist/scripts/process-execution-events.js
 
-# Hold/grant expiry：默认一次；DAEMON=true 持续运行
-DATABASE_URL=$DATABASE_URL REDIS_URL=$REDIS_URL node dist/scripts/expire-credit-holds.js
+# Hold/grant expiry：tenant 必填；默认一次并自动生成 batch identity
+DATABASE_URL=$DATABASE_URL REDIS_URL=$REDIS_URL BILLING_TENANT_ID=TENANT \
+  node dist/scripts/expire-credit-holds.js
+
+# 仅重试同一次 one-shot batch 时复用原 identity；daemon 不接受固定 batch
+DATABASE_URL=$DATABASE_URL REDIS_URL=$REDIS_URL BILLING_TENANT_ID=TENANT \
+  BILLING_EXPIRY_BATCH_ID=EXPIRY_BATCH node dist/scripts/expire-credit-holds.js
+
+# 持续运行：每个 tick 生成新的 batch identity
+DATABASE_URL=$DATABASE_URL REDIS_URL=$REDIS_URL BILLING_TENANT_ID=TENANT DAEMON=true \
+  node dist/scripts/expire-credit-holds.js
 ```
 
 部署由外部 supervisor 负责 restart/backoff。记录 image digest、commit、config revision 与启动时间。
@@ -90,8 +99,9 @@ Billing owner，不执行临时 UPDATE。
 
 ## 6. Redis 不可用
 
-- API readiness 当前会失败；idempotency hint 本身 fail-open 到 PostgreSQL。
-- Expiry lease 获取失败时实现会继续 sweep，正确性依赖 PostgreSQL row lock/status；避免人为启动大量并发 sweep。
+- API readiness 当前会失败；初始 Redis connect 失败也会阻止 API/expiry worker 启动。
+- 已连接后的 idempotency hint operation 可 fail-open 到 PostgreSQL；settlement/expiry 不使用 raw-body hint 裁决冲突。
+- 已连接后的 expiry lease operation 失败会继续 sweep，正确性依赖 PostgreSQL batch receipt、row lock/status；避免人为启动大量并发 sweep。
 - 检查 URL 是否明确为 `/4`、connect/read/overall timeout 与网络。
 - 恢复后不需要从 Redis 回填账务数据；不要把 Redis key 当作 receipt。
 - 若 API 因 readiness 被摘除，Redis 恢复后重新检查 ready 与 PostgreSQL fact。
@@ -118,7 +128,9 @@ LIMIT 100;
 SQL
 ```
 
-- Signature failure/tenant mismatch：检查 provider account mapping、endpoint secret/certificate 与 raw-body preservation；不绕过签名。
+- Signature failure/tenant mismatch：检查 provider account mapping、endpoint secret/certificate 与 raw-body preservation。Stripe 检查
+  `Stripe-Signature`；WeChat 检查 timestamp/nonce/signature headers；Alipay 检查 form body 的 `sign` 与 `sign_type=RSA2`，不把
+  query 参数或 fixture header 当作替代。
 - Pending age 增长：检查 worker、lease owner、database lock、provider errors 与 max attempts。
 - `lease_lost`：原 worker 不应写 published；确认新 owner 是否接管。
 - Dead-letter：保存 event/outbox/receipt/settlement 只读证据，确认目标 side effect 是否已发生，再用原 event identity 通过受控工具重放。
@@ -176,6 +188,27 @@ SQL
 
 禁止直接改 balance、删除 journal、重排 sequence 或释放 hold 来让告警消失。
 
+### Settlement / expiry receipt 分诊
+
+```bash
+psql "$DATABASE_URL" -v tenant=TENANT -v key=IDEMPOTENCY_KEY <<'SQL'
+SELECT command_name, command_identity, idempotency_key, payload_hash, status,
+       result_json, created_at, updated_at
+FROM payment_command_receipt
+WHERE tenant_id = :'tenant' AND idempotency_key = :'key';
+
+SELECT command_name, command_identity, idempotency_key, payload_hash, status,
+       result_json, created_at, updated_at
+FROM entitlement_command_receipt
+WHERE tenant_id = :'tenant' AND idempotency_key = :'key';
+SQL
+```
+
+- Settlement 重试复用原 `settlement_id` 与原语义 payload；expiry 重试复用原 `batch_id` 和规范化后的同一 `limit`。
+- `succeeded` 必须返回 `result_json`；同 key 指向另一 identity 或 digest 不同是冲突，不能删除 receipt 后重试。
+- Expiry succeeded result 中的 `expiredHoldIds` 是原批次事实；不得用同 key/new batch 试图继续 sweep。
+- 发现 invalid result、跨 identity 多 receipt 或账务 drift 时停止相关 tenant 写入并升级 Billing owner，不直接改 status/hash/result。
+
 ## 10. Secret 泄漏
 
 1. 隔离受影响 route/workload并停止使用泄漏 credential；
@@ -193,7 +226,8 @@ SQL
 - Worker 先停止领取新 work，再等待当前 handler 到 loop 边界；确认 lease/pending row 可被接管。
 - 应用回滚使用已签名的 immutable image digest，并保留 contract/Schema 兼容性检查。
 - V1 没有 down migration；`db:apply-schema` 不是 rollback 工具，也不会修复 drift。
-- 若发布包含 Schema/contract breaking change，应按预先审核的 owner/consumer rollout 执行；当前治理阶段没有这类变更。
+- 若发布包含 Schema/contract change，应按预先审核的 owner/consumer rollout 执行；本切片的 receipt identity 与 webhook contract
+  必须和 fresh Schema、owner contract、worker/client 版本作为一个 release unit 验证。
 - 回滚后检查 ready、error rate、queue age、receipt replay 与 reconciliation，不以进程启动作为完成证据。
 
 ## 12. 事故结束条件

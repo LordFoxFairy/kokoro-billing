@@ -26,7 +26,7 @@ default、CHECK 与索引的最终事实仍以 Schema 为准。
 | `entitlement_usage_settlement` | hold 与 usage event 的一对一结算结果 |
 | `entitlement_billing_admission` | invocation 的定价、mode、hold、accepted receipt 引用与状态 |
 | `entitlement_execution_event` | Agent/Model/Studio execution inbox、payload hash 与状态 |
-| `entitlement_command_receipt` | 通用 entitlement command replay fact |
+| `entitlement_command_receipt` | 通用 entitlement command replay fact；expiry 使用 batch command identity |
 | `entitlement_billing_command_receipt` | admission/capture/release 的 surface-aware replay fact |
 | `entitlement_outbox` | entitlement side-effect delivery、lease、attempt、publish/dead-letter 状态 |
 | `entitlement_usage_price_revision` | tenant pricing policy revision 与生效窗口 |
@@ -60,7 +60,7 @@ default、CHECK 与索引的最终事实仍以 Schema 为准。
 | `payment_reversal` | provider reversal/refund、金额、原因与结果 |
 | `payment_provider_subscription` | provider subscription identity 与状态 |
 | `payment_subscription_period` | subscription period window 与状态 |
-| `payment_command_receipt` | payment command replay fact |
+| `payment_command_receipt` | payment command replay fact；settlement acceptance 使用 settlement command identity |
 | `payment_outbox` | payment side-effect delivery、lease、attempt、publish/dead-letter 状态 |
 
 ## 3. 关系维护
@@ -97,7 +97,12 @@ tenant-scoped existence
 - Journal：delta 非零，account 内 sequence 唯一，同 tenant/source/kind 只写一个事实。
 - Money：checkout/settlement/reversal amount 为正，currency 匹配三位大写格式。
 - Offer/pricing published 状态要求 publish time；revision/window 唯一且时间窗合法。
-- Receipt：同 tenant/command/idempotency key 唯一，并保留 payload hash、status 与 result。
+- Receipt：同 tenant/command/idempotency key 唯一，并保留 payload hash、status 与 result；需要独立业务命令身份的 surface 还写
+  `command_identity`，非空 identity 在 tenant/command 内唯一。
+- Settlement receipt identity 为 `settlement_id`；expiry receipt identity 为 `batch_id`。两者的 SHA-256 digest 都包含 command
+  version 和规范化字段，result JSON 是 durable replay authority。
+- `command_identity` 保持 nullable，只因同一通用 receipt 表还服务没有独立业务 identity 的其他 command；partial unique index
+  只约束非空值，不削弱 key unique。
 - Provider event：同 tenant/provider/external event 唯一；payload hash 冲突不能当作重放。
 - Admission：同 tenant/invocation 和同 tenant/idempotency key 唯一；unknown 不隐式 capture/release。
 
@@ -115,7 +120,9 @@ UPDATE/DELETE，因此生产数据库角色和审计策略仍需补齐该防线�
 | `uq_entitlement_credit_journal_sequence`、`uq_entitlement_credit_journal_source` | account sequence 与来源事实各自唯一 |
 | `uq_entitlement_usage_event_source` | tenant 内 source event 只接收一次 |
 | `uq_entitlement_usage_settlement_hold`、`uq_entitlement_usage_settlement_event` | hold 与 usage event 均只能结算一次 |
-| entitlement/payment/Billing receipt UNIQUE | 每个相应 command surface 的 tenant + command + key 只保留一个 receipt |
+| entitlement/payment/Billing receipt key UNIQUE | 每个相应 command surface 的 tenant + command + idempotency key 只保留一个 receipt |
+| `uq_entitlement_command_receipt_identity` | 非空 entitlement command identity 在 tenant + command 内唯一；当前约束 expiry batch |
+| `uq_payment_command_receipt_identity` | 非空 payment command identity 在 tenant + command 内唯一；当前约束 settlement acceptance |
 | `uq_payment_provider_event_external` | tenant/provider external event 去重 |
 | `uq_payment_settlement_external`、`uq_payment_reversal_external` | provider payment/reversal identity 去重 |
 | `uq_entitlement_fulfillment_acquisition` | acquisition 只履约一次 |
@@ -142,9 +149,10 @@ NULLS NOT DISTINCT 或等价约束设计。
 
 ## 6. 查询索引
 
-Canonical Schema 当前定义 10 个显式 access path：
+Canonical Schema 当前定义 13 个显式 index：11 个查询/dispatch access path，加 2 个 receipt command identity unique index。
 
 - grant expiry、hold expiry；
+- entitlement/payment receipt command identity；
 - entitlement/payment outbox dispatch；
 - provider event processing；
 - settlement by checkout、reversal by settlement、checkout by status；

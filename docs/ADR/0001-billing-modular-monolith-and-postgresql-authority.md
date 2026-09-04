@@ -15,9 +15,11 @@ Payment、Checkout、Refund、Subscription、Credit、Metering 与 fulfillment �
 1. Billing 作为一个可部署模块化单体，context 通过 application port/transaction 协作。
 2. PostgreSQL 是 payment、credit、journal、receipt、inbox/outbox 与 reconciliation 的唯一 durable authority。
 3. Redis 只承担短 TTL idempotency hint 和 best-effort lease；Redis 故障时正确性仍由 PostgreSQL row lock、状态、UNIQUE/CHECK
-   与幂等事实保证。
+   与幂等事实保证。Raw-body hint 不得覆盖规范化的 PostgreSQL command digest。
 4. Scheduler 只调用 Billing command，不连接 Billing database；其他 owner 也不共享 Schema/Repository。
 5. V1 使用唯一 canonical Schema、空库安装、无 migration 与无 FK；关系由 application transaction 和 reconciliation 维护。
+6. 需要“key 重放”与“业务 command identity 重放”的命令同时保存两种 identity；settlement 使用 `settlement_id`，expiry 使用
+   `batch_id`，并以 request digest 和持久化 result 处理冲突/重放。
 
 ## Consequences
 
@@ -33,4 +35,5 @@ Payment、Checkout、Refund、Subscription、Credit、Metering 与 fulfillment �
 - `src/application/*/ports/`；
 - `src/infrastructure/postgres/`；
 - `src/infrastructure/redis/`；
+- `test/integration/durable-command-receipts.test.ts`；
 - `test/architecture/ownership.test.ts`。

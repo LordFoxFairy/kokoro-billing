@@ -37,11 +37,13 @@ Redis 仅对可重复 operation 最多尝试两次，并受 overall deadline 限
 | Credit/usage/admin/redeem 内部命令 | command receipt、业务 source UNIQUE 或一对一事实 |
 | Execution event | tenant + event ID，另存 payload hash |
 | Provider webhook | tenant + provider + external event ID，另存 payload hash |
-| Settlement/reversal | stable settlement/external reference、reversal identity/receipt |
-| Expiry | active status + row lock；重复 sweep 跳过终态 |
+| Settlement acceptance | `payment_command_receipt`：tenant + command + key、`settlement_id` identity、versioned request digest/result |
+| Reversal | stable reversal identity/receipt |
+| Expiry | `entitlement_command_receipt`：tenant + command + key、`batch_id` identity、normalized limit digest/result |
 
-Redis hint 的 claim/replay/conflict 只优化入口；失败时 handler 继续到 PostgreSQL。调用方遇到 timeout/409/unknown 时复用原 identity，
-不得用新 key 猜测重试。
+Settlement/expiry route 刻意不让 raw-body Redis fingerprint 决定 replay/conflict：JSON 属性顺序以及省略/显式默认 `limit` 都不应
+改变语义。PostgreSQL 在事务中同时核对 key、command identity 与规范化 digest；成功后重放持久化 result。调用方遇到
+timeout/409/unknown 时复用原 identity，不得用新 batch/settlement 猜测重试。
 
 ## 4. Inbox、outbox 与 worker
 
@@ -66,8 +68,9 @@ Ingress 先写 `entitlement_execution_event.status=received`。Batch script 按 
 
 ### Expiry
 
-Redis lease 提供 leader 协调；Redis 不可用时实现会继续执行 task，让 PostgreSQL row lock/status 幂等保证正确性。每个 hold 独立事务，
-单条失败会终止当前 sweep；下次运行可继续处理仍为 active 的行。
+Redis lease 提供 leader 协调；lease 操作在已连接 Redis 上失败时会继续执行 task，让 PostgreSQL receipt、row lock/status 保证正确性。
+Worker 初始连接当前仍要求 Redis 可用。一个 expiry batch 的 receipt、所有选中 hold/allocation/account/outbox 和 result 在同一外层
+transaction 提交；内部逐 hold savepoint 只提供结构化回滚。任一条失败会回滚整个 batch，原 identity 可安全重试。
 
 ### Entitlement outbox
 
@@ -78,6 +81,8 @@ publisher/consumer routing 尚未装配，不能把表存在当作已交付集�
 
 - API/worker operation 使用 context-scoped PostgreSQL session；嵌套 application transaction 使用 savepoint。
 - Account/grant/hold/allocation/journal/outbox 在同事务写入；任何异常 rollback。
+- Settlement acceptance 将 receipt、settlement、payment outbox 与 result 原子提交；expiry 将 batch receipt、释放写入、entitlement
+  outbox 与精确 hold ID result 原子提交。
 - Provider network call 与账务事务分离；本地 fact 可用于不确定结果后的重放/对账。
 - Payment lease 与 business transaction 使用独立 connection，避免业务 rollback 撤销 lease owner。
 - SIGTERM/SIGINT 触发 API resource close；超过 shutdown deadline 非零退出。
@@ -87,8 +92,10 @@ publisher/consumer routing 尚未装配，不能把表存在当作已交付集�
 
 | 故障 | 当前行为 | 正确性约束 |
 |---|---|---|
-| Redis hint timeout | 忽略 hint，继续 PostgreSQL | durable receipt/fact 决定 replay/conflict |
-| Redis expiry lease timeout | 允许 sweep 继续 | PostgreSQL row lock/status 防重复记账 |
+| Settlement/expiry Redis hint | 不参与这两个 command 的冲突裁决 | normalized PostgreSQL receipt 决定 replay/conflict |
+| 其他 Redis hint timeout | 忽略 hint，继续 PostgreSQL | durable receipt/fact 决定 replay/conflict |
+| Redis expiry lease operation timeout | 已连接后允许 sweep 继续 | PostgreSQL batch receipt/row lock/status 防重复记账 |
+| Redis initial connect failure | API/expiry worker 当前启动失败 | 账务不降级；恢复 Redis 后按原 identity 重启 |
 | PostgreSQL unavailable | readiness 503；账务路径失败 | 不降级到 Redis/内存写事实 |
 | Provider timeout | 返回稳定 provider error/unknown，由原 key 重试 | 不重复创建无 key provider mutation |
 | Metrics scrape/record failure | 返回空 metrics 或忽略记录失败 | 不改变业务 response |

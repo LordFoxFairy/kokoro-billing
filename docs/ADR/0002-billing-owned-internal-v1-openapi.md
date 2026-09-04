@@ -19,13 +19,16 @@ provider；若各 consumer 手写 DTO 或从运行时实现猜测协议，会形
 5. Consumer 固定 repository + immutable commit/tag + path + `info.version` + SHA-256；generated client/type 只读且不得成为
    Domain/DB model。
 6. Repository contract gate 同时检查核心边界、metadata 与 Fastify route parity。
+7. Provider webhook 只发布 `stripe|alipay|wechat`；provider-dependent signature location 由 contract 明确描述。Alipay 的 RSA2
+   signature 是 form body 字段，不用虚假的 query security scheme 表达，也不发布 fixture mock scheme。
 
 ## Consequences
 
 - Contract 变更先于实现与 consumer，且同 commit 更新测试/文档。
 - BFF 可以把结果映射到自己的 public Product API，但不能原样发布 Billing internal contract。
 - Provider ingress 的 permission 用 signature 表达，幂等由 provider event identity 表达。
-- 当前仍缺 historical semantic breaking diff、机器 provenance manifest 和完整 request/response parity；这些缺口必须在
+- Settlement/expiry body/result 与 webhook signature matrix 已纳入 gate；当前仍缺 historical semantic breaking diff、机器
+  provenance manifest 和其余 surface 的完整 request/response parity；这些缺口必须在
   `docs/CURRENT.md` 保持可见。
 
 ## Evidence in current source
@@ -33,4 +36,5 @@ provider；若各 consumer 手写 DTO 或从运行时实现猜测协议，会形
 - `contract/openapi/v1/openapi.yaml`；
 - `contract/README.md`；
 - `scripts/verify-openapi.ts`；
+- `test/contract/openapi-command-contract.test.ts`；
 - `test/architecture/ownership.test.ts`。

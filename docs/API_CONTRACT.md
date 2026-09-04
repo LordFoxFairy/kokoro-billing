@@ -27,9 +27,9 @@ owner、身份、幂等、错误与 consumer 规则，不复制字段级 Schema�
 | `POST .../admissions/{admissionId}/capture` | `agent`、`model`、`studio` | required + durable Billing receipt |
 | `POST .../admissions/{admissionId}/release` | `agent`、`model`、`studio` | required + durable Billing receipt |
 | `POST /v1/internal/billing/execution-events` | `agent`、`model`、`studio` | required header；event ID + payload hash 是 durable identity |
-| `POST /v1/internal/payment/settlements/accept` | 当前实现允许 `payment-worker` 或 `scheduler` | required header；settlement/external identity 收敛 |
+| `POST /v1/internal/payment/settlements/accept` | 当前实现允许 `payment-worker` 或 `scheduler` | required；`settlement_id` identity + PostgreSQL receipt/digest |
 | `POST /v1/internal/payment/refunds/accept` | `payment-worker` | required + reversal fact/receipt |
-| `POST /v1/internal/commands/expire-credit-holds` | `scheduler` | required header；状态条件使重复过期收敛 |
+| `POST /v1/internal/commands/expire-credit-holds` | `scheduler` | required；`batch_id` identity + PostgreSQL receipt/digest |
 | `POST /v1/webhooks/payment/{provider}` | provider-specific signature + account-to-tenant mapping | provider + external event ID |
 | `POST /v1/admin/billing/refunds` | trusted admin proxy + role `billing.admin` | required + reversal fact/receipt |
 
@@ -55,7 +55,16 @@ X-Kokoro-Subject: SUBJECT    # checkout 必需；catalog 可省略
 - Internal service 必须携带 registered `X-Kokoro-Service`、`X-Kokoro-Internal-Secret` 与 tenant context；每条 route 再做
   allow-list。
 - Admin 必须由 `X-Kokoro-Service: admin`、独立 proxy secret、operator identity 和精确 role `billing.admin` 组成。
-- Provider webhook 在持久化前做 provider-specific raw-body signature 验证。生产 `jwks` 模式从 provider account mapping
+- Provider webhook 在持久化前做 provider-specific raw-body signature 验证。生产 provider 集合与签名位置固定为：
+
+  | Provider | Content type / signature source |
+  |---|---|
+  | `stripe` | raw JSON + `Stripe-Signature` header |
+  | `alipay` | `application/x-www-form-urlencoded` body 中的 `sign` 与 `sign_type=RSA2`；不读 query/header alias |
+  | `wechat` | raw JSON + `Wechatpay-Timestamp`、`Wechatpay-Nonce`、`Wechatpay-Signature` headers |
+
+  OpenAPI 标准 security scheme 不能表达 body field authentication，因此 Alipay 的位置由必填 `AlipayWebhookForm` 与
+  `x-kokoro-provider-signatures` 共同约束；contract 不声明伪造的 query scheme。生产 `jwks` 模式从 provider account mapping
   解析 tenant；payload tenant 若存在必须一致。
 - Execution event 不携带第二套 caller-selected signature 字段；信任来自已认证 service context。
 
@@ -77,8 +86,15 @@ v1 成功和失败分别为：
 ## 幂等、并发与重试
 
 - 声明 `required` 的 operation 要求 8–128 个 printable ASCII 字符的 `Idempotency-Key`。
-- 同一 tenant/command/key + 同一 payload 返回原事实；同 key 不同 payload 返回 `billing.idempotency_conflict`（409）。
-- Redis claim 仅提前发现冲突；Redis timeout/failure 时继续访问 PostgreSQL durable fact。
+- 同一 tenant/command/key + 同一规范化 payload 返回原事实；同 key 不同 identity/payload 返回
+  `billing.idempotency_conflict`（409）。
+- Settlement command name 是 `payment.settlement.accept`，identity 是 `settlement_id`。Digest 覆盖版本化 command、provider、
+  external payment reference、amount、currency 及可选 provider event/checkout identity；成功结果持久化后按 key 或 identity 重放。
+- Expiry command name 是 `entitlement.credit-holds.expire`，identity 是 `batch_id`。Digest 覆盖版本化 command、batch 与规范化后的
+  `limit`（缺省值 100）；成功结果保存精确 `expired_hold_ids`，重放不再次扫描。
+- 对这两个 command，同 identity 换 key 仍读取同一 receipt；同 key 换 batch/settlement 必须 409，不能消费下一批事实。
+- Settlement/expiry 不通过 Redis raw-body fingerprint 做冲突短路，因为字段顺序或显式/隐式默认值不是业务 payload drift；
+  PostgreSQL receipt 是唯一裁决。其他已接入 hint 的入口也必须以自己的 PostgreSQL fact/receipt 为最终权威。
 - Provider webhook 不要求 caller 生成 Idempotency-Key，以签名后的稳定 external event ID 去重。
 - 只有已知 retryable 结果可使用原 key 重试；不确定结果先查询/reconcile，不创建新 key。
 
@@ -118,7 +134,8 @@ Billing OpenAPI source
 
 ## 当前 contract 缺口
 
-- 多个 mutation 尚未在 OpenAPI 中声明完整 request body、精确 response 与完整错误集合；部分 response 使用 generic schema。
+- Settlement/expiry request body、result 和 409 已闭环；其他 mutation 仍有不完整 request body、精确 response 或错误集合，部分
+  response 使用 generic schema。
 - 当前 checker 不执行 historical OpenAPI breaking diff，也没有机器 provenance manifest/artifact publish job。
 - Ledger `created_at` 是 epoch milliseconds，不符合平台 RFC 3339 UTC 目标。
 - Route parity 不能证明运行时 Zod 与 OpenAPI 字段语义完全一致；在补齐 shape 前需人工逐 route review。
