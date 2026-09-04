@@ -1,6 +1,10 @@
+import { generateKeyPairSync } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { createBillingServer } from '../../src/interfaces/http/server.js';
 import { WebhookError } from '../../src/application/payment/ports/provider-types.js';
+import { parseProviderWebhook, verifyProviderWebhook } from '../../src/application/payment/ports/provider-registry.js';
+import { createProviderRegistry } from '../../src/infrastructure/providers/payment/provider-registry.js';
+import { signAlipayNotification } from '../../src/infrastructure/providers/payment/adapters/alipay/alipay-webhook-provider.js';
 
 const webhookCalls: unknown[] = [];
 
@@ -93,6 +97,68 @@ describe('Billing HTTP surface', () => {
     const response = await server.inject({ method: 'POST', url: '/v1/webhooks/payment/stripe', payload: [] });
     expect(response.statusCode).toBe(400);
     expect(response.json().error.code).toBe('billing.invalid_request');
+  });
+
+  it('rejects providers outside the production registry before webhook processing', async () => {
+    const response = await server.inject({
+      method: 'POST',
+      url: '/v1/webhooks/payment/mock',
+      payload: { id: 'event-mock' },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe('billing.provider_not_supported');
+  });
+
+  it('accepts Alipay RSA2 only from the signed form body and ignores a query signature', async () => {
+    const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const privateKeyPem = privateKey.export({ type: 'pkcs1', format: 'pem' }).toString();
+    const publicKeyPem = publicKey.export({ type: 'pkcs1', format: 'pem' }).toString();
+    const registry = createProviderRegistry(['alipay']);
+    const params = { notify_id: 'notify-http-1', sign_type: 'RSA2', app_id: 'app-1', trade_status: 'TRADE_SUCCESS', trade_no: 'trade-http-1' };
+    const signed = { ...params, sign: signAlipayNotification(params, privateKeyPem) };
+    const acceptedEvents: unknown[] = [];
+    const alipayServer = createBillingServer({
+      checkout: { create: async () => ({ checkoutId: 'checkout-1', status: 'created', amountMinor: 1, currency: 'USD', expiresAt: new Date('2030-01-01') }) },
+      usage: { expireExpiredHolds: async (input) => ({ batchId: input.batchId, expiredHoldIds: [] }) },
+      settlement: { recordSettlement: async (input) => ({ settlementId: input.settlementId, accepted: true }) },
+      reversal: { recordReversal: async () => 'refund-1' },
+      webhook: { accept: async (input) => {
+        acceptedEvents.push(input);
+        return { providerEventId: 'event-alipay-1', processingStatus: 'received' as const };
+      } },
+      parseWebhook: (provider, payload) => parseProviderWebhook(registry, provider, payload),
+      resolveWebhookTenant: async (provider, accountRef) => provider === 'alipay' && accountRef === 'app-1' ? 'tenant-1' : null,
+      account: { getForSubject: async () => null },
+      auth: {
+        user: async () => null,
+        bff: async () => null,
+        internal: async () => null,
+        admin: async () => null,
+        webhook: async (request) => verifyProviderWebhook(registry, 'alipay', request.headers, Buffer.from(request.rawBody ?? ''), publicKeyPem),
+      },
+    });
+
+    try {
+      const accepted = await alipayServer.inject({
+        method: 'POST',
+        url: '/v1/webhooks/payment/alipay',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: new URLSearchParams(signed).toString(),
+      });
+      expect(accepted.statusCode).toBe(202);
+      expect(acceptedEvents).toHaveLength(1);
+
+      const queryOnly = await alipayServer.inject({
+        method: 'POST',
+        url: `/v1/webhooks/payment/alipay?sign=${encodeURIComponent(signed.sign)}`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: new URLSearchParams(params).toString(),
+      });
+      expect(queryOnly.statusCode).toBe(401);
+      expect(acceptedEvents).toHaveLength(1);
+    } finally {
+      await alipayServer.close();
+    }
   });
 
   it('does not expose retired pre-v1 route aliases', async () => {

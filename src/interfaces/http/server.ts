@@ -467,19 +467,22 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
   });
 
   app.post<{ Params: { provider: string } }>('/v1/webhooks/payment/:provider', async (request, reply) => {
+    const providerResult = paymentProviderSchema.safeParse(request.params.provider);
+    if (!providerResult.success) return reply.code(400).send({ error: { code: 'billing.provider_not_supported', message: 'provider is not enabled by the production contract' } });
+    const provider = providerResult.data;
     if (!(await dependencies.auth.webhook(request))) return reply.code(401).send({ error: { code: 'billing.provider_event_invalid', message: 'provider signature required' } });
     const parsedBody = unknownRecordSchema.safeParse(request.body);
     if (!parsedBody.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: 'provider payload must be a JSON object' }, meta: { request_id: request.id } });
     const body = parsedBody.data;
     try {
-      const parsed = dependencies.parseWebhook?.(request.params.provider, body);
-      const providerAccountRef = parsed?.providerAccountRef ?? dependencies.resolveWebhookAccountRef?.(request.params.provider) ?? null;
+      const parsed = dependencies.parseWebhook?.(provider, body);
+      const providerAccountRef = parsed?.providerAccountRef ?? dependencies.resolveWebhookAccountRef?.(provider) ?? null;
       const tenantId = dependencies.resolveWebhookTenant
-        ? providerAccountRef === null ? null : await dependencies.resolveWebhookTenant(request.params.provider, providerAccountRef)
+        ? providerAccountRef === null ? null : await dependencies.resolveWebhookTenant(provider, providerAccountRef)
         : typeof request.headers['x-kokoro-tenant-id'] === 'string' ? request.headers['x-kokoro-tenant-id'] : null;
       if (!tenantId) throw new Error('billing.tenant_mismatch');
       if (parsed?.payloadTenantId && parsed.payloadTenantId !== tenantId) throw new Error('billing.tenant_mismatch');
-      const result = await dependencies.webhook.accept({ tenantId: tenantId, provider: request.params.provider, providerAccountRef, externalEventId: parsed?.eventId ?? String(body.id ?? ''), eventType: parsed?.eventType ?? String(body.type ?? 'unknown'), rawPayload: body, signatureValid: true });
+      const result = await dependencies.webhook.accept({ tenantId: tenantId, provider, providerAccountRef, externalEventId: parsed?.eventId ?? String(body.id ?? ''), eventType: parsed?.eventType ?? String(body.type ?? 'unknown'), rawPayload: body, signatureValid: true });
       return reply.code(202).send({ data: { event_id: result.providerEventId, status: result.processingStatus }, meta: { request_id: request.id } });
     } catch (error) { return sendError(reply, error); }
   });

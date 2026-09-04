@@ -317,17 +317,49 @@ paths:
       x-kokoro-stability: stable
       x-kokoro-idempotency: provider-event-id
       x-kokoro-permission: provider-signature
+      description: Stripe and WeChat sign the raw JSON body with provider headers.
+        Alipay submits an application/x-www-form-urlencoded body whose sign and
+        sign_type fields are part of that same signed form; no query or synthetic
+        signature header is accepted.
+      x-kokoro-provider-signatures:
+        stripe:
+          location: header
+          fields:
+            - Stripe-Signature
+        alipay:
+          location: form-body
+          fields:
+            - sign
+            - sign_type
+        wechat:
+          location: header
+          fields:
+            - Wechatpay-Timestamp
+            - Wechatpay-Nonce
+            - Wechatpay-Signature
       security:
         - stripeSignature: []
         - wechatSignature: []
-        - alipayBodySignature: []
-        - mockSignature: []
       parameters:
         - name: provider
           in: path
           required: true
           schema:
             type: string
+            enum:
+              - stripe
+              - alipay
+              - wechat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/AlipayWebhookForm"
       responses:
         "202":
           $ref: "#/components/responses/V1Accepted"
@@ -485,17 +517,6 @@ components:
       in: header
       name: Wechatpay-Signature
       description: WeChat Pay signed raw-body header; timestamp and nonce are also required.
-    alipayBodySignature:
-      type: apiKey
-      in: query
-      name: sign
-      description: Alipay RSA2 signature is carried in the signed form body; this
-        scheme documents the body field rather than a header.
-    mockSignature:
-      type: apiKey
-      in: header
-      name: X-Kokoro-Webhook-Signature
-      description: Local fixture-only HMAC signature.
   parameters:
     IdempotencyKey:
       name: Idempotency-Key
@@ -751,6 +772,37 @@ components:
           minimum: 1
           maximum: 500
           default: 100
+    AlipayWebhookForm:
+      type: object
+      required:
+        - notify_id
+        - sign
+        - sign_type
+      properties:
+        notify_id:
+          type: string
+          minLength: 1
+        sign:
+          type: string
+          minLength: 1
+        sign_type:
+          type: string
+          enum:
+            - RSA2
+        app_id:
+          type: string
+        trade_status:
+          type: string
+        trade_no:
+          type: string
+        out_trade_no:
+          type: string
+        refund_fee:
+          type: string
+        passback_params:
+          type: string
+      additionalProperties:
+        type: string
     V1SettlementAcceptData:
       type: object
       required:

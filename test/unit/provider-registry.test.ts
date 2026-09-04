@@ -68,6 +68,15 @@ describe('payment provider registry', () => {
     expect(new AlipayWebhookProvider().parseEvent(signed)).toMatchObject({ eventType: 'payment_succeeded', externalPaymentRef: 'trade-1' });
   });
 
+  it('rejects a signed Alipay form that does not declare the canonical RSA2 algorithm', () => {
+    const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const params = { notify_id: 'notify-legacy', sign_type: 'RSA', app_id: 'app-1', trade_status: 'TRADE_SUCCESS', trade_no: 'trade-legacy' };
+    const signed = { ...params, sign: signAlipayNotification(params, privateKey.export({ type: 'pkcs1', format: 'pem' }).toString()) };
+    const rawBody = Buffer.from(new URLSearchParams(signed).toString(), 'utf8');
+    const publicKeyPem = publicKey.export({ type: 'pkcs1', format: 'pem' }).toString();
+    expect(verifyProviderWebhook(createProviderRegistry(['alipay']), 'alipay', {}, rawBody, publicKeyPem)).toBe(false);
+  });
+
   it('decrypts WeChat APIv3 encrypted resources before normalizing the order reference', () => {
     const key = Buffer.from('01234567890123456789012345678901', 'utf8');
     const nonce = randomBytes(12).toString('hex').slice(0, 12);

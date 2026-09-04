@@ -72,7 +72,7 @@ compatibility comparison。
 `contract/openapi/v1/openapi.yaml`，当前 source SHA-256：
 
 ```text
-afcc257a51418e0357c57c64f729e4ebaed63510bcc6c84755a7eb833520ee7a
+553da1418c85998ff6859142f825110a52b9c2ea9b750224e3953c1e611ad409
 ```
 
 复核：

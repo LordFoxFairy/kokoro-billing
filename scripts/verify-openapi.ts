@@ -6,7 +6,10 @@ import { parse } from 'yaml';
 type OpenApiDocument = {
   readonly openapi?: string;
   readonly paths?: Record<string, Record<string, unknown>>;
-  readonly components?: { readonly schemas?: Record<string, unknown> };
+  readonly components?: {
+    readonly schemas?: Record<string, unknown>;
+    readonly securitySchemes?: Record<string, unknown>;
+  };
 };
 type OperationGovernance = Readonly<{ idempotency: string; permission: string }>;
 
@@ -95,6 +98,31 @@ if (JSON.stringify(settlementSchema?.required) !== JSON.stringify(['settlement_i
 const expirySchema = asRecord(contract.components?.schemas?.V1ExpireCreditHoldsRequest);
 if (JSON.stringify(expirySchema?.required) !== JSON.stringify(['batch_id']) || expirySchema?.additionalProperties !== false) {
   throw new Error('V1ExpireCreditHoldsRequest must require only the explicit batch identity');
+}
+const webhook = asRecord(contract.paths?.['/v1/webhooks/payment/{provider}']?.post);
+const webhookParameters = Array.isArray(webhook?.parameters) ? webhook.parameters.map(asRecord).filter((value) => value !== null) : [];
+const providerParameter = webhookParameters.find((parameter) => parameter.name === 'provider');
+const providerSchema = asRecord(providerParameter?.schema);
+if (JSON.stringify(providerSchema?.enum) !== JSON.stringify(['stripe', 'alipay', 'wechat'])) {
+  throw new Error('payment webhook provider enum must match the production registry');
+}
+if (contract.components?.securitySchemes?.mockSignature !== undefined || contract.components?.securitySchemes?.alipayBodySignature !== undefined) {
+  throw new Error('payment webhook contract must not expose fixture signatures or model Alipay form signatures as query authentication');
+}
+const expectedProviderSignatures = {
+  stripe: { location: 'header', fields: ['Stripe-Signature'] },
+  alipay: { location: 'form-body', fields: ['sign', 'sign_type'] },
+  wechat: { location: 'header', fields: ['Wechatpay-Timestamp', 'Wechatpay-Nonce', 'Wechatpay-Signature'] },
+};
+if (JSON.stringify(webhook?.['x-kokoro-provider-signatures']) !== JSON.stringify(expectedProviderSignatures)) {
+  throw new Error('payment webhook signature locations must match the provider runtime');
+}
+const webhookRequestBody = asRecord(webhook?.requestBody);
+const webhookContent = asRecord(webhookRequestBody?.content);
+const alipayFormContent = asRecord(webhookContent?.['application/x-www-form-urlencoded']);
+const alipayFormSchemaRef = asRecord(alipayFormContent?.schema)?.$ref;
+if (alipayFormSchemaRef !== '#/components/schemas/AlipayWebhookForm') {
+  throw new Error('Alipay webhook must use the canonical form-body schema');
 }
 const tenantContext = (contract as { readonly components?: { readonly securitySchemes?: Record<string, { readonly name?: string }> } }).components?.securitySchemes?.tenantContext;
 if (tenantContext?.name !== 'X-Kokoro-Tenant-Id') throw new Error('external OpenAPI contract must expose X-Kokoro-Tenant-Id as tenant context');

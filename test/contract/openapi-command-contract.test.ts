@@ -50,4 +50,32 @@ describe('Billing command OpenAPI contract', () => {
     expect(expiry.required).toEqual(['batch_id']);
     expect(expiry.additionalProperties).toBe(false);
   });
+
+  it('documents only production webhook providers and the Alipay form-body signature', async () => {
+    const document = await readContract();
+    const webhook = operation(document, '/v1/webhooks/payment/{provider}');
+    const parameters = z.array(recordSchema).parse(webhook.parameters);
+    const provider = parameters.find((parameter) => parameter.name === 'provider');
+    expect(provider).toBeDefined();
+    expect(recordSchema.parse(provider?.schema).enum).toEqual(['stripe', 'alipay', 'wechat']);
+
+    expect(document.components.securitySchemes).not.toHaveProperty('mockSignature');
+    expect(document.components.securitySchemes).not.toHaveProperty('alipayBodySignature');
+    expect(webhook['x-kokoro-provider-signatures']).toEqual({
+      stripe: { location: 'header', fields: ['Stripe-Signature'] },
+      alipay: { location: 'form-body', fields: ['sign', 'sign_type'] },
+      wechat: {
+        location: 'header',
+        fields: ['Wechatpay-Timestamp', 'Wechatpay-Nonce', 'Wechatpay-Signature'],
+      },
+    });
+
+    const requestBody = recordSchema.parse(webhook.requestBody);
+    const content = recordSchema.parse(requestBody.content);
+    const form = recordSchema.parse(content['application/x-www-form-urlencoded']);
+    expect(form.schema).toEqual({ $ref: '#/components/schemas/AlipayWebhookForm' });
+    const alipay = recordSchema.parse(document.components.schemas.AlipayWebhookForm);
+    expect(alipay.required).toEqual(['notify_id', 'sign', 'sign_type']);
+    expect(recordSchema.parse(recordSchema.parse(alipay.properties).sign_type).enum).toEqual(['RSA2']);
+  });
 });
