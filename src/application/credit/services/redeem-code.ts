@@ -13,7 +13,13 @@ export function formatRedeemCode(compact: string): string {
   return `KOKO-${compact.slice(0, 4)}-${compact.slice(4, 8)}-${compact.slice(8, 12)}-${compact.slice(12)}`;
 }
 
-export function generateRedeemCode(random: () => number = () => randomBytes(1)[0]!): string {
+function randomByte(): number {
+  const byte = randomBytes(1).at(0);
+  if (byte === undefined) throw new Error('billing.random_byte_unavailable');
+  return byte;
+}
+
+export function generateRedeemCode(random: () => number = randomByte): string {
   let compact = '';
   while (compact.length < 16) {
     const byte = random();

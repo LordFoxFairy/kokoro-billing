@@ -57,55 +57,57 @@ export class OutboxWorker {
       throw error;
     }
 
-    const payload = parsePersistedJson(row.payload_json, jsonRecordSchema, 'billing.outbox_payload_invalid');
+    const selectedRow = row;
+    if (selectedRow === undefined) throw new Error('billing.outbox_row_missing_after_lease');
+    const payload = parsePersistedJson(selectedRow.payload_json, jsonRecordSchema, 'billing.outbox_payload_invalid');
     let leaseLost = false;
     const renewLease = async (): Promise<void> => {
       const [renewal] = await this.leaseConnection.execute<ResultSetHeader>(
-        `UPDATE ${this.table}
+          `UPDATE ${this.table}
             SET lease_until = CURRENT_TIMESTAMP(3) + ($1 * INTERVAL '1 second')
           WHERE outbox_id = $2 AND lease_token = $3 AND published_at IS NULL AND dead_lettered_at IS NULL`,
-        [this.leaseSeconds, row!.outbox_id, leaseToken],
+        [this.leaseSeconds, selectedRow.outbox_id, leaseToken],
       );
       if (renewal.affectedRows !== 1) leaseLost = true;
     };
     const renewalTimer = setInterval(() => {
       void renewLease().catch((error: unknown) => {
-        process.stderr.write(`kokoro-billing outbox lease renewal failed table=${this.table} outbox_id=${row!.outbox_id} error=${error instanceof Error ? error.message : String(error)}\n`);
+        process.stderr.write(`kokoro-billing outbox lease renewal failed table=${this.table} outbox_id=${selectedRow.outbox_id} error=${error instanceof Error ? error.message : String(error)}\n`);
       });
     }, Math.max(1_000, Math.floor(this.leaseSeconds * 1_000 / 3)));
     try {
-      await handler({ outboxId: row.outbox_id, eventType: row.event_type, payload });
+      await handler({ outboxId: selectedRow.outbox_id, eventType: selectedRow.event_type, payload });
       if (leaseLost) return 'lease_lost';
       const [published] = await this.leaseConnection.execute<ResultSetHeader>(
         `UPDATE ${this.table}
             SET published_at = CURRENT_TIMESTAMP(3), lease_token = NULL, lease_until = NULL
           WHERE outbox_id = $1 AND lease_token = $2 AND published_at IS NULL`,
-        [row.outbox_id, leaseToken],
+        [selectedRow.outbox_id, leaseToken],
       );
       if (published.affectedRows !== 1) return 'lease_lost';
       return 'published';
     } catch (error) {
       if (leaseLost) return 'lease_lost';
-      const attemptNumber = row.attempts + 1;
+      const attemptNumber = selectedRow.attempts + 1;
       if (attemptNumber >= this.maxAttempts) {
         const [deadLettered] = await this.leaseConnection.execute<ResultSetHeader>(
           `UPDATE ${this.table}
               SET dead_lettered_at = CURRENT_TIMESTAMP(3), lease_token = NULL, lease_until = NULL
             WHERE outbox_id = $1 AND lease_token = $2 AND published_at IS NULL`,
-          [row.outbox_id, leaseToken],
+          [selectedRow.outbox_id, leaseToken],
         );
         if (deadLettered.affectedRows !== 1) return 'lease_lost';
-        process.stderr.write(`kokoro-billing outbox dead-lettered table=${this.table} outbox_id=${row.outbox_id} attempts=${attemptNumber}\n`);
+        process.stderr.write(`kokoro-billing outbox dead-lettered table=${this.table} outbox_id=${selectedRow.outbox_id} attempts=${attemptNumber}\n`);
         return 'dead_lettered';
       }
       const [retry] = await this.leaseConnection.execute<ResultSetHeader>(
         `UPDATE ${this.table}
             SET lease_token = NULL, lease_until = NULL, next_attempt_at = CURRENT_TIMESTAMP(3) + (LEAST(attempts, 60) * INTERVAL '1 second')
           WHERE outbox_id = $1 AND lease_token = $2 AND published_at IS NULL`,
-        [row.outbox_id, leaseToken],
+          [selectedRow.outbox_id, leaseToken],
       );
       if (retry.affectedRows !== 1) return 'lease_lost';
-      process.stderr.write(`kokoro-billing outbox retry table=${this.table} outbox_id=${row.outbox_id} attempt=${attemptNumber} error=${error instanceof Error ? error.message : String(error)}\n`);
+      process.stderr.write(`kokoro-billing outbox retry table=${this.table} outbox_id=${selectedRow.outbox_id} attempt=${attemptNumber} error=${error instanceof Error ? error.message : String(error)}\n`);
       return 'retrying';
     } finally {
       clearInterval(renewalTimer);

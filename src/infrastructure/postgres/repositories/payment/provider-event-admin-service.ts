@@ -61,7 +61,8 @@ export class ProviderEventAdminService {
     const page = hasMore ? rows.slice(0, limit) : rows;
     const items = page.map((row) => ({ providerEventId: String(row.provider_event_id), provider: String(row.provider), externalEventId: String(row.external_event_id), eventType: String(row.event_type), processingStatus: row.processing_status, processingAttempts: Number(row.processing_attempts), lastError: row.last_error === null ? null : String(row.last_error), receivedAt: new Date(row.received_at).toISOString(), processedAt: row.processed_at === null ? null : new Date(row.processed_at).toISOString() }));
     if (!hasMore || page.length === 0) return { items };
-    const last = items[items.length - 1]!;
+    const last = items.at(-1);
+    if (last === undefined) return { items };
     return { items, nextCursor: encodeProviderEventCursor({ version: 1, scope: 'payment.provider-event.admin', tenantId: input.tenantId, status: input.status ?? null, receivedAt: last.receivedAt, providerEventId: last.providerEventId }) };
   }
 
