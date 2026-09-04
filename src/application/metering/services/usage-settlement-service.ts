@@ -7,7 +7,8 @@ export type UsageHold = { readonly holdId: string; readonly allocations: readonl
 export type SettleUsageInput = { readonly tenantId: string; readonly holdId: string; readonly usageEventId: string; readonly idempotencyKey: string; readonly actualMicros: number };
 export type UsageSettlementResult = { readonly settlementId: string; readonly capturedMicros: number; readonly releasedMicros: number };
 export type UsageReleaseResult = { readonly holdId: string; readonly releasedMicros: number };
-export type UsageExpiryResult = { readonly expiredHoldIds: readonly string[] };
+export type ExpireUsageHoldsInput = { readonly tenantId: string; readonly batchId: string; readonly idempotencyKey: string; readonly limit?: number };
+export type UsageExpiryResult = { readonly batchId: string; readonly expiredHoldIds: readonly string[] };
 export class UsageSettlementService {
   public constructor(private readonly repository: UsageSettlementRepository, private readonly transaction: TransactionPort) {}
   public recordUsageEvent(input: UsageEventInput): Promise<void> { return this.transaction.withTransaction(() => this.repository.recordUsageEvent(input)); }
@@ -15,5 +16,5 @@ export class UsageSettlementService {
   public authorizeUsage(input: AuthorizeUsageInput): Promise<UsageHold> { return this.transaction.withTransaction(() => this.repository.authorizeUsage(input)); }
   public settleUsage(input: SettleUsageInput): Promise<UsageSettlementResult> { return this.transaction.withTransaction(() => this.repository.settleUsage(input)); }
   public releaseUsage(input: { readonly tenantId: string; readonly holdId: string; readonly idempotencyKey: string }): Promise<UsageReleaseResult> { return this.transaction.withTransaction(() => this.repository.releaseUsage(input)); }
-  public expireExpiredHolds(input: { readonly tenantId?: string; readonly limit?: number } = {}): Promise<UsageExpiryResult> { return this.transaction.withTransaction(() => this.repository.expireExpiredHolds(input)); }
+  public expireExpiredHolds(input: ExpireUsageHoldsInput): Promise<UsageExpiryResult> { return this.transaction.withTransaction(() => this.repository.expireExpiredHolds(input)); }
 }

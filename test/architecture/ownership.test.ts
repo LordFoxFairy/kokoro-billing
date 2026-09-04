@@ -256,5 +256,7 @@ describe('billing ownership architecture', () => {
     expect(schema).not.toMatch(/\bSELECT\s+\*/iu);
     expect(schema).toContain('CREATE TABLE IF NOT EXISTS entitlement_credit_journal');
     expect(schema).toContain('CREATE TABLE IF NOT EXISTS payment_command_receipt');
+    expect(schema).toContain('uq_payment_command_receipt_identity');
+    expect(schema).toContain('uq_entitlement_command_receipt_identity');
   });
 });

@@ -11,8 +11,8 @@ const server = createBillingServer({
   checkout: {
     create: async () => ({ checkoutId: 'checkout-1', status: 'created', amountMinor: 1999, currency: 'USD', expiresAt: new Date('2030-01-01') }),
   },
-  usage: { expireExpiredHolds: async () => ({ expired: 0, expiredHoldIds: [] }) },
-  settlement: { recordSettlement: async () => undefined },
+  usage: { expireExpiredHolds: async (input) => ({ batchId: input.batchId, expiredHoldIds: [] }) },
+  settlement: { recordSettlement: async (input) => ({ settlementId: input.settlementId, accepted: true }) },
   reversal: { recordReversal: async () => 'refund-1' },
   webhook: {
     accept: async (input) => {

@@ -87,6 +87,7 @@ export class ProviderEventProcessor {
     const settlementId = uuidFromKey(`payment-settlement:${event.tenant_id}:${event.provider}:${externalEventId}`);
     await this.settlement.recordSettlement({
       settlementId, tenantId: event.tenant_id, provider: event.provider, providerEventId: event.provider_event_id, checkoutId: checkout.checkout_id,
+      idempotencyKey: `provider-settlement:${event.provider_event_id}`,
       externalPaymentRef: externalPaymentRef ?? `${event.provider}:${externalEventId}`,
       amountMinor: readSafeInteger(checkout.amount_minor, 'checkout_amount_minor'), currency: checkout.currency,
     });

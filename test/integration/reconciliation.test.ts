@@ -84,7 +84,7 @@ integration('billing reconciliation', () => {
     const reversalId = randomUUID();
     const accountId = randomUUID();
     try {
-      await service.recordSettlement({ settlementId, tenantId, externalPaymentRef: `reconcile-reversal-${settlementId}`, amountMinor: 100, currency: 'USD' });
+      await service.recordSettlement({ settlementId, tenantId, idempotencyKey: `settlement-${settlementId}`, externalPaymentRef: `reconcile-reversal-${settlementId}`, amountMinor: 100, currency: 'USD' });
       await service.fulfillSettlement({ settlementId, tenantId, accountId, subjectId: `subject-${accountId}`, programKey: 'reconcile', grantMicros: 10 });
       await connection.execute(
         `INSERT INTO payment_reversal (reversal_id, tenant_id, settlement_id, provider, external_reversal_ref, amount_minor, reason, status)

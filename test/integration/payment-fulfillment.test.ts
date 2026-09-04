@@ -13,10 +13,11 @@ integration('payment settlement to credit fulfillment', () => {
     const tenantId = randomUUID();
     const accountId = randomUUID();
     const settlementId = randomUUID();
-      const sourceRef = `test-payment-${randomUUID()}`;
+    const settlementKey = `settlement-${randomUUID()}`;
+    const sourceRef = `test-payment-${randomUUID()}`;
     try {
-      await service.recordSettlement({ settlementId, tenantId, externalPaymentRef: sourceRef, amountMinor: 1000, currency: 'USD' });
-      await service.recordSettlement({ settlementId, tenantId, externalPaymentRef: sourceRef, amountMinor: 1000, currency: 'USD' });
+      await service.recordSettlement({ settlementId, tenantId, idempotencyKey: settlementKey, externalPaymentRef: sourceRef, amountMinor: 1000, currency: 'USD' });
+      await service.recordSettlement({ settlementId, tenantId, idempotencyKey: settlementKey, externalPaymentRef: sourceRef, amountMinor: 1000, currency: 'USD' });
       const first = await service.fulfillSettlement({ settlementId, tenantId, accountId, subjectId: `subject-${accountId}`, programKey: 'test-plan', grantMicros: 100 });
       const second = await service.fulfillSettlement({ settlementId, tenantId, accountId, subjectId: `subject-${accountId}`, programKey: 'test-plan', grantMicros: 100 });
 
@@ -41,7 +42,7 @@ integration('payment settlement to credit fulfillment', () => {
     const sourceRef = `test-concurrent-payment-${randomUUID()}`;
     const input = { settlementId, tenantId, accountId, subjectId: `subject-${accountId}`, programKey: 'test-plan', grantMicros: 100 } as const;
     try {
-      await createPostgresBillingSettlementService(firstConnection).recordSettlement({ settlementId, tenantId, externalPaymentRef: sourceRef, amountMinor: 1000, currency: 'USD' });
+      await createPostgresBillingSettlementService(firstConnection).recordSettlement({ settlementId, tenantId, idempotencyKey: `settlement-${settlementId}`, externalPaymentRef: sourceRef, amountMinor: 1000, currency: 'USD' });
       const [first, second] = await Promise.all([
         createPostgresBillingSettlementService(firstConnection).fulfillSettlement(input),
         createPostgresBillingSettlementService(secondConnection).fulfillSettlement(input),
@@ -63,8 +64,10 @@ integration('payment settlement to credit fulfillment', () => {
     const tenantId = randomUUID();
     const sourceRef = `test-conflict-payment-${randomUUID()}`;
     try {
-      await service.recordSettlement({ settlementId: randomUUID(), tenantId, externalPaymentRef: sourceRef, amountMinor: 1000, currency: 'USD' });
-      await expect(service.recordSettlement({ settlementId: randomUUID(), tenantId, externalPaymentRef: sourceRef, amountMinor: 1000, currency: 'USD' })).rejects.toThrow('billing.idempotency_conflict');
+      const firstSettlementId = randomUUID();
+      const conflictingSettlementId = randomUUID();
+      await service.recordSettlement({ settlementId: firstSettlementId, tenantId, idempotencyKey: `settlement-${firstSettlementId}`, externalPaymentRef: sourceRef, amountMinor: 1000, currency: 'USD' });
+      await expect(service.recordSettlement({ settlementId: conflictingSettlementId, tenantId, idempotencyKey: `settlement-${conflictingSettlementId}`, externalPaymentRef: sourceRef, amountMinor: 1000, currency: 'USD' })).rejects.toThrow('billing.idempotency_conflict');
     } finally {
       await connection.end();
     }
@@ -76,8 +79,10 @@ integration('payment settlement to credit fulfillment', () => {
     const tenantId = randomUUID();
     const externalPaymentRef = `shared-provider-ref-${randomUUID()}`;
     try {
-      await service.recordSettlement({ settlementId: randomUUID(), tenantId, provider: 'stripe', externalPaymentRef, amountMinor: 1000, currency: 'USD' });
-      await expect(service.recordSettlement({ settlementId: randomUUID(), tenantId, provider: 'wechat', externalPaymentRef, amountMinor: 1000, currency: 'USD' })).resolves.toBeUndefined();
+      const stripeSettlementId = randomUUID();
+      const wechatSettlementId = randomUUID();
+      await service.recordSettlement({ settlementId: stripeSettlementId, tenantId, idempotencyKey: `settlement-${stripeSettlementId}`, provider: 'stripe', externalPaymentRef, amountMinor: 1000, currency: 'USD' });
+      await expect(service.recordSettlement({ settlementId: wechatSettlementId, tenantId, idempotencyKey: `settlement-${wechatSettlementId}`, provider: 'wechat', externalPaymentRef, amountMinor: 1000, currency: 'USD' })).resolves.toEqual({ settlementId: wechatSettlementId, accepted: true });
     } finally {
       await connection.end();
     }
@@ -90,7 +95,7 @@ integration('payment settlement to credit fulfillment', () => {
     const accountId = randomUUID();
     const settlementId = randomUUID();
     try {
-      await service.recordSettlement({ settlementId, tenantId, externalPaymentRef: `test-fulfillment-conflict-${randomUUID()}`, amountMinor: 1000, currency: 'USD' });
+      await service.recordSettlement({ settlementId, tenantId, idempotencyKey: `settlement-${settlementId}`, externalPaymentRef: `test-fulfillment-conflict-${randomUUID()}`, amountMinor: 1000, currency: 'USD' });
       await service.fulfillSettlement({ settlementId, tenantId, accountId, subjectId: `subject-${accountId}`, programKey: 'plan-a', grantMicros: 100 });
       await expect(service.fulfillSettlement({ settlementId, tenantId, accountId, subjectId: `subject-${accountId}`, programKey: 'plan-b', grantMicros: 100 })).rejects.toThrow('billing.idempotency_conflict');
     } finally {

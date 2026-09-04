@@ -17,7 +17,7 @@ integration('payment reversal to credit reversal', () => {
     const settlementId = randomUUID();
     const externalPaymentRef = `test-refund-${randomUUID()}`;
     try {
-      await settlement.recordSettlement({ settlementId, tenantId, externalPaymentRef, amountMinor: 1000, currency: 'USD' });
+      await settlement.recordSettlement({ settlementId, tenantId, idempotencyKey: `settlement-${settlementId}`, externalPaymentRef, amountMinor: 1000, currency: 'USD' });
       await settlement.fulfillSettlement({ settlementId, tenantId, accountId, subjectId: `subject-${accountId}`, programKey: 'test-plan', grantMicros: 100 });
       const reversalId = await reversal.recordReversal({ tenantId, settlementId, externalReversalRef: `refund-${randomUUID()}`, amountMinor: 500, reason: 'customer_request', idempotencyKey: `refund-command-${randomUUID()}` });
       const first = await reversal.reverseCredits({ tenantId, reversalId, settlementId, accountId, amountMicros: 40 });
@@ -45,7 +45,7 @@ integration('payment reversal to credit reversal', () => {
     const settlementId = randomUUID();
     const externalRef = `test-conflict-refund-${randomUUID()}`;
     try {
-      await settlementService.recordSettlement({ settlementId, tenantId, externalPaymentRef: `test-conflict-payment-${randomUUID()}`, amountMinor: 1000, currency: 'USD' });
+      await settlementService.recordSettlement({ settlementId, tenantId, idempotencyKey: `settlement-${settlementId}`, externalPaymentRef: `test-conflict-payment-${randomUUID()}`, amountMinor: 1000, currency: 'USD' });
       const idempotencyKey = `refund-command-${randomUUID()}`;
       const first = await service.recordReversal({ tenantId, settlementId, externalReversalRef: externalRef, amountMinor: 500, reason: 'customer_request', idempotencyKey });
       await expect(service.recordReversal({ tenantId, settlementId, externalReversalRef: externalRef, amountMinor: 500, reason: 'customer_request', idempotencyKey })).resolves.toBe(first);
@@ -63,7 +63,7 @@ integration('payment reversal to credit reversal', () => {
     const accountId = randomUUID();
     const settlementId = randomUUID();
     try {
-      await settlement.recordSettlement({ settlementId, tenantId, externalPaymentRef: `partial-payment-${randomUUID()}`, amountMinor: 1000, currency: 'USD' });
+      await settlement.recordSettlement({ settlementId, tenantId, idempotencyKey: `settlement-${settlementId}`, externalPaymentRef: `partial-payment-${randomUUID()}`, amountMinor: 1000, currency: 'USD' });
       await settlement.fulfillSettlement({ settlementId, tenantId, accountId, subjectId: `subject-${accountId}`, programKey: 'partial-plan', grantMicros: 100 });
       const firstId = await reversal.recordReversal({ tenantId, settlementId, externalReversalRef: `partial-refund-1-${randomUUID()}`, amountMinor: 250, reason: 'provider_refund', idempotencyKey: `partial-command-1-${randomUUID()}` });
       const secondId = await reversal.recordReversal({ tenantId, settlementId, externalReversalRef: `partial-refund-2-${randomUUID()}`, amountMinor: 250, reason: 'provider_refund', idempotencyKey: `partial-command-2-${randomUUID()}` });

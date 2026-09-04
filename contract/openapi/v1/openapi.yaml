@@ -255,10 +255,14 @@ paths:
           internalSecret: []
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        $ref: "#/components/requestBodies/V1SettlementAcceptRequest"
       responses:
         "202":
-          $ref: "#/components/responses/V1Accepted"
+          $ref: "#/components/responses/V1SettlementAccept"
         "400":
+          $ref: "#/components/responses/V1Error"
+        "409":
           $ref: "#/components/responses/V1Error"
   /v1/internal/payment/refunds/accept:
     post:
@@ -295,10 +299,14 @@ paths:
           internalSecret: []
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        $ref: "#/components/requestBodies/V1ExpireCreditHoldsRequest"
       responses:
         "202":
-          $ref: "#/components/responses/V1Accepted"
+          $ref: "#/components/responses/V1ExpireCreditHolds"
         "400":
+          $ref: "#/components/responses/V1Error"
+        "409":
           $ref: "#/components/responses/V1Error"
   /v1/webhooks/payment/{provider}:
     post:
@@ -510,6 +518,18 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/V1ExecutionEventRequest"
+    V1SettlementAcceptRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/V1SettlementAcceptRequest"
+    V1ExpireCreditHoldsRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/V1ExpireCreditHoldsRequest"
   schemas:
     HealthResponse:
       type: object
@@ -686,6 +706,97 @@ components:
         receipt:
           type: object
           additionalProperties: true
+    V1SettlementAcceptRequest:
+      type: object
+      required:
+        - settlement_id
+        - provider
+        - external_payment_ref
+        - amount_minor
+        - currency
+      additionalProperties: false
+      properties:
+        settlement_id:
+          type: string
+          minLength: 1
+          maxLength: 36
+        provider:
+          type: string
+          enum:
+            - stripe
+            - alipay
+            - wechat
+        external_payment_ref:
+          type: string
+          minLength: 1
+          maxLength: 255
+        amount_minor:
+          type: string
+          pattern: ^[1-9][0-9]*$
+        currency:
+          type: string
+          pattern: ^[A-Z]{3}$
+    V1ExpireCreditHoldsRequest:
+      type: object
+      required:
+        - batch_id
+      additionalProperties: false
+      properties:
+        batch_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 500
+          default: 100
+    V1SettlementAcceptData:
+      type: object
+      required:
+        - settlement_id
+        - accepted
+      additionalProperties: false
+      properties:
+        settlement_id:
+          type: string
+        accepted:
+          type: boolean
+          enum:
+            - true
+    V1ExpireCreditHoldsData:
+      type: object
+      required:
+        - batch_id
+        - expired_hold_ids
+      additionalProperties: false
+      properties:
+        batch_id:
+          type: string
+        expired_hold_ids:
+          type: array
+          items:
+            type: string
+    V1SettlementAcceptResponse:
+      type: object
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          $ref: "#/components/schemas/V1SettlementAcceptData"
+        meta:
+          $ref: "#/components/schemas/V1Meta"
+    V1ExpireCreditHoldsResponse:
+      type: object
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          $ref: "#/components/schemas/V1ExpireCreditHoldsData"
+        meta:
+          $ref: "#/components/schemas/V1Meta"
     V1Plan:
       type: object
       required:
@@ -947,6 +1058,18 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/V1CheckoutResponse"
+    V1SettlementAccept:
+      description: Durable settlement acceptance result. Replays return the same result.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/V1SettlementAcceptResponse"
+    V1ExpireCreditHolds:
+      description: Durable expiry batch result. Replays never consume another batch.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/V1ExpireCreditHoldsResponse"
     V1Error:
       description: v1 error envelope.
       content:

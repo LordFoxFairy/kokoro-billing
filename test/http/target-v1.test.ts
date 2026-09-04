@@ -4,6 +4,8 @@ import { createBillingServer } from '../../src/interfaces/http/server.js';
 const admissionResult = { admissionId: 'adm-1', holdId: 'hold-1', mode: 'credit' as const, pricePolicyRevisionId: 'price-1', amountMicros: '42', currency: 'CRD' as const, status: 'held' as const };
 const calls: { capture: unknown[]; release: unknown[]; events: unknown[] } = { capture: [], release: [], events: [] };
 const checkoutCalls: unknown[] = [];
+const settlementCalls: unknown[] = [];
+const expiryCalls: unknown[] = [];
 const idempotencyFingerprints = new Map<string, string>();
 
 const server = createBillingServer({
@@ -15,8 +17,14 @@ const server = createBillingServer({
   } },
   catalog: { listSellable: async () => ({ items: [{ id: 'offer-revision-1', key: 'pro', name: 'Pro', currency: 'USD', amountMinor: '1999', creditMicros: '1000000', billingInterval: 'month' }] }) },
   checkout: { create: async (input) => { checkoutCalls.push(input); return { checkoutId: 'checkout-1', status: 'created', amountMinor: 1999, currency: 'USD', expiresAt: new Date('2030-01-01') }; } },
-  usage: { expireExpiredHolds: async () => ({ expired: 0, expiredHoldIds: [] }) },
-  settlement: { recordSettlement: async () => undefined },
+  usage: { expireExpiredHolds: async (input) => {
+    expiryCalls.push(input);
+    return { batchId: input.batchId, expiredHoldIds: ['hold-1'] };
+  } },
+  settlement: { recordSettlement: async (input) => {
+    settlementCalls.push(input);
+    return { settlementId: input.settlementId, accepted: true };
+  } },
   reversal: { recordReversal: async () => 'refund-1' },
   webhook: { accept: async () => ({ providerEventId: 'evt-1', processingStatus: 'received' as const }) },
   account: { getForSubject: async () => ({ accountId: 'account-1', availableMicros: '42', heldMicros: '0' }) },
@@ -177,5 +185,66 @@ describe('clean-build Billing v1 transport', () => {
   it('limits the scheduler surface to its generic expiry command', async () => {
     const forbidden = await server.inject({ method: 'POST', url: '/v1/internal/commands/expire-credit-holds', headers: { ...internalHeaders, 'x-kokoro-service': 'agent', 'idempotency-key': 'sweep-123456' }, payload: {} });
     expect(forbidden.statusCode).toBe(403);
+  });
+
+  it('passes the durable settlement identity and idempotency key into the application command', async () => {
+    const response = await server.inject({
+      method: 'POST',
+      url: '/v1/internal/payment/settlements/accept',
+      headers: {
+        'x-kokoro-tenant-id': 'tenant-1',
+        'x-kokoro-service': 'payment-worker',
+        'idempotency-key': 'settlement-command-1',
+      },
+      payload: {
+        settlement_id: 'settlement-1',
+        provider: 'stripe',
+        external_payment_ref: 'payment-1',
+        amount_minor: '1000',
+        currency: 'USD',
+      },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json().data).toEqual({ settlement_id: 'settlement-1', accepted: true });
+    expect(settlementCalls.at(-1)).toEqual({
+      settlementId: 'settlement-1',
+      tenantId: 'tenant-1',
+      idempotencyKey: 'settlement-command-1',
+      provider: 'stripe',
+      externalPaymentRef: 'payment-1',
+      amountMinor: 1_000,
+      currency: 'USD',
+    });
+  });
+
+  it('requires an explicit expiry batch identity and passes it with the durable key', async () => {
+    const headers = {
+      'x-kokoro-tenant-id': 'tenant-1',
+      'x-kokoro-service': 'scheduler',
+      'idempotency-key': 'expiry-command-1',
+    };
+    const missingIdentity = await server.inject({
+      method: 'POST',
+      url: '/v1/internal/commands/expire-credit-holds',
+      headers,
+      payload: { limit: 25 },
+    });
+    expect(missingIdentity.statusCode).toBe(400);
+
+    const accepted = await server.inject({
+      method: 'POST',
+      url: '/v1/internal/commands/expire-credit-holds',
+      headers,
+      payload: { batch_id: 'expiry-batch-1', limit: 25 },
+    });
+    expect(accepted.statusCode).toBe(202);
+    expect(accepted.json().data).toEqual({ batch_id: 'expiry-batch-1', expired_hold_ids: ['hold-1'] });
+    expect(expiryCalls.at(-1)).toEqual({
+      tenantId: 'tenant-1',
+      batchId: 'expiry-batch-1',
+      idempotencyKey: 'expiry-command-1',
+      limit: 25,
+    });
   });
 });

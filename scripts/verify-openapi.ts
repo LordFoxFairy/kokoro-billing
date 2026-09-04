@@ -3,7 +3,11 @@ import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { parse } from 'yaml';
 
-type OpenApiDocument = { readonly openapi?: string; readonly paths?: Record<string, Record<string, unknown>> };
+type OpenApiDocument = {
+  readonly openapi?: string;
+  readonly paths?: Record<string, Record<string, unknown>>;
+  readonly components?: { readonly schemas?: Record<string, unknown> };
+};
 type OperationGovernance = Readonly<{ idempotency: string; permission: string }>;
 
 const expectedOperationGovernance: Readonly<Record<string, OperationGovernance>> = {
@@ -27,6 +31,9 @@ const expectedOperationGovernance: Readonly<Record<string, OperationGovernance>>
 };
 
 const httpMethod = /^(get|post|put|patch|delete|options|head)$/u;
+const asRecord = (value: unknown): Record<string, unknown> | null => value !== null && typeof value === 'object' && !Array.isArray(value)
+  ? Object.fromEntries(Object.entries(value))
+  : null;
 
 const keysNamed = (value: unknown, target: string, path = '$'): string[] => {
   if (Array.isArray(value)) return value.flatMap((item, index) => keysNamed(item, target, `${path}[${index}]`));
@@ -68,6 +75,27 @@ const executionEventRequestBody = executionEventPost !== null && typeof executio
   ? executionEventPost.requestBody
   : undefined;
 if (executionEventRequestBody === undefined) throw new Error('execution-events must reference its OpenAPI request body');
+const requiredCommandBodies: Readonly<Record<string, string>> = {
+  '/v1/internal/payment/settlements/accept': '#/components/requestBodies/V1SettlementAcceptRequest',
+  '/v1/internal/commands/expire-credit-holds': '#/components/requestBodies/V1ExpireCreditHoldsRequest',
+};
+for (const [path, expectedRef] of Object.entries(requiredCommandBodies)) {
+  const post = asRecord(contract.paths?.[path]?.post);
+  const requestBody = asRecord(post?.requestBody);
+  if (requestBody?.$ref !== expectedRef) throw new Error(`${path} must reference ${expectedRef}`);
+}
+const settlementSchema = asRecord(contract.components?.schemas?.V1SettlementAcceptRequest);
+const settlementProperties = asRecord(settlementSchema?.properties);
+const settlementProvider = asRecord(settlementProperties?.provider);
+if (JSON.stringify(settlementSchema?.required) !== JSON.stringify(['settlement_id', 'provider', 'external_payment_ref', 'amount_minor', 'currency'])
+  || settlementSchema?.additionalProperties !== false
+  || JSON.stringify(settlementProvider?.enum) !== JSON.stringify(['stripe', 'alipay', 'wechat'])) {
+  throw new Error('V1SettlementAcceptRequest must define the exact durable command payload and provider enum');
+}
+const expirySchema = asRecord(contract.components?.schemas?.V1ExpireCreditHoldsRequest);
+if (JSON.stringify(expirySchema?.required) !== JSON.stringify(['batch_id']) || expirySchema?.additionalProperties !== false) {
+  throw new Error('V1ExpireCreditHoldsRequest must require only the explicit batch identity');
+}
 const tenantContext = (contract as { readonly components?: { readonly securitySchemes?: Record<string, { readonly name?: string }> } }).components?.securitySchemes?.tenantContext;
 if (tenantContext?.name !== 'X-Kokoro-Tenant-Id') throw new Error('external OpenAPI contract must expose X-Kokoro-Tenant-Id as tenant context');
 

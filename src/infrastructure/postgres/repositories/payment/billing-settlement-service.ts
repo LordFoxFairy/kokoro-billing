@@ -1,9 +1,15 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { z } from 'zod';
 import type { SqlConnection, ResultSetHeader, RowDataPacket } from '../../database.js';
+import { parsePersistedJson } from '../../json.js';
+
+const SETTLEMENT_ACCEPT_COMMAND = 'payment.settlement.accept';
+const settlementAcceptanceSchema = z.object({ settlementId: z.string().min(1), accepted: z.literal(true) }).strict();
 
 export type RecordSettlementInput = {
   readonly settlementId: string;
   readonly tenantId: string;
+  readonly idempotencyKey: string;
   readonly externalPaymentRef: string;
   readonly amountMinor: number;
   readonly currency: string;
@@ -28,18 +34,69 @@ export type FulfillmentResult = {
   readonly journalId: string;
 };
 
+export type SettlementAcceptanceResult = {
+  readonly settlementId: string;
+  readonly accepted: true;
+};
+
 type SettlementRow = RowDataPacket & { settlement_id: string; tenant_id: string; provider: string; external_payment_ref: string; amount_minor: number; currency: string; status: string };
 type FulfillmentRow = RowDataPacket & { fulfillment_id: string; credit_grant_id: string; journal_id: string };
+type SettlementReceiptRow = RowDataPacket & {
+  receipt_id: string;
+  command_identity: string | null;
+  idempotency_key: string;
+  payload_hash: string;
+  status: 'processing' | 'succeeded' | 'failed' | 'unknown';
+  result_json: unknown;
+};
 
 export class BillingSettlementService {
   public constructor(private readonly connection: SqlConnection) {}
 
-  public async recordSettlement(input: RecordSettlementInput): Promise<void> {
+  public async recordSettlement(input: RecordSettlementInput): Promise<SettlementAcceptanceResult> {
     if (!Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0) throw new RangeError('amountMinor must be positive');
     const provider = input.provider ?? 'internal';
     if (!/^[a-z0-9][a-z0-9_-]{0,63}$/u.test(provider)) throw new RangeError('provider must be a normalized identifier');
+    const payloadHash = createHash('sha256').update(JSON.stringify({
+      command: `${SETTLEMENT_ACCEPT_COMMAND}/v1`,
+      settlementId: input.settlementId,
+      provider,
+      externalPaymentRef: input.externalPaymentRef,
+      amountMinor: input.amountMinor,
+      currency: input.currency,
+      providerEventId: input.providerEventId ?? null,
+      checkoutId: input.checkoutId ?? null,
+    })).digest('hex');
+    const result = { settlementId: input.settlementId, accepted: true } as const;
     await this.connection.beginTransaction();
     try {
+      const [receiptInsert] = await this.connection.execute<ResultSetHeader>(
+        `INSERT INTO payment_command_receipt
+          (receipt_id, tenant_id, command_name, command_identity, idempotency_key, payload_hash, status)
+         VALUES ($1, $2, $3, $4, $5, $6, 'processing')
+         ON CONFLICT DO NOTHING`,
+        [randomUUID(), input.tenantId, SETTLEMENT_ACCEPT_COMMAND, input.settlementId, input.idempotencyKey, payloadHash],
+      );
+      const [receipts] = await this.connection.execute<SettlementReceiptRow[]>(
+        `SELECT receipt_id, command_identity, idempotency_key, payload_hash, status, result_json
+           FROM payment_command_receipt
+          WHERE tenant_id = $1 AND command_name = $2
+            AND (idempotency_key = $3 OR command_identity = $4)
+          FOR UPDATE`,
+        [input.tenantId, SETTLEMENT_ACCEPT_COMMAND, input.idempotencyKey, input.settlementId],
+      );
+      if (receipts.length !== 1) throw new Error('billing.idempotency_conflict');
+      const receipt = receipts[0];
+      if (!receipt) throw new Error('billing.command_receipt_not_found');
+      if (receipt.payload_hash !== payloadHash || receipt.command_identity !== input.settlementId) throw new Error('billing.idempotency_conflict');
+      if (receipt.status === 'succeeded') {
+        const replay = parsePersistedJson(receipt.result_json, settlementAcceptanceSchema, 'billing.command_result_invalid');
+        await this.connection.commit();
+        return replay;
+      }
+      if (receiptInsert.affectedRows !== 1 || receipt.status === 'processing' && receipt.idempotency_key !== input.idempotencyKey) throw new Error('billing.command_in_progress');
+      if (receipt.status === 'unknown') throw new Error('billing.command_unknown');
+      if (receipt.status === 'failed') throw new Error('billing.command_failed');
       await this.connection.execute(
         `INSERT INTO payment_settlement
           (settlement_id, tenant_id, provider_event_id, checkout_id, provider, external_payment_ref, amount_minor, currency, status)
@@ -64,7 +121,14 @@ export class BillingSettlementService {
          ON CONFLICT DO NOTHING`,
         [randomUUID(), input.tenantId, input.settlementId, JSON.stringify({ settlementId: input.settlementId, provider, externalPaymentRef: input.externalPaymentRef, amountMinor: input.amountMinor, currency: input.currency })],
       );
+      await this.connection.execute(
+        `UPDATE payment_command_receipt
+            SET status = 'succeeded', result_json = $1, updated_at = CURRENT_TIMESTAMP(3)
+          WHERE receipt_id = $2 AND tenant_id = $3 AND command_name = $4`,
+        [JSON.stringify(result), receipt.receipt_id, input.tenantId, SETTLEMENT_ACCEPT_COMMAND],
+      );
       await this.connection.commit();
+      return result;
     } catch (error) {
       await this.connection.rollback();
       throw error;

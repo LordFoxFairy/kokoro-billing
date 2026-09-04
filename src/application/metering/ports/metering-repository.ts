@@ -8,6 +8,7 @@ import type { PublishedUsagePricing, PublishUsagePricingInput } from '../service
 import type { UsagePriceRate, UsageQuote } from '../services/usage-pricing-service.js';
 import type {
   AuthorizeUsageInput,
+  ExpireUsageHoldsInput,
   SettleUsageInput,
   UsageEventInput,
   UsageExpiryResult,
@@ -40,5 +41,5 @@ export interface UsageSettlementRepository {
   authorizeUsage(input: AuthorizeUsageInput): Promise<UsageHold>;
   settleUsage(input: SettleUsageInput): Promise<UsageSettlementResult>;
   releaseUsage(input: { readonly tenantId: string; readonly holdId: string; readonly idempotencyKey: string }): Promise<UsageReleaseResult>;
-  expireExpiredHolds(input?: { readonly tenantId?: string; readonly limit?: number }): Promise<UsageExpiryResult>;
+  expireExpiredHolds(input: ExpireUsageHoldsInput): Promise<UsageExpiryResult>;
 }

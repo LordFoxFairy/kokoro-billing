@@ -118,6 +118,7 @@ CREATE TABLE IF NOT EXISTS entitlement_command_receipt (
   receipt_id VARCHAR(36) NOT NULL PRIMARY KEY,
   tenant_id VARCHAR(191) NOT NULL,
   command_name VARCHAR(128) NOT NULL,
+  command_identity VARCHAR(255) NULL,
   idempotency_key VARCHAR(128) NOT NULL,
   payload_hash CHAR(64) NOT NULL,
   status VARCHAR(32) NOT NULL DEFAULT 'processing',
@@ -407,6 +408,7 @@ CREATE TABLE IF NOT EXISTS payment_command_receipt (
   receipt_id VARCHAR(36) NOT NULL PRIMARY KEY,
   tenant_id VARCHAR(191) NOT NULL,
   command_name VARCHAR(128) NOT NULL,
+  command_identity VARCHAR(255) NULL,
   idempotency_key VARCHAR(128) NOT NULL,
   payload_hash CHAR(64) NOT NULL,
   status VARCHAR(32) NOT NULL DEFAULT 'processing',
@@ -544,6 +546,9 @@ CREATE INDEX IF NOT EXISTS ix_entitlement_credit_grant_expiry
 CREATE INDEX IF NOT EXISTS ix_entitlement_credit_hold_expiry
   ON entitlement_credit_hold (tenant_id, expires_at, credit_hold_id)
   WHERE status = 'active';
+CREATE UNIQUE INDEX IF NOT EXISTS uq_entitlement_command_receipt_identity
+  ON entitlement_command_receipt (tenant_id, command_name, command_identity)
+  WHERE command_identity IS NOT NULL;
 CREATE INDEX IF NOT EXISTS ix_entitlement_outbox_dispatch
   ON entitlement_outbox (next_attempt_at, created_at, outbox_id)
   WHERE published_at IS NULL AND dead_lettered_at IS NULL;
@@ -556,6 +561,9 @@ CREATE INDEX IF NOT EXISTS ix_payment_outbox_dispatch
 CREATE INDEX IF NOT EXISTS ix_payment_settlement_checkout
   ON payment_settlement (tenant_id, checkout_id, created_at DESC, settlement_id DESC)
   WHERE checkout_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_payment_command_receipt_identity
+  ON payment_command_receipt (tenant_id, command_name, command_identity)
+  WHERE command_identity IS NOT NULL;
 CREATE INDEX IF NOT EXISTS ix_payment_reversal_settlement
   ON payment_reversal (tenant_id, settlement_id, created_at DESC, reversal_id DESC);
 CREATE INDEX IF NOT EXISTS ix_payment_checkout_status

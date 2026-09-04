@@ -1,9 +1,9 @@
-import type { FulfillmentResult, FulfillSettlementInput, RecordSettlementInput } from '../commands/billing-settlement-service.js';
+import type { FulfillmentResult, FulfillSettlementInput, RecordSettlementInput, SettlementAcceptanceResult } from '../commands/billing-settlement-service.js';
 import type { ProviderEventListItem, ProviderEventRetryInput, ProviderEventRetryResult } from '../commands/provider-event-admin-service.js';
 import type { ProviderEventFact, ProviderEventInput } from '../commands/provider-event-inbox-service.js';
 
 export interface BillingSettlementRepository {
-  recordSettlement(input: RecordSettlementInput): Promise<void>;
+  recordSettlement(input: RecordSettlementInput): Promise<SettlementAcceptanceResult>;
   fulfillSettlement(input: FulfillSettlementInput): Promise<FulfillmentResult>;
 }
 

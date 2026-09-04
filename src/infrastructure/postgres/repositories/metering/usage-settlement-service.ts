@@ -1,4 +1,5 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { z } from 'zod';
 import type { SqlConnection, ResultSetHeader, RowDataPacket } from '../../database.js';
 import { allocateCreditGrants, type CreditGrantForAllocation } from '../../../../application/credit/services/allocate-grants.js';
 import { readSafeInteger } from '../../../../application/ports/safe-integer.js';
@@ -46,7 +47,19 @@ export type UsageSettlementResult = {
 };
 
 export type UsageReleaseResult = { readonly holdId: string; readonly releasedMicros: number };
-export type UsageExpiryResult = { readonly expiredHoldIds: readonly string[] };
+export type ExpireUsageHoldsInput = { readonly tenantId: string; readonly batchId: string; readonly idempotencyKey: string; readonly limit?: number };
+export type UsageExpiryResult = { readonly batchId: string; readonly expiredHoldIds: readonly string[] };
+
+const EXPIRE_HOLDS_COMMAND = 'entitlement.credit-holds.expire';
+const usageExpiryResultSchema = z.object({ batchId: z.string().min(1), expiredHoldIds: z.array(z.string().min(1)) }).strict();
+type ExpiryReceiptRow = RowDataPacket & {
+  receipt_id: string;
+  command_identity: string | null;
+  idempotency_key: string;
+  payload_hash: string;
+  status: 'processing' | 'succeeded' | 'failed' | 'unknown';
+  result_json: unknown;
+};
 
 export class UsageSettlementService {
   public constructor(private readonly connection: SqlConnection) {}
@@ -369,19 +382,68 @@ export class UsageSettlementService {
    * not a Redis TTL callback: expiration must release allocations and the
    * account projection together, and must be recoverable after process death.
    */
-  public async expireExpiredHolds(input: { readonly tenantId?: string; readonly limit?: number } = {}): Promise<UsageExpiryResult> {
+  public async expireExpiredHolds(input: ExpireUsageHoldsInput): Promise<UsageExpiryResult> {
     const requestedLimit = input.limit ?? 100;
     if (!Number.isSafeInteger(requestedLimit) || requestedLimit <= 0) throw new RangeError('limit must be a positive safe integer');
     const limit = Math.min(requestedLimit, 500);
-    const sitePredicate = input.tenantId === undefined ? '' : 'AND tenant_id = $1';
-    const siteArgs = input.tenantId === undefined ? [limit] : [input.tenantId, limit];
+    const payloadHash = createHash('sha256').update(JSON.stringify({
+      command: `${EXPIRE_HOLDS_COMMAND}/v1`,
+      batchId: input.batchId,
+      limit,
+    })).digest('hex');
+    await this.connection.beginTransaction();
+    try {
+      const [receiptInsert] = await this.connection.execute<ResultSetHeader>(
+        `INSERT INTO entitlement_command_receipt
+          (receipt_id, tenant_id, command_name, command_identity, idempotency_key, payload_hash, status)
+         VALUES ($1, $2, $3, $4, $5, $6, 'processing')
+         ON CONFLICT DO NOTHING`,
+        [randomUUID(), input.tenantId, EXPIRE_HOLDS_COMMAND, input.batchId, input.idempotencyKey, payloadHash],
+      );
+      const [receipts] = await this.connection.execute<ExpiryReceiptRow[]>(
+        `SELECT receipt_id, command_identity, idempotency_key, payload_hash, status, result_json
+           FROM entitlement_command_receipt
+          WHERE tenant_id = $1 AND command_name = $2
+            AND (idempotency_key = $3 OR command_identity = $4)
+          FOR UPDATE`,
+        [input.tenantId, EXPIRE_HOLDS_COMMAND, input.idempotencyKey, input.batchId],
+      );
+      if (receipts.length !== 1) throw new Error('billing.idempotency_conflict');
+      const receipt = receipts[0];
+      if (!receipt) throw new Error('billing.command_receipt_not_found');
+      if (receipt.payload_hash !== payloadHash || receipt.command_identity !== input.batchId) throw new Error('billing.idempotency_conflict');
+      if (receipt.status === 'succeeded') {
+        const replay = parsePersistedJson(receipt.result_json, usageExpiryResultSchema, 'billing.command_result_invalid');
+        await this.connection.commit();
+        return replay;
+      }
+      if (receiptInsert.affectedRows !== 1 || receipt.status === 'processing' && receipt.idempotency_key !== input.idempotencyKey) throw new Error('billing.command_in_progress');
+      if (receipt.status === 'unknown') throw new Error('billing.command_unknown');
+      if (receipt.status === 'failed') throw new Error('billing.command_failed');
+      const expiredHoldIds = await this.expireEligibleHolds(input.tenantId, limit);
+      const result = { batchId: input.batchId, expiredHoldIds } as const;
+      await this.connection.execute(
+        `UPDATE entitlement_command_receipt
+            SET status = 'succeeded', result_json = $1, updated_at = CURRENT_TIMESTAMP(3)
+          WHERE receipt_id = $2 AND tenant_id = $3 AND command_name = $4`,
+        [JSON.stringify(result), receipt.receipt_id, input.tenantId, EXPIRE_HOLDS_COMMAND],
+      );
+      await this.connection.commit();
+      return result;
+    } catch (error) {
+      await this.connection.rollback();
+      throw error;
+    }
+  }
+
+  private async expireEligibleHolds(tenantId: string, limit: number): Promise<string[]> {
     const [holds] = await this.connection.query<RowDataPacket[]>(
       `SELECT credit_hold_id, tenant_id, credit_account_id, requested_micros
          FROM entitlement_credit_hold
-        WHERE status = 'active' AND expires_at <= CURRENT_TIMESTAMP(3) ${sitePredicate}
+        WHERE tenant_id = $1 AND status = 'active' AND expires_at <= CURRENT_TIMESTAMP(3)
         ORDER BY expires_at, credit_hold_id
-        LIMIT ${input.tenantId === undefined ? '$1' : '$2'}`,
-      siteArgs,
+        LIMIT $2`,
+      [tenantId, limit],
     );
     const expiredHoldIds: string[] = [];
     for (const row of holds) {
@@ -434,7 +496,7 @@ export class UsageSettlementService {
         throw error;
       }
     }
-    return { expiredHoldIds };
+    return expiredHoldIds;
   }
 }
 

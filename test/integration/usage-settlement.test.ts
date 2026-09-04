@@ -17,7 +17,7 @@ integration('usage authorization and settlement', () => {
     const settlementId = randomUUID();
     const usageEventId = randomUUID();
     try {
-      await settlement.recordSettlement({ settlementId, tenantId, externalPaymentRef: `usage-payment-${randomUUID()}`, amountMinor: 1000, currency: 'USD' });
+      await settlement.recordSettlement({ settlementId, tenantId, idempotencyKey: `settlement-${settlementId}`, externalPaymentRef: `usage-payment-${randomUUID()}`, amountMinor: 1000, currency: 'USD' });
       await settlement.fulfillSettlement({ settlementId, tenantId, accountId, subjectId: `subject-${accountId}`, programKey: 'usage-plan', grantMicros: 100 });
       await usage.recordUsageEvent({ usageEventId, tenantId, subjectId: `subject-${accountId}`, sourceEventId: `usage-${randomUUID()}`, featureKey: 'model.request', quantityMicros: 30 });
       const foreignUsageEventId = randomUUID();
@@ -49,7 +49,7 @@ integration('usage authorization and settlement', () => {
     const accountId = randomUUID();
     try {
       const settlementId = randomUUID();
-      await settlement.recordSettlement({ settlementId, tenantId, externalPaymentRef: `release-payment-${randomUUID()}`, amountMinor: 1000, currency: 'USD' });
+      await settlement.recordSettlement({ settlementId, tenantId, idempotencyKey: `settlement-${settlementId}`, externalPaymentRef: `release-payment-${randomUUID()}`, amountMinor: 1000, currency: 'USD' });
       await settlement.fulfillSettlement({ settlementId, tenantId, accountId, subjectId: `subject-${accountId}`, programKey: 'release-plan', grantMicros: 100 });
       const hold = await usage.authorizeUsage({ tenantId, accountId, idempotencyKey: `release-hold-${randomUUID()}`, requestedMicros: 30, featureKey: 'model.request' });
       const first = await usage.releaseUsage({ tenantId, holdId: hold.holdId, idempotencyKey: `release-${randomUUID()}` });
@@ -71,12 +71,16 @@ integration('usage authorization and settlement', () => {
     const accountId = randomUUID();
     try {
       const settlementId = randomUUID();
-      await settlement.recordSettlement({ settlementId, tenantId, externalPaymentRef: `expiry-payment-${randomUUID()}`, amountMinor: 1000, currency: 'USD' });
+      await settlement.recordSettlement({ settlementId, tenantId, idempotencyKey: `settlement-${settlementId}`, externalPaymentRef: `expiry-payment-${randomUUID()}`, amountMinor: 1000, currency: 'USD' });
       await settlement.fulfillSettlement({ settlementId, tenantId, accountId, subjectId: `subject-${accountId}`, programKey: 'expiry-plan', grantMicros: 100 });
       const hold = await usage.authorizeUsage({ tenantId, accountId, idempotencyKey: `expiry-hold-${randomUUID()}`, requestedMicros: 30, featureKey: 'model.request' });
       await connection.execute(`UPDATE entitlement_credit_hold SET expires_at = CURRENT_TIMESTAMP(3) - INTERVAL '1 second' WHERE credit_hold_id = $1`, [hold.holdId]);
-      expect(await usage.expireExpiredHolds({ tenantId })).toEqual({ expiredHoldIds: [hold.holdId] });
-      expect(await usage.expireExpiredHolds({ tenantId })).toEqual({ expiredHoldIds: [] });
+      const batchId = `expiry-batch-${randomUUID()}`;
+      const idempotencyKey = `expiry-${randomUUID()}`;
+      expect(await usage.expireExpiredHolds({ tenantId, batchId, idempotencyKey })).toEqual({ batchId, expiredHoldIds: [hold.holdId] });
+      expect(await usage.expireExpiredHolds({ tenantId, batchId, idempotencyKey })).toEqual({ batchId, expiredHoldIds: [hold.holdId] });
+      const nextBatchId = `expiry-batch-${randomUUID()}`;
+      expect(await usage.expireExpiredHolds({ tenantId, batchId: nextBatchId, idempotencyKey: `expiry-${randomUUID()}` })).toEqual({ batchId: nextBatchId, expiredHoldIds: [] });
       const [accountRows] = await connection.query<RowDataPacket[]>('SELECT available_micros, held_micros FROM entitlement_credit_account WHERE credit_account_id = $1', [accountId]);
       expect(Number(accountRows[0]?.available_micros)).toBe(100);
       expect(Number(accountRows[0]?.held_micros)).toBe(0);

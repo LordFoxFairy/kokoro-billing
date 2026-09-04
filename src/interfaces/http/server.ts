@@ -87,7 +87,9 @@ const executionEventSchema = z.object({
   execution_id: z.string().min(1).max(255), invocation_id: z.string().min(1).max(255), occurred_at: z.string().datetime({ offset: true }),
   receipt_schema_version: z.string().min(1).max(32), receipt: z.record(z.string(), z.unknown()).optional(),
 }).strict();
-const targetSettlementSchema = z.object({ settlement_id: z.string().min(1), external_payment_ref: z.string().min(1), amount_minor: positiveDecimalString, currency: z.string().regex(/^[A-Z]{3}$/u), provider: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/u).optional() }).strict();
+const paymentProviderSchema = z.enum(['stripe', 'alipay', 'wechat']);
+const targetSettlementSchema = z.object({ settlement_id: z.string().min(1).max(36), external_payment_ref: z.string().min(1).max(255), amount_minor: positiveDecimalString, currency: z.string().regex(/^[A-Z]{3}$/u), provider: paymentProviderSchema }).strict();
+const expireCreditHoldsSchema = z.object({ batch_id: z.string().min(1).max(128), limit: z.number().int().positive().max(500).optional() }).strict();
 const targetRefundSchema = z.object({ settlement_id: z.string().min(1), external_ref: z.string().min(1), amount_minor: positiveDecimalString, allocation_mode: z.enum(['proportional', 'line_specific']), reason: z.string().min(1).max(500) }).strict();
 const unknownRecordSchema = z.record(z.string(), z.unknown());
 
@@ -421,8 +423,8 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
     if (!(await claimIdempotencyHint(dependencies, request, key, reply, context.tenantId))) return;
     try {
-      await dependencies.settlement.recordSettlement({ settlementId: parsed.data.settlement_id, externalPaymentRef: parsed.data.external_payment_ref, amountMinor: safeDecimal(parsed.data.amount_minor, 'amount_minor'), currency: parsed.data.currency, tenantId: context.tenantId, ...(parsed.data.provider === undefined ? {} : { provider: parsed.data.provider }) });
-      return reply.code(202).send({ data: { accepted: true }, meta: { request_id: request.id } });
+      const result = await dependencies.settlement.recordSettlement({ settlementId: parsed.data.settlement_id, externalPaymentRef: parsed.data.external_payment_ref, amountMinor: safeDecimal(parsed.data.amount_minor, 'amount_minor'), currency: parsed.data.currency, tenantId: context.tenantId, idempotencyKey: key, provider: parsed.data.provider });
+      return reply.code(202).send({ data: { settlement_id: result.settlementId, accepted: result.accepted }, meta: { request_id: request.id } });
     } catch (error) { return sendError(reply, error); }
   });
 
@@ -456,10 +458,11 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     const context = await targetInternal(request, reply, ['scheduler']);
     if (!context) return;
     const key = requireIdempotency(request, reply); if (!key) return;
-    const parsed = z.object({ limit: z.number().int().positive().max(500).optional() }).strict().safeParse(request.body ?? {});
+    const parsed = expireCreditHoldsSchema.safeParse(request.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
+    if (!(await claimIdempotencyHint(dependencies, request, key, reply, context.tenantId))) return;
     try {
-      return reply.code(202).send({ data: toSnakeCase(await dependencies.usage.expireExpiredHolds(parsed.data.limit === undefined ? {} : { tenantId: context.tenantId, limit: parsed.data.limit })), meta: { request_id: request.id } });
+      return reply.code(202).send({ data: toSnakeCase(await dependencies.usage.expireExpiredHolds({ tenantId: context.tenantId, batchId: parsed.data.batch_id, idempotencyKey: key, ...(parsed.data.limit === undefined ? {} : { limit: parsed.data.limit }) })), meta: { request_id: request.id } });
     } catch (error) { return sendError(reply, error); }
   });
 
