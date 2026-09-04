@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { access, readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -28,7 +29,84 @@ const workflowSchema = z.object({
   }).passthrough(),
 }).passthrough();
 
+const openApiSchema = z.object({
+  paths: z.record(z.string(), z.record(z.string(), z.unknown())),
+}).passthrough();
+
+const operationGovernance: Readonly<Record<string, Readonly<{ idempotency: string; permission: string }>>> = {
+  'get /healthz': { idempotency: 'inherent', permission: 'none' },
+  'get /readyz': { idempotency: 'inherent', permission: 'none' },
+  'get /metrics': { idempotency: 'inherent', permission: 'none' },
+  'get /v1/commerce/catalog': { idempotency: 'read-only', permission: 'authenticated-user-or-web-bff' },
+  'get /v1/billing/me/credit-account': { idempotency: 'read-only', permission: 'authenticated-user' },
+  'get /v1/billing/me/credit-ledger': { idempotency: 'read-only', permission: 'authenticated-user' },
+  'post /v1/internal/entitlement/admissions': { idempotency: 'required', permission: 'agent-model-studio-service' },
+  'post /v1/internal/entitlement/admissions/{admissionId}/capture': { idempotency: 'required', permission: 'agent-model-studio-service' },
+  'post /v1/internal/entitlement/admissions/{admissionId}/release': { idempotency: 'required', permission: 'agent-model-studio-service' },
+  'post /v1/internal/billing/execution-events': { idempotency: 'required', permission: 'agent-model-studio-service' },
+  'post /v1/internal/payment/settlements/accept': { idempotency: 'required', permission: 'payment-worker-or-scheduler' },
+  'post /v1/internal/payment/refunds/accept': { idempotency: 'required', permission: 'payment-worker-service' },
+  'post /v1/internal/commands/expire-credit-holds': { idempotency: 'required', permission: 'scheduler-service' },
+  'post /v1/webhooks/payment/{provider}': { idempotency: 'provider-event-id', permission: 'provider-signature' },
+  'get /v1/billing/me/subscriptions': { idempotency: 'read-only', permission: 'authenticated-user' },
+  'post /v1/billing/checkout': { idempotency: 'required', permission: 'authenticated-user-or-web-bff' },
+  'post /v1/admin/billing/refunds': { idempotency: 'required', permission: 'billing-admin' },
+};
+
 describe('billing ownership architecture', () => {
+  it('keeps the repository governance document set and a local ADR', async () => {
+    const requiredDocuments = [
+      'README.md',
+      'INDEX.md',
+      'docs/INDEX.md',
+      'docs/CURRENT.md',
+      'docs/TECHNICAL_DESIGN.md',
+      'docs/API_CONTRACT.md',
+      'docs/DATA_MODEL.md',
+      'docs/SECURITY.md',
+      'docs/RELIABILITY.md',
+      'docs/ACCEPTANCE.md',
+      'docs/SLO.md',
+      'docs/RUNBOOK.md',
+      'contract/README.md',
+    ];
+    await Promise.all(requiredDocuments.map(async (path) => expect(access(join(process.cwd(), path)), path).resolves.toBeUndefined()));
+    const adrFiles = (await readdir(join(process.cwd(), 'docs/ADR'))).filter((entry) => entry.endsWith('.md'));
+    expect(adrFiles).not.toHaveLength(0);
+  });
+
+  it('governs every OpenAPI operation with exact owner semantics', async () => {
+    const contract = openApiSchema.parse(parse(await text('contract/openapi/v1/openapi.yaml')));
+    const actualOperations = new Set<string>();
+    for (const [path, pathItem] of Object.entries(contract.paths)) {
+      for (const [method, rawOperation] of Object.entries(pathItem)) {
+        const key = `${method.toLowerCase()} ${path}`;
+        const expected = operationGovernance[key];
+        if (expected === undefined) continue;
+        actualOperations.add(key);
+        const operation = z.record(z.string(), z.unknown()).parse(rawOperation);
+        expect(operation, key).toMatchObject({
+          'x-kokoro-owner': 'kokoro-billing',
+          'x-kokoro-visibility': 'internal-owner',
+          'x-kokoro-stability': 'stable',
+          'x-kokoro-idempotency': expected.idempotency,
+          'x-kokoro-permission': expected.permission,
+        });
+      }
+    }
+    expect([...actualOperations].sort()).toEqual(Object.keys(operationGovernance).sort());
+  });
+
+  it('binds contract governance documentation to the current OpenAPI digest', async () => {
+    const source = await text('contract/openapi/v1/openapi.yaml');
+    const readme = await text('contract/README.md');
+    const digest = createHash('sha256').update(source).digest('hex');
+    expect(readme).toContain(digest);
+    for (const field of ['owner', 'visibility', 'version', 'generation', 'breaking', 'provenance', 'consumer workflow']) {
+      expect(readme.toLowerCase(), field).toContain(field);
+    }
+  });
+
   it('has one clean-slate schema and no retired implementation trees', async () => {
     await expect(access(join(process.cwd(), 'database/schema.sql'))).resolves.toBeUndefined();
     await expect(access(join(process.cwd(), 'database/migrations'))).rejects.toThrow();
@@ -91,7 +169,7 @@ describe('billing ownership architecture', () => {
 
   it('enables every Root TypeScript strictness option and explicit real-infrastructure workflow gates', async () => {
     const tsconfig = JSON.parse(await text('tsconfig.json')) as { compilerOptions?: Record<string, unknown> };
-    for (const option of ['strict', 'noUncheckedIndexedAccess', 'exactOptionalPropertyTypes', 'noImplicitOverride', 'noImplicitReturns', 'noUnusedLocals', 'noUnusedParameters']) {
+    for (const option of ['strict', 'noUncheckedIndexedAccess', 'exactOptionalPropertyTypes', 'noImplicitOverride', 'noImplicitReturns', 'noUnusedLocals', 'noUnusedParameters', 'useUnknownInCatchVariables']) {
       expect(tsconfig.compilerOptions?.[option], option).toBe(true);
     }
     const eslint = await text('eslint.config.mjs');
