@@ -9,8 +9,9 @@ Reconcile 与 Billing command receipt；不拥有 Tenant、Identity、Agent Run�
 ## 边界
 
 - PostgreSQL 是支付、余额、账本、幂等 receipt、inbox/outbox 与对账事实源。
-- Redis 仅保存可丢失的短 TTL idempotency key-presence marker，并承担 expiry worker lease；它不保存或比较请求 body/digest，
-  不决定 replay、冲突或结果。规范化 command 与 PostgreSQL durable receipt/owner fact 是唯一裁决。
+- Redis 仅保存可丢失的短 TTL idempotency key-presence marker，并承担 expiry worker 的 best-effort lease；它不保存或比较请求
+  body/digest，不决定 replay、冲突、终态或结果。Redis 在启动或运行中丢失时，API 保持 ready（报告 `redis=degraded`），expiry
+  继续依靠 PostgreSQL 执行；规范化 command 与 PostgreSQL durable receipt/owner fact 是唯一裁决。
 - Browser 通过 Web/BFF 调用；BFF、Agent、Model、Studio、Payment worker 与 Scheduler 只能使用 Billing 拥有的协议，
   不读取本仓数据库。
 - Credit 是 Billing 内部 bounded context，不存在独立 Credit writer。
@@ -44,6 +45,7 @@ curl --fail http://127.0.0.1:4245/readyz
 ```
 
 `BILLING_AUTH_MODE=internal-header` 只用于本地 fixture；`NODE_ENV=production` 强制使用 `jwks`。
+`/readyz` 只以 PostgreSQL 是否可用决定 200/503；Redis hint 不可用时返回 200 且 `data.dependencies.redis=degraded`。
 
 ## 契约
 

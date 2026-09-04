@@ -26,7 +26,7 @@ owner、身份、幂等、错误与 consumer 规则，不复制字段级 Schema�
 | `POST /v1/internal/entitlement/admissions` | `agent`、`model`、`studio` | required + durable Billing receipt |
 | `POST .../admissions/{admissionId}/capture` | `agent`、`model`、`studio` | required + durable Billing receipt |
 | `POST .../admissions/{admissionId}/release` | `agent`、`model`、`studio` | required + durable Billing receipt |
-| `POST /v1/internal/billing/execution-events` | `agent`、`model`、`studio` | required header；event ID + payload hash 是 durable identity |
+| `POST /v1/internal/billing/execution-events` | `agent`、`model`、`studio` | required；event ID identity + PostgreSQL receipt/digest |
 | `POST /v1/internal/payment/settlements/accept` | 当前实现允许 `payment-worker` 或 `scheduler` | required；`settlement_id` identity + PostgreSQL receipt/digest |
 | `POST /v1/internal/payment/refunds/accept` | `payment-worker` | required + reversal fact/receipt |
 | `POST /v1/internal/commands/expire-credit-holds` | `scheduler` | required；`batch_id` identity + PostgreSQL receipt/digest |
@@ -88,13 +88,26 @@ v1 成功和失败分别为：
 - 声明 `required` 的 operation 要求 8–128 个 printable ASCII 字符的 `Idempotency-Key`。
 - 同一 tenant/command/key + 同一规范化 payload 返回原事实；同 key 不同 identity/payload 返回
   `billing.idempotency_conflict`（409）。
+- Admission command receipt 额外包含 API surface。Authorize、capture、release、execution-event 的唯一业务 identity 分别是
+  `invocation_id`、path `admissionId`、path `admissionId`、`event_id`；capture/release 在任何 admission 终态短路前先核对 receipt。
+  Capture digest 覆盖 accepted receipt 全部字段；release digest 覆盖 `invocation_id`、`reason` 与可选 `service_receipt`；execution
+  digest 覆盖完整 event envelope。它们都保存 HTTP `Idempotency-Key` 和持久化 result。
+- Checkout 直接以 `payment_checkout` 作为 tenant/key durable fact。带版本的 digest 覆盖 subject、offer revision、金额、currency 与
+  完整 quote snapshot；object key 在所有深度排序、array 顺序保留、非 JSON 值拒绝。Existing key 的 digest/replay 在读取当前 catalog
+  之前裁决，因此首次成功后的 offer disabled 不使原命令失去可重放性。
 - Settlement command name 是 `payment.settlement.accept`，identity 是 `settlement_id`。Digest 覆盖版本化 command、provider、
   external payment reference、amount、currency 及可选 provider event/checkout identity；成功结果持久化后按 key 或 identity 重放。
 - Expiry command name 是 `entitlement.credit-holds.expire`，identity 是 `batch_id`。Digest 覆盖版本化 command、batch 与规范化后的
   `limit`（缺省值 100）；成功结果保存精确 `expired_hold_ids`，重放不再次扫描。
-- 对这两个 command，同 identity 换 key 仍读取同一 receipt；同 key 换 batch/settlement 必须 409，不能消费下一批事实。
+- Refund command name 是 `PaymentReversal`，业务 identity 是 provider + external reversal reference；versioned digest 覆盖 settlement、
+  provider/external ref、amount、reason 与可信 admin operator。Receipt claim 使用 `ON CONFLICT` 后锁定并比较，独立连接的等价并发
+  重放同一 reversal，payload drift 返回 409。
+- 对具备业务 identity 的 command，同 identity 换 key 仍读取同一 receipt；同 key 换 identity/payload 必须 409。
 - Redis hint 只写 tenant/route/key 的短 TTL presence marker，不接收或比较请求 body/digest，也不返回 replay/conflict 裁决。
-  Redis miss、timeout、坏记录和 JSON 字段顺序不改变结果；规范化 command 与 PostgreSQL receipt/owner fact 是唯一裁决。
+  Redis miss、timeout、坏记录和 JSON 字段顺序不改变结果；API/expiry 在 Redis 丢失时继续 PostgreSQL path，`/readyz` 报告
+  `redis=degraded`。规范化 command 与 PostgreSQL receipt/owner fact 是唯一裁决。
+- Receipt claim/effect/result 在单一 PostgreSQL transaction 内完成，当前不承诺 processing lease/reclaim。可见历史
+  `processing|unknown` 返回 `billing.command_unknown`，`failed` 返回 `billing.command_failed`。
 - Provider webhook 不要求 caller 生成 Idempotency-Key，以签名后的稳定 external event ID 去重。
 - 只有已知 retryable 结果可使用原 key 重试；不确定结果先查询/reconcile，不创建新 key。
 
@@ -113,9 +126,9 @@ Catalog、credit ledger、subscription 使用 `limit`（1–100）与 opaque `cu
 | 身份/权限 | `billing.unauthorized`、`billing.forbidden`、`billing.service_auth_failed` | 401/403；修正身份，不自动重试 |
 | 输入/协议 | `billing.invalid_request`、`billing.idempotency_required`、`billing.invalid_cursor` | 400；修正请求 |
 | 额度 | `billing.insufficient_credit` | 402；业务终态 |
-| 冲突/未知 | `billing.idempotency_conflict`、`billing.command_in_progress`、`billing.command_unknown` | 409；按原 key 查询/重放/对账 |
+| 冲突/未知 | `billing.idempotency_conflict`、`billing.command_failed`、`billing.command_unknown` | 409；按原 key 查询/重放/对账 |
 | 依赖/配置 | `billing.dependencies_not_ready`、`billing.*_not_configured` | 503；受控退避 |
-| 内部错误 | `billing.internal_error` | 500；不泄漏 provider/SQL/stack |
+| 内部错误 | `billing.internal_error` | 500；包括 durable result 不变量损坏；不泄漏内部 code/provider/SQL/stack |
 
 Transport 会补齐 `retryable`、`details` 与 `meta.request_id`；consumer 只依赖稳定 code，不解析 message。
 
@@ -134,8 +147,8 @@ Billing OpenAPI source
 
 ## 当前 contract 缺口
 
-- Settlement/expiry request body、result 和 409 已闭环；其他 mutation 仍有不完整 request body、精确 response 或错误集合，部分
-  response 使用 generic schema。
+- Capture/release request body、execution-event 409、settlement/expiry request body 与 Redis readiness 状态已纳入 checker；其他
+  mutation 仍有不完整 request body、精确 response 或错误集合，部分 response 使用 generic schema。
 - 当前 checker 不执行 historical OpenAPI breaking diff，也没有机器 provenance manifest/artifact publish job。
 - Ledger `created_at` 是 epoch milliseconds，不符合平台 RFC 3339 UTC 目标。
 - Route parity 不能证明运行时 Zod 与 OpenAPI 字段语义完全一致；在补齐 shape 前需人工逐 route review。

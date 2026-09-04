@@ -624,6 +624,7 @@ components:
                   type: string
                   enum:
                     - ok
+                    - degraded
     Error:
       $ref: "#/components/schemas/V1ErrorResponse"
     V1Meta:

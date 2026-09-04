@@ -46,7 +46,7 @@ pnpm contract:check
 ```
 
 该命令校验 OpenAPI 版本、tenant/request ID/execution-event 边界、capture/release/settlement/expiry command body、
-Idempotency-Key 与 execution-event 409、production webhook provider/signature location、全部 operation metadata 与 Fastify route parity。
+Idempotency-Key、execution-event 409、Redis degraded readiness、production webhook provider/signature location、全部 operation metadata 与 Fastify route parity。
 HTTP runtime 仍由手写 Zod/mapper 实现；生成物若未来引入，
 只能从本 source 生成到明确的 read-only directory，并在同一 commit 校验 drift。
 
@@ -77,7 +77,7 @@ form-body `sign`/`sign_type=RSA2` 由 `x-kokoro-provider-signatures` 区分；fi
 `contract/openapi/v1/openapi.yaml`，当前 source SHA-256：
 
 ```text
-44a804c09d398d1a0a609928dd243998e0aa472a76fc456c1715154b678dfa35
+58fbe4fea083ba12e0db23f49e995b96500d01af0013febf40eba3093510ef63
 ```
 
 复核：
@@ -116,7 +116,7 @@ allow-list 内的 operation。
 
 ## Validation scope and gaps
 
-当前 `contract:check` 能证明 YAML 可解析、capture/release/settlement/expiry shape、execution-event 冲突状态、
-Idempotency-Key、webhook provider/signature、核心禁用字段、metadata 与 route 集合；它不能证明所有 request/response 与运行时
+当前 `contract:check` 能证明 YAML 可解析、capture/release/settlement/expiry shape、execution-event 冲突状态、Redis degraded
+readiness、Idempotency-Key、webhook provider/signature、核心禁用字段、metadata 与 route 集合；它不能证明所有 request/response 与运行时
 Zod 逐字段相等。其余 mutation body、generic response、错误集合与 ledger time format 仍需在后续 contract-first 变更中补齐，详见
 [`../docs/CURRENT.md`](../docs/CURRENT.md)。

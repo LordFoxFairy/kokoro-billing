@@ -252,11 +252,17 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
   app.get('/readyz', async (_request, reply) => {
     if (!dependencies.health) return reply.code(200).send({ data: { module: 'kokoro-billing', status: 'ready' } });
     try {
-      await Promise.all([dependencies.health.postgres(), dependencies.health.redis()]);
-      return reply.code(200).send({ data: { module: 'kokoro-billing', status: 'ready', dependencies: { postgres: 'ok', redis: 'ok' } } });
+      await dependencies.health.postgres();
     } catch {
       return reply.code(503).send({ error: { code: 'billing.dependencies_not_ready', message: 'billing dependencies are not ready' } });
     }
+    let redis: 'ok' | 'degraded' = 'ok';
+    try {
+      await dependencies.health.redis();
+    } catch {
+      redis = 'degraded';
+    }
+    return reply.code(200).send({ data: { module: 'kokoro-billing', status: 'ready', dependencies: { postgres: 'ok', redis } } });
   });
   registerMetricsRoute(app, 'billing');
   app.addHook('onSend', async (request, reply, payload) => {

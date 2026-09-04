@@ -27,7 +27,7 @@ default、CHECK 与索引的最终事实仍以 Schema 为准。
 | `entitlement_billing_admission` | invocation 的定价、mode、hold、accepted receipt 引用与状态 |
 | `entitlement_execution_event` | Agent/Model/Studio execution inbox、payload hash 与状态 |
 | `entitlement_command_receipt` | 通用 entitlement command replay fact；expiry 使用 batch command identity |
-| `entitlement_billing_command_receipt` | admission/capture/release 的 surface-aware replay fact |
+| `entitlement_billing_command_receipt` | admission/capture/release/execution-event ingress 的 surface-aware replay fact |
 | `entitlement_outbox` | entitlement side-effect delivery、lease、attempt、publish/dead-letter 状态 |
 | `entitlement_usage_price_revision` | tenant pricing policy revision 与生效窗口 |
 | `entitlement_usage_price_rate` | revision 下按 feature/label 的 rate 与 reservation |
@@ -60,7 +60,7 @@ default、CHECK 与索引的最终事实仍以 Schema 为准。
 | `payment_reversal` | provider reversal/refund、金额、原因与结果 |
 | `payment_provider_subscription` | provider subscription identity 与状态 |
 | `payment_subscription_period` | subscription period window 与状态 |
-| `payment_command_receipt` | payment command replay fact；settlement acceptance 使用 settlement command identity |
+| `payment_command_receipt` | payment command replay fact；settlement 与 refund 使用各自业务 command identity |
 | `payment_outbox` | payment side-effect delivery、lease、attempt、publish/dead-letter 状态 |
 
 ## 3. 关系维护
@@ -101,6 +101,13 @@ tenant-scoped existence
   `command_identity`，非空 identity 在 tenant/command 内唯一。
 - Settlement receipt identity 为 `settlement_id`；expiry receipt identity 为 `batch_id`。两者的 SHA-256 digest 都包含 command
   version 和规范化字段，result JSON 是 durable replay authority。
+- Admission receipt 在 key/command 外增加 `api_surface`；authorize/capture/release/execution-event identity 依次为 invocation、admission、
+  admission 与 event ID。Capture/release 的完整 runtime payload 和 execution-event 的 `Idempotency-Key` 均进入 receipt。
+- Refund receipt identity 是 provider + external reversal reference 的 canonical digest；checkout 以 tenant/key 唯一的
+  `payment_checkout.quote_hash` 保存 versioned command digest。Checkout digest 在当前 offer/catalog 校验之前用于 existing replay。
+- 这些 command 的 object payload 递归 canonicalize：object key 顺序不参与 digest，array 顺序参与，非 JSON 值在持久化前拒绝。
+- 当前 receipt claim/effect/result 同事务提交，不存在可见 lease/fence reclaim；正常失败回滚 claim。历史 `processing|unknown|failed`
+  仅是稳定诊断 outcome，不能据此重新执行 side effect。Succeed receipt 的 `result_json` 缺失或 shape 损坏属于数据库不变量事故。
 - `command_identity` 保持 nullable，只因同一通用 receipt 表还服务没有独立业务 identity 的其他 command；partial unique index
   只约束非空值，不削弱 key unique。
 - Provider event：同 tenant/provider/external event 唯一；payload hash 冲突不能当作重放。
@@ -122,7 +129,8 @@ UPDATE/DELETE，因此生产数据库角色和审计策略仍需补齐该防线�
 | `uq_entitlement_usage_settlement_hold`、`uq_entitlement_usage_settlement_event` | hold 与 usage event 均只能结算一次 |
 | entitlement/payment/Billing receipt key UNIQUE | 每个相应 command surface 的 tenant + command + idempotency key 只保留一个 receipt |
 | `uq_entitlement_command_receipt_identity` | 非空 entitlement command identity 在 tenant + command 内唯一；当前约束 expiry batch |
-| `uq_payment_command_receipt_identity` | 非空 payment command identity 在 tenant + command 内唯一；当前约束 settlement acceptance |
+| `uq_entitlement_billing_receipt_identity` | 非空 admission/execution command identity 在 tenant + surface + command 内唯一 |
+| `uq_payment_command_receipt_identity` | 非空 payment command identity 在 tenant + command 内唯一；当前约束 settlement 与 refund |
 | `uq_payment_provider_event_external` | tenant/provider external event 去重 |
 | `uq_payment_settlement_external`、`uq_payment_reversal_external` | provider payment/reversal identity 去重 |
 | `uq_entitlement_fulfillment_acquisition` | acquisition 只履约一次 |
@@ -149,10 +157,10 @@ NULLS NOT DISTINCT 或等价约束设计。
 
 ## 6. 查询索引
 
-Canonical Schema 当前定义 13 个显式 index：11 个查询/dispatch access path，加 2 个 receipt command identity unique index。
+Canonical Schema 当前定义 14 个显式 index：11 个查询/dispatch access path，加 3 个 receipt command identity unique index。
 
 - grant expiry、hold expiry；
-- entitlement/payment receipt command identity；
+- entitlement/admission/payment receipt command identity；
 - entitlement/payment outbox dispatch；
 - provider event processing；
 - settlement by checkout、reversal by settlement、checkout by status；

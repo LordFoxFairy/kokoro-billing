@@ -108,6 +108,13 @@ const idempotencySchema = asRecord(idempotencyParameter?.schema);
 if (idempotencySchema?.minLength !== 8 || idempotencySchema.maxLength !== 128 || idempotencySchema.pattern !== '^[\\x20-\\x7E]+$') {
   throw new Error('Idempotency-Key constraints must match the runtime boundary');
 }
+const readyResponse = asRecord(contract.components?.schemas?.ReadyResponse);
+const readyData = asRecord(asRecord(readyResponse?.properties)?.data);
+const readyDependencies = asRecord(asRecord(readyData?.properties)?.dependencies);
+const readyRedis = asRecord(asRecord(readyDependencies?.properties)?.redis);
+if (JSON.stringify(readyRedis?.enum) !== JSON.stringify(['ok', 'degraded'])) {
+  throw new Error('ReadyResponse Redis status must match fail-open runtime readiness');
+}
 const settlementSchema = asRecord(contract.components?.schemas?.V1SettlementAcceptRequest);
 const settlementProperties = asRecord(settlementSchema?.properties);
 const settlementProvider = asRecord(settlementProperties?.provider);

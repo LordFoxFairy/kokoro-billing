@@ -54,6 +54,12 @@ describe('Billing command OpenAPI contract', () => {
     const idempotencyKey = recordSchema.parse(document.components.parameters.IdempotencyKey);
     const idempotencyKeySchema = recordSchema.parse(idempotencyKey.schema);
     expect(idempotencyKeySchema).toMatchObject({ minLength: 8, maxLength: 128, pattern: '^[\\x20-\\x7E]+$' });
+
+    const ready = recordSchema.parse(document.components.schemas.ReadyResponse);
+    const readyData = recordSchema.parse(recordSchema.parse(ready.properties).data);
+    const dependencies = recordSchema.parse(recordSchema.parse(readyData.properties).dependencies);
+    const redis = recordSchema.parse(recordSchema.parse(dependencies.properties).redis);
+    expect(redis.enum).toEqual(['ok', 'degraded']);
   });
 
   it('defines exact request bodies for durable settlement and expiry commands', async () => {

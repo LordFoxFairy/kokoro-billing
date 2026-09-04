@@ -7,8 +7,9 @@
 
 允许修改：
 
-- settlement/expiry application port、PostgreSQL repository、HTTP adapter 与 worker；
-- `database/schema.sql` 中 command receipt identity；
+- admission/capture/release/execution、checkout、settlement/expiry/refund 的 application port、PostgreSQL repository、HTTP adapter 与 worker；
+- `database/schema.sql` 中 command receipt identity/state；
+- Redis hint/lease 的 fail-open 装配，不引入第二事实源；
 - Billing owner OpenAPI、contract checker、architecture/HTTP/integration test；
 - 本仓运行、API、数据、可靠性和验收文档。
 
@@ -29,6 +30,23 @@ git diff --check
 
 ## 2. 行为验收
 
+### Admission 与 execution receipt
+
+- Authorize/capture/release/execution-event ingress 的裁决必须写 `entitlement_billing_command_receipt`，scope 至少为
+  tenant + surface + command + `Idempotency-Key`；业务 identity 分别为 invocation、admission、admission 与 event ID。
+- Digest 必须带 command version 并递归 canonicalize JSON。Capture/release 的完整 receipt 字段不能由 HTTP 解析后丢弃；execution
+  必须把 contract 要求的 `Idempotency-Key` 传入 application 并持久化。
+- 每个 command 在 admission/event 终态短路前先比较 durable receipt；同 key/identity payload drift 返回 409。
+- Claim/effect/result 同 transaction；不使用无 fence 的 processing lease/reclaim。历史 `failed`、`unknown`、`processing` 分别返回
+  stable `command_failed`、`command_unknown`、`command_unknown`。
+
+### Checkout
+
+- Existing `tenant_id + idempotency_key` checkout 必须在当前 offer/catalog 校验前读取、锁定并比较 versioned digest。
+- Object key 的递归重排不改变 digest；array 顺序保留；非 JSON 值拒绝。
+- 首次成功后禁用 offer，再以原 key/重排字段 payload 调用仍重放同一 checkout；payload drift 返回 409。
+- 测试必须经过实际 Fastify route 与真实 PostgreSQL，Fake 只补充 transport mapping，不能替代该验收。
+
 ### Durable settlement
 
 - `POST /v1/internal/payment/settlements/accept` 必须有 strict request body 和 `Idempotency-Key`。
@@ -44,6 +62,21 @@ git diff --check
 - Receipt 与 hold/allocation/account/outbox/result 同事务提交，result 保存精确 `expired_hold_ids`。
 - 同 batch 换 key 重放原 result；同 key 换 batch/limit 返回冲突，不扫描或消费下一批 eligible hold。
 - Worker 必须显式 tenant scope；daemon 每 tick 生成新 batch，一次性重试可复用固定 batch。
+
+### Refund 与 result invariant
+
+- Refund receipt 使用 `INSERT ... ON CONFLICT DO NOTHING` 后 tenant-scoped lock/compare/replay；provider + external reversal ref 是稳定
+  业务 identity，digest 覆盖财务字段与可信 operator。
+- 两个独立 PostgreSQL connection 的等价并发只形成一个 receipt/reversal 并返回同一 ID；唯一约束异常不得映射为 500。
+- 任一 succeeded durable receipt 的 result 缺失或 shape 损坏必须成为内部 persistence invariant：外部 generic
+  `billing.internal_error` 500，结构化日志保留内部 code，不得返回客户端 400。
+
+### Redis loss
+
+- Redis 永远只存 key-presence marker 或 best-effort lease；不能保存 request digest/result 或裁决 replay/conflict。
+- API 与 expiry worker 在 Redis 初始连接/运行中丢失时继续 PostgreSQL path；PostgreSQL 健康时 `/readyz` 返回 200 且
+  `data.dependencies.redis=degraded`。
+- 同一 PostgreSQL database 在 Redis 缺失下关闭并重建 runtime 后，durable receipt/fact 仍可重放。
 
 ### Webhook
 
@@ -61,7 +94,7 @@ git diff --check
 | Vitest | `pnpm test` | exit 0，0 failed；记录 skipped 数量 |
 | Build | `pnpm build` | exit 0 |
 | SQL governance | `pnpm sql:check` | canonical Schema naming/time/no-FK gate 通过 |
-| Contract | `pnpm contract:check` | OpenAPI、command shape、webhook matrix、17 route parity 通过 |
+| Contract | `pnpm contract:check` | OpenAPI、command shape/status、Redis readiness、webhook matrix、17 route parity 通过 |
 | Combined | `pnpm verify` | repository-local gate 全部通过 |
 | Diff | `git diff --check` | exit 0 |
 
@@ -90,6 +123,10 @@ pnpm test:integration
 - Schema job 在 fresh database 成功，第二次安装因非空 guard 拒绝；
 - integration 0 failed、0 skipped；
 - `durable-command-receipts.test.ts` 覆盖 settlement replay/conflict/concurrency 与 expiry identity/replay/next-batch；
+- `admission-command-receipts.test.ts` 覆盖 capture/release/execution 的 key/identity/digest/终态顺序；
+- `checkout-http-replay.test.ts` 覆盖递归字段重排、offer disabled replay 与 drift 409；
+- `payment-reversal.test.ts` 使用两个独立连接覆盖 refund 并发；`durable-result-http.test.ts` 覆盖损坏 result generic 500；
+- `runtime-redis-loss.test.ts` 覆盖 Redis 缺失时的 runtime 启动/重启与 degraded readiness；
 - Redis hint/lease suite 真实连接 DB 4；
 - 所有 SQL 参数化且 tenant-scoped。
 
@@ -120,9 +157,10 @@ PY
 ## 6. Contract、Schema 与文档验收
 
 - Contract、runtime 与 registry 的 provider 集合一致。
-- Settlement/expiry 的 request body、response、400/409 与 runtime Zod/application DTO 一致。
+- Capture/release、settlement/expiry 的 request body 与 execution-event 409 和 runtime Zod/application DTO 一致；ready response 允许
+  Redis `ok|degraded`。
 - `contract/README.md` digest 等于当前 OpenAPI bytes。
-- Schema 两张 receipt 表均有 nullable `command_identity` 和非空 partial unique index；nullable 只服务没有独立 identity 的其他命令。
+- Schema 三张 receipt 表均有 nullable `command_identity` 和非空 partial unique index；nullable 只服务没有独立 identity 的其他命令。
 - Required 文档集存在，CURRENT 明确区分实现、缺口和生产证据；API/DATA_MODEL/RELIABILITY/RUNBOOK 与当前行为一致。
 - 不生成或手改 `src/generated/`。
 
@@ -130,16 +168,18 @@ PY
 
 TDD 证据至少包含：
 
-1. settlement 无 durable replay 时的失败测试；
-2. expiry 缺少 batch result/identity 时的失败测试；
-3. OpenAPI 缺 request body/provider enum 时的失败测试；
-4. Redis raw-body authority 曾对等价 payload 提前返回 409、且未调用 durable command 的失败测试；
-5. 实现后的 targeted GREEN 与最终全量 GREEN。
+1. capture/release/execution 只依赖 Redis/业务终态、未 claim durable receipt 时的失败测试；
+2. checkout 字段重排被误判、disabled offer 阻断 replay 时的失败测试；
+3. refund 独立连接并发泄漏 unique violation 时的失败测试；
+4. succeeded receipt 损坏被映射为客户端 400 时的失败测试；
+5. OpenAPI 缺 capture/release body、execution 409 或 ready degraded status 时的失败测试；
+6. Redis 初始连接失败阻止 runtime/worker 时的失败测试；
+7. 实现后的 targeted GREEN 与最终全量 GREEN。
 
 只有以下条件同时满足才可报告本切片完成：
 
 1. 分支是 `codex/billing-durable-command-webhook`；
-2. 工作树干净，提交按 durable command、webhook contract、authority regression、文档逻辑分组；
+2. 工作树干净，提交按 durable receipt、replay/concurrency invariant、Redis-loss/documentation 逻辑分组；
 3. repository-local 全部门禁在最终内容上重跑；
 4. Root Billing 静态切片 0 violation；
 5. fresh Schema + real PostgreSQL/Redis integration 0 failed、0 skipped；

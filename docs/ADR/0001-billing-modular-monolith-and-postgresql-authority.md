@@ -25,7 +25,8 @@ Payment、Checkout、Refund、Subscription、Credit、Metering 与 fulfillment �
 
 - 需要严格 tenant predicate、固定 lock order、durable receipt、append-oriented journal 与 reconciliation。
 - Provider network call 必须位于数据库事务外，并用稳定 provider idempotency identity。
-- Redis outage 可以影响 readiness/效率，不能触发内存/Redis 账务写入。
+- Redis outage 只影响 hint/lease 效率；PostgreSQL 健康时 API 保持 ready 并报告 Redis degraded，expiry 继续执行，且不触发
+  内存/Redis 账务写入。
 - Context 仍需保持代码/port 边界，不能退化为万能 BillingService。
 - Reconciliation runtime、retention 与 DR 仍需单独交付；本决策不构成生产可靠性证据。
 

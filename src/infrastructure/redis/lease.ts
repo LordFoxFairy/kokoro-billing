@@ -40,8 +40,13 @@ export class RedisLease {
 
   public async connect(): Promise<void> {
     if (!this.connected) {
-      await connectRedisWithDeadline(this.client.connect(), this.timeouts);
-      this.connected = true;
+      try {
+        await connectRedisWithDeadline(this.client.connect(), this.timeouts);
+        this.connected = true;
+      } catch (error) {
+        if (this.client.isOpen) this.client.destroy();
+        throw error;
+      }
     }
   }
 
@@ -57,6 +62,7 @@ export class RedisLease {
 
   public async runExclusive<T>(name: string, ttlSeconds: number, task: () => Promise<T>): Promise<T | undefined> {
     if (!Number.isSafeInteger(ttlSeconds) || ttlSeconds <= 0) throw new RangeError('lease ttl must be a positive safe integer');
+    if (!this.connected) return task();
     const token = randomUUID();
     const key = `${this.namespace}:${name}`;
     let acquired: string | null;
@@ -66,11 +72,21 @@ export class RedisLease {
       // Redis is coordination only. PostgreSQL row locks/idempotent facts remain the
       // correctness boundary, so a Redis outage degrades to concurrent workers
       // instead of taking the billing mutation path offline.
+      this.connected = false;
+      if (this.client.isOpen) this.client.destroy();
       process.stderr.write(`kokoro-billing redis lease unavailable name=${name} error=${error instanceof Error ? error.message : String(error)}\n`);
       return task();
     }
     if (acquired !== 'OK') {
-      const currentOwner = await runIdempotentRedisOperation('lease-read-owner', this.timeouts, () => this.client.get(key));
+      let currentOwner: string | null;
+      try {
+        currentOwner = await runIdempotentRedisOperation('lease-read-owner', this.timeouts, () => this.client.get(key));
+      } catch (error) {
+        this.connected = false;
+        if (this.client.isOpen) this.client.destroy();
+        process.stderr.write(`kokoro-billing redis lease owner unavailable name=${name} error=${error instanceof Error ? error.message : String(error)}\n`);
+        return task();
+      }
       if (currentOwner !== token) return undefined;
     }
     let renewing = false;

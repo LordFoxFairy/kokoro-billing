@@ -72,8 +72,15 @@ runtime，其他仓库和人工查询使用独立最小权限角色。
 - 已定义 JSON route 使用 Zod strict schema；未知字段在主要 mutation 上被拒绝。
 - Idempotency-Key 限制为 8–128 printable ASCII；金额/currency/identity/limit 有边界检查。
 - Mutation 的幂等 security boundary 是 tenant-scoped PostgreSQL receipt/owner fact：key、command identity 与规范化 digest 必须
-  一致；Redis 仅接收 scoped key-presence marker，不接收 body/digest，也不因字段顺序、坏记录或故障否决命令。
+  一致；admission receipt 还包含 API surface。Capture/release/execution 的可信 receipt/event 字段、refund 的 provider identity、
+  checkout 的完整 quote 都进入带版本 digest，不能在 transport 解析后丢弃。
+- Canonical JSON 在所有 object 深度排序 key、保留 array 顺序并拒绝 `undefined`、non-finite number、BigInt、Date、cycle 等非 JSON
+  值；相同语义字段重排不会变成新命令，array 重排仍会被视为 payload drift。
+- Redis 仅接收 scoped key-presence marker 或 best-effort lease，不接收 body/digest，也不因字段顺序、坏记录、初始连接失败或运行中
+  故障否决命令。PostgreSQL 健康时 readiness 保持 200 并显式报告 `redis=degraded`。
 - v1 外部字段 snake_case，错误归一为稳定 `billing.*` code；内部异常不回传 SQL、stack 或 provider 原文。
+- Succeeded durable result 缺失/损坏归类为 typed persistence invariant；外部固定 generic `billing.internal_error` 500，只有结构化
+  server log 保存 `internal_error_code`，避免向 caller 泄漏数据库内部状态。
 - Provider body 以原始字符串保留用于签名，再解析为 object。
 - Request ID/trace ID 只接受有限长度 printable value，否则生成/回退本地 ID。
 

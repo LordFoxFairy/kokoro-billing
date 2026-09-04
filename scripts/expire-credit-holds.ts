@@ -20,7 +20,11 @@ const limit = process.env.BILLING_EXPIRY_LIMIT === undefined ? undefined : Numbe
 if (limit !== undefined && (!Number.isSafeInteger(limit) || limit <= 0)) throw new Error('BILLING_EXPIRY_LIMIT must be a positive integer');
 const connection = await createBillingConnection(databaseUrl);
 const lease = new RedisLease(redisUrl);
-await lease.connect();
+try {
+  await lease.connect();
+} catch (error) {
+  process.stderr.write(`kokoro-billing redis expiry hint unavailable during startup error=${error instanceof Error ? error.message : String(error)}\n`);
+}
 const metricsServer = await startWorkerMetricsServer(metricsPort, process.env.BILLING_EXPIRY_METRICS_HOST ?? '127.0.0.1');
 let stopping = false;
 process.once('SIGTERM', () => { stopping = true; });

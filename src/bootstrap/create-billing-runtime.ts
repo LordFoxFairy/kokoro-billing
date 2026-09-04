@@ -31,7 +31,11 @@ export async function createBillingRuntime(config: BillingRuntimeConfig): Promis
   const idempotencyHint = new RedisIdempotencyHint(config.redisUrl, 'billing:idempotency', config.redisTimeouts);
 
   try {
-    await idempotencyHint.connect();
+    try {
+      await idempotencyHint.connect();
+    } catch (error) {
+      process.stderr.write(`kokoro-billing redis hint unavailable during startup error=${error instanceof Error ? error.message : String(error)}\n`);
+    }
 
     const checkout = createPostgresCheckoutService(connection, {
       ...(config.enabledProviders.includes('stripe') && config.stripeSecretKey

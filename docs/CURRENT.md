@@ -14,7 +14,7 @@
 - `scripts/apply-schema.ts` 使用 PostgreSQL advisory lock、事务和空库检查安装 Schema。
 - 金额/credit 使用整数列；数据库瞬时点使用 `TIMESTAMPTZ(3)`。
 
-### Durable settlement 与 expiry command
+### Durable command authority
 
 - `payment.settlement.accept` 以 `settlement_id` 作为 command identity，并在 `payment_command_receipt` 保存
   `Idempotency-Key`、versioned request digest、状态和 `{settlementId, accepted}` 结果。
@@ -25,8 +25,22 @@
   `billing.idempotency_conflict`。
 - Expiry replay 读取已持久化的 hold ID 列表，不会重新扫描后续 eligible hold；receipt、hold/allocation/account 与 outbox 在同一
   PostgreSQL use-case transaction 内提交。
-- 所有带 `Idempotency-Key` 的 HTTP mutation 都只把 tenant/route/key 的短 TTL presence marker 作为可丢失 Redis 提示；Redis 不接收 body/digest，
-  不返回 replay/conflict 裁决。JSON 字段顺序、Redis miss/timeout/坏记录不会绕过规范化 command 与 PostgreSQL receipt/owner fact。
+- Admission authorize/capture/release 与 execution-event ingress 使用 `entitlement_billing_command_receipt`；scope 是
+  `tenant_id + api_surface + command_name + idempotency_key`，业务 identity 分别是 invocation、admission、admission 与 event ID。
+  Capture/release 在检查 admission 终态前先 claim/replay receipt，release 的 `invocation_id`、`reason` 与可选 `service_receipt`
+  都进入版本化 digest；execution event 的 HTTP `Idempotency-Key` 进入 application 并持久化。
+- Receipt claim、业务 effect 与 result 在同一 PostgreSQL transaction 内提交；正常执行不会提交对其他 transaction 可见的 `processing` row。
+  Schema 已从通用 entitlement/payment receipt 删除 lease 字段；历史 `failed` 返回 `billing.command_failed`，历史
+  `unknown`/`processing` 返回 `billing.command_unknown`，不做无 fence 的 stale reclaim。
+- Checkout 先按 `tenant_id + idempotency_key` 锁定并比较 versioned canonical payload digest，再决定 replay；只有新 command 才读取
+  当前 catalog。Canonical JSON 递归排序 object key、保留 array 顺序并拒绝非 JSON 值，因此报价后续 disabled 不阻断原结果重放。
+- Refund 使用 provider + external reversal reference 作为业务 identity，在 settlement row lock 下通过 receipt `ON CONFLICT`、
+  `FOR UPDATE`、digest 比较和 durable result 重放收敛独立连接并发；同一 settlement 的累计退款也被串行校验。
+- 所有带 `Idempotency-Key` 的 HTTP mutation 都只把 tenant/route/key 的短 TTL presence marker 作为可丢失 Redis 提示；Redis 不接收
+  body/digest，不返回 replay/conflict 裁决。API 和 expiry worker 在 Redis 初始连接或运行中丢失时继续使用 PostgreSQL；readiness
+  返回 `redis=degraded` 而不是摘除账务 API。
+- 损坏或缺失的 succeeded durable `result_json` 由 persistence boundary 抛出内部不变量；HTTP 固定返回 generic
+  `billing.internal_error` 500，结构化 error log 保留内部诊断 code，不把持久化损坏伪装成客户端 400。
 
 ### Webhook contract 与 runtime
 
@@ -40,6 +54,8 @@
 ### 运行时与协议
 
 - `src/main.ts` 通过 `src/bootstrap/create-billing-runtime.ts` 装配 PostgreSQL、Redis、provider、auth 与 Fastify。
+- Redis hint 初始连接失败不会阻止 runtime 构建；`/readyz` 只以 PostgreSQL 为可服务权威，并把 Redis 状态报告为
+  `ok|degraded`。同一 PostgreSQL 数据库可在 Redis 缺失时关闭、重建 runtime 并继续读取 durable receipt/fact。
 - OpenAPI 与实现各有 17 个 HTTP operation；非探针 operation 已版本化为 `/v1/**`。
 - v1 JSON transport 使用 snake_case 和 `{data, meta}` / `{error, meta}`；`meta.request_id` 由 transport 补齐。
 - 用户 JWT、Web BFF service-auth、内部 service secret、admin proxy secret 与 provider signature 是分离的身份入口。
@@ -48,11 +64,12 @@
 
 ### 本轮可执行覆盖
 
-- Contract test 固定 settlement/expiry body、response、provider enum 和 webhook signature location。
-- HTTP test 固定 batch/key 传递、缺失 batch 拒绝、等价 JSON 与 Redis timeout 均继续进入 durable authority、unsupported provider
-  拒绝及真实 Alipay RSA2 form-body 验签；真实 Redis integration 固定 marker-only 与坏记录非权威语义。
-- Real-PostgreSQL integration 固定 receipt replay、request drift conflict、并发 settlement、identity replay、同 key 下一批拒绝及
-  expiry 不消费后续 hold。
+- Contract test 固定 capture/release request body、execution-event 409、settlement/expiry body、Idempotency-Key 边界、Redis degraded
+  readiness、provider enum 和 webhook signature location。
+- HTTP test 固定 capture/release/execution key 与完整 payload 传递、generic 500 result-corruption mapping、等价 JSON 与 Redis timeout
+  均继续进入 durable authority，以及真实 Alipay RSA2 form-body 验签。
+- Real-PostgreSQL integration 固定 admission command receipt、checkout 递归字段重排/disabled-offer replay/payload drift、refund 双连接
+  并发、settlement/expiry identity replay、历史 receipt 状态和损坏 result；runtime integration 固定 Redis 缺失下的启动与重启。
 - Architecture/SQL gate 固定 canonical Schema、无 FK、receipt identity index、依赖方向与 route metadata。
 
 ## 下一阶段目标
@@ -64,20 +81,21 @@
 
 ## 已知缺口
 
-1. **其余 OpenAPI shape coverage**：settlement 与 expiry 已闭环；refund、admission/release、subscription 等 surface 仍有 generic
-   response 或不完整 error/body 描述。
+1. **其余 OpenAPI shape coverage**：capture/release request 与 execution conflict 已闭环；refund、subscription 等 surface 仍有
+   generic response 或不完整 error/body 描述。
 2. **Breaking/provenance automation**：没有 historical semantic diff 与机器 provenance publish job；当前以 Git commit/tag +
    OpenAPI SHA-256 固定来源。
 3. **Ledger wire time**：`V1LedgerEntry.created_at` 与 adapter 使用 Unix epoch milliseconds；平台目标是 RFC 3339 UTC。
 4. **Reconciliation deployment**：repository/service 与 integration test 已存在，但没有独立 CLI/worker、schedule、metric 或受审计
    repair command。
 5. **Execution worker concurrency**：一次性 batch 没有跨进程 row lease；当前不应并行运行多个实例。
-6. **HTTP abuse/reliability controls**：尚未统一配置 route rate limit、overall request deadline、response-size limit 与取消传播。
+6. **HTTP/provider reliability controls**：尚未统一配置 route rate limit、overall request deadline、response-size limit 与取消传播；
+   hosted checkout provider call 当前仍位于 session transaction，尚未拆成带 durable provider-attempt 状态的短事务流程。
 7. **Observability completeness**：provider error ratio、execution lag、reconciliation drift、receipt 状态和账本不变量仍缺直接
    metric/alert provisioning。
 8. **Retention/DR**：receipt、inbox/outbox、audit、journal 尚无已执行 retention/partition/GC 策略；备份恢复与 RPO/RTO 无仓内实测。
-9. **Redis startup availability**：Redis 不是账务事实源，但 API/expiry worker 当前启动与 readiness 仍要求 Redis 连接；运行中部分
-   hint/lease 操作可降级不等于启动完全解耦。
+9. **Redis 自动恢复**：Redis 丢失后当前进程 fail-open 并禁用对应 hint/lease 优化；Redis 恢复不会在同一进程自动重新连接，需由
+   supervisor 受控重启后恢复优化，但 PostgreSQL command/账务可用性不受此限制。
 10. **生产证据**：仓内没有生产 traffic、SLO attainment、容量、故障注入或恢复演练数据；SLO 数值仅为目标。
 
 ## 本轮边界

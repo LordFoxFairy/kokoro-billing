@@ -40,13 +40,16 @@ Application 不导入 Fastify、pg、Redis 或 provider SDK；HTTP 不执行 SQL
 ```text
 IAM user JWT 或 web-bff service-auth
   -> tenant/subject + Zod + Idempotency-Key
-  -> 校验 published offer revision 与 quote snapshot
+  -> canonicalize request -> lock tenant/key checkout -> digest conflict 或 replay
+  -> 仅新 command 校验 database clock、published offer revision 与 quote snapshot
   -> 写 payment_checkout 唯一事实
-  -> 可选 Stripe hosted session（事务外 provider call）
+  -> 可选 Stripe hosted session（稳定 provider idempotency key；当前调用仍位于 session transaction）
   -> 返回 snake_case checkout snapshot
 ```
 
-同一 `tenant_id + idempotency_key` 重放读取原 checkout；quote hash 不同返回 `billing.idempotency_conflict`。
+同一 `tenant_id + idempotency_key` 重放读取原 checkout；报价在首次成功后被 disabled 也不改变 replay。`quote_hash` 是带 command
+version 的 SHA-256 digest，覆盖 subject、offer revision、金额、currency 与完整 quote snapshot。Object key 递归排序、array 顺序保留，
+非 JSON 值拒绝；digest 不同返回 `billing.idempotency_conflict`。
 
 ### Admission / usage
 
@@ -61,7 +64,10 @@ Agent|Model|Studio service
      unknown: retain hold for later reconciliation
 ```
 
-`entitlement_billing_command_receipt` 是 admission/capture/release 的 durable replay authority。Redis hint 失败时请求继续到 PostgreSQL。
+`entitlement_billing_command_receipt` 是 authorize/capture/release/execution-event ingress 的 durable replay authority。Receipt scope 是
+tenant + API surface + command + key；authorize identity 是 invocation ID，capture/release identity 是 admission ID，execution-event
+identity 唯一选择 event ID。Release 的 invocation/reason/service receipt 与 execution event 的完整 envelope 都进入版本化 canonical digest。
+每个 handler 在检查 admission/event 终态前先核对 receipt；Redis hint 失败时请求继续到 PostgreSQL。
 
 ### Provider event / payment fulfillment
 
@@ -94,6 +100,21 @@ payment-worker|scheduler + tenant + Idempotency-Key
 `payment.settlement.accept` 的 command identity 是 `settlement_id`。Receipt key 与 identity 各有 tenant/command scoped unique
 constraint；payload drift、key 指向另一 identity，或 identity 指向另一 payload 都不会进入业务写入。
 
+### Refund acceptance
+
+```text
+payment-worker|admin + tenant + Idempotency-Key
+  -> resolve provider and lock settlement
+  -> INSERT payment_command_receipt ON CONFLICT DO NOTHING
+  -> lock key-or-(provider, external reversal ref) identity receipt
+  -> compare versioned canonical digest / replay durable result
+  -> validate cumulative amount -> write reversal/audit/outbox -> finish receipt
+  -> one transaction commit
+```
+
+`PaymentReversal` 的业务 identity 是 provider + external reversal reference 的 canonical digest。Settlement row 使用 `FOR UPDATE`，
+因此不同 refund identity 的累计金额检查和相同 key/identity 的两个独立连接都被串行化；唯一约束竞争不会泄漏为 500。
+
 ### Expiry
 
 ```text
@@ -116,9 +137,12 @@ caller/worker 生成的 `batch_id`；一次 daemon tick 生成一个新 identity
 - `PostgresConnection` 通过 `AsyncLocalStorage` 将一个 request/worker operation 绑定到一个 session；嵌套事务使用 savepoint。
 - Repository SQL 使用 PostgreSQL `$1...` 参数；动态 outbox table 只来自封闭 union。
 - 写路径按 tenant-scoped receipt/事实、聚合、allocation/journal、outbox 的固定业务顺序锁定。
-- Settlement receipt、settlement/outbox/result 在一个 use-case transaction 内提交；expiry receipt、选中 hold 的
-  allocation/account/outbox 与 result 也在一个 use-case transaction 内提交，内部 savepoint 不改变外层原子性。
-- 两类 receipt 同时受 key unique 与非空 command identity partial unique 约束；查询使用 `FOR UPDATE` 串行化并发重试。
+- Admission command receipt/effect/result、settlement receipt/settlement/outbox/result、refund receipt/reversal/outbox/result，以及 expiry
+  receipt/选中 hold 的 allocation/account/outbox/result，分别在一个 use-case transaction 内提交；内部 savepoint 不改变外层原子性。
+- 三张 receipt 表受 tenant/operation/key unique；具备业务 identity 的 command 另受非空 identity partial unique。`ON CONFLICT` 后的
+  tenant-scoped `FOR UPDATE` 串行化并发重试。
+- Receipt 的 `processing` 只表示当前 transaction 内的 claim；当前模型不提交 processing lease，也不 reclaim。历史可见
+  `processing|unknown` 稳定返回 `billing.command_unknown`，`failed` 返回 `billing.command_failed`。
 - Payment outbox 使用 `FOR UPDATE SKIP LOCKED`，lease 更新使用独立连接，避免与 handler 事务一起回滚。
 - 无数据库 FK；Application/Repository 通过 tenant existence、state check、row lock、同事务写入、UNIQUE/CHECK 与 reconciliation
   维护关系。
@@ -140,13 +164,15 @@ PaymentCollection/PaymentAttempt 的纯迁移表已有 unit test，但当前业�
 ## 7. 错误与关闭
 
 Transport 将已知 `billing.*` 错误映射到 4xx/409/402，其余归一为 `billing.internal_error`，并补齐 retryable/details 与
-request ID。API 在 SIGTERM/SIGINT 时关闭 Fastify、Redis 与 PostgreSQL，默认总 deadline 为 10 秒；超时退出非零。
+request ID。损坏的 durable result 使用 typed persistence invariant：外部只见 generic 500，结构化日志保留内部 code。API 在
+SIGTERM/SIGINT 时关闭 Fastify、Redis 与 PostgreSQL，默认总 deadline 为 10 秒；超时退出非零。Redis 初始连接失败时 API 仍启动，
+`/readyz` 在 PostgreSQL 健康时返回 ready + `redis=degraded`；expiry worker 同样直接执行 PostgreSQL-protected batch。
 Payment worker 续租失败返回 `lease_lost`，handler 失败按 attempts backoff，达到上限写 dead-letter。
 
 详细 timeout、降级和恢复语义见 [`RELIABILITY.md`](RELIABILITY.md)。
 
 ## 8. 已知设计缺口
 
-完整列表见 [`CURRENT.md`](CURRENT.md)。Settlement/expiry durable receipt 与 webhook provider contract 已闭环；剩余直接影响技术闭环的是：其余 OpenAPI shape/历史 breaking 比较不完整、
+完整列表见 [`CURRENT.md`](CURRENT.md)。核心 command durable receipt 与 webhook provider contract 已闭环；剩余直接影响技术闭环的是：其余 OpenAPI shape/历史 breaking 比较不完整、
 reconciliation 未装配、execution batch 无跨进程 lease、HTTP overall deadline/size/rate limit 未显式配置，以及 production
-observability/DR 证据缺失。
+observability/DR 证据缺失。Hosted checkout provider call 仍位于 session transaction，未宣称已完成外部调用事务分离。

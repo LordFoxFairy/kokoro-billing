@@ -46,8 +46,8 @@ curl --fail --silent --show-error http://HOST:9095/metrics
 curl --fail --silent --show-error http://HOST:9096/metrics
 ```
 
-`/healthz` 只证明进程响应；`/readyz` 同时 ping PostgreSQL 与 Redis。Redis 虽不是账务事实源，但当前 API readiness 仍会在 Redis
-不可用时返回 503。
+`/healthz` 只证明进程响应；`/readyz` 以 PostgreSQL 为可服务权威。Redis 正常时返回 `redis=ok`；Redis 不可用时仍返回 200，
+并显式报告 `redis=degraded`。PostgreSQL 不可用才返回 503。
 
 ## 3. Worker 启动
 
@@ -99,12 +99,13 @@ Billing owner，不执行临时 UPDATE。
 
 ## 6. Redis 不可用
 
-- API readiness 当前会失败；初始 Redis connect 失败也会阻止 API/expiry worker 启动。
-- 已连接后的 idempotency marker operation 可 fail-open 到 PostgreSQL；marker 不含 body/digest，也不裁决 replay/conflict。
-- 已连接后的 expiry lease operation 失败会继续 sweep，正确性依赖 PostgreSQL batch receipt、row lock/status；避免人为启动大量并发 sweep。
+- API 初始连接失败仍会启动；PostgreSQL 健康时 readiness 为 200 + `redis=degraded`。Expiry worker 初始连接失败也会继续 sweep。
+- Idempotency marker operation fail-open 到 PostgreSQL；marker 不含 body/digest，也不裁决 replay/conflict。
+- Expiry lease operation 失败会继续 sweep，正确性依赖 PostgreSQL batch receipt、row lock/status；避免人为启动大量并发 sweep。
 - 检查 URL 是否明确为 `/4`、connect/read/overall timeout 与网络。
 - 恢复后不需要从 Redis 回填账务数据；不要把 Redis key 当作 receipt。
-- 若 API 因 readiness 被摘除，Redis 恢复后重新检查 ready 与 PostgreSQL fact。
+- 当前进程在连接/operation 失败后禁用相应 Redis 优化；Redis 恢复后由 supervisor 受控重启可重新启用。重启前后均先检查
+  PostgreSQL fact，不从 Redis 回填或推断 receipt。
 
 ## 7. Payment provider / inbox / outbox
 
@@ -188,7 +189,7 @@ SQL
 
 禁止直接改 balance、删除 journal、重排 sequence 或释放 hold 来让告警消失。
 
-### Settlement / expiry receipt 分诊
+### Command receipt 分诊
 
 ```bash
 psql "$DATABASE_URL" -v tenant=TENANT -v key=IDEMPOTENCY_KEY <<'SQL'
@@ -201,11 +202,19 @@ SELECT command_name, command_identity, idempotency_key, payload_hash, status,
        result_json, created_at, updated_at
 FROM entitlement_command_receipt
 WHERE tenant_id = :'tenant' AND idempotency_key = :'key';
+
+SELECT api_surface, command_name, command_identity, idempotency_key,
+       payload_hash, status, result_json, created_at, updated_at
+FROM entitlement_billing_command_receipt
+WHERE tenant_id = :'tenant' AND idempotency_key = :'key';
 SQL
 ```
 
-- Settlement 重试复用原 `settlement_id` 与原语义 payload；expiry 重试复用原 `batch_id` 和规范化后的同一 `limit`。
+- Settlement 重试复用原 `settlement_id`，refund 复用原 provider/external reference，expiry 重试复用原 `batch_id` 和规范化后的
+  同一 `limit`；capture/release/execution 复用原 admission/event identity 与完整 payload。
 - `succeeded` 必须返回 `result_json`；同 key 指向另一 identity 或 digest 不同是冲突，不能删除 receipt 后重试。
+- `failed` 是稳定 command failure；`processing|unknown` 统一按 unknown 对账。当前 receipt 没有 stale lease/reclaim，不按
+  `updated_at` 年龄擅自重跑 side effect。
 - Expiry succeeded result 中的 `expiredHoldIds` 是原批次事实；不得用同 key/new batch 试图继续 sweep。
 - 发现 invalid result、跨 identity 多 receipt 或账务 drift 时停止相关 tenant 写入并升级 Billing owner，不直接改 status/hash/result。
 

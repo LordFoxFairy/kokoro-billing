@@ -27,8 +27,13 @@ export class RedisIdempotencyHint implements IdempotencyHint {
 
   public async connect(): Promise<void> {
     if (!this.connected) {
-      await connectRedisWithDeadline(this.client.connect(), this.timeouts);
-      this.connected = true;
+      try {
+        await connectRedisWithDeadline(this.client.connect(), this.timeouts);
+        this.connected = true;
+      } catch (error) {
+        if (this.client.isOpen) this.client.destroy();
+        throw error;
+      }
     }
   }
 
@@ -43,14 +48,31 @@ export class RedisIdempotencyHint implements IdempotencyHint {
   }
 
   public async ping(): Promise<void> {
-    await runIdempotentRedisOperation('ping', this.timeouts, () => this.client.ping());
+    if (!this.connected) throw new Error('redis hint is not connected');
+    try {
+      await runIdempotentRedisOperation('ping', this.timeouts, () => this.client.ping());
+    } catch (error) {
+      this.disable();
+      throw error;
+    }
   }
 
   public async markSeen(key: string, ttlSeconds: number): Promise<void> {
-    await runIdempotentRedisOperation('mark-seen', this.timeouts, () => this.client.set(this.key(key), 'seen', { NX: true, EX: ttlSeconds }));
+    if (!this.connected) return;
+    try {
+      await runIdempotentRedisOperation('mark-seen', this.timeouts, () => this.client.set(this.key(key), 'seen', { NX: true, EX: ttlSeconds }));
+    } catch (error) {
+      this.disable();
+      throw error;
+    }
   }
 
   private key(key: string): string {
     return `${this.namespace}:${key}`;
+  }
+
+  private disable(): void {
+    this.connected = false;
+    if (this.client.isOpen) this.client.destroy();
   }
 }
