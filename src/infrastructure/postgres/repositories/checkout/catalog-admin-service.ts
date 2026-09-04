@@ -49,10 +49,10 @@ export class CatalogAdminService {
         await this.connection.commit();
         return parsePersistedJson(receipt.result_json, catalogPlanSchema, 'billing.command_result_invalid');
       }
-      if (receiptInsert.affectedRows !== 1 && receipt.status === 'processing') throw new Error('billing.command_in_progress');
+      if (receiptInsert.affectedRows !== 1 && receipt.status === 'processing') throw new Error('billing.command_unknown');
       if (receipt.status === 'unknown') throw new Error('billing.command_unknown');
       if (receipt.status === 'failed') throw new Error('billing.command_failed');
-      if (receipt.status !== 'processing') throw new Error('billing.command_in_progress');
+      if (receipt.status !== 'processing') throw new Error('billing.command_unknown');
       await this.connection.execute(
         `INSERT INTO entitlement_offer (offer_id, tenant_id, offer_key, status) VALUES ($1, $2, $3, 'active')
          ON CONFLICT (tenant_id, offer_key) DO UPDATE SET status = 'active'`,

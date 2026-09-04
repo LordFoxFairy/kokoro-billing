@@ -202,13 +202,16 @@ describe('clean-build Billing v1 transport', () => {
     expect(capture.statusCode).toBe(200);
     expect(calls.capture[0]).toEqual(['tenant-1', 'adm-1', expect.objectContaining({ invocationId: 'inv-1' }), 'key-123456']);
 
-    const release = await server.inject({ method: 'POST', url: '/v1/internal/entitlement/admissions/adm-1/release', headers: { ...internalHeaders, 'idempotency-key': 'release-123456' }, payload: { invocation_id: 'inv-1', reason: 'execution.failed' } });
+    const release = await server.inject({ method: 'POST', url: '/v1/internal/entitlement/admissions/adm-1/release', headers: { ...internalHeaders, 'idempotency-key': 'release-123456' }, payload: { invocation_id: 'inv-1', reason: 'execution.failed', service_receipt: { result_digest: 'release-digest' } } });
     expect(release.statusCode).toBe(200);
-    expect(calls.release[0]).toEqual(['tenant-1', 'adm-1', 'execution.failed', 'release-123456']);
+    expect(calls.release[0]).toEqual([{
+      tenantId: 'tenant-1', admissionId: 'adm-1', invocationId: 'inv-1', reason: 'execution.failed',
+      serviceReceipt: { result_digest: 'release-digest' }, idempotencyKey: 'release-123456',
+    }]);
 
     const event = await server.inject({ method: 'POST', url: '/v1/internal/billing/execution-events', headers: { ...internalHeaders, 'idempotency-key': 'event-123456' }, payload: { event_id: 'event-1', event_type: 'execution.unknown', execution_id: 'exec-1', invocation_id: 'inv-1', occurred_at: '2026-09-01T00:00:00Z', receipt_schema_version: '1' } });
     expect(event.statusCode).toBe(202);
-    expect(calls.events[0]).toEqual([expect.objectContaining({ tenantId: 'tenant-1', eventId: 'event-1', eventType: 'execution.unknown' })]);
+    expect(calls.events[0]).toEqual([expect.objectContaining({ tenantId: 'tenant-1', eventId: 'event-1', eventType: 'execution.unknown', idempotencyKey: 'event-123456' })]);
   });
 
   it('rejects the retired execution-event signature field instead of persisting an unverified claim', async () => {

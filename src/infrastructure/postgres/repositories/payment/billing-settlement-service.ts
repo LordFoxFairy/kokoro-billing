@@ -1,7 +1,8 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { SqlConnection, ResultSetHeader, RowDataPacket } from '../../database.js';
-import { parsePersistedJson } from '../../json.js';
+import { parsePersistedJson, PersistedDataInvariantError } from '../../json.js';
+import { canonicalJsonDigest } from '../../canonical-json.js';
 
 const SETTLEMENT_ACCEPT_COMMAND = 'payment.settlement.accept';
 const settlementAcceptanceSchema = z.object({ settlementId: z.string().min(1), accepted: z.literal(true) }).strict();
@@ -57,7 +58,7 @@ export class BillingSettlementService {
     if (!Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0) throw new RangeError('amountMinor must be positive');
     const provider = input.provider ?? 'internal';
     if (!/^[a-z0-9][a-z0-9_-]{0,63}$/u.test(provider)) throw new RangeError('provider must be a normalized identifier');
-    const payloadHash = createHash('sha256').update(JSON.stringify({
+    const payloadHash = canonicalJsonDigest({
       command: `${SETTLEMENT_ACCEPT_COMMAND}/v1`,
       settlementId: input.settlementId,
       provider,
@@ -66,7 +67,7 @@ export class BillingSettlementService {
       currency: input.currency,
       providerEventId: input.providerEventId ?? null,
       checkoutId: input.checkoutId ?? null,
-    })).digest('hex');
+    });
     const result = { settlementId: input.settlementId, accepted: true } as const;
     await this.connection.beginTransaction();
     try {
@@ -87,16 +88,15 @@ export class BillingSettlementService {
       );
       if (receipts.length !== 1) throw new Error('billing.idempotency_conflict');
       const receipt = receipts[0];
-      if (!receipt) throw new Error('billing.command_receipt_not_found');
+      if (!receipt) throw new PersistedDataInvariantError('billing.command_receipt_not_found_after_insert');
       if (receipt.payload_hash !== payloadHash || receipt.command_identity !== input.settlementId) throw new Error('billing.idempotency_conflict');
       if (receipt.status === 'succeeded') {
         const replay = parsePersistedJson(receipt.result_json, settlementAcceptanceSchema, 'billing.command_result_invalid');
         await this.connection.commit();
         return replay;
       }
-      if (receiptInsert.affectedRows !== 1 || receipt.status === 'processing' && receipt.idempotency_key !== input.idempotencyKey) throw new Error('billing.command_in_progress');
-      if (receipt.status === 'unknown') throw new Error('billing.command_unknown');
       if (receipt.status === 'failed') throw new Error('billing.command_failed');
+      if (receipt.status === 'unknown' || receiptInsert.affectedRows !== 1) throw new Error('billing.command_unknown');
       await this.connection.execute(
         `INSERT INTO payment_settlement
           (settlement_id, tenant_id, provider_event_id, checkout_id, provider, external_payment_ref, amount_minor, currency, status)
@@ -114,7 +114,7 @@ export class BillingSettlementService {
       if (row.settlement_id !== input.settlementId || row.tenant_id !== input.tenantId || row.provider !== provider || row.external_payment_ref !== input.externalPaymentRef || String(row.amount_minor) !== String(input.amountMinor) || row.currency !== input.currency) {
         throw new Error('billing.idempotency_conflict');
       }
-      await this.connection.execute(
+      const [receiptUpdate] = await this.connection.execute<ResultSetHeader>(
         `INSERT INTO payment_outbox
           (outbox_id, tenant_id, aggregate_type, aggregate_id, event_type, payload_json)
          VALUES ($1, $2, 'payment_settlement', $3, 'PaymentSettlementRecorded', $4)
@@ -124,9 +124,10 @@ export class BillingSettlementService {
       await this.connection.execute(
         `UPDATE payment_command_receipt
             SET status = 'succeeded', result_json = $1, updated_at = CURRENT_TIMESTAMP(3)
-          WHERE receipt_id = $2 AND tenant_id = $3 AND command_name = $4`,
+          WHERE receipt_id = $2 AND tenant_id = $3 AND command_name = $4 AND status = 'processing'`,
         [JSON.stringify(result), receipt.receipt_id, input.tenantId, SETTLEMENT_ACCEPT_COMMAND],
       );
+      if (receiptUpdate.affectedRows !== 1) throw new PersistedDataInvariantError('billing.command_receipt_transition_invalid');
       await this.connection.commit();
       return result;
     } catch (error) {

@@ -60,7 +60,14 @@ export class RedeemAdminService {
     try {
       const [rows] = await this.connection.execute<Receipt[]>(`SELECT payload_hash, result_json, status FROM entitlement_command_receipt WHERE tenant_id = $1 AND command_name = $2 AND idempotency_key = $3 FOR UPDATE`, [tenantId, command, key]);
       const prior = rows[0];
-      if (prior) { if (prior.payload_hash !== payloadHash) throw new Error('billing.idempotency_conflict'); if (prior.status !== 'succeeded' || prior.result_json === null) throw new Error(prior.status === 'processing' ? 'billing.command_in_progress' : 'billing.command_failed'); const result = parsePersistedJson(prior.result_json, schema, 'billing.command_result_invalid'); await this.connection.commit(); return result; }
+      if (prior) {
+        if (prior.payload_hash !== payloadHash) throw new Error('billing.idempotency_conflict');
+        if (prior.status === 'processing' || prior.status === 'unknown') throw new Error('billing.command_unknown');
+        if (prior.status !== 'succeeded' || prior.result_json === null) throw new Error('billing.command_failed');
+        const result = parsePersistedJson(prior.result_json, schema, 'billing.command_result_invalid');
+        await this.connection.commit();
+        return result;
+      }
       const receiptId = randomUUID();
       await this.connection.execute(`INSERT INTO entitlement_command_receipt (receipt_id, tenant_id, command_name, idempotency_key, payload_hash, status) VALUES ($1, $2, $3, $4, $5, 'processing')`, [receiptId, tenantId, command, key, payloadHash]);
       const result = await work();

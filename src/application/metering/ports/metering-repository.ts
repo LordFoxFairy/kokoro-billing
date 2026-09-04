@@ -3,6 +3,7 @@ import type {
   BillingAdmissionResult,
   CreateBillingAdmissionInput,
   ExecutionEventInput,
+  ReleaseAdmissionInput,
 } from '../services/billing-admission-service.js';
 import type { PublishedUsagePricing, PublishUsagePricingInput } from '../services/usage-pricing-admin-service.js';
 import type { UsagePriceRate, UsageQuote } from '../services/usage-pricing-service.js';
@@ -20,7 +21,7 @@ import type {
 export interface BillingAdmissionRepository {
   create(input: CreateBillingAdmissionInput): Promise<BillingAdmissionResult>;
   capture(tenantId: string, admissionId: string, receipt: AcceptedReceipt, idempotencyKey: string): Promise<BillingAdmissionResult>;
-  release(tenantId: string, admissionId: string, reason: string, idempotencyKey: string): Promise<BillingAdmissionResult>;
+  release(input: ReleaseAdmissionInput): Promise<BillingAdmissionResult>;
   recordExecutionEvent(input: ExecutionEventInput): Promise<{ readonly eventId: string; readonly status: 'received' | 'processed' }>;
   processExecutionEvent(tenantId: string, eventId: string): Promise<void>;
 }

@@ -7,6 +7,8 @@ type OpenApiDocument = {
   readonly openapi?: string;
   readonly paths?: Record<string, Record<string, unknown>>;
   readonly components?: {
+    readonly parameters?: Record<string, unknown>;
+    readonly requestBodies?: Record<string, unknown>;
     readonly schemas?: Record<string, unknown>;
     readonly securitySchemes?: Record<string, unknown>;
   };
@@ -79,6 +81,8 @@ const executionEventRequestBody = executionEventPost !== null && typeof executio
   : undefined;
 if (executionEventRequestBody === undefined) throw new Error('execution-events must reference its OpenAPI request body');
 const requiredCommandBodies: Readonly<Record<string, string>> = {
+  '/v1/internal/entitlement/admissions/{admissionId}/capture': '#/components/requestBodies/V1AdmissionCaptureRequest',
+  '/v1/internal/entitlement/admissions/{admissionId}/release': '#/components/requestBodies/V1AdmissionReleaseRequest',
   '/v1/internal/payment/settlements/accept': '#/components/requestBodies/V1SettlementAcceptRequest',
   '/v1/internal/commands/expire-credit-holds': '#/components/requestBodies/V1ExpireCreditHoldsRequest',
 };
@@ -86,6 +90,23 @@ for (const [path, expectedRef] of Object.entries(requiredCommandBodies)) {
   const post = asRecord(contract.paths?.[path]?.post);
   const requestBody = asRecord(post?.requestBody);
   if (requestBody?.$ref !== expectedRef) throw new Error(`${path} must reference ${expectedRef}`);
+}
+const captureSchema = asRecord(contract.components?.schemas?.V1AdmissionCaptureRequest);
+if (JSON.stringify(captureSchema?.required) !== JSON.stringify(['invocation_id', 'execution_id', 'accepted_provider_ref', 'accepted_at', 'service_receipt', 'receipt_schema_version'])
+  || captureSchema?.additionalProperties !== false) {
+  throw new Error('V1AdmissionCaptureRequest must define the exact durable capture payload');
+}
+const releaseSchema = asRecord(contract.components?.schemas?.V1AdmissionReleaseRequest);
+if (JSON.stringify(releaseSchema?.required) !== JSON.stringify(['invocation_id', 'reason'])
+  || releaseSchema?.additionalProperties !== false) {
+  throw new Error('V1AdmissionReleaseRequest must define the exact durable release payload');
+}
+const executionResponses = asRecord(asRecord(executionEventPost)?.responses);
+if (executionResponses?.['409'] === undefined) throw new Error('execution-events must document idempotency conflict as 409');
+const idempotencyParameter = asRecord(contract.components?.parameters?.IdempotencyKey);
+const idempotencySchema = asRecord(idempotencyParameter?.schema);
+if (idempotencySchema?.minLength !== 8 || idempotencySchema.maxLength !== 128 || idempotencySchema.pattern !== '^[\\x20-\\x7E]+$') {
+  throw new Error('Idempotency-Key constraints must match the runtime boundary');
 }
 const settlementSchema = asRecord(contract.components?.schemas?.V1SettlementAcceptRequest);
 const settlementProperties = asRecord(settlementSchema?.properties);

@@ -8,6 +8,7 @@ const recordSchema = z.record(z.string(), z.unknown());
 const openApiSchema = z.object({
   paths: z.record(z.string(), recordSchema),
   components: z.object({
+    parameters: recordSchema,
     securitySchemes: recordSchema,
     requestBodies: recordSchema,
     schemas: recordSchema,
@@ -25,6 +26,36 @@ const operation = (document: z.infer<typeof openApiSchema>, path: string): Recor
 };
 
 describe('Billing command OpenAPI contract', () => {
+  it('keeps admission command bodies and execution conflict status aligned with runtime', async () => {
+    const document = await readContract();
+    expect(operation(document, '/v1/internal/entitlement/admissions/{admissionId}/capture').requestBody).toEqual({
+      $ref: '#/components/requestBodies/V1AdmissionCaptureRequest',
+    });
+    expect(operation(document, '/v1/internal/entitlement/admissions/{admissionId}/release').requestBody).toEqual({
+      $ref: '#/components/requestBodies/V1AdmissionReleaseRequest',
+    });
+    expect(recordSchema.parse(operation(document, '/v1/internal/billing/execution-events').responses)).toHaveProperty('409');
+
+    const capture = recordSchema.parse(document.components.schemas.V1AdmissionCaptureRequest);
+    expect(capture.required).toEqual([
+      'invocation_id',
+      'execution_id',
+      'accepted_provider_ref',
+      'accepted_at',
+      'service_receipt',
+      'receipt_schema_version',
+    ]);
+    expect(capture.additionalProperties).toBe(false);
+
+    const release = recordSchema.parse(document.components.schemas.V1AdmissionReleaseRequest);
+    expect(release.required).toEqual(['invocation_id', 'reason']);
+    expect(release.additionalProperties).toBe(false);
+
+    const idempotencyKey = recordSchema.parse(document.components.parameters.IdempotencyKey);
+    const idempotencyKeySchema = recordSchema.parse(idempotencyKey.schema);
+    expect(idempotencyKeySchema).toMatchObject({ minLength: 8, maxLength: 128, pattern: '^[\\x20-\\x7E]+$' });
+  });
+
   it('defines exact request bodies for durable settlement and expiry commands', async () => {
     const document = await readContract();
     expect(operation(document, '/v1/internal/payment/settlements/accept').requestBody).toEqual({

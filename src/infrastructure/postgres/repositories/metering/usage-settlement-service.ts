@@ -1,9 +1,10 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { SqlConnection, ResultSetHeader, RowDataPacket } from '../../database.js';
 import { allocateCreditGrants, type CreditGrantForAllocation } from '../../../../application/credit/services/allocate-grants.js';
 import { readSafeInteger } from '../../../../application/ports/safe-integer.js';
-import { jsonRecordSchema, parsePersistedJson } from '../../json.js';
+import { jsonRecordSchema, parsePersistedJson, PersistedDataInvariantError } from '../../json.js';
+import { canonicalJsonDigest } from '../../canonical-json.js';
 
 export type UsageEventInput = {
   readonly usageEventId: string;
@@ -386,11 +387,11 @@ export class UsageSettlementService {
     const requestedLimit = input.limit ?? 100;
     if (!Number.isSafeInteger(requestedLimit) || requestedLimit <= 0) throw new RangeError('limit must be a positive safe integer');
     const limit = Math.min(requestedLimit, 500);
-    const payloadHash = createHash('sha256').update(JSON.stringify({
+    const payloadHash = canonicalJsonDigest({
       command: `${EXPIRE_HOLDS_COMMAND}/v1`,
       batchId: input.batchId,
       limit,
-    })).digest('hex');
+    });
     await this.connection.beginTransaction();
     try {
       const [receiptInsert] = await this.connection.execute<ResultSetHeader>(
@@ -410,24 +411,24 @@ export class UsageSettlementService {
       );
       if (receipts.length !== 1) throw new Error('billing.idempotency_conflict');
       const receipt = receipts[0];
-      if (!receipt) throw new Error('billing.command_receipt_not_found');
+      if (!receipt) throw new PersistedDataInvariantError('billing.command_receipt_not_found_after_insert');
       if (receipt.payload_hash !== payloadHash || receipt.command_identity !== input.batchId) throw new Error('billing.idempotency_conflict');
       if (receipt.status === 'succeeded') {
         const replay = parsePersistedJson(receipt.result_json, usageExpiryResultSchema, 'billing.command_result_invalid');
         await this.connection.commit();
         return replay;
       }
-      if (receiptInsert.affectedRows !== 1 || receipt.status === 'processing' && receipt.idempotency_key !== input.idempotencyKey) throw new Error('billing.command_in_progress');
-      if (receipt.status === 'unknown') throw new Error('billing.command_unknown');
       if (receipt.status === 'failed') throw new Error('billing.command_failed');
+      if (receipt.status === 'unknown' || receiptInsert.affectedRows !== 1) throw new Error('billing.command_unknown');
       const expiredHoldIds = await this.expireEligibleHolds(input.tenantId, limit);
       const result = { batchId: input.batchId, expiredHoldIds } as const;
-      await this.connection.execute(
+      const [receiptUpdate] = await this.connection.execute<ResultSetHeader>(
         `UPDATE entitlement_command_receipt
             SET status = 'succeeded', result_json = $1, updated_at = CURRENT_TIMESTAMP(3)
-          WHERE receipt_id = $2 AND tenant_id = $3 AND command_name = $4`,
+          WHERE receipt_id = $2 AND tenant_id = $3 AND command_name = $4 AND status = 'processing'`,
         [JSON.stringify(result), receipt.receipt_id, input.tenantId, EXPIRE_HOLDS_COMMAND],
       );
+      if (receiptUpdate.affectedRows !== 1) throw new PersistedDataInvariantError('billing.command_receipt_transition_invalid');
       await this.connection.commit();
       return result;
     } catch (error) {

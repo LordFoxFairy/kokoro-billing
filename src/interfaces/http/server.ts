@@ -1,4 +1,4 @@
-import Fastify, { LogController, type FastifyInstance, type FastifyRequest } from 'fastify';
+import Fastify, { LogController, type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { CheckoutService } from '../../application/checkout/commands/checkout-service.js';
@@ -82,6 +82,11 @@ const acceptedReceiptSchema = z.object({
   invocation_id: z.string().min(1).max(255), execution_id: z.string().min(1).max(255), accepted_provider_ref: z.string().min(1).max(255),
   accepted_at: z.string().datetime({ offset: true }), service_receipt: z.record(z.string(), z.unknown()), receipt_schema_version: z.string().min(1).max(32),
 }).strict();
+const releaseAdmissionSchema = z.object({
+  invocation_id: z.string().min(1).max(255),
+  reason: z.string().min(1).max(255),
+  service_receipt: z.record(z.string(), z.unknown()).optional(),
+}).strict();
 const executionEventSchema = z.object({
   event_id: z.string().min(1).max(255), event_type: z.enum(['execution.waiting', 'execution.accepted', 'execution.rejected', 'execution.failed', 'execution.unknown']),
   execution_id: z.string().min(1).max(255), invocation_id: z.string().min(1).max(255), occurred_at: z.string().datetime({ offset: true }),
@@ -102,22 +107,49 @@ const idempotencyKey = (request: FastifyRequest): string | null => {
   return typeof value === 'string' && value.length > 0 ? value : null;
 };
 
-const sendError = (reply: { code: (status: number) => { send: (body: unknown) => unknown } }, error: unknown) => {
+type ClassifiedBillingError = {
+  readonly statusCode: number;
+  readonly externalCode: string;
+  readonly externalMessage: string;
+  readonly internalCode: string;
+};
+
+export const classifyBillingError = (error: unknown): ClassifiedBillingError => {
   const structured = error instanceof WebhookError
-    ? { code: error.code, statusCode: error.statusCode }
-    : error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' && 'statusCode' in error && typeof error.statusCode === 'number'
-      ? { code: error.code, statusCode: error.statusCode }
+    ? { code: error.code, statusCode: error.statusCode, internalCode: error.code }
+    : error !== null && typeof error === 'object'
+      && 'code' in error && typeof error.code === 'string'
+      && 'statusCode' in error && typeof error.statusCode === 'number'
+      ? {
+          code: error.code,
+          statusCode: error.statusCode,
+          internalCode: 'internalCode' in error && typeof error.internalCode === 'string' ? error.internalCode : error.code,
+        }
       : null;
   const rawMessage = error instanceof Error ? error.message : 'billing.internal_error';
   const code = structured?.code ?? (rawMessage.startsWith('billing.') ? rawMessage : 'billing.internal_error');
-  const status = structured?.statusCode !== undefined && structured.statusCode >= 400 && structured.statusCode < 500 ? structured.statusCode : code === 'billing.internal_error' ? 500
+  const status = structured?.statusCode !== undefined && structured.statusCode >= 400 && structured.statusCode < 600 ? structured.statusCode : code === 'billing.internal_error' ? 500
     : code === 'billing.insufficient_credit' ? 402
-    : ['billing.idempotency_conflict', 'billing.command_in_progress', 'billing.command_unknown', 'billing.reversal_exposure', 'billing.credit_projection_drift', 'billing.usage_event_mismatch'].includes(code) ? 409
+    : ['billing.idempotency_conflict', 'billing.command_failed', 'billing.command_in_progress', 'billing.command_unknown', 'billing.reversal_exposure', 'billing.credit_projection_drift', 'billing.usage_event_mismatch'].includes(code) ? 409
     : 400;
-  return reply.code(status).send({ error: { code, message: code === 'billing.internal_error' ? 'internal billing error' : rawMessage } });
+  const internalCode = structured?.internalCode ?? code;
+  if (status >= 500) {
+    return { statusCode: status, externalCode: 'billing.internal_error', externalMessage: 'internal billing error', internalCode };
+  }
+  return { statusCode: status, externalCode: code, externalMessage: rawMessage, internalCode };
 };
 
-const requireIdempotency = (request: FastifyRequest, reply: Parameters<typeof sendError>[0]): string | null => {
+const sendError = (reply: FastifyReply, error: unknown) => {
+  const classified = classifyBillingError(error);
+  if (classified.statusCode >= 500) {
+    reply.log.error({ err: error, internal_error_code: classified.internalCode }, 'billing request failed');
+  }
+  return reply.code(classified.statusCode).send({
+    error: { code: classified.externalCode, message: classified.externalMessage },
+  });
+};
+
+const requireIdempotency = (request: FastifyRequest, reply: FastifyReply): string | null => {
   const value = idempotencyKey(request);
   if (!value) {
     void reply.code(400).send({ error: { code: 'billing.idempotency_required', message: 'Idempotency-Key is required' } });
@@ -160,7 +192,7 @@ const hasStorefrontServiceMarker = (request: FastifyRequest): boolean => {
 const storefrontContext = async (
   dependencies: BillingHttpDependencies,
   request: FastifyRequest,
-  reply: Parameters<typeof sendError>[0],
+  reply: FastifyReply,
 ): Promise<StorefrontContext | null> => {
   const serviceMarker = hasStorefrontServiceMarker(request);
   const bffContext = await dependencies.auth.bff(request);
@@ -382,11 +414,18 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     if (!context) return;
     if (!dependencies.admission) return reply.code(503).send({ error: { code: 'billing.admission_not_configured', message: 'admission is not configured' } });
     const key = requireIdempotency(request, reply); if (!key) return;
-    const body = z.object({ invocation_id: z.string().min(1), reason: z.string().min(1).max(255), service_receipt: z.record(z.string(), z.unknown()).optional() }).strict().safeParse(request.body);
+    const body = releaseAdmissionSchema.safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: body.error.message } });
     await markIdempotencyKeySeen(dependencies, request, key, context.tenantId);
     try {
-      const result = await dependencies.admission.release(context.tenantId, request.params.admissionId, body.data.reason, key);
+      const result = await dependencies.admission.release({
+        tenantId: context.tenantId,
+        admissionId: request.params.admissionId,
+        invocationId: body.data.invocation_id,
+        reason: body.data.reason,
+        ...(body.data.service_receipt === undefined ? {} : { serviceReceipt: body.data.service_receipt }),
+        idempotencyKey: key,
+      });
       return reply.code(200).send({ data: admissionWire(result), meta: { request_id: request.id } });
     } catch (error) { return sendError(reply, error); }
   });
@@ -400,7 +439,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
     await markIdempotencyKeySeen(dependencies, request, key, context.tenantId);
     try {
-      const result = await dependencies.admission.recordExecutionEvent({ tenantId: context.tenantId, eventId: parsed.data.event_id, eventType: parsed.data.event_type, executionId: parsed.data.execution_id, invocationId: parsed.data.invocation_id, occurredAt: new Date(parsed.data.occurred_at), receiptSchemaVersion: parsed.data.receipt_schema_version, ...(parsed.data.receipt === undefined ? {} : { receipt: parsed.data.receipt }) });
+      const result = await dependencies.admission.recordExecutionEvent({ tenantId: context.tenantId, eventId: parsed.data.event_id, eventType: parsed.data.event_type, executionId: parsed.data.execution_id, invocationId: parsed.data.invocation_id, occurredAt: new Date(parsed.data.occurred_at), receiptSchemaVersion: parsed.data.receipt_schema_version, ...(parsed.data.receipt === undefined ? {} : { receipt: parsed.data.receipt }), idempotencyKey: key });
       return reply.code(202).send({ data: { event_id: result.eventId, status: result.status }, meta: { request_id: request.id } });
     } catch (error) { return sendError(reply, error); }
   });

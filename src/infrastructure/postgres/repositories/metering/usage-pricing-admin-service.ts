@@ -92,10 +92,10 @@ export class UsagePricingAdminService {
         await this.connection.commit();
         return parsePublishedUsagePricing(receipt.result_json);
       }
-      if (receiptInsert.affectedRows !== 1 && receipt.status === 'processing') throw new Error('billing.command_in_progress');
+      if (receiptInsert.affectedRows !== 1 && receipt.status === 'processing') throw new Error('billing.command_unknown');
       if (receipt.status === 'unknown') throw new Error('billing.command_unknown');
       if (receipt.status === 'failed') throw new Error('billing.command_failed');
-      if (receipt.status !== 'processing') throw new Error('billing.command_in_progress');
+      if (receipt.status !== 'processing') throw new Error('billing.command_unknown');
 
       const [revisions] = await this.connection.execute<RowDataPacket[]>(
         `SELECT COALESCE(MAX(revision), 0) AS revision FROM entitlement_usage_price_revision WHERE tenant_id = $1`,

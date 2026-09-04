@@ -259,4 +259,61 @@ integration('durable Billing command receipts', () => {
       await connection.end();
     }
   });
+
+  it.each([
+    { status: 'failed', expected: 'billing.command_failed' },
+    { status: 'unknown', expected: 'billing.command_unknown' },
+    { status: 'processing', expected: 'billing.command_unknown' },
+  ] as const)('returns the stable $status outcome for a durable settlement receipt', async ({ status, expected }) => {
+    const connection = await createBillingConnection(databaseUrl!);
+    const settlement = createPostgresBillingSettlementService(connection);
+    const tenantId = randomUUID();
+    const input = {
+      tenantId,
+      settlementId: randomUUID(),
+      idempotencyKey: `settlement-state-${randomUUID()}`,
+      provider: 'stripe',
+      externalPaymentRef: `payment-state-${randomUUID()}`,
+      amountMinor: 1_000,
+      currency: 'USD',
+    } as const;
+    try {
+      await settlement.recordSettlement(input);
+      await connection.execute(
+        `UPDATE payment_command_receipt SET status = $1, result_json = NULL
+          WHERE tenant_id = $2 AND command_name = 'payment.settlement.accept' AND idempotency_key = $3`,
+        [status, tenantId, input.idempotencyKey],
+      );
+      await expect(settlement.recordSettlement(input)).rejects.toThrow(expected);
+    } finally {
+      await connection.end();
+    }
+  });
+
+  it.each([
+    { status: 'failed', expected: 'billing.command_failed' },
+    { status: 'unknown', expected: 'billing.command_unknown' },
+    { status: 'processing', expected: 'billing.command_unknown' },
+  ] as const)('returns the stable $status outcome for a durable expiry receipt', async ({ status, expected }) => {
+    const connection = await createBillingConnection(databaseUrl!);
+    const usage = createPostgresUsageSettlementService(connection);
+    const tenantId = randomUUID();
+    const input = {
+      tenantId,
+      batchId: `expiry-state-${randomUUID()}`,
+      idempotencyKey: `expiry-state-${randomUUID()}`,
+      limit: 1,
+    } as const;
+    try {
+      await usage.expireExpiredHolds(input);
+      await connection.execute(
+        `UPDATE entitlement_command_receipt SET status = $1, result_json = NULL
+          WHERE tenant_id = $2 AND command_name = 'entitlement.credit-holds.expire' AND idempotency_key = $3`,
+        [status, tenantId, input.idempotencyKey],
+      );
+      await expect(usage.expireExpiredHolds(input)).rejects.toThrow(expected);
+    } finally {
+      await connection.end();
+    }
+  });
 });

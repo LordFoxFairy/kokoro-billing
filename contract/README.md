@@ -45,8 +45,9 @@ V1 内只接受 backward-compatible 变更；仅修改 `info.version` 不能使 
 pnpm contract:check
 ```
 
-该命令校验 OpenAPI 版本、tenant/request ID/execution-event 边界、settlement/expiry command body、production webhook provider/
-signature location、全部 operation metadata 与 Fastify route parity。HTTP runtime 仍由手写 Zod/mapper 实现；生成物若未来引入，
+该命令校验 OpenAPI 版本、tenant/request ID/execution-event 边界、capture/release/settlement/expiry command body、
+Idempotency-Key 与 execution-event 409、production webhook provider/signature location、全部 operation metadata 与 Fastify route parity。
+HTTP runtime 仍由手写 Zod/mapper 实现；生成物若未来引入，
 只能从本 source 生成到明确的 read-only directory，并在同一 commit 校验 drift。
 
 ## Breaking policy
@@ -76,7 +77,7 @@ form-body `sign`/`sign_type=RSA2` 由 `x-kokoro-provider-signatures` 区分；fi
 `contract/openapi/v1/openapi.yaml`，当前 source SHA-256：
 
 ```text
-553da1418c85998ff6859142f825110a52b9c2ea9b750224e3953c1e611ad409
+44a804c09d398d1a0a609928dd243998e0aa472a76fc456c1715154b678dfa35
 ```
 
 复核：
@@ -115,7 +116,7 @@ allow-list 内的 operation。
 
 ## Validation scope and gaps
 
-当前 `contract:check` 能证明 YAML 可解析、settlement/expiry shape、webhook provider/signature、核心禁用字段、metadata 与 route
-集合；它不能证明所有 request/response 与运行时 Zod 逐字段相等。其余 mutation body、generic response、错误集合与 ledger time
-format 仍需在后续 contract-first 变更中补齐，详见
+当前 `contract:check` 能证明 YAML 可解析、capture/release/settlement/expiry shape、execution-event 冲突状态、
+Idempotency-Key、webhook provider/signature、核心禁用字段、metadata 与 route 集合；它不能证明所有 request/response 与运行时
+Zod 逐字段相等。其余 mutation body、generic response、错误集合与 ledger time format 仍需在后续 contract-first 变更中补齐，详见
 [`../docs/CURRENT.md`](../docs/CURRENT.md)。

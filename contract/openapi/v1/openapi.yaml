@@ -184,6 +184,8 @@ paths:
           schema:
             type: string
         - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        $ref: "#/components/requestBodies/V1AdmissionCaptureRequest"
       responses:
         "200":
           $ref: "#/components/responses/V1Accepted"
@@ -211,6 +213,8 @@ paths:
           schema:
             type: string
         - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        $ref: "#/components/requestBodies/V1AdmissionReleaseRequest"
       responses:
         "200":
           $ref: "#/components/responses/V1Accepted"
@@ -239,6 +243,8 @@ paths:
         "202":
           $ref: "#/components/responses/V1Accepted"
         "400":
+          $ref: "#/components/responses/V1Error"
+        "409":
           $ref: "#/components/responses/V1Error"
   /v1/internal/payment/settlements/accept:
     post:
@@ -526,6 +532,7 @@ components:
         type: string
         minLength: 8
         maxLength: 128
+        pattern: '^[\x20-\x7E]+$'
   requestBodies:
     V1CheckoutRequest:
       required: true
@@ -539,6 +546,18 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/V1ExecutionEventRequest"
+    V1AdmissionCaptureRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/V1AdmissionCaptureRequest"
+    V1AdmissionReleaseRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/V1AdmissionReleaseRequest"
     V1SettlementAcceptRequest:
       required: true
       content:
@@ -686,6 +705,57 @@ components:
         name:
           type: string
       additionalProperties: true
+    V1AdmissionCaptureRequest:
+      type: object
+      required:
+        - invocation_id
+        - execution_id
+        - accepted_provider_ref
+        - accepted_at
+        - service_receipt
+        - receipt_schema_version
+      additionalProperties: false
+      properties:
+        invocation_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        execution_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        accepted_provider_ref:
+          type: string
+          minLength: 1
+          maxLength: 255
+        accepted_at:
+          type: string
+          format: date-time
+        service_receipt:
+          type: object
+          additionalProperties: true
+        receipt_schema_version:
+          type: string
+          minLength: 1
+          maxLength: 32
+    V1AdmissionReleaseRequest:
+      type: object
+      required:
+        - invocation_id
+        - reason
+      additionalProperties: false
+      properties:
+        invocation_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 255
+        service_receipt:
+          type: object
+          additionalProperties: true
     V1ExecutionEventRequest:
       type: object
       required:

@@ -34,7 +34,7 @@ export class AdminGrantService {
       if (prior[0]) {
         const existing = prior[0] as { payload_hash: string; result_json: string | AdminGrantResult | null; status: string };
         if (existing.payload_hash !== payloadHash) throw new Error('billing.idempotency_conflict');
-        if (existing.status === 'processing') throw new Error('billing.command_in_progress');
+        if (existing.status === 'processing') throw new Error('billing.command_unknown');
         if (existing.status === 'unknown') throw new Error('billing.command_unknown');
         if (existing.status !== 'succeeded' || existing.result_json === null) throw new Error('billing.command_failed');
         const stored = existing.result_json;

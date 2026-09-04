@@ -123,7 +123,6 @@ CREATE TABLE IF NOT EXISTS entitlement_command_receipt (
   payload_hash CHAR(64) NOT NULL,
   status VARCHAR(32) NOT NULL DEFAULT 'processing',
   result_json JSONB NULL,
-  lease_until TIMESTAMPTZ(3) NULL,
   created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   CONSTRAINT uq_entitlement_command_receipt_key UNIQUE (tenant_id, command_name, idempotency_key),
@@ -413,7 +412,6 @@ CREATE TABLE IF NOT EXISTS payment_command_receipt (
   payload_hash CHAR(64) NOT NULL,
   status VARCHAR(32) NOT NULL DEFAULT 'processing',
   result_json JSONB NULL,
-  lease_until TIMESTAMPTZ(3) NULL,
   created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   CONSTRAINT uq_payment_command_receipt_key UNIQUE (tenant_id, command_name, idempotency_key),
@@ -478,6 +476,7 @@ CREATE TABLE IF NOT EXISTS entitlement_billing_command_receipt (
   tenant_id VARCHAR(191) NOT NULL,
   api_surface VARCHAR(32) NOT NULL,
   command_name VARCHAR(128) NOT NULL,
+  command_identity VARCHAR(255) NULL,
   idempotency_key VARCHAR(128) NOT NULL,
   payload_hash CHAR(64) NOT NULL,
   status VARCHAR(32) NOT NULL DEFAULT 'processing',
@@ -548,6 +547,9 @@ CREATE INDEX IF NOT EXISTS ix_entitlement_credit_hold_expiry
   WHERE status = 'active';
 CREATE UNIQUE INDEX IF NOT EXISTS uq_entitlement_command_receipt_identity
   ON entitlement_command_receipt (tenant_id, command_name, command_identity)
+  WHERE command_identity IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_entitlement_billing_receipt_identity
+  ON entitlement_billing_command_receipt (tenant_id, api_surface, command_name, command_identity)
   WHERE command_identity IS NOT NULL;
 CREATE INDEX IF NOT EXISTS ix_entitlement_outbox_dispatch
   ON entitlement_outbox (next_attempt_at, created_at, outbox_id)

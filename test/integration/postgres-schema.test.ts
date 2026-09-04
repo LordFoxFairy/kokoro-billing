@@ -99,4 +99,36 @@ integration('billing canonical PostgreSQL schema', () => {
       await connection.end();
     }
   });
+
+  it('uses command identity without a durable receipt lease in the single-transaction claim model', async () => {
+    const connection = await createBillingConnection(databaseUrl!);
+    try {
+      const [columns] = await connection.query<(RowDataPacket & { table_name: string; column_name: string })[]>(
+        `SELECT table_name, column_name
+           FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name IN ('entitlement_command_receipt', 'entitlement_billing_command_receipt', 'payment_command_receipt')
+          ORDER BY table_name, ordinal_position`,
+      );
+      const receiptColumns = new Map<string, string[]>();
+      for (const row of columns) {
+        const names = receiptColumns.get(row.table_name) ?? [];
+        names.push(row.column_name);
+        receiptColumns.set(row.table_name, names);
+      }
+      expect(receiptColumns.get('entitlement_billing_command_receipt')).toContain('command_identity');
+      expect(receiptColumns.get('entitlement_command_receipt')).not.toContain('lease_until');
+      expect(receiptColumns.get('payment_command_receipt')).not.toContain('lease_until');
+
+      const [indexes] = await connection.query<(RowDataPacket & { index_name: string })[]>(
+        `SELECT indexname AS index_name
+           FROM pg_indexes
+          WHERE schemaname = current_schema() AND indexname = $1`,
+        ['uq_entitlement_billing_receipt_identity'],
+      );
+      expect(indexes).toHaveLength(1);
+    } finally {
+      await connection.end();
+    }
+  });
 });
