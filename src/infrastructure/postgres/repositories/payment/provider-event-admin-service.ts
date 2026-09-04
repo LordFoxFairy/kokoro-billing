@@ -78,9 +78,9 @@ export class ProviderEventAdminService {
       );
       if (prior[0]) {
         if (prior[0].payload_hash !== payloadHash) throw new Error('billing.idempotency_conflict');
-        if (prior[0].status === 'processing') throw new Error('billing.command_unknown');
-        if (prior[0].status === 'unknown') throw new Error('billing.command_unknown');
-        if (!prior[0].result_json) throw new Error('billing.command_failed');
+        if (prior[0].status === 'processing' || prior[0].status === 'unknown') throw new Error('billing.command_unknown');
+        if (prior[0].status === 'failed') throw new Error('billing.command_failed');
+        if (prior[0].status !== 'succeeded') throw new Error('billing.command_unknown');
         const result = parsePersistedJson(prior[0].result_json, providerEventRetryResultSchema, 'billing.command_result_invalid');
         await this.connection.commit();
         return result;

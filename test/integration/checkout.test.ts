@@ -37,7 +37,7 @@ integration('checkout quote snapshot', () => {
       // expiry must not turn a valid idempotent replay into a payload conflict.
       const replay = await service.create({ ...input, expiresAt: new Date(Date.now() + 300_000) });
       expect(replay).toEqual(first);
-      await expect(service.create({ ...input, amountMinor: 2000 })).rejects.toThrow('billing.checkout_quote_mismatch');
+      await expect(service.create({ ...input, amountMinor: 2000 })).rejects.toThrow('billing.idempotency_conflict');
       const [rows] = await connection.query('SELECT checkout_id FROM payment_checkout WHERE tenant_id = $1 AND idempotency_key = $2', [tenantId, idempotencyKey]);
       expect(rows).toHaveLength(1);
     } finally {
@@ -53,7 +53,7 @@ integration('checkout quote snapshot', () => {
     const service = createPostgresCheckoutService(connection);
     await expect(service.create({
       tenantId: randomUUID(), subjectId: randomUUID(), idempotencyKey: `expired-${randomUUID()}`,
-      offerRevisionId: randomUUID(), amountMinor: 100, currency: 'USD', quoteSnapshot: {}, expiresAt: new Date(Date.now() - 1),
+      offerRevisionId: randomUUID(), amountMinor: 100, currency: 'USD', quoteSnapshot: { key: 'starter', creditMicros: '1000' }, expiresAt: new Date(Date.now() - 1),
     })).rejects.toThrow('billing.quote_expired');
     await connection.end();
   });

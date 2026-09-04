@@ -63,7 +63,8 @@ export class RedeemAdminService {
       if (prior) {
         if (prior.payload_hash !== payloadHash) throw new Error('billing.idempotency_conflict');
         if (prior.status === 'processing' || prior.status === 'unknown') throw new Error('billing.command_unknown');
-        if (prior.status !== 'succeeded' || prior.result_json === null) throw new Error('billing.command_failed');
+        if (prior.status === 'failed') throw new Error('billing.command_failed');
+        if (prior.status !== 'succeeded') throw new Error('billing.command_unknown');
         const result = parsePersistedJson(prior.result_json, schema, 'billing.command_result_invalid');
         await this.connection.commit();
         return result;

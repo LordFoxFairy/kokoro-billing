@@ -1,36 +1,24 @@
 import { randomUUID } from 'node:crypto';
 import type { SqlConnection, ResultSetHeader, RowDataPacket } from '../../database.js';
-import { createHash } from 'node:crypto';
 import { readSafeInteger } from '../../../../application/ports/safe-integer.js';
 import { z } from 'zod';
-import { parsePersistedJson } from '../../json.js';
+import type {
+  RecordReversalInput,
+  ReversalResult,
+  ReverseCreditsInput,
+} from '../../../../application/refund/commands/billing-reversal-service.js';
+import { canonicalJson, canonicalJsonDigest } from '../../canonical-json.js';
+import { parsePersistedJson, PersistedDataInvariantError } from '../../json.js';
 
 const reversalReceiptSchema = z.object({ reversalId: z.string().min(1) }).strict();
+const REVERSAL_COMMAND = 'PaymentReversal';
 
-export type RecordReversalInput = {
-  readonly tenantId: string;
-  readonly settlementId: string;
-  /** Provider namespace for the external refund reference; defaults to the settlement provider. */
-  readonly provider?: string;
-  readonly externalReversalRef: string;
-  readonly amountMinor: number;
-  readonly reason: string;
-  readonly idempotencyKey: string;
-  readonly operatorId?: string;
-};
-
-export type ReverseCreditsInput = {
-  readonly tenantId: string;
-  readonly reversalId: string;
-  readonly settlementId: string;
-  readonly accountId: string;
-  /** Omit for provider refunds; the service computes a serialized proportional allocation. */
-  readonly amountMicros?: number;
-};
-
-export type ReversalResult = {
-  readonly fulfillmentReversalId: string;
-  readonly journalId: string;
+type ReversalReceiptRow = RowDataPacket & {
+  receipt_id: string;
+  command_identity: string | null;
+  payload_hash: string;
+  status: 'processing' | 'succeeded' | 'failed' | 'unknown';
+  result_json: unknown;
 };
 
 export class BillingReversalService {
@@ -38,54 +26,58 @@ export class BillingReversalService {
 
   public async recordReversal(input: RecordReversalInput): Promise<string> {
     if (!Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0) throw new RangeError('amountMinor must be positive');
-    const reversalId = randomUUID();
-    const payloadHash = createHash('sha256').update(JSON.stringify({
-      settlementId: input.settlementId,
-      provider: input.provider ?? 'settlement-provider',
-      externalReversalRef: input.externalReversalRef,
-      amountMinor: input.amountMinor,
-      reason: input.reason,
-    })).digest('hex');
     await this.connection.beginTransaction();
     try {
-      const [settlements] = await this.connection.execute<RowDataPacket[]>(
-        `SELECT provider, amount_minor FROM payment_settlement WHERE tenant_id = $1 AND settlement_id = $2 FOR SHARE`,
+      const [settlements] = await this.connection.execute<(RowDataPacket & { provider: string; amount_minor: number | string })[]>(
+        `SELECT provider, amount_minor
+           FROM payment_settlement
+          WHERE tenant_id = $1 AND settlement_id = $2
+          FOR UPDATE`,
         [input.tenantId, input.settlementId],
       );
-      const settlement = settlements[0] as { provider: string; amount_minor: number | string } | undefined;
+      const settlement = settlements[0];
       if (!settlement) throw new Error('billing.settlement_not_found');
       const settlementAmountMinor = readSafeInteger(settlement.amount_minor, 'settlement_amount_minor');
       if (input.amountMinor > settlementAmountMinor) throw new Error('billing.reversal_amount_exceeds_settlement');
       const provider = input.provider ?? settlement.provider;
       if (!/^[a-z0-9][a-z0-9_-]{0,63}$/u.test(provider)) throw new RangeError('provider must be a normalized identifier');
-      const [receipts] = await this.connection.execute<RowDataPacket[]>(
-        `SELECT payload_hash, status, result_json
-           FROM payment_command_receipt
-          WHERE tenant_id = $1 AND command_name = 'PaymentReversal' AND idempotency_key = $2
-          FOR UPDATE`,
-        [input.tenantId, input.idempotencyKey],
+      const commandIdentity = `payment-reversal:${canonicalJsonDigest({ provider, externalReversalRef: input.externalReversalRef })}`;
+      const payloadHash = canonicalJsonDigest({
+        command: 'payment.reversal.record/v1',
+        settlementId: input.settlementId,
+        provider,
+        externalReversalRef: input.externalReversalRef,
+        amountMinor: input.amountMinor,
+        reason: input.reason,
+        operatorId: input.operatorId ?? null,
+      });
+      const [receiptInsert] = await this.connection.execute<ResultSetHeader>(
+        `INSERT INTO payment_command_receipt
+          (receipt_id, tenant_id, command_name, command_identity, idempotency_key, payload_hash, status)
+         VALUES ($1, $2, $3, $4, $5, $6, 'processing')
+         ON CONFLICT DO NOTHING`,
+        [randomUUID(), input.tenantId, REVERSAL_COMMAND, commandIdentity, input.idempotencyKey, payloadHash],
       );
-      const receipt = receipts[0] as { payload_hash: string; status: string; result_json: string | null } | undefined;
-      if (receipt) {
-        if (receipt.payload_hash !== payloadHash) throw new Error('billing.idempotency_conflict');
-        if (receipt.status === 'processing') throw new Error('billing.command_in_progress');
-        if (receipt.status === 'unknown') throw new Error('billing.command_unknown');
-        if (receipt.status !== 'succeeded' || receipt.result_json === null) throw new Error('billing.command_failed');
+      const [receipts] = await this.connection.execute<ReversalReceiptRow[]>(
+        `SELECT receipt_id, command_identity, payload_hash, status, result_json
+           FROM payment_command_receipt
+          WHERE tenant_id = $1 AND command_name = $2
+            AND (idempotency_key = $3 OR command_identity = $4)
+          FOR UPDATE`,
+        [input.tenantId, REVERSAL_COMMAND, input.idempotencyKey, commandIdentity],
+      );
+      if (receipts.length !== 1) throw new Error('billing.idempotency_conflict');
+      const receipt = receipts[0];
+      if (!receipt) throw new PersistedDataInvariantError('billing.command_receipt_not_found_after_insert');
+      if (receipt.payload_hash !== payloadHash || receipt.command_identity !== commandIdentity) throw new Error('billing.idempotency_conflict');
+      if (receipt.status === 'succeeded') {
         const result = parsePersistedJson(receipt.result_json, reversalReceiptSchema, 'billing.command_result_invalid');
         await this.connection.commit();
         return result.reversalId;
       }
-      await this.connection.execute(
-        `INSERT INTO payment_command_receipt
-          (receipt_id, tenant_id, command_name, idempotency_key, payload_hash, status)
-         VALUES ($1, $2, 'PaymentReversal', $3, $4, 'processing')`,
-        [randomUUID(), input.tenantId, input.idempotencyKey, payloadHash],
-      );
-      const [prior] = await this.connection.execute<RowDataPacket[]>(
-        `SELECT reversal_id, settlement_id, provider, amount_minor, reason
-           FROM payment_reversal WHERE tenant_id = $1 AND provider = $2 AND external_reversal_ref = $3 FOR UPDATE`,
-        [input.tenantId, provider, input.externalReversalRef],
-      );
+      if (receipt.status === 'failed') throw new Error('billing.command_failed');
+      if (receipt.status === 'unknown' || receiptInsert.affectedRows !== 1) throw new Error('billing.command_unknown');
+
       const [priorTotals] = await this.connection.execute<RowDataPacket[]>(
         `SELECT COALESCE(SUM(amount_minor), 0) AS amount_minor
            FROM payment_reversal
@@ -94,41 +86,34 @@ export class BillingReversalService {
       );
       const priorAmountMinor = readSafeInteger((priorTotals[0] as { amount_minor: number | string } | undefined)?.amount_minor ?? 0, 'prior_reversal_amount_minor');
       if (priorAmountMinor + input.amountMinor > settlementAmountMinor) throw new Error('billing.reversal_amount_exceeds_settlement');
-      if (prior[0]) {
-        const row = prior[0] as { reversal_id: string; settlement_id: string; provider: string; amount_minor: number; reason: string };
-        if (row.settlement_id !== input.settlementId || row.provider !== provider || readSafeInteger(row.amount_minor, 'reversal_amount_minor') !== input.amountMinor || row.reason !== input.reason) throw new Error('billing.idempotency_conflict');
-        await this.writeReversalOutbox(input.tenantId, row.reversal_id, input.settlementId, input.amountMinor, input.reason);
-        await this.markReceiptSucceeded(input.tenantId, input.idempotencyKey, row.reversal_id);
-        await this.connection.commit();
-        return row.reversal_id;
-      }
-      await this.connection.execute(
+      const reversalId = randomUUID();
+      const [reversalInsert] = await this.connection.execute<ResultSetHeader>(
         `INSERT INTO payment_reversal
           (reversal_id, tenant_id, settlement_id, provider, external_reversal_ref, amount_minor, reason, status)
          VALUES ($1, $2, $3, $4, $5, $6, $7, 'succeeded')
           ON CONFLICT DO NOTHING`,
         [reversalId, input.tenantId, input.settlementId, provider, input.externalReversalRef, input.amountMinor, input.reason],
       );
-      if (input.operatorId) {
-        await this.connection.execute(
-          `INSERT INTO entitlement_audit_event
-            (audit_event_id, tenant_id, operator_id, action, resource_type, resource_id, reason, payload_json)
-           VALUES ($1, $2, $3, 'admin_refund', 'payment_reversal', $4, $5, $6)`,
-          [randomUUID(), input.tenantId, input.operatorId, reversalId, input.reason, JSON.stringify({ settlementId: input.settlementId, amountMinor: input.amountMinor, externalReversalRef: input.externalReversalRef })],
-        );
-      }
-      const [rows] = await this.connection.execute<(RowDataPacket & { reversal_id: string; settlement_id: string; provider: string; amount_minor: number; reason: string })[]>(
+      const [rows] = await this.connection.execute<(RowDataPacket & { reversal_id: string; settlement_id: string; provider: string; amount_minor: number | string; reason: string })[]>(
         `SELECT reversal_id, settlement_id, provider, amount_minor, reason
            FROM payment_reversal WHERE tenant_id = $1 AND provider = $2 AND external_reversal_ref = $3 FOR UPDATE`,
         [input.tenantId, provider, input.externalReversalRef],
       );
       const row = rows[0];
-      if (!row) throw new Error('billing.reversal_not_found');
+      if (!row) throw new PersistedDataInvariantError('billing.reversal_not_found_after_insert');
       if (row.settlement_id !== input.settlementId || row.provider !== provider || readSafeInteger(row.amount_minor, 'reversal_amount_minor') !== input.amountMinor || row.reason !== input.reason) {
         throw new Error('billing.idempotency_conflict');
       }
+      if (input.operatorId !== undefined && reversalInsert.affectedRows === 1) {
+        await this.connection.execute(
+          `INSERT INTO entitlement_audit_event
+            (audit_event_id, tenant_id, operator_id, action, resource_type, resource_id, reason, payload_json)
+           VALUES ($1, $2, $3, 'admin_refund', 'payment_reversal', $4, $5, $6)`,
+          [randomUUID(), input.tenantId, input.operatorId, row.reversal_id, input.reason, canonicalJson({ settlementId: input.settlementId, amountMinor: input.amountMinor, externalReversalRef: input.externalReversalRef })],
+        );
+      }
       await this.writeReversalOutbox(input.tenantId, row.reversal_id, input.settlementId, input.amountMinor, input.reason);
-      await this.markReceiptSucceeded(input.tenantId, input.idempotencyKey, row.reversal_id);
+      await this.markReceiptSucceeded(receipt.receipt_id, input.tenantId, row.reversal_id);
       await this.connection.commit();
       return row.reversal_id;
     } catch (error) {
@@ -137,13 +122,14 @@ export class BillingReversalService {
     }
   }
 
-  private async markReceiptSucceeded(tenantId: string, idempotencyKey: string, reversalId: string): Promise<void> {
-    await this.connection.execute(
+  private async markReceiptSucceeded(receiptId: string, tenantId: string, reversalId: string): Promise<void> {
+    const [updated] = await this.connection.execute<ResultSetHeader>(
       `UPDATE payment_command_receipt
-          SET status = 'succeeded', result_json = $1
-        WHERE tenant_id = $2 AND command_name = 'PaymentReversal' AND idempotency_key = $3`,
-      [JSON.stringify({ reversalId }), tenantId, idempotencyKey],
+          SET status = 'succeeded', result_json = $1, updated_at = CURRENT_TIMESTAMP(3)
+        WHERE receipt_id = $2 AND tenant_id = $3 AND command_name = $4 AND status = 'processing'`,
+      [canonicalJson({ reversalId }), receiptId, tenantId, REVERSAL_COMMAND],
     );
+    if (updated.affectedRows !== 1) throw new PersistedDataInvariantError('billing.command_receipt_transition_invalid');
   }
 
   private async writeReversalOutbox(tenantId: string, reversalId: string, settlementId: string, amountMinor: number, reason: string): Promise<void> {
@@ -152,7 +138,7 @@ export class BillingReversalService {
         (outbox_id, tenant_id, aggregate_type, aggregate_id, event_type, payload_json)
        VALUES ($1, $2, 'payment_reversal', $3, 'PaymentReversalRecorded', $4)
        ON CONFLICT DO NOTHING`,
-      [randomUUID(), tenantId, reversalId, JSON.stringify({ reversalId, settlementId, amountMinor, reason })],
+      [randomUUID(), tenantId, reversalId, canonicalJson({ reversalId, settlementId, amountMinor, reason })],
     );
   }
 

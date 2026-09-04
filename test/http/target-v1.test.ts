@@ -6,6 +6,7 @@ const calls: { capture: unknown[]; release: unknown[]; events: unknown[] } = { c
 const checkoutCalls: unknown[] = [];
 const checkoutReceiptAmounts = new Map<string, number>();
 const settlementCalls: unknown[] = [];
+const reversalCalls: unknown[] = [];
 const expiryCalls: unknown[] = [];
 const lossyHintMarks: Array<{ readonly key: string; readonly ttlSeconds: number }> = [];
 
@@ -35,7 +36,7 @@ const server = createBillingServer({
     settlementCalls.push(input);
     return { settlementId: input.settlementId, accepted: true };
   } },
-  reversal: { recordReversal: async () => 'refund-1' },
+  reversal: { recordReversal: async (input) => { reversalCalls.push(input); return 'refund-1'; } },
   webhook: { accept: async () => ({ providerEventId: 'evt-1', processingStatus: 'received' as const }) },
   account: { getForSubject: async () => ({ accountId: 'account-1', availableMicros: '42', heldMicros: '0' }) },
   admission: {
@@ -54,7 +55,9 @@ const server = createBillingServer({
       ? { tenantId: request.headers['x-kokoro-tenant-id'], serviceId: 'web-bff', ...(typeof request.headers['x-kokoro-subject'] === 'string' ? { subjectId: request.headers['x-kokoro-subject'] } : {}) }
       : null,
     internal: async (request) => ({ tenantId: String(request.headers['x-kokoro-tenant-id']), serviceId: String(request.headers['x-kokoro-service']) }),
-    admin: async () => null,
+    admin: async (request) => request.headers['x-kokoro-role'] === 'billing.admin'
+      ? { tenantId: String(request.headers['x-kokoro-tenant-id']), operatorId: String(request.headers['x-kokoro-operator']), role: 'billing.admin' }
+      : null,
     webhook: async () => true,
   },
 });
@@ -174,6 +177,33 @@ describe('clean-build Billing v1 transport', () => {
 
     expect(response.statusCode).toBe(201);
     expect(checkoutCalls).toHaveLength(callsBefore + 1);
+  });
+
+  it('passes the trusted admin operator into the durable refund command', async () => {
+    const response = await server.inject({
+      method: 'POST',
+      url: '/v1/admin/billing/refunds',
+      headers: {
+        'x-kokoro-tenant-id': 'tenant-1',
+        'x-kokoro-operator': 'operator-1',
+        'x-kokoro-role': 'billing.admin',
+        'idempotency-key': 'admin-refund-123456',
+      },
+      payload: {
+        settlement_id: 'settlement-1',
+        external_ref: 'refund-1',
+        amount_minor: '500',
+        allocation_mode: 'proportional',
+        reason: 'customer request',
+      },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(reversalCalls.at(-1)).toMatchObject({
+      tenantId: 'tenant-1',
+      operatorId: 'operator-1',
+      idempotencyKey: 'admin-refund-123456',
+    });
   });
 
   it('uses the v1 envelope for errors without a top-level requestId', async () => {

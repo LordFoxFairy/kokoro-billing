@@ -49,9 +49,56 @@ integration('payment reversal to credit reversal', () => {
       const idempotencyKey = `refund-command-${randomUUID()}`;
       const first = await service.recordReversal({ tenantId, settlementId, externalReversalRef: externalRef, amountMinor: 500, reason: 'customer_request', idempotencyKey });
       await expect(service.recordReversal({ tenantId, settlementId, externalReversalRef: externalRef, amountMinor: 500, reason: 'customer_request', idempotencyKey })).resolves.toBe(first);
+      await expect(service.recordReversal({ tenantId, settlementId, externalReversalRef: externalRef, amountMinor: 500, reason: 'customer_request', idempotencyKey: `replacement-key-${randomUUID()}` })).resolves.toBe(first);
       await expect(service.recordReversal({ tenantId, settlementId, externalReversalRef: externalRef, amountMinor: 501, reason: 'customer_request', idempotencyKey })).rejects.toThrow('billing.idempotency_conflict');
     } finally {
       await connection.end();
+    }
+  });
+
+  it('serializes concurrent retries from independent PostgreSQL connections', async () => {
+    const firstConnection = await createBillingConnection(databaseUrl!);
+    const secondConnection = await createBillingConnection(databaseUrl!);
+    const settlement = createPostgresBillingSettlementService(firstConnection);
+    const tenantId = randomUUID();
+    const settlementId = randomUUID();
+    const input = {
+      tenantId,
+      settlementId,
+      externalReversalRef: `concurrent-refund-${randomUUID()}`,
+      amountMinor: 500,
+      reason: 'customer_request',
+      idempotencyKey: `refund-command-${randomUUID()}`,
+    } as const;
+    try {
+      await settlement.recordSettlement({
+        settlementId,
+        tenantId,
+        idempotencyKey: `settlement-${settlementId}`,
+        externalPaymentRef: `concurrent-payment-${randomUUID()}`,
+        amountMinor: 1000,
+        currency: 'USD',
+      });
+      const [first, second] = await Promise.all([
+        createPostgresBillingReversalService(firstConnection).recordReversal(input),
+        createPostgresBillingReversalService(secondConnection).recordReversal(input),
+      ]);
+
+      expect(first).toBe(second);
+      const [reversals] = await firstConnection.query<RowDataPacket[]>(
+        'SELECT reversal_id FROM payment_reversal WHERE tenant_id = $1 AND settlement_id = $2',
+        [tenantId, settlementId],
+      );
+      const [receipts] = await firstConnection.query<RowDataPacket[]>(
+        `SELECT receipt_id FROM payment_command_receipt
+          WHERE tenant_id = $1 AND command_name = 'PaymentReversal' AND idempotency_key = $2`,
+        [tenantId, input.idempotencyKey],
+      );
+      expect(reversals).toHaveLength(1);
+      expect(receipts).toHaveLength(1);
+    } finally {
+      await firstConnection.end();
+      await secondConnection.end();
     }
   });
 

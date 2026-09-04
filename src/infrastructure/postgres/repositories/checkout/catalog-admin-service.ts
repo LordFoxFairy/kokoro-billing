@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import type { SqlConnection, ResultSetHeader, RowDataPacket } from '../../database.js';
 import type { CatalogPlan } from './catalog-service.js';
 import { z } from 'zod';
-import { parsePersistedJson } from '../../json.js';
+import { parsePersistedJson, PersistedDataInvariantError } from '../../json.js';
 
 export type PublishCatalogPlanInput = {
   readonly tenantId: string;
@@ -43,11 +43,12 @@ export class CatalogAdminService {
         [input.tenantId, input.idempotencyKey],
       );
       const receipt = receipts[0] as { payload_hash: string; status: string; result_json: string | null } | undefined;
-      if (!receipt) throw new Error('billing.command_receipt_not_found');
+      if (!receipt) throw new PersistedDataInvariantError('billing.command_receipt_not_found_after_insert');
       if (receipt.payload_hash !== payloadHash) throw new Error('billing.idempotency_conflict');
-      if (receipt.status === 'succeeded' && receipt.result_json !== null) {
+      if (receipt.status === 'succeeded') {
+        const replay = parsePersistedJson(receipt.result_json, catalogPlanSchema, 'billing.command_result_invalid');
         await this.connection.commit();
-        return parsePersistedJson(receipt.result_json, catalogPlanSchema, 'billing.command_result_invalid');
+        return replay;
       }
       if (receiptInsert.affectedRows !== 1 && receipt.status === 'processing') throw new Error('billing.command_unknown');
       if (receipt.status === 'unknown') throw new Error('billing.command_unknown');

@@ -130,7 +130,7 @@ export const classifyBillingError = (error: unknown): ClassifiedBillingError => 
   const code = structured?.code ?? (rawMessage.startsWith('billing.') ? rawMessage : 'billing.internal_error');
   const status = structured?.statusCode !== undefined && structured.statusCode >= 400 && structured.statusCode < 600 ? structured.statusCode : code === 'billing.internal_error' ? 500
     : code === 'billing.insufficient_credit' ? 402
-    : ['billing.idempotency_conflict', 'billing.command_failed', 'billing.command_in_progress', 'billing.command_unknown', 'billing.reversal_exposure', 'billing.credit_projection_drift', 'billing.usage_event_mismatch'].includes(code) ? 409
+    : ['billing.idempotency_conflict', 'billing.command_failed', 'billing.command_unknown', 'billing.reversal_exposure', 'billing.credit_projection_drift', 'billing.usage_event_mismatch'].includes(code) ? 409
     : 400;
   const internalCode = structured?.internalCode ?? code;
   if (status >= 500) {
@@ -478,7 +478,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
     await markIdempotencyKeySeen(dependencies, request, key, context.tenantId);
     try {
-      const refundId = await dependencies.reversal.recordReversal({ tenantId: context.tenantId, settlementId: parsed.data.settlement_id, externalReversalRef: parsed.data.external_ref, amountMinor: safeDecimal(parsed.data.amount_minor, 'amount_minor'), reason: `${parsed.data.allocation_mode}:${parsed.data.reason}`, idempotencyKey: key });
+      const refundId = await dependencies.reversal.recordReversal({ tenantId: context.tenantId, settlementId: parsed.data.settlement_id, externalReversalRef: parsed.data.external_ref, amountMinor: safeDecimal(parsed.data.amount_minor, 'amount_minor'), reason: `${parsed.data.allocation_mode}:${parsed.data.reason}`, idempotencyKey: key, operatorId: context.operatorId });
       return reply.code(202).send({ data: { refund_id: refundId, status: 'accepted' }, meta: { request_id: request.id } });
     } catch (error) { return sendError(reply, error); }
   });

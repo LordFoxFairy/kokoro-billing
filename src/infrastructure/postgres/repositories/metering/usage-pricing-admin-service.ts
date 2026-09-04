@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { SqlConnection, ResultSetHeader, RowDataPacket } from '../../database.js';
 import { z } from 'zod';
-import { parsePersistedJson } from '../../json.js';
+import { parsePersistedJson, PersistedDataInvariantError } from '../../json.js';
 
 export type UsagePriceRateInput = {
   readonly featureKey: string;
@@ -86,11 +86,12 @@ export class UsagePricingAdminService {
         [input.tenantId, input.idempotencyKey],
       );
       const receipt = receipts[0] as { payload_hash: string; status: string; result_json: string | null } | undefined;
-      if (!receipt) throw new Error('billing.command_receipt_not_found');
+      if (!receipt) throw new PersistedDataInvariantError('billing.command_receipt_not_found_after_insert');
       if (receipt.payload_hash !== payloadHash) throw new Error('billing.idempotency_conflict');
-      if (receipt.status === 'succeeded' && receipt.result_json !== null) {
+      if (receipt.status === 'succeeded') {
+        const replay = parsePublishedUsagePricing(receipt.result_json);
         await this.connection.commit();
-        return parsePublishedUsagePricing(receipt.result_json);
+        return replay;
       }
       if (receiptInsert.affectedRows !== 1 && receipt.status === 'processing') throw new Error('billing.command_unknown');
       if (receipt.status === 'unknown') throw new Error('billing.command_unknown');
