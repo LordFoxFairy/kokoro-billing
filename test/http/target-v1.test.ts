@@ -218,6 +218,41 @@ describe('clean-build Billing v1 transport', () => {
     });
   });
 
+  it('does not let the byte-level Redis hint override settlement receipt semantics', async () => {
+    const headers = {
+      'x-kokoro-tenant-id': 'tenant-1',
+      'x-kokoro-service': 'payment-worker',
+      'idempotency-key': 'settlement-semantic-replay-1',
+    };
+    const first = await server.inject({
+      method: 'POST',
+      url: '/v1/internal/payment/settlements/accept',
+      headers,
+      payload: {
+        settlement_id: 'settlement-semantic-1',
+        provider: 'stripe',
+        external_payment_ref: 'payment-semantic-1',
+        amount_minor: '1000',
+        currency: 'USD',
+      },
+    });
+    const reorderedReplay = await server.inject({
+      method: 'POST',
+      url: '/v1/internal/payment/settlements/accept',
+      headers,
+      payload: {
+        currency: 'USD',
+        amount_minor: '1000',
+        external_payment_ref: 'payment-semantic-1',
+        provider: 'stripe',
+        settlement_id: 'settlement-semantic-1',
+      },
+    });
+
+    expect(first.statusCode).toBe(202);
+    expect(reorderedReplay.statusCode).toBe(202);
+  });
+
   it('requires an explicit expiry batch identity and passes it with the durable key', async () => {
     const headers = {
       'x-kokoro-tenant-id': 'tenant-1',
@@ -246,5 +281,28 @@ describe('clean-build Billing v1 transport', () => {
       idempotencyKey: 'expiry-command-1',
       limit: 25,
     });
+  });
+
+  it('lets PostgreSQL normalize the default expiry limit instead of trusting the Redis hint', async () => {
+    const headers = {
+      'x-kokoro-tenant-id': 'tenant-1',
+      'x-kokoro-service': 'scheduler',
+      'idempotency-key': 'expiry-default-replay-1',
+    };
+    const explicitDefault = await server.inject({
+      method: 'POST',
+      url: '/v1/internal/commands/expire-credit-holds',
+      headers,
+      payload: { batch_id: 'expiry-default-batch-1', limit: 100 },
+    });
+    const implicitDefault = await server.inject({
+      method: 'POST',
+      url: '/v1/internal/commands/expire-credit-holds',
+      headers,
+      payload: { batch_id: 'expiry-default-batch-1' },
+    });
+
+    expect(explicitDefault.statusCode).toBe(202);
+    expect(implicitDefault.statusCode).toBe(202);
   });
 });

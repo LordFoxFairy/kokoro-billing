@@ -421,7 +421,8 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     const key = requireIdempotency(request, reply); if (!key) return;
     const parsed = targetSettlementSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
-    if (!(await claimIdempotencyHint(dependencies, request, key, reply, context.tenantId))) return;
+    // PostgreSQL normalizes and authoritatively hashes this command. A raw-body Redis
+    // fingerprint could reject a semantically identical replay with reordered JSON fields.
     try {
       const result = await dependencies.settlement.recordSettlement({ settlementId: parsed.data.settlement_id, externalPaymentRef: parsed.data.external_payment_ref, amountMinor: safeDecimal(parsed.data.amount_minor, 'amount_minor'), currency: parsed.data.currency, tenantId: context.tenantId, idempotencyKey: key, provider: parsed.data.provider });
       return reply.code(202).send({ data: { settlement_id: result.settlementId, accepted: result.accepted }, meta: { request_id: request.id } });
@@ -460,7 +461,8 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     const key = requireIdempotency(request, reply); if (!key) return;
     const parsed = expireCreditHoldsSchema.safeParse(request.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: { code: 'billing.invalid_request', message: parsed.error.message } });
-    if (!(await claimIdempotencyHint(dependencies, request, key, reply, context.tenantId))) return;
+    // The durable receipt normalizes the default limit and binds the key to batch_id;
+    // Redis byte fingerprints are deliberately bypassed for this command.
     try {
       return reply.code(202).send({ data: toSnakeCase(await dependencies.usage.expireExpiredHolds({ tenantId: context.tenantId, batchId: parsed.data.batch_id, idempotencyKey: key, ...(parsed.data.limit === undefined ? {} : { limit: parsed.data.limit }) })), meta: { request_id: request.id } });
     } catch (error) { return sendError(reply, error); }

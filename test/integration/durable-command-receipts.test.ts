@@ -30,9 +30,14 @@ integration('durable Billing command receipts', () => {
     try {
       const first = await settlement.recordSettlement(input);
       const replay = await settlement.recordSettlement(input);
+      const identityReplay = await settlement.recordSettlement({
+        ...input,
+        idempotencyKey: `settlement-alternate-${randomUUID()}`,
+      });
 
       expect(first).toEqual({ settlementId, accepted: true });
       expect(replay).toEqual(first);
+      expect(identityReplay).toEqual(first);
       const [receipts] = await connection.query<(RowDataPacket & {
         command_name: string;
         command_identity: string;
@@ -203,6 +208,15 @@ integration('durable Billing command receipts', () => {
       const secondHoldId = await createExpiredHold('second');
       const replay = await usage.expireExpiredHolds(command);
       expect(replay).toEqual(first);
+      const identityReplay = await usage.expireExpiredHolds({
+        ...command,
+        idempotencyKey: `expiry-alternate-${randomUUID()}`,
+      });
+      expect(identityReplay).toEqual(first);
+      await expect(usage.expireExpiredHolds({
+        ...command,
+        batchId: `expiry-next-${randomUUID()}`,
+      })).rejects.toThrow('billing.idempotency_conflict');
 
       const [secondHolds] = await connection.query<(RowDataPacket & { status: string })[]>(
         `SELECT status FROM entitlement_credit_hold
