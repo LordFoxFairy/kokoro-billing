@@ -27,7 +27,7 @@
 | B4 / P1 / 空库安装保护 | Billing / billing_owner（gpt-5.6-sol）/ B1+B2+Root | worker仅3个代码/测试文件；Root交接后更新database README、INDEX、CURRENT、ACCEPTANCE | 独占DB、TDD、非空/custom schema/并发/回滚/锁与JS超时/backend终止；主控提交/复验 | 已验收：93c06dfa33d38601e51534972890bfda50ea614d |
 | B5 / P0 / 全量catalog drift | Billing / billing_owner / 数据+TS+Root | 精确文件集见B5执行卡；Root交接后文档与提交 | 比较canonical参照库的35表全部列/约束/索引/predicate；缺CHECK与错predicate反例 | 已验收：9663db58bd85eb810b94df6120de050530c79d2f |
 | B6 / P0 / Prisma承接验证 | Billing / 后续续派billing_owner / Root | 固定依赖/生成链/模型/数据生命周期/独立验证；派前冻结文件集 | stable版本、无第二schema、typedCRUD+同tx锁/receipt/outbox+BigInt+错误+生成drift；不切生产writer | 已验收：B6a c7ef9fa；B6b 2793882；生产迁移仍归B8 |
-| B7 / P1 / 工具链与架构门 | Billing / 后续续派billing_owner / 独立reviewer | package/lock/TS/ESLint/format/CI/architecture精确集派前批准 | Node24、版本固定、完整typed gate；AST有效/违规样本替代禁modules/强制ports；单独格式切片 | 待派工；不放宽门禁 |
+| B7 / P1 / 工具链与架构门 | Billing / 后续续派billing_owner / 独立reviewer | package/lock/TS/ESLint/format/CI/architecture精确集派前批准 | Node24、版本固定、完整typed gate；AST有效/违规样本替代禁modules/强制ports；单独格式切片 | B7a待提交后复验；B7b/c/d待派工，不放宽门禁 |
 | B8 / P0 / Nest+Prisma闭合业务切换 | Billing / 后续续派billing_owner / Root+独立reviewer | 先完整35表映射/provider图/事务组卡，再授权src/SQL/contract/test/worker集 | 先稳定查询范式，后整个共享Credit事务组；同一事务不混pg/Prisma，旧实现随闭合切片删除；中间未闭合commit不发布 | 待设计门；依赖B5/B6/B7 |
 | B9 / P1 / 契约与外部副作用 | Billing / 后续续派billing_owner / Root | owner contract先行；消费者另开owner任务，无本仓写入权 | envelope/request-id/UTC/error/202语义；checkout claim→网络→finalize及unknown恢复；实际消费者固定artifact | 待契约裁决/依赖B8 |
 | B10 / P1 / 运行可靠性验收 | Billing / 后续续派billing_owner / Root | worker/reconciliation/retention/smoke与文档；派前批准文件集 | execution并发lease、orphan检测、append-only角色、预算取消、provider sandbox、CI PG16/镜像/DR分层证据 | 待派工 |
@@ -465,3 +465,56 @@ Docker官方多架构index由只读`docker buildx imagetools inspect node:24.20.
 其他B7a工具仅pin实际lock：@eslint/js10.0.1、eslint10.9.1、typescript-eslint8.67.0、typescript5.9.3、tsx4.23.12、yaml2.9.0、@types/pg8.23.1。
 候选后续typed工具：ESLint10.10.0、typescript-eslint8.70.0、兼容TypeScript6.0.3；registry最新TS7.0.2超过typescript-eslint的<6.1 peer，不采用不兼容最新。
 Prettier3.9.6留B7d。以上为billing_ts_review只读核验，Root后续复核安装与digest，尚不声明升级完成。
+
+
+B7a中途审查：工具链配置/精确版本/CI变化符合卡，Root frozen install与audit实际0漏洞；尚未整套验收。
+规格review发现治理test只拼接命令字符串、JSON/YAML未收窄与配置漂移漏项；修订后Root发现负例baseline缺setup必然先失败，
+再修订引入文件级no-explicit-any disable且manifest/lock反例仍缺。此处不以绿色测试数放行。
+临时窄任务B7a-R：Root收回writer后交给billing_toolchain_hardening（gpt-6-astra），只允许test/architecture/toolchain.test.ts；
+billing_owner已停止写入，仍为后续Billing实施负责人。hardening不改依赖/文档/生产/SQL/Git、不跑infra；Root负责提交，原两位reviewer独立复审。
+目标为零any/零类型放宽、有效正向baseline、单因素因果反例、同一check函数验证manifest/lock/workflow/Docker；文件放置与B7a一致。
+
+执行纪律补记：owner第一次完整verify的工具包装丢失session_id，观察30秒后误判终止并删除自身billing_owner_b7a_a19120d49101318a，
+该次结果无效不计验收；只影响其自建库，未访问其他业务库。Root只读ps/PG确认无对应进程/连接、该库与billing_reference库当前均不存在。
+后续保留完整exec结果并用session_id/write_stdin或cell_id/wait，不将观察超时视为执行终止。Root最终整套从独占新库重跑。
+
+
+### B7a 独立审查与 Root 冻结工作树证据
+
+配置实施billing_owner；治理test收尾billing_toolchain_hardening（gpt-6-astra），唯一writer先后交接，无同时写入。
+数据/规格billing_data_review与TS/供应链billing_ts_review均已独立复审放行，无已报P1/P2遗留。
+新测试344行，85项配置反例；不存在any/disable/非空断言，真实文件和正反例复用检查器，先正向再单因素失败并断言具体原因。
+hardening实际旧实现RED为FROM静默漏检与YAML键序误拒2项；这不是生产业务回归数。
+
+当前实际：Node24.20.0、pnpm11.25.0、@types/node24.13.3、Vitest5.0.0、Vite8.2.2，lock实际Rolldown1.2.7；
+保留TS5.9.3/ESLint10.9.1/typescript-eslint8.67.0至B7b，所有direct精确pin，生产直接依赖解析版本逐项与fab7a00相同。
+workspace engineStrict=true；Root以Node22.22.2执行frozen install实际exit1（ERR_PNPM_UNSUPPORTED_ENGINE），Node24同命令exit0。
+两verify workflow均读取.node-version且真实frozen/apply/integration/catalog/Prisma/verify顺序；没有no-optional、if跳过或失败吞噬。
+Root独立官方`docker buildx imagetools inspect node:24.20.0-bookworm-slim`成功核验批准index digest；本机docker info 8s超时，未启动/重启daemon。
+
+| Root实际命令 / 资源 | 冻结代码结果 |
+|---|---|
+| `pnpm install --frozen-lockfile`（Node24） | exit0 |
+| `pnpm audit --json` | exit0；info/low/moderate/high/critical均0，既有5项公告不再存在当前解析图 |
+| 独占billing_accept_b7a_* `pnpm db:apply-schema` | exit0 |
+| 同库/共享Redis DB4 `pnpm verify` | exit0；56文件318测试，0失败0跳过；85为新工具链配置测试，原业务测试仍保留；Vitest耗时31.07s |
+| 同库 `pnpm test:integration` | exit0；32文件137测试，0失败0跳过；26.59s，包含于上行，不相加 |
+| `pnpm db:verify-schema` / `pnpm prisma:check` | exit0；35表368列127约束83索引，catalog及生成0差异 |
+| 独占billing_runtime_b7a_*，`node --import tsx src/main.ts`与`node dist/src/main.js` | 两者health/ready200、anonymous credit-account401、受信BFF commerce catalog200，SIGTERM退出0；随机端口与本轮库均清理 |
+| `git diff --check` | exit0 |
+
+Root日志：`/tmp/billing-b7a-root.lN5i5L`，摘要在本任务板持久保存。首次手工smoke探针把路径写为/v1/billing/me/account得到404，
+这是probe错误；核对canonical路由后使用/v1/billing/me/credit-account与/v1/commerce/catalog完整重跑通过，不改生产路由掩盖问题。
+规范化测试保持隔离和原默认进程隔离，不采纳Vitest输出的isolate:false速度建议。单次耗时不作为性能改进承诺。
+
+新增维护风险：官方npm metadata确认prom-client15.1.3 deprecated，替代包@prometheus-io/client当前0.16.1/Apache-2.0，
+本卡仅pin当前已验生产版本，不夹带metrics API替换；由B8/B10的metrics/lifecycle切片比较接口、许可证、故障和迁移测试。
+Docker/PG16 CI/provider sandbox/镜像供应链运行仍未验；B7b typed lint、B7c AST边界、B7d格式、B8生产Nest/Prisma与B9/B10仍未完成。
+
+本切片三文档门：
+- /Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/TECHNICAL_DESIGN.md
+- /Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/API_CONTRACT.md
+- /Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/DATA_MODEL.md
+
+上述三面仍一致于工具链变化、业务SQL/API不变；本轮contract:check/canonical catalog/Prisma check通过，不将此门扩为B8业务重写放行。
+交付SHA和干净HEAD完整复验随后记录。

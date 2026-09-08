@@ -350,3 +350,9 @@ B7a仅运行时/测试依赖与CI配置：单一仓根.node-version为Node24.20.
 release verify安装须保留测试runner原生可选包，并与CI同样执行catalog/Prisma生成门；发布安全与签名顺序保持。
 B7b再收紧全部手写TS的typed lint；B7c用实际依赖图正反例替代旧modules/ports形状门；B7d独立格式化，均不制造双轨业务实现。
 当前三设计面一致于“工具链无业务事实变化”，不扩大为B8生产重写授权。
+
+
+B7a实施事实：本地/CI/两Docker base固定Node24.20.0与核验digest，Vitest5.0.0+Vite8.2.2强制peer由manifest/lock固定；
+实际Rolldown1.2.7安装native optional binding，release不再裁剪optional。engineStrict实际拒绝Node22安装。
+配置check含真实正反例，未降低现有安全阈值或跳过测试；Root完整门及Node24原生HTTP smoke证据见任务板。
+本切片并未实现全部手写TS typed lint/AST边界/格式化，也未改生产模块、SQL与HTTP contract；不把runtime升级称为Nest重写。

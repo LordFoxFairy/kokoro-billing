@@ -7,7 +7,7 @@ Reconcile 与 Billing command receipt；不拥有 Tenant、Identity、Agent Run�
 > 表述为生产证据。
 
 当前规范化分支的[任务板](docs/IMPLEMENTATION_PLAN.md)与[ADR-0003](docs/ADR/0003-nestjs-prisma-sql-first-alignment.md)
-记录Nest/Prisma目标、当前Fastify/pg差异和分阶段验收；Prisma未接入前不将目标写成现状。
+记录Nest/Prisma目标与分阶段验收；Prisma生成/隔离验证已接入，生产仍Fastify/pg。
 
 ## 边界
 
@@ -22,8 +22,8 @@ Reconcile 与 Billing command receipt；不拥有 Tenant、Identity、Agent Run�
 
 ## 五分钟启动
 
-要求 Node.js 22、`pnpm@11.25.0`，并复用 Root 的 PostgreSQL 与 Redis。Billing 使用独立 PostgreSQL database/schema
-和 Redis logical DB `4`。
+要求 Node.js 24.20.0（见仓根 `.node-version`）、`pnpm@11.25.0`，并复用 Root 的 PostgreSQL 与 Redis。Billing 使用独立 PostgreSQL database/schema
+和 Redis logical DB `4`。`engineStrict` 会拒绝不匹配的 Node；安装与验证前切换到仓库固定版本。
 
 ```bash
 cd /Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing

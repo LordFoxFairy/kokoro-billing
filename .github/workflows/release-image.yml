@@ -42,6 +42,7 @@ jobs:
           --health-retries=20
     env:
       DATABASE_URL: postgresql://kokoro_app:example-password@127.0.0.1:5432/kokoro_billing
+      SCHEMA_ADMIN_URL: postgresql://kokoro_app:example-password@127.0.0.1:5432/postgres
       REDIS_URL: redis://127.0.0.1:6379
       REDIS_TEST_URL: redis://127.0.0.1:6379
     steps:
@@ -54,14 +55,18 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version-file: .node-version
           cache: pnpm
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts --no-optional
+        run: pnpm install --frozen-lockfile
       - name: Install canonical PostgreSQL schema
         run: pnpm db:apply-schema
       - name: Run real infrastructure integration tests
         run: pnpm test:integration
+      - name: Verify canonical PostgreSQL catalog
+        run: pnpm db:verify-schema
+      - name: Verify generated Prisma artifacts
+        run: pnpm prisma:generate && pnpm prisma:check
       - name: Verify repository
         run: pnpm verify
 

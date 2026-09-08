@@ -118,3 +118,9 @@ Node类型变化由typecheck证明；生产包只pin已有实际lock，其他maj
 官方语义来源：[Vitest迁移](https://vitest.dev/guide/migration/)、
 [Node发布周期](https://nodejs.org/en/about/previous-releases)、
 [typed lint](https://typescript-eslint.io/getting-started/typed-linting/)。
+
+
+B7a已安装候选并通过当前冻结工作树完整门：Node24.20.0/@types24.13.3/Vitest5.0.0/Vite8.2.2；
+lock实际Rolldown1.2.7（MIT；native optional），TS5.9.3暂留B7b。Root audit所有严重度0，源码与编译HTTP smoke通过。
+Node22安装被engineStrict拒绝；镜像digest从官方registry核验但daemon超时，尚未构建/镜像smoke，不宣称镜像已验收。
+准确commit和测试证据由唯一任务板维护；prom-client官方deprecated信号归后续metrics迁移评估，不因0漏洞忽略维护风险。

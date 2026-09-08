@@ -12,6 +12,8 @@
 |---|---|---|
 | `contract/openapi/v1/openapi.yaml` | Billing HTTP v1 的 machine source | owner-authored；先改 contract，再改实现/消费者 |
 | `database/schema.sql` | 35 张 Billing 表的 canonical Schema | PostgreSQL 16；空库安装；无 FK/REFERENCES |
+| `.node-version` / `package.json` / `pnpm-lock.yaml` | 固定Node24.20.0、pnpm与精确依赖 | 本地、CI和镜像版本由toolchain治理测试核对 |
+| `test/architecture/toolchain.test.ts` | 工具链配置正反例 | manifest/lock、CI实际门、Docker FROM、engineStrict；不代替运行验收 |
 | `src/main.ts` | API 进程入口 | 只调用 composition root，不包含业务规则 |
 | `src/bootstrap/create-billing-runtime.ts` | 组合根 | 装配 config、PostgreSQL、Redis、provider、application 与 HTTP |
 | `src/interfaces/http/server.ts` | Fastify transport | Zod 边界校验、身份入口、snake_case/envelope/error 映射 |

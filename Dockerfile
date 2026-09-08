@@ -1,6 +1,6 @@
 # Keep the runtime base reproducible; update this digest deliberately with the
-# Node 22 Bookworm security-refresh process rather than floating on rebuild.
-FROM node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 AS package-manager
+# Node 24 Bookworm security-refresh process rather than floating on rebuild.
+FROM node:24.20.0-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS package-manager
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@11.25.0 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -17,7 +17,7 @@ RUN pnpm prisma:generate && pnpm build
 FROM package-manager AS production-dependencies
 RUN pnpm install --frozen-lockfile --prod --ignore-scripts
 
-FROM node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 AS runtime
+FROM node:24.20.0-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV BILLING_HOST=0.0.0.0

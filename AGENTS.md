@@ -4,6 +4,7 @@
 
 本仓是 Billing owner，负责 payment、subscription、checkout、refund、credit、ledger、reconcile 和 billing receipt。规则已经明确时直接执行，不重复向用户确认。
 
+- 本仓运行工具链固定于`.node-version`/package/lock；先切换Node24.20.0再使用pnpm11.25.0，engineStrict拒绝旧Node。
 - 工程与数据规则以 Root 三份专项手册为准；本文件不另立语言/SQL 规则。
 - 当前代码仍为 Fastify + pg 全局分层；目标按业务能力聚合 Nest modules。旧四层和 `ports/` 不是新实现模板。
 - 当前与目标、唯一 writer、公开能力及 Prisma 选型见 `docs/TECHNICAL_DESIGN.md`、`docs/DATA_MODEL.md` 和 ADR-0003。
