@@ -339,3 +339,14 @@ Prisma timeout不是任意JavaScript callback取消器：Root双事务probe中25
 
 尚待B8真实业务切换：单一Credit/Ledger writer、跨模块同事务context、完整35表CRUD覆盖、deadlock/serialization恢复、
 提交结果未知、外部provider副作用与worker生命周期。原始API/schema未变，不将fixture公开给业务Service或消费者。
+
+
+### B7 工具链切片设计门
+
+B7a仅运行时/测试依赖与CI配置：单一仓根.node-version为Node24.20.0，本地与CI读取它，Docker固定对应精确tag+经核验digest，
+治理测试校验一致性；pnpm11.25.0固定，@types/node采用24系列最新稳定兼容精确版。Vitest5替代2，不新增生产Vite入口。
+新治理测试放现有test/architecture；其他文件集、删除项与分工见IMPLEMENTATION_PLAN的B7a卡。
+普通生产依赖仅精确pin现有lock实际值；Nest/Zod/Prisma等major不混入，SQL/API/业务writer不改。
+release verify安装须保留测试runner原生可选包，并与CI同样执行catalog/Prisma生成门；发布安全与签名顺序保持。
+B7b再收紧全部手写TS的typed lint；B7c用实际依赖图正反例替代旧modules/ports形状门；B7d独立格式化，均不制造双轨业务实现。
+当前三设计面一致于“工具链无业务事实变化”，不扩大为B8生产重写授权。

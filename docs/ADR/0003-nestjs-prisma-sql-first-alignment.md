@@ -100,3 +100,21 @@ ADR-0001 的 Billing/PG authority/幂等语义继续有效；其中旧 ports 路
   [8.0.0变更](https://github.com/RebeccaStevens/deepmerge-ts/releases/tag/v8.0.0)、
   [mysql2公告一](https://github.com/advisories/GHSA-3f6p-5ww8-9rcr)、
   [mysql2公告二](https://github.com/advisories/GHSA-rgwj-5xj2-c3m3)。实际验证结果见唯一任务板；官方公告不是本仓测试替代。
+
+
+## B7 工具链升级决策（2026-09-08）
+
+选Node24 LTS、同major类型包及Vitest5稳定线；运行/CI/镜像固定同精确版本，pnpm11.25.0不变。
+比较保留Vitest2（已有安全公告，不采用）、最小修补Vitest3/Vite6（可作短期修补但不作为本次目标）、
+当前稳定Vitest5（采用，完整实跑通过才验收）。Vitest由Vitest/Vite维护者持续维护，MIT；Node为MIT，
+原生transform依赖及license/lock在实际安装后核验。Vite不进入生产dependencies；默认先由Vitestpeer安装并锁定，
+只有真实配置import/peer控制需求才增加直接devDependency，不做无用bundler配置。
+主要风险为v2→v5跨major的mock历史清除、hoisted mock位置、模块转换/进程池与原生可选依赖；
+Billing保留现有测试断言，记录真实耗时及全套、integration、Prisma生成/构建结果；不得降级测试门绕过适配。
+Node类型变化由typecheck证明；生产包只pin已有实际lock，其他major升级单独审查。
+失败退出路径是回到上一已验commit的工具链并保留失败证据，不安装两个test runner或长期兼容模式，不操作真实账务数据。
+准确版本/peer/engine/供应链和安装验证绑定任务板B7a交付；目前本段是批准目标而非安装完成声明。
+
+官方语义来源：[Vitest迁移](https://vitest.dev/guide/migration/)、
+[Node发布周期](https://nodejs.org/en/about/previous-releases)、
+[typed lint](https://typescript-eslint.io/getting-started/typed-linting/)。

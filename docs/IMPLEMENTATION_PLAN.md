@@ -431,3 +431,27 @@ B6a+B6b标记已验收，Goal保持active且范围不缩减。下一任务为B7�
 再续派billing_owner；生产迁移归B8，外部调用与消费者归B9，完整可靠性归B10。
 本切片未运行format:check（尚无脚本）、PG16 CI、镜像、provider sandbox、跨仓消费者或生产smoke；
 B6a记录的5项开发依赖公告仍待B7实际修复并重新audit，未以本轮测试声称消除。
+
+
+## B7 执行分解与 B7a 运行时/测试工具链卡
+
+2026-09-08；前轮分类为进展：B6b 2793882 已交付并在干净HEAD全门通过，289ad66记录验收。
+本轮保持原Goal，不把测试能力当生产Prisma迁移；B7a先完成工具链，B7b严格typed lint、B7c AST架构、B7d纯格式依次交付。
+
+| 项 | B7a决定 |
+|---|---|
+| Owner/writer | Billing，billing_owner唯一实现writer；Root设计/共享Git提交/最终验收，billing_ts_review只读版本与代码审查、billing_data_review只读规格审查 |
+| 基线 | /Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing，codex/billing-ts-prisma-alignment，289ad66c13d57707d261213a8e1e5ae0816121f1；开始干净；Root SQL手册/Agent/.tmp变更全部排除 |
+| 目标 | Node24.20.0与同major类型包、本地/CI/镜像一致；Vitest5.0.0替代2.1.9；保留测试语义与真实PG/Redis覆盖；manifest精确pin已有解析，不同时改变业务依赖major |
+| 放置比较/粒度 | `.node-version`放仓根供本地与CI读取，拒绝docs中的第二机器版本或并存.nvmrc；工具链治理用现有test/architecture/toolchain.test.ts，不放业务src或新建单文件目录；其余修改现有配置文件 |
+| 允许写入 | .node-version、package.json、pnpm-lock.yaml、pnpm-workspace.yaml、Dockerfile、.github/workflows/ci.yml、.github/workflows/release-image.yml、test/architecture/toolchain.test.ts；确有Vitest配置兼容问题可修改vitest.config.ts；Root交接后更新文档 |
+| 排除 | 所有生产src、SQL/contract/Prisma schema与生成配置、其他现有test文件、ESLint/TS严格配置、纯格式、其他仓与Git index；若新测试runner揭示用例需改，先报告具体文件/失败与语义 |
+| 依赖/生命周期 | Node `/opt/homebrew/bin/node`实际24.20.0；bash前置PATH后运行pnpm11.25.0；Vitest原生可选依赖必须安装，release移除no-optional；不启用第二构建器或引入生产Vite；Prisma仍7.10.0及已批准scoped override |
+| CI/API/数据 | CI与release verify读取.node-version，frozen install；release补SCHEMA_ADMIN_URL/catalog/Prisma生成检查，不改变生产协议/SQL/测试隔离；现有安全扫描阈值、签名/SBOM/发布顺序保留 |
+| 删除 | Node22配置、浮动manifest范围、release no-optional；不保留第二Node版本源或旧test runner；不用兼容mock行为掩盖失败 |
+| 验证/交付 | 先新治理测试RED（旧配置真实不符），再配置GREEN；frozen install、lint/typecheck/build/verify、真实integration、db:verify-schema/prisma:check、audit；性能记录耗时，不以新runner的默认行为冒充全部正确；Root提交后重跑完整门 |
+
+依赖实际安装前核验精确稳定版本、Node/peer/license及镜像digest；版本只来自官方registry/发布文档，不从历史报告猜测。
+Node Docker digest必须对官方manifest核验，查不到先保留明确未完成项，不伪造SHA。Docker本机不可用不妨碍native门，镜像实跑证据另列。
+现有本仓没有vi.mock/vi.hoisted或poolOptions使用，Vitest5的默认clearMocks/top-level hoisting已读取官方迁移说明；仍须全测试实跑。
+Root参考官方Vitest迁移与typescript-eslint typed-linting文档，工具语义不是Billing适配证明。
