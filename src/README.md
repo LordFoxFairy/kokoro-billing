@@ -1,5 +1,8 @@
 # Billing runtime layout
 
+Current Fastify/pg layout only, not a mandatory layering template. The Nest/Prisma target and cutover gates live in
+`docs/TECHNICAL_DESIGN.md`, ADR-0003 and `docs/IMPLEMENTATION_PLAN.md`.
+
 ```text
 domain/payment/services/       payment state transitions
 application/payment/           settlement, provider events, provider ports

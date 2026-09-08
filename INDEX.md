@@ -3,6 +3,9 @@
 本文描述当前代码与事实边界。进度与缺口见 [`docs/CURRENT.md`](docs/CURRENT.md)，字段级 wire contract 见
 [`contract/openapi/v1/openapi.yaml`](contract/openapi/v1/openapi.yaml)。
 
+这是Fastify/pg现状地图，不是新实现的四层模板；Nest/Prisma目标与切片见
+[`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)及ADR-0003。
+
 ## 事实源与入口
 
 | 路径 | 职责 | 约束 |

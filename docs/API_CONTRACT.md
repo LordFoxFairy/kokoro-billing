@@ -1,5 +1,23 @@
 # kokoro-billing API 契约策略
 
+## 2026-09-08 当前契约与目标差异
+
+下文是当前OpenAPI/运行时语义，并不表示已符合最新Root API手册。B3文档及B4安装保护切片不改任何HTTP字段、路径、
+身份、状态码、cursor、digest或响应；17个operation的当前contract SHA保持不变。目标与实施顺序见
+[ADR-0003](ADR/0003-nestjs-prisma-sql-first-alignment.md) 和 [任务板](IMPLEMENTATION_PLAN.md)。
+
+后续contract切片必须处理：
+
+1. request ID只通过`x-request-id`响应header传输；删除当前`x-kokoro-request-id`与`meta.request_id`，不建header alias。
+2. ledger instant改RFC3339 UTC；金额/credit仍以当前十进制wire及显式精度规则表达，不把Prisma bigint直接送JSON。
+3. feature typed error与HTTP mapper分离；逐码确定status/retryable/safe message，不按`Error.message`前缀或“全部409可重试”推断。
+4. 补全17个operation的request/response/error语义，说明202已提交的接受事实与后续业务终态，以及真实存在的查询/取消能力；
+   不为凑契约编造endpoint。design-first YAML维持唯一机器来源，生成validator或全量semantic parity须先验证。
+5. 当前契约标stable且ADR-0002要求major breaking。上述wire变更属于breaking，必须先核验实际发布/消费者，再单独记录
+   clean-slate owner/consumer切换裁决；此轮不擅自将stable v1原位改写，不预建双协议或长期兼容窗口。
+
+这些目标尚未进入机器契约，完整API切换门未通过。B4只操作离线安装入口，无传输契约变更，可按局部设计实施。
+
 Canonical machine-readable source：[`../contract/openapi/v1/openapi.yaml`](../contract/openapi/v1/openapi.yaml)。本文件解释
 owner、身份、幂等、错误与 consumer 规则，不复制字段级 Schema。Contract 的 version/generation/breaking/provenance 见
 [`../contract/README.md`](../contract/README.md)。

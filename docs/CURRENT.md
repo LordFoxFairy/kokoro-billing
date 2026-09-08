@@ -1,9 +1,21 @@
 # kokoro-billing 当前状态
 
-更新时间：2026-09-04。当前功能切片为 `codex/billing-durable-command-webhook`；最终验收必须绑定交付时的 `HEAD`、
+更新时间：2026-09-08。当前规范化分支为 `codex/billing-ts-prisma-alignment`；最终验收必须绑定交付时的 `HEAD`、
 干净工作树和当次命令输出，不能继承历史报告。
 
 本文中的“已实现”表示可在当前源码、Schema、contract 与测试中定位；不表示已获得生产流量、SLO、容量或灾难恢复证据。
+
+## 当前规范化工作
+
+- 唯一任务板：[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)；最新目标：[ADR-0003](ADR/0003-nestjs-prisma-sql-first-alignment.md)。
+- 当前仍为Fastify + pg + Zod3，全局四层不是新代码模板。已撤销子仓AGENTS中的强制四层规则；Nest/Prisma尚未切换。
+- Prisma稳定候选为7.10.0；npm latest实际指向8.0.0-rc.13，未采用预发布。选择SQL-first唯一canonical + generated Prisma；
+  不删除CHECK/锁/索引，不保留Prisma读/pg写双轨。业务切换前仍需完整drift、模型/writer映射、事务及契约门。
+- `7a193ba`基线：lint/typecheck/build/sql:check/contract:check通过，17条route parity；无依赖test为84通过/80跳过。
+  复用本机PostgreSQL18.4/Redis，用独立临时database执行integration为80通过；全套46文件/164测试通过，0失败0跳过。
+  临时库已删除；没有清空共享Redis。该结果不是CI PostgreSQL16、provider sandbox、镜像或生产验证。
+- 当前Root topology通过；Root standard和handbook测试存在既有失败，详情与准确数量见任务板，不修改其他owner来制造绿灯。
+- 第一实施切片是B4离线Schema安装保护；完整catalog drift另列B5，Prisma与Nest另列B6/B7/B8，不把局部交付称为整仓规范化完成。
 
 ## 已实现
 

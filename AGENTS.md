@@ -4,15 +4,22 @@
 
 本仓是 Billing owner，负责 payment、subscription、checkout、refund、credit、ledger、reconcile 和 billing receipt。规则已经明确时直接执行，不重复向用户确认。
 
-- 目录按 bounded context 组织；每个 context 内保持 `domain/application/infrastructure/interfaces`，禁止万能 `BillingService` 和跨模块 Repository。
-- 账务事实只能由 application service 在明确事务中修改；payment 不直接写 credit ledger，Agent 只能调用 quote/hold/commit/release。
-- V1 从当前业务事实重建唯一 canonical `database/schema.sql`；删除 38 个历史 migration、runner、旧 DTO、旧 endpoint、双写和 fallback。
-- SQL 使用 PostgreSQL `$1, $2, ...` 参数绑定；禁止 `FOREIGN KEY`、`REFERENCES`；关系由 owner 校验、事务、锁、状态机和真实业务 UNIQUE/CHECK 维护。
-- 时间使用 `TIMESTAMPTZ(3)` 和 RFC 3339 UTC；金额使用最小货币单位整数加 `currency_code`，ledger append-only。
+- 工程与数据规则以 Root 三份专项手册为准；本文件不另立语言/SQL 规则。
+- 当前代码仍为 Fastify + pg 全局分层；目标按业务能力聚合 Nest modules。旧四层和 `ports/` 不是新实现模板。
+- 当前与目标、唯一 writer、公开能力及 Prisma 选型见 `docs/TECHNICAL_DESIGN.md`、`docs/DATA_MODEL.md` 和 ADR-0003。
+- 唯一 canonical source 仍是 `database/schema.sql`。Prisma 目标是从 SQL 安装的临时库生成只读 schema/Client；未完成生成、事务承接和完整数据门前不切换生产数据访问。
+- Billing 全部 HTTP operation 为 internal-owner；机器事实源仍为 `contract/openapi/v1/openapi.yaml`。既有 wire 差异和后续切换见 `docs/API_CONTRACT.md`。
+- 唯一任务表是 `docs/IMPLEMENTATION_PLAN.md`；同仓单一 writer，主控管理共享 Git index/commit，审查员只读。
+- 真实集成测试只对本轮创建的独立临时 database 执行；复用 PostgreSQL/Redis 实例，不清空共享数据。
 
 完成前执行：
 
 ```bash
 pnpm lint && pnpm typecheck && pnpm test && pnpm build
-pnpm db:apply-schema
+pnpm sql:check && pnpm contract:check
+DATABASE_URL=<本任务创建的独立临时database> pnpm db:apply-schema
+DATABASE_URL=<本任务创建的独立临时database> REDIS_TEST_URL=<共享实例的隔离测试命名空间> pnpm test:integration
 ```
+
+`format:check`、完整 Schema drift、Prisma generate/check 和 Nest 生命周期门尚待任务板对应切片交付。未配置真实依赖时
+`pnpm test` 会跳过 integration；必须在报告中列出 pass/fail/skip，不能把该结果当作完整验收。

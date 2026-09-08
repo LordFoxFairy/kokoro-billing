@@ -4,6 +4,9 @@
 - Date：2026-09-03
 - Owner：kokoro-billing
 
+2026-09-08：PG authority、Billing owner与幂等不变量继续有效；本文ports/旧分层路径是当前基线证据，不再作为目录强制规则。
+Nest/Prisma目标及事务内模块协作由[ADR-0003](0003-nestjs-prisma-sql-first-alignment.md)补充。
+
 ## Context
 
 Payment、Checkout、Refund、Subscription、Credit、Metering 与 fulfillment 需要在单一 owner 内维护金额、余额、journal、receipt 与

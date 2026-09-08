@@ -6,6 +6,9 @@ Reconcile 与 Billing command receipt；不拥有 Tenant、Identity、Agent Run�
 > 当前状态、已验证能力与缺口见 [`docs/CURRENT.md`](docs/CURRENT.md)。本文是启动入口，不把目标架构或本地测试结果
 > 表述为生产证据。
 
+当前规范化分支的[任务板](docs/IMPLEMENTATION_PLAN.md)与[ADR-0003](docs/ADR/0003-nestjs-prisma-sql-first-alignment.md)
+记录Nest/Prisma目标、当前Fastify/pg差异和分阶段验收；Prisma未接入前不将目标写成现状。
+
 ## 边界
 
 - PostgreSQL 是支付、余额、账本、幂等 receipt、inbox/outbox 与对账事实源。

@@ -6,6 +6,9 @@
 
 ## 阅读顺序
 
+当前规范化任务、审计证据与阶段门：[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)；目标决策：
+[ADR-0003](ADR/0003-nestjs-prisma-sql-first-alignment.md)。当前代码仍为Fastify/pg，目标Nest/Prisma未完成切换。
+
 1. [`CURRENT.md`](CURRENT.md)：当前实现、证据边界和待办缺口。
 2. [`TECHNICAL_DESIGN.md`](TECHNICAL_DESIGN.md)：分层、bounded context、事务、状态机与运行单元。
 3. [`API_CONTRACT.md`](API_CONTRACT.md)：visibility、认证、幂等、错误和分页策略。
@@ -27,6 +30,5 @@
 
 ## 权威顺序
 
-当前代码、machine contract、canonical Schema 与上述 CURRENT/设计文档优先。Root 的
-`docs/ARCHITECTURE_STANDARD.md` 是跨仓工程基线；Root handbook 中的 Billing 文章和历史 ADR 可用于背景与考古，
-但不覆盖本仓当前 contract、Schema、代码或缺口清单。
+Root AGENTS与三份语言/SQL专项手册是规范权威；当前代码、machine contract、canonical Schema决定现状证据，CURRENT明确
+差异，不能以现状覆盖目标规范。Root handbook中的历史Billing文章和被替代ADR只用于考古。详见Root AGENTS必读顺序。
