@@ -3,7 +3,17 @@
 验收必须在待交付 commit 的干净工作树上重新执行。历史报告、旧 CI、Agent 自报、被 skip 的 integration 和本地 fixture
 均不等于生产证据。
 
-## 1. 本切片范围
+## 2026-09-08 B4 安装保护切片
+
+当前允许范围由[IMPLEMENTATION_PLAN](IMPLEMENTATION_PLAN.md)确定；以下旧durable-command矩阵保留作回归基线，不再授权
+对所有application/SQL/HTTP进行修改。本轮仅安装入口/安装用例、新integration及必要文档；没有改Schema、HTTP、业务src或依赖。
+
+B4必须通过：21个独占临时database用例，覆盖fresh35表/重复拒绝、schema全部参数前置拒绝、public缺失/CREATE权限、
+所有用户namespace关系与独立type/function/procedure、原对象保留、search_path覆盖、事务回滚、独立client并发、锁超时、
+backend终止和JS deadline。业务全套185、独立integration101通过；命令/环境/审查与SHA统一记录在任务板。
+完整catalog drift、目标Prisma/Nest、CI16、镜像/provider sandbox与生产DR均不在本次通过范围。
+
+## 1. Durable-command 历史切片范围（回归参考，非当前写入授权）
 
 允许修改：
 

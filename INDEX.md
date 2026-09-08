@@ -16,6 +16,7 @@
 | `src/bootstrap/create-billing-runtime.ts` | 组合根 | 装配 config、PostgreSQL、Redis、provider、application 与 HTTP |
 | `src/interfaces/http/server.ts` | Fastify transport | Zod 边界校验、身份入口、snake_case/envelope/error 映射 |
 | `scripts/apply-schema.ts` | Schema job | advisory lock + blank-database guard + 单事务安装 |
+| `scripts/canonical-schema.ts` | 离线安装用例 | public-only、全用户namespace非空保护、受控连接错误/超时与事务回滚；不做B5全量drift |
 | `scripts/process-payment-events.ts` | Payment event worker | PostgreSQL row lease、重试、dead-letter 与 worker metrics |
 | `scripts/process-execution-events.ts` | Execution event batch | 顺序处理 received inbox event |
 | `scripts/expire-credit-holds.ts` | Expiry worker | 显式 tenant/batch identity；Redis lease 协调；PostgreSQL receipt/事务维护事实 |
@@ -64,6 +65,9 @@ domain -> no HTTP/PostgreSQL/Redis/provider SDK
 | `test/integration/` | PostgreSQL/Redis repository、事务、Schema、worker 与对账；需要真实 fixture |
 | `test/architecture/` | 分层、SQL 边界、strictness、文档、contract metadata、CI/供应链与 clean-slate 门禁 |
 | `test/doubles/` | 测试专用 provider double；生产 `src/` 不含 fake/in-memory provider |
+
+`test/integration/schema-installation.test.ts`的21个用例分别创建独占临时database，覆盖安装范围、对象保留、权限、并发、
+DDL失败、backend终止和客户端deadline；仅该fixture的管理连接需要CREATEDB/测试扩展权限，不将其授予生产Billing角色。
 
 ## 交付与文档
 

@@ -15,7 +15,10 @@
   复用本机PostgreSQL18.4/Redis，用独立临时database执行integration为80通过；全套46文件/164测试通过，0失败0跳过。
   临时库已删除；没有清空共享Redis。该结果不是CI PostgreSQL16、provider sandbox、镜像或生产验证。
 - 当前Root topology通过；Root standard和handbook测试存在既有失败，详情与准确数量见任务板，不修改其他owner来制造绿灯。
-- 第一实施切片是B4离线Schema安装保护；完整catalog drift另列B5，Prisma与Nest另列B6/B7/B8，不把局部交付称为整仓规范化完成。
+- B4离线Schema安装保护已实施并经独立审查/主控验证：public-only目标、所有用户namespace非空对象保护、单事务锁、回滚、
+  server/client预算与连接错误处理。新增21项真实PG反例；主控全套185通过，独立integration101通过，0失败0跳过；
+  build产物HTTP health/ready/401/BFF catalog与SIGTERM smoke通过。交付SHA与命令见任务板。
+- 完整catalog drift另列B5，Prisma与Nest另列B6/B7/B8，不把局部交付称为整仓规范化完成。
 
 ## 已实现
 
@@ -23,7 +26,8 @@
 
 - Billing 拥有 Payment、Subscription、Checkout、Refund、Credit、Ledger、Metering、Reconcile 和 command receipt。
 - `database/schema.sql` 是唯一 V1 Schema，含 35 张 `payment_*` / `entitlement_*` 表；没有 migration 目录、外键或跨仓表。
-- `scripts/apply-schema.ts` 使用 PostgreSQL advisory lock、事务和空库检查安装 Schema。
+- `scripts/apply-schema.ts` 通过 `scripts/canonical-schema.ts` 使用 PostgreSQL advisory lock、READ COMMITTED事务与全用户namespace
+  空库检查安装Schema。只接受既有public目标，非空关系/type/function拒绝；故障回滚且释放资源，不自动补齐旧库。
 - 金额/credit 使用整数列；数据库瞬时点使用 `TIMESTAMPTZ(3)`。
 
 ### Durable command authority
