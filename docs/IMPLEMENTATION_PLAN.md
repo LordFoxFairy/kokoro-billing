@@ -27,7 +27,7 @@
 | B4 / P1 / 空库安装保护 | Billing / billing_owner（gpt-5.6-sol）/ B1+B2+Root | worker仅3个代码/测试文件；Root交接后更新database README、INDEX、CURRENT、ACCEPTANCE | 独占DB、TDD、非空/custom schema/并发/回滚/锁与JS超时/backend终止；主控提交/复验 | 已验收：93c06dfa33d38601e51534972890bfda50ea614d |
 | B5 / P0 / 全量catalog drift | Billing / billing_owner / 数据+TS+Root | 精确文件集见B5执行卡；Root交接后文档与提交 | 比较canonical参照库的35表全部列/约束/索引/predicate；缺CHECK与错predicate反例 | 已验收：9663db58bd85eb810b94df6120de050530c79d2f |
 | B6 / P0 / Prisma承接验证 | Billing / 后续续派billing_owner / Root | 固定依赖/生成链/模型/数据生命周期/独立验证；派前冻结文件集 | stable版本、无第二schema、typedCRUD+同tx锁/receipt/outbox+BigInt+错误+生成drift；不切生产writer | 已验收：B6a c7ef9fa；B6b 2793882；生产迁移仍归B8 |
-| B7 / P1 / 工具链与架构门 | Billing / 后续续派billing_owner / 独立reviewer | package/lock/TS/ESLint/format/CI/architecture精确集派前批准 | Node24、版本固定、完整typed gate；AST有效/违规样本替代禁modules/强制ports；单独格式切片 | B7a待提交后复验；B7b/c/d待派工，不放宽门禁 |
+| B7 / P1 / 工具链与架构门 | Billing / 后续续派billing_owner / 独立reviewer | package/lock/TS/ESLint/format/CI/architecture精确集派前批准 | Node24、版本固定、完整typed gate；AST有效/违规样本替代禁modules/强制ports；单独格式切片 | B7a已验收058bdf3；B7b/c/d待派工，不放宽门禁 |
 | B8 / P0 / Nest+Prisma闭合业务切换 | Billing / 后续续派billing_owner / Root+独立reviewer | 先完整35表映射/provider图/事务组卡，再授权src/SQL/contract/test/worker集 | 先稳定查询范式，后整个共享Credit事务组；同一事务不混pg/Prisma，旧实现随闭合切片删除；中间未闭合commit不发布 | 待设计门；依赖B5/B6/B7 |
 | B9 / P1 / 契约与外部副作用 | Billing / 后续续派billing_owner / Root | owner contract先行；消费者另开owner任务，无本仓写入权 | envelope/request-id/UTC/error/202语义；checkout claim→网络→finalize及unknown恢复；实际消费者固定artifact | 待契约裁决/依赖B8 |
 | B10 / P1 / 运行可靠性验收 | Billing / 后续续派billing_owner / Root | worker/reconciliation/retention/smoke与文档；派前批准文件集 | execution并发lease、orphan检测、append-only角色、预算取消、provider sandbox、CI PG16/镜像/DR分层证据 | 待派工 |
@@ -518,3 +518,28 @@ Docker/PG16 CI/provider sandbox/镜像供应链运行仍未验；B7b typed lint�
 
 上述三面仍一致于工具链变化、业务SQL/API不变；本轮contract:check/canonical catalog/Prisma check通过，不将此门扩为B8业务重写放行。
 交付SHA和干净HEAD完整复验随后记录。
+
+
+### B7a 交付与干净 HEAD 验收
+
+交付SHA：`058bdf39b3dcbf7c084770670312b453a2a34354`。Root在该干净HEAD重新执行（日志`/tmp/billing-b7a-final.Dp5tr6`）：
+- Node24.20.0/pnpm11.25.0 frozen install exit0；自有空库db:apply-schema exit0。
+- `pnpm verify` exit0，56文件318测试通过（31.84s），0失败0跳过；lint/typecheck/build/sql/17-route contract全部通过。
+- `pnpm test:integration` exit0，32文件137通过（27.47s），0失败0跳过；本集合包含在全套内。
+- `pnpm db:verify-schema`为35表368列127约束83索引、0差异；`pnpm prisma:check` exit0无差异。
+- `pnpm audit --json` exit0，全部严重度0漏洞。
+- 当前构建之后再次分别启动源码与dist HTTP入口：health/ready200，anonymous credit-account401，受信BFF commerce catalog200；两进程SIGTERM正常退出0。
+- `git diff --check` exit0，`git status --short`无输出；结束trap删除本轮独占database，未清空/重启共享PG/Redis或修改其他仓。
+
+B7a配置/native交付已验收；镜像只有官方digest核验证据，本机daemon仍不可用，Docker构建/PG16 CI/provider sandbox未运行并保留B10验收项。
+B7整体未完成：下一个可执行切片B7b（严格typed lint/兼容TS工具升级），再B7c架构、B7d独立纯格式；原Goal保持active。
+
+### B7b 新的只读实际基线（尚未实施）
+
+Root用当前Node24/ESLint工具在不修改配置、不生成产物的前提下，CLI临时启用全部手写TS的unsafe五规则及switch-exhaustiveness-check：
+`pnpm exec eslint . --format json --rule @typescript-eslint/no-unsafe-argument:error --rule @typescript-eslint/no-unsafe-assignment:error --rule @typescript-eslint/no-unsafe-call:error --rule @typescript-eslint/no-unsafe-member-access:error --rule @typescript-eslint/no-unsafe-return:error --rule @typescript-eslint/switch-exhaustiveness-check:error`。
+实际exit1：11文件49条（unsafe-member-access38、assignment10、argument1），不是当前既有lint门失败，不放宽目标规则。
+集中于test HTTP JSON、几个integration matcher/result与scripts/schema-verification.error.ts的未知错误数组边界；新toolchain test未报unsafe问题。
+临时报告`/tmp/billing-b7b-typed-baseline.json`，后续启用recommendedTypeChecked后还应重测完整规则，不以本49条当最终总数。
+兼容升级候选仍为TS6.0.3 + typescript-eslint8.70.0 + ESLint10.10.0（实际安装前再核验）；TS7.0.2超过该lint peer上限，不盲追latest。
+Root已读官方TS6发布说明与typescript-eslint dependency-versions，后续NodeNext、类型推断/defaults/build输出必须实际回归，不安装兼容双栈。

@@ -7,7 +7,7 @@
 
 ## 当前规范化工作
 
-- B7a已实现Node24.20.0统一、Vitest5/Vite8、精确依赖及engineStrict，CI/release补齐catalog与Prisma门；审计0漏洞。Root当前冻结代码318项全套与137项integration通过，最终提交/复验证据见任务板。生产仍Fastify/pg，typed全仓lint/AST/格式归B7后续。
+- B7a已实现Node24.20.0统一、Vitest5/Vite8、精确依赖及engineStrict，CI/release补齐catalog与Prisma门；审计0漏洞。交付058bdf3，Root干净HEAD318项全套与137项integration通过，源码/dist HTTP smoke通过；精确证据见任务板。生产仍Fastify/pg，typed全仓lint/AST/格式归B7后续。
 - 唯一任务板：[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)；最新目标：[ADR-0003](ADR/0003-nestjs-prisma-sql-first-alignment.md)。
 - 当前仍为Fastify + pg + Zod3，全局四层不是新代码模板。已撤销子仓AGENTS中的强制四层规则；Nest/Prisma尚未切换。
 - B6a固定安装Prisma/client/adapter-pg 7.10.0用于生成链与隔离验证；npm latest实际指向8.0.0-rc.13，未采用预发布。选择SQL-first唯一canonical + generated Prisma；
