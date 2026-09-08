@@ -107,8 +107,8 @@ ADR-0001 的 Billing/PG authority/幂等语义继续有效；其中旧 ports 路
 选Node24 LTS、同major类型包及Vitest5稳定线；运行/CI/镜像固定同精确版本，pnpm11.25.0不变。
 比较保留Vitest2（已有安全公告，不采用）、最小修补Vitest3/Vite6（可作短期修补但不作为本次目标）、
 当前稳定Vitest5（采用，完整实跑通过才验收）。Vitest由Vitest/Vite维护者持续维护，MIT；Node为MIT，
-原生transform依赖及license/lock在实际安装后核验。Vite不进入生产dependencies；默认先由Vitestpeer安装并锁定，
-只有真实配置import/peer控制需求才增加直接devDependency，不做无用bundler配置。
+原生transform依赖及license/lock在实际安装后核验。Vite不进入生产dependencies；已核验Vitest5将Vite声明为非optional peer；本仓直接devDependency固定Vite8.2.2以控制该真实测试依赖，
+不依赖自动peer浮动选型，不做无用bundler配置。
 主要风险为v2→v5跨major的mock历史清除、hoisted mock位置、模块转换/进程池与原生可选依赖；
 Billing保留现有测试断言，记录真实耗时及全套、integration、Prisma生成/构建结果；不得降级测试门绕过适配。
 Node类型变化由typecheck证明；生产包只pin已有实际lock，其他major升级单独审查。

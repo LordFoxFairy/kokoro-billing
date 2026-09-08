@@ -455,3 +455,13 @@ B6a记录的5项开发依赖公告仍待B7实际修复并重新audit，未以本
 Node Docker digest必须对官方manifest核验，查不到先保留明确未完成项，不伪造SHA。Docker本机不可用不妨碍native门，镜像实跑证据另列。
 现有本仓没有vi.mock/vi.hoisted或poolOptions使用，Vitest5的默认clearMocks/top-level hoisting已读取官方迁移说明；仍须全测试实跑。
 Root参考官方Vitest迁移与typescript-eslint typed-linting文档，工具语义不是Billing适配证明。
+
+
+B7a安装前版本复核与Root裁决：Node24.20.0 LTS；@types/node24.13.3（MIT）；Vitest5.0.0（MIT，Node ^22.12 || ^24 || >=26）;
+Vite8.2.2（MIT，Node ^20.19 || >=22.12），为Vitest5非optional peer（^6.4 || ^7 || ^8）。Root采纳**直接devDependency**精确pin Vite8.2.2，
+因为这是测试runner真实强制peer控制，不是新生产bundler；避免浮动peer选择。Rolldown1.2.4 native bindings为optional，保留其安装。
+Docker官方多架构index由只读`docker buildx imagetools inspect node:24.20.0-bookworm-slim`核验：
+`sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e`。
+其他B7a工具仅pin实际lock：@eslint/js10.0.1、eslint10.9.1、typescript-eslint8.67.0、typescript5.9.3、tsx4.23.12、yaml2.9.0、@types/pg8.23.1。
+候选后续typed工具：ESLint10.10.0、typescript-eslint8.70.0、兼容TypeScript6.0.3；registry最新TS7.0.2超过typescript-eslint的<6.1 peer，不采用不兼容最新。
+Prettier3.9.6留B7d。以上为billing_ts_review只读核验，Root后续复核安装与digest，尚不声明升级完成。
