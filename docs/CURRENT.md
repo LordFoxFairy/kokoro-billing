@@ -19,7 +19,7 @@
   server/client预算与连接错误处理。新增21项真实PG反例；主控全套185通过，独立integration101通过，0失败0跳过；
   build产物HTTP health/ready/401/BFF catalog与SIGTERM smoke通过。交付SHA与命令见任务板。
 - B5 全量catalog drift已实现并获数据/TS独立复审放行：35表/368列/127约束/83索引，含partial predicate、locale、persistence、RLS与额外执行对象；
-  目标只读，显式管理连接仅创建并清理本轮template0参照库，安全输出差异与未知资源名。Root实际验收与交付SHA见任务板。
+  目标只读，显式管理连接仅创建并清理本轮template0参照库，安全输出差异与未知资源名。交付9663db5，Root在干净HEAD完整217项、integration129项通过，0失败0跳过；命令见任务板。
 - Prisma与Nest仍属B6/B7/B8；35表当前writer调查已写入同一任务板，shared receipt/audit/outbox的公开能力仍待设计，不把B5称为整仓规范化完成。
 
 ## 已实现

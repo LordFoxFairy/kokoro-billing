@@ -25,7 +25,7 @@
 | B2 / P0 / TS模块与契约审查 | Billing / billing_ts_review（gpt-5.6-sol）/ Root | 只读src/contract/test/CI/文档 | 已复核旧四层门禁、repository编排、HTTP混责与wire偏差 | 已审查 |
 | B3 / P0 / 三文档与ADR收敛 | Billing / Root / B1+B2 reviewers | AGENTS、三文档、ADR-0003、CURRENT、本任务板及README/INDEX导航 | 当前态/目标态、唯一schema、契约策略一致；两位reviewer局部放行B4，完整重写门待验 | 已验收：9c890728c49458b38245682873273bd6d6b40d2c |
 | B4 / P1 / 空库安装保护 | Billing / billing_owner（gpt-5.6-sol）/ B1+B2+Root | worker仅3个代码/测试文件；Root交接后更新database README、INDEX、CURRENT、ACCEPTANCE | 独占DB、TDD、非空/custom schema/并发/回滚/锁与JS超时/backend终止；主控提交/复验 | 已验收：93c06dfa33d38601e51534972890bfda50ea614d |
-| B5 / P0 / 全量catalog drift | Billing / 后续续派billing_owner / Root | 安装/验证scripts、integration、生成治理文档；派前冻结精确文件集 | 比较canonical参照库的35表全部列/约束/索引/predicate；缺CHECK与错predicate反例 | 独立审查通过、Root验证通过；待提交后干净HEAD复验 |
+| B5 / P0 / 全量catalog drift | Billing / billing_owner / 数据+TS+Root | 精确文件集见B5执行卡；Root交接后文档与提交 | 比较canonical参照库的35表全部列/约束/索引/predicate；缺CHECK与错predicate反例 | 已验收：9663db58bd85eb810b94df6120de050530c79d2f |
 | B6 / P0 / Prisma承接验证 | Billing / 后续续派billing_owner / Root | 固定依赖/生成链/模型/数据生命周期/独立验证；派前冻结文件集 | stable版本、无第二schema、typedCRUD+同tx锁/receipt/outbox+BigInt+错误+生成drift；不切生产writer | 待派工；依赖B5 |
 | B7 / P1 / 工具链与架构门 | Billing / 后续续派billing_owner / 独立reviewer | package/lock/TS/ESLint/format/CI/architecture精确集派前批准 | Node24、版本固定、完整typed gate；AST有效/违规样本替代禁modules/强制ports；单独格式切片 | 待派工；不放宽门禁 |
 | B8 / P0 / Nest+Prisma闭合业务切换 | Billing / 后续续派billing_owner / Root+独立reviewer | 先完整35表映射/provider图/事务组卡，再授权src/SQL/contract/test/worker集 | 先稳定查询范式，后整个共享Credit事务组；同一事务不混pg/Prisma，旧实现随闭合切片删除；中间未闭合commit不发布 | 待设计门；依赖B5/B6/B7 |
@@ -238,3 +238,7 @@ Root交接后仅补三设计面、CURRENT/ACCEPTANCE、README/INDEX/database REA
 SQL SHA256仍57b6ff2cd09de0835b2c608575dea74644163ab591e21fa477855476661920bd；OpenAPI仍58fbe4fea083ba12e0db23f49e995b96500d01af0013febf40eba3093510ef63。
 未运行：PG16 CI（已接db:verify-schema步骤）、专门ICU rules运行反例、极端驱动release/close同步抛错注入、镜像/provider sandbox、Prisma/Nest、format门、跨仓消费者/生产DR。
 B5 runtime src不变，B4原生HTTP smoke是历史回归证据，不冒充本轮新smoke。B6下一步先复用现有生成/参照生命周期经验设计稳定Prisma生成与承接验证，不直接迁业务。
+
+B5交付SHA：`9663db58bd85eb810b94df6120de050530c79d2f`，共享checkout由Root提交，无cherry-pick。
+Root在该干净HEAD重新执行db:apply-schema、verify（217/217，51文件）、test:integration（129/129，30文件），随后按CI顺序执行db:verify-schema（0差异），全部exit0，0失败0跳过。
+所有本轮已确认创建的临时库已清理；本轮未更新其他仓。阶段B5已验收，整体Goal继续active，B6–B10未完成。
