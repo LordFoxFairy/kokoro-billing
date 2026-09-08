@@ -356,3 +356,13 @@ B7a实施事实：本地/CI/两Docker base固定Node24.20.0与核验digest，Vit
 实际Rolldown1.2.7安装native optional binding，release不再裁剪optional。engineStrict实际拒绝Node22安装。
 配置check含真实正反例，未降低现有安全阈值或跳过测试；Root完整门及Node24原生HTTP smoke证据见任务板。
 本切片并未实现全部手写TS typed lint/AST边界/格式化，也未改生产模块、SQL与HTTP contract；不把runtime升级称为Nest重写。
+
+
+### B7b 类型边界与门禁
+
+B7b切片范围为已有角色文件内类型收窄、测试fixture及配置，不做业务目录迁移或SQL/API改写。
+完整recommendedTypeChecked作用于所有手写TS（src/scripts/test/root配置），生成Client精确排除lint但仍由生成一致性/typecheck/build验证。
+补forceConsistentCasingInFileNames/noUncheckedSideEffectImports，保留全部既有strict选项；NodeNext及dist入口不改。
+non-null断言由显式事实/fixture前置条件替代，HTTP JSON以unknown+schema/实际断言收窄，不用泛型强转假验证；保留falsey异常原值和事务清理语义。
+ESLint实际配置通过test/architecture/typed-lint.test.ts的正反例验证覆盖面、unsafe/Promise/穷尽性，不仅匹配配置文字。
+具体版本、switch选项及允许文件由唯一任务卡冻结；三设计面一致于“无业务SQL/API变更”，完整Nest/Prisma业务迁移仍须B8设计门。

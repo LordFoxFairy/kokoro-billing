@@ -543,3 +543,94 @@ Root用当前Node24/ESLint工具在不修改配置、不生成产物的前提下
 临时报告`/tmp/billing-b7b-typed-baseline.json`，后续启用recommendedTypeChecked后还应重测完整规则，不以本49条当最终总数。
 兼容升级候选仍为TS6.0.3 + typescript-eslint8.70.0 + ESLint10.10.0（实际安装前再核验）；TS7.0.2超过该lint peer上限，不盲追latest。
 Root已读官方TS6发布说明与typescript-eslint dependency-versions，后续NodeNext、类型推断/defaults/build输出必须实际回归，不安装兼容双栈。
+
+
+## B7b 严格类型切片执行卡
+
+2026-09-08。前轮为进展：B7a058bdf3实现在干净HEAD通过318全套/137integration及源码/dist smoke，9eb06fc记录验收。
+当前工作目录 /Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing，codex/billing-ts-prisma-alignment，9eb06fc干净；其他仓及Root手册/.tmp排除。
+
+| 项 | 决定 |
+|---|---|
+| Owner/writer/review | Billing；billing_toolchain_hardening（gpt-6-astra）负责B7b唯一写入，沿用已验加固负责人；原billing_owner不再活跃。Root设计/共享Git提交；billing_data_review规格、billing_ts_review代码只读 |
+| 目标/当前事实 | 当前recommended只对src启unsafe；CLI完整recommendedTypeChecked+no-non-null基线56文件313条，详见下列文件；生产Fastify/pg未变 |
+| 配置文件 | package.json/pnpm-lock.yaml、eslint.config.mjs、tsconfig.json/tsconfig.build.json（必要固定输出rootDir）、test/architecture/toolchain.test.ts（同步精确pins）；新test/architecture/typed-lint.test.ts验证实际ESLint运行正反例 |
+| 目录/粒度 | 类型修复在原归属文件，不搬模块。typed lint测试放既有architecture而非生产scripts；多个test共享非空前置断言时允许单文件test/assert-defined.ts，不新建单文件fixtures目录；不把测试helper导入src |
+| 依赖 | Node24.20.0/pnpm11.25.0/Vitest5/Vite8/Prisma7.10保持；升级TS6.0.3、typescript-eslint8.70.0、ESLint10.10.0，@eslint/js10.0.1保持；其他直接依赖不变 |
+| 门禁 | recommendedTypeChecked覆盖全部手写src/scripts/test/root TS config；明确unsafe、Promise、no-non-null、switch穷尽；forceConsistentCasingInFileNames及noUncheckedSideEffectImports显式true；generated只按精确路径忽略lint，仍生成/typecheck/build，不手改生成物 |
+| 行为/API/SQL | 普通输入/输出、数值、事务、错误原对象与falsey异常传播保持；不改SQL/API/权限/receipt/锁/状态。类型边界局部收窄，不生成另一wire契约；若发现必须改变业务语义先报告Root，不以重写旧pg逻辑夹带B8 |
+| 删除 | src-only unsafe配置、非空/无用断言、重复preset规则；不引入any、双重断言、ts-ignore、eslint-disable、ignoreDeprecations或给对象强行String来掩盖未知输入 |
+| 验证/交付 | 先实际typed lint正反例RED，再规则+修复GREEN；保留全部原业务断言，不能靠移走/skip测试、无意义await过门；Root独占库full verify/integration/catalog/Prisma/源码与dist smoke及audit，明确文件暂存提交 |
+
+Root复核matrix：TS6.0.3（Apache-2.0、Node>=14.17）为typescript-eslint8.70.0（MIT，TS>=4.8.4<6.1、ESLint^8.57/^9/^10）最高稳定兼容线；
+ESLint10.10.0、@eslint/js10.0.1（MIT）兼容Node24。registry TS latest7.0.2不满足lint peer，明确不选，不是退回更易过门版本。
+TS6保持显式ES2022/NodeNext/types；rootDir默认变化须build确认dist/src与dist/scripts，显式side-effect import检查，不用弃用项消音。
+Root采纳switch选项allowDefaultCaseForExhaustiveSwitch=true、considerDefaultExhaustiveForUnions=false、requireDefaultForNonUnion=false：
+union即使有defensive default仍须逐成员穷尽，不机械要求普通string switch补default；这是显式项目选择，不降低已存在业务switch保障。
+
+只读CLI/API基线（当前8.67 preset，升级后重新统计）：313条=non-null123、require-await119、no-base-to-string19、unsafe-member38、unsafe-assignment10、unsafe-argument1、only-throw-error1、prefer-promise-reject-errors1、no-unnecessary-type-assertion1。
+报告/tmp/billing-b7b-full-typed-baseline.json。只读API override未写配置，不将此结果称已启用新门禁。
+允许按该基线修复下列已有文件；新版本额外问题或新增helper/角色文件需向Root报告精确位置与理由再扩大：
+
+- `prisma.config.ts`
+- `scripts/canonical-reference.ts`
+- `scripts/canonical-schema.ts`
+- `scripts/prisma-artifacts.ts`
+- `scripts/prisma-process.ts`
+- `scripts/process-payment-events.ts`
+- `scripts/schema-database-session.ts`
+- `scripts/schema-verification.error.ts`
+- `scripts/schema-verification.ts`
+- `src/bootstrap/create-billing-runtime.ts`
+- `src/infrastructure/auth/billing-auth.ts`
+- `src/infrastructure/postgres/connection.ts`
+- `src/infrastructure/postgres/repositories/credit/account-query-service.ts`
+- `src/infrastructure/postgres/repositories/credit/redeem-service.ts`
+- `src/infrastructure/postgres/repositories/metering/billing-admission-service.ts`
+- `src/infrastructure/postgres/repositories/payment/provider-event-processor.ts`
+- `src/infrastructure/postgres/repositories/reconcile/admin-stats-service.ts`
+- `src/infrastructure/postgres/repositories/reconcile/reconciliation-service.ts`
+- `src/interfaces/http/server.ts`
+- `test/http/readiness.test.ts`
+- `test/http/server.test.ts`
+- `test/http/target-v1.test.ts`
+- `test/integration/account-query.test.ts`
+- `test/integration/admin-grant.test.ts`
+- `test/integration/admin-stats.test.ts`
+- `test/integration/admission-command-receipts.test.ts`
+- `test/integration/catalog-admin.test.ts`
+- `test/integration/catalog.test.ts`
+- `test/integration/checkout-http-replay.test.ts`
+- `test/integration/checkout.test.ts`
+- `test/integration/durable-command-receipts.test.ts`
+- `test/integration/durable-result-http.test.ts`
+- `test/integration/grant-expiry.test.ts`
+- `test/integration/mock-checkout-payment.test.ts`
+- `test/integration/outbox-worker.test.ts`
+- `test/integration/payment-fulfillment.test.ts`
+- `test/integration/payment-reversal.test.ts`
+- `test/integration/postgres-pool-context.test.ts`
+- `test/integration/postgres-schema.test.ts`
+- `test/integration/prisma-generation.test.ts`
+- `test/integration/prisma-persistence.test.ts`
+- `test/integration/provider-account.test.ts`
+- `test/integration/provider-webhook.test.ts`
+- `test/integration/reconciliation.test.ts`
+- `test/integration/redeem.test.ts`
+- `test/integration/redis-idempotency-hint.test.ts`
+- `test/integration/redis-lease.test.ts`
+- `test/integration/runtime-redis-loss.test.ts`
+- `test/integration/schema-drift.test.ts`
+- `test/integration/schema-installation.test.ts`
+- `test/integration/subscription-query.test.ts`
+- `test/integration/usage-pricing-admin.test.ts`
+- `test/integration/usage-pricing.test.ts`
+- `test/integration/usage-settlement.test.ts`
+- `test/unit/redis-optional.test.ts`
+- `test/unit/redis-timeout-policy.test.ts`
+
+
+Worker不操作Git/文档/生产基础设施；构建/生成仅在已固定离线Client流程，不能refresh生成schema掩盖drift。
+异步fixture优先Promise.resolve/reject明确表达契约；涉及抛错的stub要保留拒绝而非变为同步throw，不能插入无意义await只满足require-await。
+unknown日志使用受控形状/安全消息；不得误删原始异常与Aggregate/cause或falsey rejection反例。
+官方工具语义：TS6 release-notes、typescript-eslint users/configs与switch-exhaustiveness-check；版本与执行证据分开，最终兼容靠实际门禁。

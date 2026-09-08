@@ -124,3 +124,18 @@ B7a已安装候选并通过当前冻结工作树完整门：Node24.20.0/@types24
 lock实际Rolldown1.2.7（MIT；native optional），TS5.9.3暂留B7b。Root audit所有严重度0，源码与编译HTTP smoke通过。
 Node22安装被engineStrict拒绝；镜像digest从官方registry核验但daemon超时，尚未构建/镜像smoke，不宣称镜像已验收。
 准确commit和测试证据由唯一任务板维护；prom-client官方deprecated信号归后续metrics迁移评估，不因0漏洞忽略维护风险。
+
+
+### B7b 编译器与类型感知lint裁决（2026-09-08）
+
+采用TS6.0.3（Apache-2.0）+typescript-eslint8.70.0（MIT）+ESLint10.10.0（MIT），@eslint/js10.0.1保持。
+保留5.9会落后于兼容稳定编译器；TS7.0.2超过当前lint peer<6.1；选择最新稳定且互兼容的6.0.3，不双装编译器。
+维护状态以Microsoft/typescript-eslint/ESLint官方发布和registry peer为证；保留既有Node24/ESM工具链，不引入新编译/运行方式。
+风险：TS6推断/defaults、类型lint增加未知边界与async fixture错误、编译输出root；用全套行为/类型/生成/smoke验证，而不是ignoreDeprecations或禁用规则。
+失败退出用上一已验commit并保留失败证据，解决兼容再升级；不在运行时并存编译器或写入真实账务库。
+采用完整recommendedTypeChecked与明确non-null/穷尽选项，真实unknown边界收窄、不复制业务契约、不改变正常账务行为。
+性能记录真实耗时，不承诺升级更快；独立格式化留B7d，其他依赖/metrics替换留自身切片。
+
+来源：[TS6](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-6-0.html)、
+[typed configs](https://typescript-eslint.io/users/configs/)、
+[switch options](https://typescript-eslint.io/rules/switch-exhaustiveness-check/)。本段为目标裁决，交付与验证见任务板。
