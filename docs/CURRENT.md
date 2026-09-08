@@ -10,7 +10,7 @@
 - 唯一任务板：[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)；最新目标：[ADR-0003](ADR/0003-nestjs-prisma-sql-first-alignment.md)。
 - 当前仍为Fastify + pg + Zod3，全局四层不是新代码模板。已撤销子仓AGENTS中的强制四层规则；Nest/Prisma尚未切换。
 - B6a固定安装Prisma/client/adapter-pg 7.10.0用于生成链与隔离验证；npm latest实际指向8.0.0-rc.13，未采用预发布。选择SQL-first唯一canonical + generated Prisma；
-  不删除CHECK/锁/索引，不保留Prisma读/pg写双轨。业务切换前仍需Prisma生成/事务承接、writer公开边界及契约门。
+  不删除CHECK/锁/索引，不保留Prisma读/pg写双轨。生成/隔离事务承接已验收；业务切换前仍需writer公开边界、真实业务事务组及契约门。
 - `7a193ba`基线：lint/typecheck/build/sql:check/contract:check通过，17条route parity；无依赖test为84通过/80跳过。
   复用本机PostgreSQL18.4/Redis，用独立临时database执行integration为80通过；全套46文件/164测试通过，0失败0跳过。
   临时库已删除；没有清空共享Redis。该结果不是CI PostgreSQL16、provider sandbox、镜像或生产验证。
@@ -20,7 +20,7 @@
   build产物HTTP health/ready/401/BFF catalog与SIGTERM smoke通过。交付SHA与命令见任务板。
 - B5 全量catalog drift已实现并获数据/TS独立复审放行：35表/368列/127约束/83索引，含partial predicate、locale、persistence、RLS与额外执行对象；
   目标只读，显式管理连接仅创建并清理本轮template0参照库，安全输出差异与未知资源名。交付9663db5，Root在干净HEAD完整217项、integration129项通过，0失败0跳过；命令见任务板。
-- Prisma生产承接与Nest仍属B6b/B7/B8；B6a生成链验收见任务板。35表当前writer调查已写入同一任务板，shared receipt/audit/outbox的公开能力仍待设计，不把B5称为整仓规范化完成。
+- B6a生成链与B6b隔离事务承接已验收；Prisma生产承接与Nest仍属B7/B8，见任务板。35表当前writer调查已写入同一任务板，shared receipt/audit/outbox的公开能力仍待设计，不把B5称为整仓规范化完成。
 
 ## 已实现
 
@@ -134,4 +134,5 @@ Prisma/client/adapter-pg固定7.10.0；SQL仍唯一可编辑Schema，schema/prov
 
 已增加Prisma真实事务、回滚、并发唯一性/锁、预算、BigInt/JSON/UTC验证，独立规格/TS复审完成。
 修正了key UNIQUE被identity约束掩盖、泛P2010冒充超时以及JavaScript barrier早期失败悬挂等测试缺口。
-精确提交与最终Root验收见任务板；生产仍Fastify/pg，本轮不声称业务writer/Nest已切换。
+交付27938824a064893a1d8f201fd3e3c9d8042ce579；Root干净HEAD全套55文件233项、独立integration32文件137项通过，0失败0跳过；catalog与Prisma生成均0差异。
+生产仍Fastify/pg，本轮不声称业务writer/Nest已切换；下一切片B7，精确命令及未运行项见任务板。

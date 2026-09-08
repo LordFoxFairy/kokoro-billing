@@ -26,7 +26,7 @@
 | B3 / P0 / 三文档与ADR收敛 | Billing / Root / B1+B2 reviewers | AGENTS、三文档、ADR-0003、CURRENT、本任务板及README/INDEX导航 | 当前态/目标态、唯一schema、契约策略一致；两位reviewer局部放行B4，完整重写门待验 | 已验收：9c890728c49458b38245682873273bd6d6b40d2c |
 | B4 / P1 / 空库安装保护 | Billing / billing_owner（gpt-5.6-sol）/ B1+B2+Root | worker仅3个代码/测试文件；Root交接后更新database README、INDEX、CURRENT、ACCEPTANCE | 独占DB、TDD、非空/custom schema/并发/回滚/锁与JS超时/backend终止；主控提交/复验 | 已验收：93c06dfa33d38601e51534972890bfda50ea614d |
 | B5 / P0 / 全量catalog drift | Billing / billing_owner / 数据+TS+Root | 精确文件集见B5执行卡；Root交接后文档与提交 | 比较canonical参照库的35表全部列/约束/索引/predicate；缺CHECK与错predicate反例 | 已验收：9663db58bd85eb810b94df6120de050530c79d2f |
-| B6 / P0 / Prisma承接验证 | Billing / 后续续派billing_owner / Root | 固定依赖/生成链/模型/数据生命周期/独立验证；派前冻结文件集 | stable版本、无第二schema、typedCRUD+同tx锁/receipt/outbox+BigInt+错误+生成drift；不切生产writer | B6a已验收c7ef9fa；B6b待派工 |
+| B6 / P0 / Prisma承接验证 | Billing / 后续续派billing_owner / Root | 固定依赖/生成链/模型/数据生命周期/独立验证；派前冻结文件集 | stable版本、无第二schema、typedCRUD+同tx锁/receipt/outbox+BigInt+错误+生成drift；不切生产writer | 已验收：B6a c7ef9fa；B6b 2793882；生产迁移仍归B8 |
 | B7 / P1 / 工具链与架构门 | Billing / 后续续派billing_owner / 独立reviewer | package/lock/TS/ESLint/format/CI/architecture精确集派前批准 | Node24、版本固定、完整typed gate；AST有效/违规样本替代禁modules/强制ports；单独格式切片 | 待派工；不放宽门禁 |
 | B8 / P0 / Nest+Prisma闭合业务切换 | Billing / 后续续派billing_owner / Root+独立reviewer | 先完整35表映射/provider图/事务组卡，再授权src/SQL/contract/test/worker集 | 先稳定查询范式，后整个共享Credit事务组；同一事务不混pg/Prisma，旧实现随闭合切片删除；中间未闭合commit不发布 | 待设计门；依赖B5/B6/B7 |
 | B9 / P1 / 契约与外部副作用 | Billing / 后续续派billing_owner / Root | owner contract先行；消费者另开owner任务，无本仓写入权 | envelope/request-id/UTC/error/202语义；checkout claim→网络→finalize及unknown恢复；实际消费者固定artifact | 待契约裁决/依赖B8 |
@@ -37,8 +37,9 @@
 - [x] B0：当前门禁与真实依赖基线已记录。
 - [x] B1/B2：独立审查已接收并由Root复核。
 - [x] B3：明确Prisma目标与当前差异，三文档一致；B4局部数据设计经billing_data_review放行。
-- [ ] 完整业务/Prisma重写门：35表映射、完整drift、生成链/事务承接、breaking消费者裁决尚待验证。
+- [ ] 完整业务/Prisma重写门：catalog drift、生成链及隔离事务承接已通过；35表目标writer/provider图、真实业务事务组与breaking消费者裁决仍待完成。
 - [x] B4交付、两阶段review、Root主工作树重跑验证与commit；见93c06df。
+- [x] B5完整catalog drift与B6a/B6b生成/隔离事务承接已验收；下一切片B7，不代表生产Prisma切换。
 
 ## B4执行卡（仅离线安装局部修复）
 
@@ -255,7 +256,7 @@ Root在该干净HEAD重新执行db:apply-schema、verify（217/217，51文件）
 - B6b允许集在B6a生成/类型门通过后续派：test/integration/prisma-database.fixture.ts、test/integration/prisma-persistence.test.ts；依赖和scripts额外变动先报告。生产src除generated全部排除，SQL/contract/其他仓排除。
 - 交付要求：从canonical临时库实际生成35模型，无CHECK/partial predicate丢失后假schema一致的声明；两次生成相同、schema/client篡改只报错不修复、离线generate/build，源码与编译Client真实连接smoke；完整B5与原业务回归不破坏。
 - 安全：SCHEMA_ADMIN_URL=postgresql://nako@127.0.0.1:5432/postgres仅作管理，SQL只施加自有随机库。复用PG5432/Redis6379，禁止reset/FLUSH/终止其他服务；目标/管理URL和临时路径不可进入生成物。
-- 状态：B6a已验收c7ef9fa；B6b为下一切片，仍未实施。所有commit由Root，worker报告命令/实际计数/依赖变动与风险；不将B6a安装/生成称为完整B6或整仓完成。
+- 状态：B6a已验收c7ef9fa；B6b已交付2793882，最终证据见本任务板末尾。所有commit由Root，worker报告命令/实际计数/依赖变动与风险；不将B6a安装/生成称为完整B6或整仓完成。
 
 ## B6a 审查与主控证据（生成治理，不是业务迁移）
 
@@ -393,7 +394,7 @@ B8依赖设计必须同时解决Payment事件编排→Refund与Refund→Payment 
 - 持锁任务失败传播至acquired；finally release并回收所有task，成功路径await holder防止超时回滚被误当成功释放。
 - Root实测Prisma25ms interactive timeout不终止JavaScript gate：150ms仍pending，显式release后才得原错/P2028。
   并发arrival具失败通道，早期故障等待另一worker到达后再抛原始marker，finally释放/回收；正常并发重新清空PID收集，避免依赖pool复用。
-- 单事务组不只count：receipt succeeded/result、account余额与journal amount、outbox引用一致；失败组不留事实，外连接看不到未提交账户。
+- 单事务组不只count：receipt succeeded/result与account余额显式检查，journal/outbox写入同事务并检查总数；失败组不留事实，外连接看不到未提交账户。
 
 Root阶段验证（Node22.22.2/pnpm11.25.0/PG18.4/Redis DB4）：前一冻结版完整verify55文件233项、独立integration32文件137项，
 catalog35表368列127约束83索引0差异，prisma:check通过；最后holder/PID/barrier修正后需最终HEAD重跑，以下提交验收记录为准。
@@ -401,3 +402,32 @@ Root已独立运行holder修正后的5项及lint/typecheck/build；barrier/PID�
 
 审查最终范围只放行Prisma隔离能力，未宣称production转换；完整35表业务迁移、异常归一与deadlock/serialization/未知提交恢复仍B8，
 原5项依赖公告与format门归B7。Root未触碰SQL手册、其他仓、共享基础设施，未运行Docker/PG16 CI/provider sandbox。
+
+
+### B6b 交付与干净 HEAD 最终验收
+
+交付：`27938824a064893a1d8f201fd3e3c9d8042ce579`，共享checkout由Root提交，无cherry-pick。
+Root先在最后barrier/PID版本独立跑5项真实PG测试通过，再提交；下列全门均在该干净HEAD运行，测试期间无人写入。
+环境：`/bin/bash` login=false，Node22.22.2、pnpm11.25.0、PostgreSQL18.4、Redis6379 DB4。
+管理连接只用于创建/删除本任务随机database；完整suite使用独占`billing_accept_b6b_*`，退出trap已删除。
+日志目录为`/tmp/billing-b6b-final.vATRpo`；持久验收事实如下，不依赖临时日志存在。
+
+| 实际命令 | 结果 |
+|---|---|
+| `pnpm db:apply-schema`（独占空库） | exit0 |
+| `pnpm verify` | exit0；lint/typecheck/build/sql:check/contract:check/test全通过，55文件233测试，0失败0跳过 |
+| `pnpm test:integration`（同独占库） | exit0；32文件137测试，0失败0跳过；此集合包含于上行，不相加计数 |
+| `pnpm db:verify-schema` | exit0；35表368列127约束83索引，differences为空 |
+| `pnpm prisma:check` | exit0；完整生成集合无差异 |
+| `git diff --check` / `git status --short` | exit0 / 无输出，测试后工作树干净 |
+
+canonical SQL SHA256：`57b6ff2cd09de0835b2c608575dea74644163ab591e21fa477855476661920bd`；
+OpenAPI SHA256：`58fbe4fea083ba12e0db23f49e995b96500d01af0013febf40eba3093510ef63`，均未变。
+独立数据/规格与TS/生命周期review已放行；Root额外要求PID集合隔离后完成上述最终复验。
+局部三文档门仍为本仓TECHNICAL_DESIGN、API_CONTRACT、DATA_MODEL（绝对路径见B6a门报告）：
+本切片仅新增隔离测试，API/Schema不变；此门不放行尚未明确的B8共享writer/provider图与B9契约变化。
+
+B6a+B6b标记已验收，Goal保持active且范围不缩减。下一任务为B7，由Root冻结工具链/架构门设计与精确写入卡，
+再续派billing_owner；生产迁移归B8，外部调用与消费者归B9，完整可靠性归B10。
+本切片未运行format:check（尚无脚本）、PG16 CI、镜像、provider sandbox、跨仓消费者或生产smoke；
+B6a记录的5项开发依赖公告仍待B7实际修复并重新audit，未以本轮测试声称消除。
