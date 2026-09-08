@@ -115,7 +115,7 @@ B6a允许仅为新生成代码增加精确ESLint ignore、Git ignore、TypeScrip
 不在B6替换旧架构断言，增加生成治理门证明没有production Prisma import、无手改schema来源、精确版本与无迁移/db push命令。
 Docker build需复制生成配置/schema，在无数据库环境运行generate+build；不更新基础镜像/Node/全量依赖，工具链独立归B7。
 
-B6b范围先锁定真实隔离验证，不新建production服务：test/fixtures/prisma-database.ts管理测试Client/adapter/事务预算，
+B6b范围先锁定真实隔离验证，不新建production服务：test/integration/prisma-database.fixture.ts管理测试Client/adapter/事务预算，
 test/integration/prisma-persistence.test.ts覆盖typed create/read/update、CHECK/UNIQUE失败与错误实际形状、同tx receipt/account/journal/outbox一起提交/回滚；
 同tx参数化FOR UPDATE锁、SKIP LOCKED、不同连接竞争；BigInt超过MAX_SAFE_INTEGER存取与wire十进制边界、JSON null、UTC精度。
 测试以安全隔离资源验证Prisma可承接，不把测试内mapper/error代码声称是最终业务实现；B8仍需真实模块与契约端到端替换。
@@ -313,3 +313,29 @@ observability/DR 证据缺失。Hosted checkout provider call 仍位于 session 
 - generator显式JS import扩展名；Prisma原生introspection的partialIndexes窄例外及依赖安全覆盖以ADR-0003为准。
 - check/refresh均以受控安全错误输出收口；staging、参照库、发布回滚错误不互相覆盖。超时只清理本轮专属进程组，ESRCH视为已退出。
 - B6a不调整生产Schema/API、业务writer、框架、既有架构门；普通CRUD/锁/事务承接继续归B6b，业务切换归B8。
+
+
+### B6b 实际承接边界（2026-09-08）
+
+隔离fixture位于现有`test/integration/prisma-database.fixture.ts`，通过canonical参照生命周期创建自己的数据库，
+PrismaPg使用外部pool，由fixture先断开Client再结束pool，两者失败均保留；生产代码不import此fixture。
+`prisma-persistence.test.ts`验证生成Client typedCRUD、BigInt/JSON/UTC、单事务事实组、独立连接锁与预算。
+事务前后pg_backend_pid/txid相同；外连接看不到未提交账户；receipt succeeded/result、account余额、journal、outbox同事务提交或全部回滚。
+同identity不同key并发与同key不同identity分开测试，避免两个UNIQUE互相掩盖；相同key/identity跨tenant允许。
+
+| 实际操作 | Prisma7.10/adapter-pg/本机PG18.4观察 |
+|---|---|
+| typed create违反余额CHECK | P2039；本轮仅固定顶层code与meta对象，不推断约束名映射 |
+| typed create违反key或identity唯一性 | P2002，独立因果测试 |
+| 参数化raw锁等待预算 | P2010 + meta.driverAdapterError.cause.code=55P03 |
+| 可解码raw statement预算 | P2010 + cause.code=57014 |
+| Prisma交互事务过期 | P2028 |
+
+P2010本身不能证明超时：Root实际无超时`SELECT pg_sleep(0)`也因void解码失败产生P2010。
+预算用`set_config`返回值与具体原因断言；statement探针采用`SELECT 1 FROM pg_sleep(...)`。
+Prisma timeout不是任意JavaScript callback取消器：Root双事务probe中25ms预算后150ms仍等待人为gate，释放后才settle。
+因此测试并发使用可拒绝arrival、finally释放、allSettled回收，且成功路径显式await holder；不能依赖事务超时消除JS死等。
+正常与早期故障反例的PID集合分开，避免依赖pool复用。此处是本版本承接证据，不是生产异常归一或重试策略的安装。
+
+尚待B8真实业务切换：单一Credit/Ledger writer、跨模块同事务context、完整35表CRUD覆盖、deadlock/serialization恢复、
+提交结果未知、外部provider副作用与worker生命周期。原始API/schema未变，不将fixture公开给业务Service或消费者。

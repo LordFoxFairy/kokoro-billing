@@ -128,3 +128,10 @@ Prisma/client/adapter-pg固定7.10.0；SQL仍唯一可编辑Schema，schema/prov
 独立数据/TS复审已放行；Root真实完整门禁54文件228测试通过、0失败0跳过，catalog35表0差异，prisma:check通过，
 源码与编译Client均连接隔离PG验证。生产仍Fastify/pg，B6b事务承接与Nest业务切换未完成。
 当前审计5项既有vitest/vite/esbuild漏洞待B7；Docker探测超时，未声明镜像/PG16 CI/完整供应链通过。准确命令与提交见任务板。
+
+
+### B6b 隔离事务承接
+
+已增加Prisma真实事务、回滚、并发唯一性/锁、预算、BigInt/JSON/UTC验证，独立规格/TS复审完成。
+修正了key UNIQUE被identity约束掩盖、泛P2010冒充超时以及JavaScript barrier早期失败悬挂等测试缺口。
+精确提交与最终Root验收见任务板；生产仍Fastify/pg，本轮不声称业务writer/Nest已切换。

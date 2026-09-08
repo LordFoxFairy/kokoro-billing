@@ -252,7 +252,7 @@ Root在该干净HEAD重新执行db:apply-schema、verify（217/217，51文件）
   scripts/canonical-reference.ts、scripts/schema-verification.ts、scripts/schema-verification.error.ts（仅复用生命周期）、scripts/prisma-generation.ts、scripts/prisma-generation.types.ts、scripts/prisma-generation.constants.ts、scripts/prisma-refresh.ts、scripts/prisma-check.ts、scripts/prisma-process.ts、scripts/prisma-artifacts.ts（收尾经Root批准的产物一致性职责）；
   database/generated/schema.prisma、database/generated/provenance.json（仅生成）；src/generated/prisma/**（仅生成且gitignored）；
   test/integration/prisma-generation.test.ts、test/unit/prisma-generation.test.ts、test/architecture/prisma-generation.test.ts。普通文件确需不同职责先报告调整，不机械创建全部候选文件。
-- B6b允许集在B6a生成/类型门通过后续派：test/fixtures/prisma-database.ts、test/integration/prisma-persistence.test.ts；依赖和scripts额外变动先报告。生产src除generated全部排除，SQL/contract/其他仓排除。
+- B6b允许集在B6a生成/类型门通过后续派：test/integration/prisma-database.fixture.ts、test/integration/prisma-persistence.test.ts；依赖和scripts额外变动先报告。生产src除generated全部排除，SQL/contract/其他仓排除。
 - 交付要求：从canonical临时库实际生成35模型，无CHECK/partial predicate丢失后假schema一致的声明；两次生成相同、schema/client篡改只报错不修复、离线generate/build，源码与编译Client真实连接smoke；完整B5与原业务回归不破坏。
 - 安全：SCHEMA_ADMIN_URL=postgresql://nako@127.0.0.1:5432/postgres仅作管理，SQL只施加自有随机库。复用PG5432/Redis6379，禁止reset/FLUSH/终止其他服务；目标/管理URL和临时路径不可进入生成物。
 - 状态：B6a已验收c7ef9fa；B6b为下一切片，仍未实施。所有commit由Root，worker报告命令/实际计数/依赖变动与风险；不将B6a安装/生成称为完整B6或整仓完成。
@@ -321,3 +321,83 @@ B6a局部三文档门：
 三面在c7ef9fa中一致：只读生成治理无业务契约/SQL变更；`contract:check`17route通过、SQL/catalog/Prisma生成门通过。
 未决项明确为B6b真实事务承接、B8共享writer/provider图与SQL命名切换、B9消费者/外部副作用、B10完整运行门，不扩大为完整业务重写放行。
 下一步Root按本卡续派billing_owner实施B6b的两份隔离测试文件，先真实行为验证，不新增生产模块，不触及其他仓。
+
+
+## B6b 执行卡：Prisma 真实事务承接证明
+
+2026-09-08；基线b05034ecb05f527d031959068ba52ff23fc457f4，codex/billing-ts-prisma-alignment，Billing干净。
+前轮分类为进展：B6a实现c7ef9fa已提交并通过全门，不是状态重复。当前B6b开始实施，整个Goal仍保持原范围。
+
+| 项 | 决定 |
+|---|---|
+| Owner / writer | Billing；billing_owner（gpt-5.6-sol）唯一writer；Root架构/提交，数据与TS reviewer只读 |
+| 范围 | 仅test/integration/prisma-database.fixture.ts与prisma-persistence.test.ts；Root交接后更新技术/数据/任务板证据；其他源码/配置/Schema/API/Git由worker排除 |
+| 目录比较 | 原计划test/fixtures尚不存在且仅一个fixture，改用现有test/integration的角色后缀文件；不放入scripts或生产database模块，不创建空目录 |
+| API / 生命周期 | 测试fixture使用withCanonicalReference复用自有template0数据库；PrismaPg管理本fixture pool，显式connect/disconnect、预算/UTC/search_path；所有tx同一Prisma TransactionClient，结束后释放再删自己DB |
+| 依赖与数据 | B6a生成Client与canonical SQL不变；不改变17条HTTP契约；普通CRUD typedClient；raw仅set_config/pg_backend_pid/txid/锁与SKIP LOCKED及预算探针；禁止unsafe raw与其他owner访问 |
+| 验证 | 同tx receipt/account/journal/outbox全部提交与失败全回滚；双连接可见性；CHECK与key UNIQUE；同identity不同key并发partial UNIQUE；同tenant限定FOR UPDATE等待/释放、SKIP LOCKED不抢同行；事务/语句/锁预算；BigInt超safe精确存取+现有安全数值边界、JSON DbNull/JsonNull/UTC毫秒 |
+| 删除 | 不生成第二schema、mapper/error兼容层、生产Prisma服务或应用pg替身；fixture仅是能力证据，业务替换须B8完成 |
+| 交付 | Worker先验证反例与实际错误形态，再交回；不伪造RED、不把fixture导入缺失当业务RED。Root规格/独立审查后重跑verify、integration、catalog/prisma check，明确路径暂存小切片 |
+
+具体测试判定：并发使用显式握手或PG锁状态，不只靠sleep猜调度；记录不同pg_backend_pid及同事务tx身份。
+数据库行更新与结果/事件JSON写入使用生成类型，金额不经Number损失精度；超过safe范围写入数据库可保持bigint，当前API安全数值策略继续明确拒绝。
+JSON null使用Prisma.DbNull/JsonNull和typed filters证明区分；同一Date instant采用UTC存取并保留毫秒。
+CHECK/UNIQUE/事务冲突报告Prisma7.10+adapter-pg实际错误code/meta语义，SQLSTATE若未公开不编造映射；B8再绑定业务错误体系。
+仅复用已有PG5432/Redis6379，不共享reset/FLUSH，fixture只创建/清理随机reference库，测试不需要Redis。
+
+官方语义2026-09-08重新读取：Prisma v7 transactions（maxWait/timeout/isolationLevel、同tx单连接、P2034）和JSON字段（DbNull/JsonNull）；
+官方页面通过curl读取.md，web读取端不支持text/markdown。现有已安装adapter声明确认pool config/externalPool所有权及disposeExternalPool选项。
+技术/数据/API三面仍依B6门：仅新测试，无生产事实更改；完整业务重写未决仍为B8的writer/provider/SQL命名与B9契约消费者。
+
+## 并行只读调查：B7 与 B8 准备（尚未实施）
+
+B6b writer工作期间，billing_ts_review完成B7工具链调查，Root检查真实事务调用链；未修改生产源码/依赖/其他仓。
+
+B7当前证据与Root候选：Node24.20.0统一本地/CI/镜像，单一`.node-version`；保留pnpm11.25.0；
+Vitest5.0.0作为当前稳定候选（官方发布仅数日，v2→v5跨major风险需完整实跑，不凭latest标签放行）；
+Vite8.2.2作为对应peer候选，是否直接声明由实际安装关系决定，不引入无生产消费者的bundler。
+当前生产依赖先精确pin已验证lock解析，Nest/Zod等major按自身切片评估，不夹带无关升级。
+开发门采用recommendedTypeChecked覆盖全部手写TS、Promise/unsafe/exhaustiveness与大小写一致，独立纯格式切片，
+AST架构门替换禁modules/强制ports；正反例证明非法依赖被拒，合法模块允许，不靠禁词制造绿色。
+完整目录/provider图归Root B8裁决，B7不把目标结构宣称为已运行结构；有效tenant/SQL/权限保障不随旧形状门删除。
+
+版本来源（2026-09-08 reviewer只读核验）：Node官方previous-releases/dist index；npm view vitest/vite engines/peers/dist-tags；
+Vitest migration官方文档。报告确认旧esbuild/Vite/Vitest共5项公告仍在；最小安全线不等于当前目标最新版。
+Root尝试直接读取Docker官方registry Node24.20.0-bookworm-slim manifest，auth端TLS EOF而失败，未获得可信digest；
+不得捏造镜像SHA，B7实际依赖/镜像操作前重新验证。此问题不阻塞当前本地Prisma测试与其他实现。
+
+### B8 新的真实基线证据
+
+Root在仅自己创建的canonical参照库中运行现有真实inbox.accept→ProviderEventProcessor.process；注入缺失provider的已持久事件，
+业务抛出`billing.provider_not_enabled`后读取结果为`processing_status=received, processing_attempts=0, last_error=null`。
+原因是`application/payment/commands/provider-event-processor.ts`外层withTransaction包住内部catch/markFailed/rethrow，
+失败记录随业务事务回滚（`infrastructure/postgres/repositories/payment/provider-event-processor.ts`约57–78行）。
+不是声称handler已记录失败；B8/B10须在业务回滚结束后设计受控独立失败记录，保留幂等/未知提交语义，不能机械搬旧实现。
+本轮只读现有源码及操作独占fixture，没有修改实际provider入口或生成第二协议。
+
+B8依赖设计必须同时解决Payment事件编排→Refund与Refund→Payment settlement锁的潜在Nest循环：
+不能用forwardRef/ModuleRef掩盖。候选之一是Payment基础事实Module保持leaf，PaymentEvents子能力Module只在worker组合根
+导入Payment/Refund/Subscription/Credit等公开服务；另一个是拆Payment内明确的Settlement公开子能力。最终provider图仍待Root在B8统一裁决，
+不让不同worker各造一个边界。当前处理器的subscription/account直接写入须分别移交对应owner，不能只移动文件。
+
+
+## B6b 审查收敛与验证记录
+
+基线b05034e；writer billing_owner，数据/规格billing_data_review、TS/生命周期billing_ts_review，Root最终审查/提交。
+实际新增2文件：`test/integration/prisma-database.fixture.ts`、`test/integration/prisma-persistence.test.ts`，生产src/SQL/contract/依赖字节不变。
+
+全部审查缺口已修：
+- fixture初始化失败关联ready拒绝，完整关闭Client/pool/参照；配置前置拒绝有反例，不冒充所有资源故障已注入验证。
+- key UNIQUE采用实际winner key+新identity，partial UNIQUE采用相同identity+不同key并发；不同tenant用相同identity/key仍允许。
+- Root真实探针证明无timeout的pg_sleep void结果也会P2010；改可解码probe，锁55P03与statement57014、交互P2028分别断言。
+- 持锁任务失败传播至acquired；finally release并回收所有task，成功路径await holder防止超时回滚被误当成功释放。
+- Root实测Prisma25ms interactive timeout不终止JavaScript gate：150ms仍pending，显式release后才得原错/P2028。
+  并发arrival具失败通道，早期故障等待另一worker到达后再抛原始marker，finally释放/回收；正常并发重新清空PID收集，避免依赖pool复用。
+- 单事务组不只count：receipt succeeded/result、account余额与journal amount、outbox引用一致；失败组不留事实，外连接看不到未提交账户。
+
+Root阶段验证（Node22.22.2/pnpm11.25.0/PG18.4/Redis DB4）：前一冻结版完整verify55文件233项、独立integration32文件137项，
+catalog35表368列127约束83索引0差异，prisma:check通过；最后holder/PID/barrier修正后需最终HEAD重跑，以下提交验收记录为准。
+Root已独立运行holder修正后的5项及lint/typecheck/build；barrier/PID最后版由worker运行5项通过并交回，尚不以worker计数取代Root最终验证。
+
+审查最终范围只放行Prisma隔离能力，未宣称production转换；完整35表业务迁移、异常归一与deadlock/serialization/未知提交恢复仍B8，
+原5项依赖公告与format门归B7。Root未触碰SQL手册、其他仓、共享基础设施，未运行Docker/PG16 CI/provider sandbox。
