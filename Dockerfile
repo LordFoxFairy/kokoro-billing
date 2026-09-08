@@ -8,9 +8,11 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 FROM package-manager AS build
 RUN pnpm install --frozen-lockfile --prod=false --ignore-scripts
 COPY tsconfig.json tsconfig.build.json ./
+COPY prisma.config.ts ./
+COPY database/generated ./database/generated
 COPY src ./src
 COPY scripts ./scripts
-RUN pnpm build
+RUN pnpm prisma:generate && pnpm build
 
 FROM package-manager AS production-dependencies
 RUN pnpm install --frozen-lockfile --prod --ignore-scripts

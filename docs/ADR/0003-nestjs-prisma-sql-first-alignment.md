@@ -29,10 +29,12 @@ database、health、http、access、worker 等进程支持职责。只在切片�
 
 1. `database/schema.sql` 保持唯一可编辑 canonical source；V1 无历史 migration 链。生成路径目标为
    `database/generated/schema.prisma` 与 `src/generated/prisma/`，两者由固定脚本生成，禁止手改。
-2. 生成链：创建本轮独占临时 database → 安装 canonical SQL → introspect → 确定性名称映射/生成 → validate/generate →
+2. 生成链：创建本轮独占临时 database → 安装 canonical SQL → introspect → 确定性名称映射/生成（B6先保留SQL命名identity映射；B8随canonical命名改动统一再生） → validate/generate →
    比较产物与 PostgreSQL catalog → 清理仅本轮资源。任何名称映射规则只表达生成命名，不另行描述字段/约束。
 3. Prisma introspection 并非完整 Schema drift：CHECK、partial index predicate、默认值和精度等必须另以完整 catalog 比对验证。
-   7.x partialIndexes 当前是 Preview；默认不启用，原 SQL 索引照常存在，生成验证必须显式记录支持边界。
+   7.10.0原生`db pull --force`面对当前partial indexes自动写入`previewFeatures = ["partialIndexes"]`；
+   B6a批准仅保留这一只读生成元数据例外，不手删索引元数据、不开放其他Preview、不运行db push/migrate。
+   CHECK等完整语义仍由SQL/B5 catalog证明；B6b必须验证同identity不同key的真实partial UNIQUE冲突。
 4. 目标应用只保留一个 PrismaClient/adapter 生命周期；`pg` 可以是 adapter 底层依赖和安装/诊断脚本工具，生产业务中不再有
    独立 pg Pool/query 写入路径。禁止 pg 与 Prisma 分别提交同一用例、并行双写、runtime fallback。
 5. 普通 CRUD 使用 typed Client。raw SQL 仅限具名 row lock/receipt claim、SKIP LOCKED outbox claim、经验证的原子计数或复杂
@@ -63,7 +65,8 @@ database、health、http、access、worker 等进程支持职责。只在切片�
 `npm view @prisma/client version engines license --json` 返回 `7.10.0`。`prisma@7.10.0` / `@prisma/adapter-pg@7.10.0`
 均存在，Prisma 包 Apache-2.0；Node 支持 `^20.19 || ^22.12 || >=24.0`。Nest core 当前稳定 `12.0.1`，MIT。
 候选为 Node 24 LTS + Nest 12.0.1 + Prisma/client/adapter-pg 7.10.0；进入安装切片前复核所有 peer、实际 lock、license 与安全公告。
-本轮**没有安装或声称验证目标栈兼容**；当前 Node 22.22.2、实际 pnpm 12.3.4 与 manifest pnpm 11.25.0 的差异留任务板处理。
+以上为B3选型时证据；B6a现已固定安装Prisma/client/adapter-pg 7.10.0并验证生成链，尚未安装Nest或切换业务writer。
+B6a主控复验使用Node22.22.2/pnpm11.25.0；本机另有Node24.20.0。Node、类型包、CI与镜像统一升级仍归B7。
 
 官方资料（工具语义，不等于 Billing 兼容证据）：
 
@@ -82,3 +85,18 @@ database、health、http、access、worker 等进程支持职责。只在切片�
 
 ADR-0001 的 Billing/PG authority/幂等语义继续有效；其中旧 ports 路径只描述基线。ADR-0002 的当前 contract authority 继续有效。
 本 ADR 不宣称 fresh-schema 全量 drift、Prisma、Nest、provider sandbox、生产 SLO/DR 或完整跨仓切换已完成。
+
+
+## B6a 生成与供应链窄例外（2026-09-08）
+
+- generator固定`importFileExtension = "js"`，避免仓库与临时目录的扩展名推断不同；tsx源码与tsc编译Client分别实测。
+- SQL命名identity映射及原生partialIndexes只用于生成物，手写文件仍遵循TypeScript规范；生成Client不入Git。
+- `@prisma/config@7.10.0>deepmerge-ts`限定覆盖到8.0.0（BSD-3-Clause），`prisma@7.10.0>mysql2`限定覆盖到3.23.1（MIT）。
+  不全局替换其他依赖，不采用Prisma8预发布。前者属于major覆盖：上游config使用deepmerge合并普通配置对象，本仓无Map配置，
+  以实际config加载、db pull、validate、generate、check验证本用法，不宣称全部deepmerge API兼容。mysql2是CLI传递依赖，Billing只连接PostgreSQL。
+- scoped覆盖修复本次引入的deepmerge-ts/mysql2公告；Root审计仍有旧vitest/vite/esbuild的5项（3 moderate、1 high、1 critical），
+  不忽略或降低CI扫描阈值，交B7处理。后续稳定Prisma原生依赖修复时移除覆盖并重复完整生成/回归/安全扫描。
+- 维护证据：[deepmerge-ts公告](https://github.com/advisories/GHSA-ggr8-5vv4-36mx)、
+  [8.0.0变更](https://github.com/RebeccaStevens/deepmerge-ts/releases/tag/v8.0.0)、
+  [mysql2公告一](https://github.com/advisories/GHSA-3f6p-5ww8-9rcr)、
+  [mysql2公告二](https://github.com/advisories/GHSA-rgwj-5xj2-c3m3)。实际验证结果见唯一任务板；官方公告不是本仓测试替代。

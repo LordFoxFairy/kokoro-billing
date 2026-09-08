@@ -1,11 +1,10 @@
-import { createHash, randomUUID } from "node:crypto";
-import { installCanonicalSchema } from "./canonical-schema.js";
+import { createHash } from "node:crypto";
+import { withCanonicalReference } from "./canonical-reference.js";
 import { readSchemaCatalog } from "./schema-catalog.js";
 import {
   withSchemaSession,
   type CatalogQuery,
 } from "./schema-database-session.js";
-import { SchemaVerificationResourceError } from "./schema-verification.error.js";
 import type {
   CatalogDifference,
   SchemaCatalog,
@@ -129,81 +128,30 @@ export async function verifySchema(input: {
     (targetUrl.port || "5432") !== (adminUrl.port || "5432")
   )
     throw new Error("target and admin URLs must identify the same server");
-  const name = `billing_reference_${randomUUID().replaceAll("-", "")}`;
-  let created = false;
-  let primaryError: unknown;
-  let hasPrimaryError = false;
-  let cleanupError: unknown;
-  let hasCleanupError = false;
-  let output: SchemaVerificationResult | undefined;
-  try {
-    await withSchemaSession(adminUrl.toString(), async (adminQuery) => {
-      const a = await identity(adminQuery);
-      const b = await readOnlyIdentity(targetUrl.toString());
-      if (
-        a.address !== b.address ||
-        a.port !== b.port ||
-        a.version !== b.version
-      )
-        throw new Error(
-          "target and admin connections resolved to different servers",
-        );
-      try {
-        await adminQuery(`CREATE DATABASE "${name}" TEMPLATE template0`);
-        created = true;
-      } catch (error) {
-        throw new SchemaVerificationResourceError(
-          name,
-          "creation-unconfirmed",
-          {
-            cause: error,
-          },
-        );
-      }
-    });
-    const referenceUrl = new URL(adminUrl);
-    referenceUrl.pathname = `/${name}`;
-    referenceUrl.searchParams.delete("schema");
-    referenceUrl.searchParams.delete("options");
-    await installCanonicalSchema({
-      databaseUrl: referenceUrl.toString(),
-      schemaSql: input.canonicalSql,
-    });
-    const expected = await snapshot(referenceUrl.toString());
-    const actual = await snapshot(targetUrl.toString());
-    output = {
-      canonicalSha256: createHash("sha256")
-        .update(input.canonicalSql)
-        .digest("hex"),
-      serverVersion: actual.serverVersion,
-      objectCounts: Object.fromEntries(
-        categories.map((category) => [category, actual[category].length]),
-      ) as SchemaVerificationResult["objectCounts"],
-      differences: compareSchemaCatalogs(expected, actual),
-    };
-  } catch (error) {
-    primaryError = error;
-    hasPrimaryError = true;
-  } finally {
-    if (created)
-      try {
-        await withSchemaSession(adminUrl.toString(), (query) =>
-          query(`DROP DATABASE "${name}"`).then(() => undefined),
-        );
-      } catch (error) {
-        cleanupError = error;
-        hasCleanupError = true;
-      }
-  }
-  if (hasCleanupError)
-    throw new SchemaVerificationResourceError(name, "cleanup-failed", {
-      cause: hasPrimaryError
-        ? new AggregateError(
-            [primaryError, cleanupError],
-            "verification and cleanup failed",
-          )
-        : cleanupError,
-    });
-  if (hasPrimaryError) throw primaryError;
-  return output!;
+  await withSchemaSession(adminUrl.toString(), async (adminQuery) => {
+    const a = await identity(adminQuery);
+    const b = await readOnlyIdentity(targetUrl.toString());
+    if (a.address !== b.address || a.port !== b.port || a.version !== b.version)
+      throw new Error(
+        "target and admin connections resolved to different servers",
+      );
+  });
+  return withCanonicalReference(
+    adminUrl.toString(),
+    input.canonicalSql,
+    async (referenceUrl) => {
+      const expected = await snapshot(referenceUrl);
+      const actual = await snapshot(targetUrl.toString());
+      return {
+        canonicalSha256: createHash("sha256")
+          .update(input.canonicalSql)
+          .digest("hex"),
+        serverVersion: actual.serverVersion,
+        objectCounts: Object.fromEntries(
+          categories.map((category) => [category, actual[category].length]),
+        ) as SchemaVerificationResult["objectCounts"],
+        differences: compareSchemaCatalogs(expected, actual),
+      };
+    },
+  );
 }

@@ -6,7 +6,7 @@
 
 **Architecture:** Billing 继续作为账务唯一 owner；按业务能力聚合 Nest module/provider，PostgreSQL 保持 durable authority，Redis 仅优化。Prisma 的 schema/锁/约束承接须经证据评审，禁止只安装依赖或保留双写就宣称完成。
 
-**Tech Stack:** 当前 Fastify + pg + Zod 3；目标 Nest 12 + Prisma 7.10.0、SQL-first只读生成链，见ADR-0003；尚未安装目标栈。
+**Tech Stack:** 当前 Fastify + pg + Zod 3；目标 Nest 12 + Prisma 7.10.0、SQL-first只读生成链，见ADR-0003；B6a已安装Prisma生成链；生产仍Fastify/pg，Nest与业务writer未切换。
 
 ## 基线与执行边界
 
@@ -26,7 +26,7 @@
 | B3 / P0 / 三文档与ADR收敛 | Billing / Root / B1+B2 reviewers | AGENTS、三文档、ADR-0003、CURRENT、本任务板及README/INDEX导航 | 当前态/目标态、唯一schema、契约策略一致；两位reviewer局部放行B4，完整重写门待验 | 已验收：9c890728c49458b38245682873273bd6d6b40d2c |
 | B4 / P1 / 空库安装保护 | Billing / billing_owner（gpt-5.6-sol）/ B1+B2+Root | worker仅3个代码/测试文件；Root交接后更新database README、INDEX、CURRENT、ACCEPTANCE | 独占DB、TDD、非空/custom schema/并发/回滚/锁与JS超时/backend终止；主控提交/复验 | 已验收：93c06dfa33d38601e51534972890bfda50ea614d |
 | B5 / P0 / 全量catalog drift | Billing / billing_owner / 数据+TS+Root | 精确文件集见B5执行卡；Root交接后文档与提交 | 比较canonical参照库的35表全部列/约束/索引/predicate；缺CHECK与错predicate反例 | 已验收：9663db58bd85eb810b94df6120de050530c79d2f |
-| B6 / P0 / Prisma承接验证 | Billing / 后续续派billing_owner / Root | 固定依赖/生成链/模型/数据生命周期/独立验证；派前冻结文件集 | stable版本、无第二schema、typedCRUD+同tx锁/receipt/outbox+BigInt+错误+生成drift；不切生产writer | 待派工；依赖B5 |
+| B6 / P0 / Prisma承接验证 | Billing / 后续续派billing_owner / Root | 固定依赖/生成链/模型/数据生命周期/独立验证；派前冻结文件集 | stable版本、无第二schema、typedCRUD+同tx锁/receipt/outbox+BigInt+错误+生成drift；不切生产writer | B6a待主控验收；B6b未开始 |
 | B7 / P1 / 工具链与架构门 | Billing / 后续续派billing_owner / 独立reviewer | package/lock/TS/ESLint/format/CI/architecture精确集派前批准 | Node24、版本固定、完整typed gate；AST有效/违规样本替代禁modules/强制ports；单独格式切片 | 待派工；不放宽门禁 |
 | B8 / P0 / Nest+Prisma闭合业务切换 | Billing / 后续续派billing_owner / Root+独立reviewer | 先完整35表映射/provider图/事务组卡，再授权src/SQL/contract/test/worker集 | 先稳定查询范式，后整个共享Credit事务组；同一事务不混pg/Prisma，旧实现随闭合切片删除；中间未闭合commit不发布 | 待设计门；依赖B5/B6/B7 |
 | B9 / P1 / 契约与外部副作用 | Billing / 后续续派billing_owner / Root | owner contract先行；消费者另开owner任务，无本仓写入权 | envelope/request-id/UTC/error/202语义；checkout claim→网络→finalize及unknown恢复；实际消费者固定artifact | 待契约裁决/依赖B8 |
@@ -242,3 +242,64 @@ B5 runtime src不变，B4原生HTTP smoke是历史回归证据，不冒充本轮
 B5交付SHA：`9663db58bd85eb810b94df6120de050530c79d2f`，共享checkout由Root提交，无cherry-pick。
 Root在该干净HEAD重新执行db:apply-schema、verify（217/217，51文件）、test:integration（129/129，30文件），随后按CI顺序执行db:verify-schema（0差异），全部exit0，0失败0跳过。
 所有本轮已确认创建的临时库已清理；本轮未更新其他仓。阶段B5已验收，整体Goal继续active，B6–B10未完成。
+
+## B6 执行卡：生成链先行、事务承接随后
+
+- 基线：`/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing`，分支codex/billing-ts-prisma-alignment，2a2be5a6ece557316d369decf9cdee23f59afd8a；Billing干净，Root其他既有改动排除。
+- 当前设计：本仓docs/TECHNICAL_DESIGN.md B6放置门、docs/DATA_MODEL.md、docs/API_CONTRACT.md和ADR-0003；Root已统一三面，无业务/API改动，完整业务writer/provider边界仍为B8未决。
+- writer：billing_owner（gpt-5.6-sol）；review：billing_data_review与billing_ts_review，Root复核/提交；同仓单一writer、不Git操作，沿用前两切片机制。
+- B6a允许集：package.json、pnpm-lock.yaml、pnpm-workspace.yaml（必要Prisma build allowlist及ADR-0003 scoped安全覆盖）、.gitignore、.dockerignore、Dockerfile、tsconfig.json/tsconfig.build.json、eslint.config.mjs、.github/workflows/ci.yml、prisma.config.ts；
+  scripts/canonical-reference.ts、scripts/schema-verification.ts、scripts/schema-verification.error.ts（仅复用生命周期）、scripts/prisma-generation.ts、scripts/prisma-generation.types.ts、scripts/prisma-generation.constants.ts、scripts/prisma-refresh.ts、scripts/prisma-check.ts、scripts/prisma-process.ts、scripts/prisma-artifacts.ts（收尾经Root批准的产物一致性职责）；
+  database/generated/schema.prisma、database/generated/provenance.json（仅生成）；src/generated/prisma/**（仅生成且gitignored）；
+  test/integration/prisma-generation.test.ts、test/unit/prisma-generation.test.ts、test/architecture/prisma-generation.test.ts。普通文件确需不同职责先报告调整，不机械创建全部候选文件。
+- B6b允许集在B6a生成/类型门通过后续派：test/fixtures/prisma-database.ts、test/integration/prisma-persistence.test.ts；依赖和scripts额外变动先报告。生产src除generated全部排除，SQL/contract/其他仓排除。
+- 交付要求：从canonical临时库实际生成35模型，无CHECK/partial predicate丢失后假schema一致的声明；两次生成相同、schema/client篡改只报错不修复、离线generate/build，源码与编译Client真实连接smoke；完整B5与原业务回归不破坏。
+- 安全：SCHEMA_ADMIN_URL=postgresql://nako@127.0.0.1:5432/postgres仅作管理，SQL只施加自有随机库。复用PG5432/Redis6379，禁止reset/FLUSH/终止其他服务；目标/管理URL和临时路径不可进入生成物。
+- 状态：B6a实现交回、数据/TS独立复审已放行，主控验收中；B6b待B6a证据。所有commit由Root，worker报告命令/实际计数/依赖变动与风险；不将B6a安装/生成称为完整B6或整仓完成。
+
+## B6a 审查与主控证据（生成治理，不是业务迁移）
+
+2026-09-08，基线2a2be5a加B6a冻结实现。billing_owner为唯一实现writer，Root负责设计文档/提交；
+billing_data_review（数据/规格）与billing_ts_review（TS/生命周期）已独立复审放行，无剩余已报阻断项。
+Root交接后更新三设计面、ADR、CURRENT、README、database README、AGENTS、INDEX与本任务板，不改其他仓。
+
+本切片实际交付：固定Prisma/client/adapter7.10；SQL→独立template0参照→空bootstrap introspection→validate/generate；
+只读schema/provenance入Git，Client忽略并在消费前离线生成；check比较完整文件集合/字节，不发布；refresh受独占锁保护发布/失败回滚。
+35模型与SQL表/字段集合一致。SQL/OpenAPI字节未变，业务src除生成物未变，B6b/生产writer/七模块仍未交付。
+生成文件的partialIndexes、JS import扩展名及scoped依赖安全覆盖均为Root审查后的明确裁决，见ADR-0003。
+
+审查修正及真实反例：
+- 将“generate后输入schema没变”替换为两次不同随机database/临时输出目录的完整生成/全文件比较，真实Client/schema篡改、缺失和额外文件受测。
+- Root实际malformed URL命令曾打印SECRET_FIXTURE（RED）；两CLI安全入口后同一命令exit1且秘密不出现（GREEN）。
+- timeout由专属process group处理TERM/KILL并等待组消失；真实父子进程（子忽略TERM）测试，ESRCH正常退出竞态不报cleanup失败。
+- 发布先准备/备份/替换、失败逆序还原；rename故障反例证明旧schema/Client保持；受控交错证明第二publisher拒绝、持有者成套发布。
+- primary、rollback、staging/lock/backup cleanup保留原错误与Aggregate/cause；CLI只安全展示受控信息，不打印原连接错误。
+  清理双故障与ESRCH分支本轮有代码复审，无专门故障注入测试，不把它们算作已运行反例。
+
+Root实际工具链：`/bin/bash` login=false，Node22.22.2、pnpm11.25.0，PG18.4、共享Redis6379 DB4。
+本机默认zsh另解析Node24.20.0；不能把不同shell工具链混称。本轮只创建/清理自身billing_accept_b6_*及tests自有随机库，无共享reset/FLUSH/服务重启。
+
+| 命令 | 实际结果 |
+|---|---|
+| `pnpm install --frozen-lockfile` | exit0，pnpm11.25.0 |
+| 独占database `pnpm db:apply-schema` | exit0 |
+| 同库、SCHEMA_ADMIN_URL及REDIS_TEST_URL环境 `pnpm verify` | exit0；lint/typecheck/build/sql:check/contract:check/test；54文件228测试通过，0失败0跳过 |
+| 同库 `pnpm db:verify-schema` | exit0，35表368列127约束83索引，0差异 |
+| `pnpm prisma:check` | exit0；对当前全部schema/provenance/Client重建比较 |
+| `node --input-type=module` 导入dist Client，经PrismaPg读取本轮测试库 | exit0，真实count=17；另独占空库count=0 |
+| `pnpm audit --json` | exit1，5项既有问题：esbuild/vite/vitest，3 moderate+1 high+1 critical；新增Prisma传递依赖公告经scoped覆盖消除，B7处理既有项 |
+| `git diff --check` | exit0 |
+
+SQL SHA256仍57b6ff2cd09de0835b2c608575dea74644163ab591e21fa477855476661920bd；OpenAPI仍58fbe4fea083ba12e0db23f49e995b96500d01af0013febf40eba3093510ef63。
+B5/本轮定向复验由worker为7文件43项通过，不替代上述Root完整门禁。Owner两次刷新完整产物哈希相同的报告由独立真实生成测试复核，
+不把手工刷新等同长期自动化覆盖。详细CLI隔离反例与交付SHA在提交时补记。
+
+未运行/剩余范围：Docker info探测超时，未构建镜像/运行PG16 CI；未声称Trivy全绿。format门/旧依赖审计归B7，
+stdout收集上限、清理双故障注入为后续hardening；Prisma typed业务事务、部分唯一索引并发、BigInt/JSON/UTC语义归B6b，
+Nest/单一Credit writer/旧pg业务删除归B8，契约消费者/checkout外部调用与可靠性归B9/B10。目标保持active。
+
+Root命令级补验：在本轮临时镜像目录复制必要源码/生成物并链接依赖，直接`node --import tsx scripts/prisma-check.ts`：
+原始产物exit0；仅篡改schema后exit1、报告schema路径且篡改字节保留；恢复后仅篡改Client再次exit1、报告Client路径且字节保留；
+全部恢复后exit0。两CLI分别以带SECRET_FIXTURE的malformed管理URL执行，均exit1且输出无该秘密。
+最初镜像调用pnpm exec因未复制workspace策略触发自动安装/ignored builds而失败，这是验证fixture问题，非生成链反例；
+改直接Node入口后成功，主仓随后frozen install复核exit0，临时目录已清理。最终提交后重跑全门，不继承该次自动安装环境。

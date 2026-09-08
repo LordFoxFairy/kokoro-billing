@@ -79,3 +79,12 @@ DDL失败、backend终止和客户端deadline；仅该fixture的管理连接需�
 - `Dockerfile`：digest-pinned Node 22、多阶段构建、non-root runtime、HEALTHCHECK。
 - [`docs/INDEX.md`](docs/INDEX.md)：当前文档入口。
 - [`docs/ADR/`](docs/ADR/)：本仓仍有效的架构决策；Root handbook 只作背景材料。
+
+## Prisma 生成治理（B6a）
+
+- `prisma.config.ts`：固定生成schema入口，离线Client生成不读取应用数据库。
+- `scripts/canonical-reference.ts`：B5 catalog与Prisma共用的独占参照库生命周期。
+- `scripts/prisma-generation.*`、`scripts/prisma-process.ts`：固定工具编排、元数据与有界进程组。
+- `scripts/prisma-artifacts.ts`：全文件比较、独占发布与回滚；`prisma-check.ts`/`prisma-refresh.ts`为安全CLI边界。
+- `database/generated/`：只读生成schema/provenance；`src/generated/prisma/`为Git忽略的Client。
+- `test/{unit,integration,architecture}/prisma-generation.test.ts`：生成一致性、隔离真实Client、故障与边界。

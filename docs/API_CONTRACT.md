@@ -1,6 +1,6 @@
 # kokoro-billing API 契约策略
 
-B5 仅新增离线 catalog 验收命令，不变更 17 个 HTTP operation、wire schema、身份、状态或消费者；OpenAPI 保持不变。
+B5/B6 仅新增离线 catalog/Prisma 生成和隔离承接验收命令，不变更 17 个 HTTP operation、wire schema、身份、状态或消费者；OpenAPI 保持不变。
 
 ## 2026-09-08 当前契约与目标差异
 

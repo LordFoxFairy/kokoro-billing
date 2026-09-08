@@ -75,6 +75,9 @@ jobs:
       - name: Verify canonical PostgreSQL catalog
         run: pnpm db:verify-schema
 
+      - name: Verify generated Prisma artifacts
+        run: pnpm prisma:generate && pnpm prisma:check
+
       - name: Verify repository
         run: pnpm verify
 

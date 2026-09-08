@@ -41,3 +41,21 @@ Billing facts remain in PostgreSQL. Redis is limited to coordination and short-l
 PostgreSQL command receipts with a request digest, persisted result, idempotency key and explicit `command_identity`; partial unique indexes bind
 each non-null identity to one tenant-scoped command. Redis never owns their replay or conflict decision. All database instants use
 `TIMESTAMPTZ(3)` and all money/credit values use integer minor units.
+
+
+## Generated Prisma artifacts (B6a)
+
+`database/schema.sql` remains the only editable schema. Commit `database/generated/schema.prisma` and `provenance.json` only as outputs;
+`src/generated/prisma/` is ignored and regenerated locally. Prisma/client/adapter-pg are pinned to 7.10.0.
+
+- `SCHEMA_ADMIN_URL=<management URL> pnpm prisma:refresh`: create only an owned template0 reference, install canonical SQL, introspect from
+  an empty bootstrap, validate, generate and publish the complete schema/provenance/Client set. No application DATABASE_URL, db push or migrations.
+- `pnpm prisma:generate`: offline Client generation from the committed schema. Typecheck/build/test/integration scripts explicitly run it first.
+- `SCHEMA_ADMIN_URL=<management URL> pnpm prisma:check`: independently rebuild in temporary directories and report missing/extra/changed
+  bytes across the complete generated set. It does not overwrite current artifacts. Do not refresh before investigating drift.
+
+Introspection emits the narrow `partialIndexes` Preview metadata exception documented in ADR-0003. CHECK and full SQL semantics remain
+under the independent catalog gate. Source and compiled Client validation does not imply production writer migration.
+Refresh publishers acquire `.billing-prisma-artifacts-publish.lock` atomically; a second publisher fails immediately. After a process crash,
+inspect ownership and confirm no publisher is running before manually handling that lock or controlled `.backup-*`/`.next-*` directories.
+Never run offline generate/build concurrently with refresh in the same checkout. No cross-directory crash-atomicity guarantee is claimed.

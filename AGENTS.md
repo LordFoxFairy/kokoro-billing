@@ -21,5 +21,6 @@ DATABASE_URL=<本任务创建的独立临时database> pnpm db:apply-schema
 DATABASE_URL=<本任务创建的独立临时database> REDIS_TEST_URL=<共享实例的隔离测试命名空间> pnpm test:integration
 ```
 
-`format:check`、完整 Schema drift、Prisma generate/check 和 Nest 生命周期门尚待任务板对应切片交付。未配置真实依赖时
+完整Schema drift已交付；B6a增加`pnpm prisma:generate`及`SCHEMA_ADMIN_URL=<同实例管理连接> pnpm prisma:check`，
+后者在生成完成后执行，不先refresh覆盖差异。`format:check`与Nest生命周期门尚待任务板对应切片交付。未配置真实依赖时
 `pnpm test` 会跳过 integration；必须在报告中列出 pass/fail/skip，不能把该结果当作完整验收。

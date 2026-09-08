@@ -4,7 +4,7 @@
 
 本文下方描述 `7a193ba` 的当前 Fastify/pg 行为，不再作为新文件的全局四层模板。目标方案见
 [ADR-0003](ADR/0003-nestjs-prisma-sql-first-alignment.md)，进度唯一入口是 [IMPLEMENTATION_PLAN](IMPLEMENTATION_PLAN.md)。
-当前尚无 Nest/Prisma 运行实现；设计与源码差异显式保留。
+当前生产运行时尚无Nest/Prisma切换；B6a仅新增生成链与隔离Client验证，设计与生产源码差异显式保留。
 
 | 项 | 结论 |
 |---|---|
@@ -87,6 +87,43 @@ B5 的 scripts/schema-database-session.ts 只管理治理连接的预算、错�
 官方语义核验（2026-09-08）：[pg_attribute](https://www.postgresql.org/docs/16/catalog-pg-attribute.html)、
 [pg_constraint](https://www.postgresql.org/docs/16/catalog-pg-constraint.html)、
 [catalog 输出函数](https://www.postgresql.org/docs/16/functions-info.html)。本地 PG18 实测与 CI16 分开记录。
+
+### B6 Prisma 生成与承接放置门（2026-09-08）
+
+| 项 | 结论 |
+|---|---|
+| Owner | Billing；Root设计/提交/验收，billing_owner单一writer，独立数据与TS审查 |
+| 当前事实 | 基线2a2be5a、工作树干净；B5全catalog已验收，当前无Prisma依赖/生成物/运行时调用，35表映射调查已入任务板 |
+| 目标职责 | B6a先建立可重现SQL→introspection→schema/Client链；B6b验证现有账务表在Prisma同tx内typed CRUD/锁/receipt/outbox/BigInt/错误与回滚；不切生产writer |
+| 目录比较 | 生成物可放根generated或src/generated；采用已批准database/generated/schema.prisma和src/generated/prisma。治理脚本选scripts而非运行时database模块，尚不创建Nest空层 |
+| 粒度 | 从B5抽取真实复用的canonical-reference生命周期供drift与Prisma生成；生成进程/产物比较与CLI分工，现有目录内具名文件，无单文件业务目录 |
+| 依赖 | prisma、@prisma/client、@prisma/adapter-pg固定7.10.0；CLI开发依赖、Client/adapter运行依赖。pg仍用于现有业务与治理，B6测试隔离，生产切换B8删除旧writer而非长期双栈 |
+| 数据/API | SQL字节不变、无db push/migrate；Prisma model/field先保留SQL命名的确定性identity映射，生成代码不套手写TS命名规则。B8随SQL规范命名变更统一再生，不编写脆弱的正则schema重命名器 |
+| 删除 | B5参照库生命周期搬至共用脚本并删原重复分支；不新建人工models/fields清单或第二schema。Client是可再生构建物不入Git |
+| 验证 | frozen install、prisma validate/generate、两次刷新相同、手改schema/Client负例、全catalog无变化、lint/typecheck/build/test、源码/编译Client smoke；B6b真实事务/锁/并发/错误/BigInt门 |
+
+B6a命令职责：`prisma:refresh`需显式SCHEMA_ADMIN_URL，只在本轮template0参照库安装SQL；固定本地CLI introspect，不读取应用DATABASE_URL。
+以全新临时工作目录的空datasource+generator配置执行db pull --force，避免旧schema手改被re-introspection保留。introspection后的唯一
+schema产物提交database/generated/schema.prisma，generated provenance记录canonical SHA256、schema SHA256、精确Prisma版本，禁止时间戳/秘密/临时绝对路径。
+`prisma:generate`仅从已提交schema离线生成Client；不连接数据库。generator固定prisma-client、ESM、nodejs，输出路径固定；扩展名与tsc/tsx须实测。
+`prisma:check`从相同canonical参照重新生成到临时目录，比较schema/provenance及当前生成Client全部相对文件与字节（missing/extra/changed），
+校验失败不能偷偷覆盖现有产物；无现有Client时报明确未生成，先运行prisma:generate。refresh成功才发布新产物，不将失败的半成品当有效输出。
+schema与provenance是只读生成物，构建/测试明确调用prisma:generate，不依赖隐式postinstall；CLI/子进程必须超时有界，清理自有临时目录和参照库，
+不执行任意shell拼接、不把DB凭据放命令参数/日志。复用B5连接/安全资源错误；创建结果未知仍报安全随机名，不猜测DROP。
+
+B6a允许仅为新生成代码增加精确ESLint ignore、Git ignore、TypeScript相对扩展重写及config include（确需时）；手写源码strict不降级。
+不在B6替换旧架构断言，增加生成治理门证明没有production Prisma import、无手改schema来源、精确版本与无迁移/db push命令。
+Docker build需复制生成配置/schema，在无数据库环境运行generate+build；不更新基础镜像/Node/全量依赖，工具链独立归B7。
+
+B6b范围先锁定真实隔离验证，不新建production服务：test/fixtures/prisma-database.ts管理测试Client/adapter/事务预算，
+test/integration/prisma-persistence.test.ts覆盖typed create/read/update、CHECK/UNIQUE失败与错误实际形状、同tx receipt/account/journal/outbox一起提交/回滚；
+同tx参数化FOR UPDATE锁、SKIP LOCKED、不同连接竞争；BigInt超过MAX_SAFE_INTEGER存取与wire十进制边界、JSON null、UTC精度。
+测试以安全隔离资源验证Prisma可承接，不把测试内mapper/error代码声称是最终业务实现；B8仍需真实模块与契约端到端替换。
+raw白名单仅限fixture中明确的set_config预算、backend/tx身份断言、账务行锁、SKIP LOCKED；普通CRUD不用raw或unsafe API。
+
+官方证据重新核验（2026-09-08）：[Prisma generator](https://www.prisma.io/docs/orm/v7/prisma-schema/overview/generators)、
+[db pull](https://www.prisma.io/docs/cli/v7/db/pull)、[transactions](https://www.prisma.io/docs/orm/v7/prisma-client/queries/transactions)。
+npm精确7.10.0三个包存在、Apache-2.0，Node ^20.19/22.12/>=24与TS>=5.4满足当前工具链；维护/退出取舍沿ADR-0003，实际安装/供应链扫描待本切片记录。
 
 ## 1. Owner 与边界
 
@@ -264,3 +301,15 @@ Payment worker 续租失败返回 `lease_lost`，handler 失败按 attempts back
 完整列表见 [`CURRENT.md`](CURRENT.md)。核心 command durable receipt 与 webhook provider contract 已闭环；剩余直接影响技术闭环的是：其余 OpenAPI shape/历史 breaking 比较不完整、
 reconciliation 未装配、execution batch 无跨进程 lease、HTTP overall deadline/size/rate limit 未显式配置，以及 production
 observability/DR 证据缺失。Hosted checkout provider call 仍位于 session transaction，未宣称已完成外部调用事务分离。
+
+
+### B6a 收尾设计裁决
+
+- 新增`scripts/prisma-artifacts.ts`承载生成产物比较/发布，而不是塞入Prisma进程runner；这是构建产物一致性变化原因，
+  与`scripts/prisma-generation.ts`中的工具编排分离，不建新目录。发布先准备同盘副本，再备份/替换两个目录，失败逆序回滚；
+  primary/rollback/cleanup错误聚合保留。destination内原子mkdir锁`.billing-prisma-artifacts-publish.lock`覆盖全过程，第二publisher立即失败。
+  只有成功持有者释放锁；不自动删除疑似陈旧锁。确认没有运行者后再人工检查锁和`.backup-*`/`.next-*`；这不是跨目录崩溃原子性承诺。
+  `prisma:generate`、build、refresh不得同时写同一生成目录；并发发布锁仅约束refresh publisher，不冒充整个构建系统调度锁。
+- generator显式JS import扩展名；Prisma原生introspection的partialIndexes窄例外及依赖安全覆盖以ADR-0003为准。
+- check/refresh均以受控安全错误输出收口；staging、参照库、发布回滚错误不互相覆盖。超时只清理本轮专属进程组，ESRCH视为已退出。
+- B6a不调整生产Schema/API、业务writer、框架、既有架构门；普通CRUD/锁/事务承接继续归B6b，业务切换归B8。

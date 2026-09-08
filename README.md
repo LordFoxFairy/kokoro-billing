@@ -105,3 +105,10 @@ DATABASE_URL=TARGET REDIS_TEST_URL=redis://HOST:PORT/4 pnpm test:integration
 - [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md)：表 owner、不变量、关系与 retention。
 - [`docs/SECURITY.md`](docs/SECURITY.md) / [`docs/RELIABILITY.md`](docs/RELIABILITY.md)：信任边界与故障语义。
 - [`docs/SLO.md`](docs/SLO.md) / [`docs/RUNBOOK.md`](docs/RUNBOOK.md)：目标、告警与处置。
+
+
+### Prisma 生成入口
+
+B6a已提供SQL-first只读生成链，生产仍使用原pg实现。`pnpm prisma:generate`从已提交schema离线生成Client，
+`typecheck`、`build`、`test`和`test:integration`已显式调用它。需要CREATEDB管理连接的`prisma:refresh`/`prisma:check`
+只使用本轮临时参照库；check不覆盖差异，操作顺序和残留锁处理见[数据库说明](database/README.md)。

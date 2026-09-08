@@ -1,0 +1,591 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../../src/generated/prisma"
+  previewFeatures     = ["partialIndexes"]
+  importFileExtension = "js"
+  moduleFormat        = "esm"
+  runtime             = "nodejs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model entitlement_acquisition {
+  acquisition_id  String   @id @db.VarChar(36)
+  tenant_id       String   @db.VarChar(191)
+  subject_id      String   @db.VarChar(255)
+  source_kind     String   @db.VarChar(64)
+  source_ref      String   @db.VarChar(255)
+  program_key     String   @db.VarChar(255)
+  quantity_micros BigInt
+  created_at      DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@unique([tenant_id, source_kind, source_ref, program_key], map: "uq_entitlement_acquisition_source")
+}
+
+model entitlement_audit_event {
+  audit_event_id String   @id @db.VarChar(36)
+  tenant_id      String   @db.VarChar(191)
+  operator_id    String   @db.VarChar(255)
+  action         String   @db.VarChar(128)
+  subject_id     String?  @db.VarChar(255)
+  resource_type  String   @db.VarChar(64)
+  resource_id    String?  @db.VarChar(36)
+  reason         String   @db.VarChar(500)
+  payload_json   Json
+  created_at     DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model entitlement_billing_admission {
+  admission_id             String    @id @db.VarChar(36)
+  tenant_id                String    @db.VarChar(191)
+  billing_subject_kind     String    @db.VarChar(32)
+  billing_subject_ref      String    @db.VarChar(255)
+  payer_ref                String    @db.VarChar(255)
+  feature_key              String    @db.VarChar(128)
+  surface                  String    @db.VarChar(32)
+  invocation_id            String    @db.VarChar(255)
+  execution_id             String    @db.VarChar(255)
+  meter_kind               String    @db.VarChar(64)
+  requested_model_tier     String?   @db.VarChar(128)
+  price_policy_revision_id String?   @db.VarChar(36)
+  amount_micros            BigInt    @default(0)
+  currency                 String    @default("CRD") @db.Char(3)
+  mode                     String    @db.VarChar(32)
+  status                   String    @default("created") @db.VarChar(32)
+  hold_id                  String?   @db.VarChar(36)
+  accepted_provider_ref    String?   @db.VarChar(255)
+  accepted_at              DateTime? @db.Timestamptz(3)
+  service_receipt          Json?
+  idempotency_key          String    @db.VarChar(128)
+  created_at               DateTime  @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+  updated_at               DateTime  @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@unique([tenant_id, idempotency_key], map: "uq_entitlement_admission_idempotency")
+  @@unique([tenant_id, invocation_id], map: "uq_entitlement_admission_invocation")
+  @@index([tenant_id, status, created_at(sort: Desc), admission_id(sort: Desc)], map: "ix_entitlement_billing_admission_status")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model entitlement_billing_command_receipt {
+  receipt_id       String   @id @db.VarChar(36)
+  tenant_id        String   @db.VarChar(191)
+  api_surface      String   @db.VarChar(32)
+  command_name     String   @db.VarChar(128)
+  command_identity String?  @db.VarChar(255)
+  idempotency_key  String   @db.VarChar(128)
+  payload_hash     String   @db.Char(64)
+  status           String   @default("processing") @db.VarChar(32)
+  result_json      Json?
+  created_at       DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+  updated_at       DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@unique([tenant_id, api_surface, command_name, idempotency_key], map: "uq_entitlement_billing_receipt")
+  @@unique([tenant_id, api_surface, command_name, command_identity], map: "uq_entitlement_billing_receipt_identity", where: raw("(command_identity IS NOT NULL)"))
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model entitlement_command_receipt {
+  receipt_id       String   @id @db.VarChar(36)
+  tenant_id        String   @db.VarChar(191)
+  command_name     String   @db.VarChar(128)
+  command_identity String?  @db.VarChar(255)
+  idempotency_key  String   @db.VarChar(128)
+  payload_hash     String   @db.Char(64)
+  status           String   @default("processing") @db.VarChar(32)
+  result_json      Json?
+  created_at       DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+  updated_at       DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@unique([tenant_id, command_name, command_identity], map: "uq_entitlement_command_receipt_identity", where: raw("(command_identity IS NOT NULL)"))
+  @@unique([tenant_id, command_name, idempotency_key], map: "uq_entitlement_command_receipt_key")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model entitlement_credit_account {
+  credit_account_id String   @id @db.VarChar(36)
+  quota_micros      BigInt?
+  quota_period      String?  @db.VarChar(32)
+  tenant_id         String   @db.VarChar(191)
+  subject_id        String   @db.VarChar(255)
+  status            String   @default("active") @db.VarChar(32)
+  available_micros  BigInt   @default(0)
+  held_micros       BigInt   @default(0)
+  generation        BigInt   @default(1)
+  created_at        DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+  updated_at        DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@unique([tenant_id, subject_id], map: "uq_entitlement_credit_account_subject")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model entitlement_credit_grant {
+  credit_grant_id   String    @id @db.VarChar(36)
+  tenant_id         String    @db.VarChar(191)
+  credit_account_id String    @db.VarChar(36)
+  source_kind       String    @db.VarChar(64)
+  source_ref        String    @db.VarChar(255)
+  program_key       String    @db.VarChar(255)
+  original_micros   BigInt
+  remaining_micros  BigInt
+  effective_at      DateTime  @db.Timestamptz(3)
+  expires_at        DateTime? @db.Timestamptz(3)
+  burn_priority     Int       @default(0)
+  status            String    @default("active") @db.VarChar(32)
+  issued_at         DateTime  @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+  revoked_at        DateTime? @db.Timestamptz(3)
+  created_at        DateTime  @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+  updated_at        DateTime  @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@unique([tenant_id, source_kind, source_ref, program_key], map: "uq_entitlement_credit_grant_source")
+  @@index([tenant_id, expires_at, burn_priority, credit_grant_id], map: "ix_entitlement_credit_grant_expiry", where: raw("((status)::text = ANY ((ARRAY['pending'::character varying, 'active'::character varying])::text[]))"))
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model entitlement_credit_hold {
+  credit_hold_id      String   @id @db.VarChar(36)
+  label_key           String?  @db.VarChar(255)
+  pricing_revision_id String?  @db.VarChar(36)
+  tenant_id           String   @db.VarChar(191)
+  credit_account_id   String   @db.VarChar(36)
+  idempotency_key     String   @db.VarChar(128)
+  requested_micros    BigInt
+  status              String   @default("active") @db.VarChar(32)
+  expires_at          DateTime @db.Timestamptz(3)
+  captured_micros     BigInt   @default(0)
+  released_micros     BigInt   @default(0)
+  feature_key         String?  @db.VarChar(255)
+  model_binding_id    String?  @db.VarChar(255)
+  created_at          DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+  updated_at          DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@unique([tenant_id, idempotency_key], map: "uq_entitlement_credit_hold_idempotency")
+  @@index([tenant_id, expires_at, credit_hold_id], map: "ix_entitlement_credit_hold_expiry", where: raw("((status)::text = 'active'::text)"))
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model entitlement_credit_hold_allocation {
+  credit_hold_id  String   @db.VarChar(36)
+  tenant_id       String   @db.VarChar(191)
+  credit_grant_id String   @db.VarChar(36)
+  held_micros     BigInt
+  captured_micros BigInt   @default(0)
+  released_micros BigInt   @default(0)
+  created_at      DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+  updated_at      DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@id([credit_hold_id, credit_grant_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model entitlement_credit_journal {
+  journal_id        String   @id @db.VarChar(36)
+  tenant_id         String   @db.VarChar(191)
+  credit_account_id String   @db.VarChar(36)
+  journal_seq       BigInt
+  entry_kind        String   @db.VarChar(32)
+  amount_micros     BigInt
+  source_kind       String   @db.VarChar(64)
+  source_ref        String   @db.VarChar(255)
+  created_at        DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@unique([credit_account_id, journal_seq], map: "uq_entitlement_credit_journal_sequence")
+  @@unique([tenant_id, source_kind, source_ref, entry_kind], map: "uq_entitlement_credit_journal_source")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model entitlement_execution_event {
+  event_id               String    @db.VarChar(255)
+  tenant_id              String    @db.VarChar(191)
+  execution_id           String    @db.VarChar(255)
+  invocation_id          String    @db.VarChar(255)
+  event_type             String    @db.VarChar(64)
+  occurred_at            DateTime  @db.Timestamptz(3)
+  receipt_schema_version String    @db.VarChar(32)
+  receipt_json           Json?
+  payload_hash           String    @db.Char(64)
+  status                 String    @default("received") @db.VarChar(32)
+  created_at             DateTime  @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+  processed_at           DateTime? @db.Timestamptz(3)
+
+  @@id([tenant_id, event_id])
+  @@index([tenant_id, status, occurred_at, event_id], map: "ix_entitlement_execution_event_processing")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model entitlement_fulfillment {
+  fulfillment_id String    @id @db.VarChar(36)
+  tenant_id      String    @db.VarChar(191)
+  acquisition_id String    @unique(map: "uq_entitlement_fulfillment_acquisition") @db.VarChar(36)
+  status         String    @default("committed") @db.VarChar(32)
+  committed_at   DateTime? @db.Timestamptz(3)
+  created_at     DateTime  @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model entitlement_fulfillment_reversal {
+  fulfillment_reversal_id String   @id @db.VarChar(36)
+  tenant_id               String   @db.VarChar(191)
+  fulfillment_id          String   @db.VarChar(36)
+  payment_reversal_id     String   @unique(map: "uq_entitlement_fulfillment_reversal_payment") @db.VarChar(36)
+  amount_micros           BigInt
+  status                  String   @default("committed") @db.VarChar(32)
+  created_at              DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model entitlement_offer {
+  offer_id   String   @id @db.VarChar(36)
+  tenant_id  String   @db.VarChar(191)
+  offer_key  String   @db.VarChar(255)
+  status     String   @default("active") @db.VarChar(32)
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@unique([tenant_id, offer_key], map: "uq_entitlement_offer_site_key")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model entitlement_offer_revision {
+  offer_revision_id String    @id @db.VarChar(36)
+  offer_id          String    @db.VarChar(36)
+  tenant_id         String    @db.VarChar(191)
+  revision          Int
+  name              String    @db.VarChar(255)
+  currency          String    @db.Char(3)
+  amount_minor      BigInt
+  credit_micros     BigInt    @default(0)
+  billing_interval  String    @db.VarChar(16)
+  status            String    @default("published") @db.VarChar(32)
+  metadata_json     Json?
+  published_at      DateTime? @db.Timestamptz(3)
+  deleted_at        DateTime? @db.Timestamptz(3)
+  deleted_by        String?   @db.VarChar(255)
+  delete_reason     String?   @db.VarChar(512)
+  created_at        DateTime  @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+  updated_at        DateTime  @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@unique([offer_id, revision], map: "uq_entitlement_offer_revision_number")
+}
+
+model entitlement_outbox {
+  outbox_id        String    @id @db.VarChar(36)
+  lease_token      String?   @db.VarChar(36)
+  lease_until      DateTime? @db.Timestamptz(3)
+  dead_lettered_at DateTime? @db.Timestamptz(3)
+  tenant_id        String    @db.VarChar(191)
+  aggregate_type   String    @db.VarChar(64)
+  aggregate_id     String    @db.VarChar(36)
+  event_type       String    @db.VarChar(128)
+  payload_json     Json
+  attempts         Int       @default(0)
+  next_attempt_at  DateTime  @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+  published_at     DateTime? @db.Timestamptz(3)
+  created_at       DateTime  @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@index([next_attempt_at, created_at, outbox_id], map: "ix_entitlement_outbox_dispatch", where: raw("((published_at IS NULL) AND (dead_lettered_at IS NULL))"))
+}
+
+model entitlement_redeem {
+  redemption_id   String   @id @db.VarChar(36)
+  tenant_id       String   @db.VarChar(191)
+  code_id         String   @db.VarChar(36)
+  campaign_id     String   @db.VarChar(36)
+  recipient_id    String   @db.VarChar(255)
+  idempotency_key String   @db.VarChar(128)
+  credit_grant_id String   @db.VarChar(36)
+  amount_micros   BigInt
+  created_at      DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@unique([tenant_id, code_id], map: "uq_redeem_code_once")
+  @@unique([tenant_id, recipient_id, idempotency_key], map: "uq_redeem_idempotency")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model entitlement_redeem_campaign {
+  campaign_id     String    @id @db.VarChar(36)
+  tenant_id       String    @db.VarChar(191)
+  campaign_key    String    @db.VarChar(128)
+  program_key     String    @db.VarChar(255)
+  credit_micros   BigInt
+  max_redemptions Int
+  redeemed_count  Int       @default(0)
+  starts_at       DateTime  @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+  ends_at         DateTime? @db.Timestamptz(3)
+  status          String    @default("active") @db.VarChar(32)
+  created_at      DateTime  @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@unique([tenant_id, campaign_key], map: "uq_redeem_campaign_key")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model entitlement_redeem_code {
+  code_id     String    @id @db.VarChar(36)
+  tenant_id   String    @db.VarChar(191)
+  campaign_id String    @db.VarChar(36)
+  batch_id    String    @db.VarChar(36)
+  code_hash   String    @db.Char(64)
+  status      String    @default("issued") @db.VarChar(32)
+  redeemed_by String?   @db.VarChar(255)
+  redeemed_at DateTime? @db.Timestamptz(3)
+  created_at  DateTime  @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@unique([tenant_id, code_hash], map: "uq_redeem_code_hash")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model entitlement_redeem_code_batch {
+  batch_id        String   @id @db.VarChar(36)
+  tenant_id       String   @db.VarChar(191)
+  campaign_id     String   @db.VarChar(36)
+  requested_count Int
+  issued_count    Int      @default(0)
+  created_by      String   @db.VarChar(255)
+  reason          String   @db.VarChar(500)
+  created_at      DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model entitlement_subscription_term {
+  term_id          String   @id @db.VarChar(36)
+  tenant_id        String   @db.VarChar(191)
+  subject_id       String   @db.VarChar(255)
+  source_period_id String   @db.VarChar(36)
+  program_key      String   @db.VarChar(255)
+  period_start     DateTime @db.Timestamptz(3)
+  period_end       DateTime @db.Timestamptz(3)
+  status           String   @default("active") @db.VarChar(32)
+  grant_micros     BigInt   @default(0)
+  created_at       DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+  updated_at       DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@unique([tenant_id, source_period_id], map: "uq_entitlement_subscription_term_period")
+  @@index([tenant_id, subject_id, period_start(sort: Desc), term_id(sort: Desc)], map: "ix_entitlement_subscription_term_subject")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model entitlement_usage_event {
+  usage_event_id  String   @id @db.VarChar(36)
+  tenant_id       String   @db.VarChar(191)
+  subject_id      String   @db.VarChar(255)
+  source_event_id String   @db.VarChar(255)
+  feature_key     String   @db.VarChar(255)
+  quantity_micros BigInt
+  dimensions_json Json?
+  status          String   @default("recorded") @db.VarChar(32)
+  created_at      DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@unique([tenant_id, source_event_id], map: "uq_entitlement_usage_event_source")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model entitlement_usage_price_rate {
+  usage_price_rate_id       String   @id @db.VarChar(36)
+  usage_price_revision_id   String   @db.VarChar(36)
+  tenant_id                 String   @db.VarChar(191)
+  feature_key               String   @db.VarChar(255)
+  label_key                 String?  @db.VarChar(255)
+  model_binding_id          String?  @db.VarChar(255)
+  input_micros_per_million  BigInt   @default(0)
+  output_micros_per_million BigInt   @default(0)
+  cached_micros_per_million BigInt   @default(0)
+  reservation_micros        BigInt
+  status                    String   @default("active") @db.VarChar(32)
+  created_at                DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@unique([usage_price_revision_id, feature_key, label_key], map: "uq_entitlement_usage_price_rate_identity")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model entitlement_usage_price_revision {
+  usage_price_revision_id String    @id @db.VarChar(36)
+  tenant_id               String    @db.VarChar(191)
+  revision                Int
+  effective_from          DateTime  @db.Timestamptz(3)
+  effective_to            DateTime? @db.Timestamptz(3)
+  status                  String    @default("published") @db.VarChar(32)
+  published_at            DateTime? @db.Timestamptz(3)
+  created_at              DateTime  @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@unique([tenant_id, revision], map: "uq_entitlement_usage_price_revision_site_number")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model entitlement_usage_settlement {
+  usage_settlement_id String   @id @db.VarChar(36)
+  tenant_id           String   @db.VarChar(191)
+  credit_hold_id      String   @unique(map: "uq_entitlement_usage_settlement_hold") @db.VarChar(36)
+  usage_event_id      String   @unique(map: "uq_entitlement_usage_settlement_event") @db.VarChar(36)
+  actual_micros       BigInt
+  status              String   @default("settled") @db.VarChar(32)
+  created_at          DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model payment_checkout {
+  checkout_id          String   @id @db.VarChar(36)
+  provider             String?  @db.VarChar(64)
+  provider_account_ref String?  @db.VarChar(255)
+  provider_session_id  String?  @db.VarChar(255)
+  checkout_url         String?
+  tenant_id            String   @db.VarChar(191)
+  subject_id           String   @db.VarChar(255)
+  idempotency_key      String   @db.VarChar(128)
+  offer_revision_id    String   @db.VarChar(36)
+  quote_hash           String   @db.Char(64)
+  quote_snapshot_json  Json
+  amount_minor         BigInt
+  currency             String   @db.Char(3)
+  status               String   @default("created") @db.VarChar(32)
+  expires_at           DateTime @db.Timestamptz(3)
+  created_at           DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+  updated_at           DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@unique([tenant_id, idempotency_key], map: "uq_payment_checkout_idempotency")
+  @@index([tenant_id, status, created_at(sort: Desc), checkout_id(sort: Desc)], map: "ix_payment_checkout_status")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model payment_command_receipt {
+  receipt_id       String   @id @db.VarChar(36)
+  tenant_id        String   @db.VarChar(191)
+  command_name     String   @db.VarChar(128)
+  command_identity String?  @db.VarChar(255)
+  idempotency_key  String   @db.VarChar(128)
+  payload_hash     String   @db.Char(64)
+  status           String   @default("processing") @db.VarChar(32)
+  result_json      Json?
+  created_at       DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+  updated_at       DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@unique([tenant_id, command_name, command_identity], map: "uq_payment_command_receipt_identity", where: raw("(command_identity IS NOT NULL)"))
+  @@unique([tenant_id, command_name, idempotency_key], map: "uq_payment_command_receipt_key")
+}
+
+model payment_customer_binding {
+  binding_id            String   @id @db.VarChar(36)
+  tenant_id             String   @db.VarChar(191)
+  subject_id            String   @db.VarChar(255)
+  provider_account_id   String   @db.VarChar(36)
+  external_customer_ref String   @db.VarChar(255)
+  created_at            DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@unique([provider_account_id, external_customer_ref], map: "uq_payment_customer_binding_external")
+}
+
+model payment_outbox {
+  outbox_id        String    @id @db.VarChar(36)
+  lease_token      String?   @db.VarChar(36)
+  lease_until      DateTime? @db.Timestamptz(3)
+  dead_lettered_at DateTime? @db.Timestamptz(3)
+  tenant_id        String    @db.VarChar(191)
+  aggregate_type   String    @db.VarChar(64)
+  aggregate_id     String    @db.VarChar(36)
+  event_type       String    @db.VarChar(128)
+  payload_json     Json
+  attempts         Int       @default(0)
+  next_attempt_at  DateTime  @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+  published_at     DateTime? @db.Timestamptz(3)
+  created_at       DateTime  @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@unique([aggregate_type, aggregate_id, event_type], map: "uq_payment_outbox_source_event")
+  @@index([next_attempt_at, created_at, outbox_id], map: "ix_payment_outbox_dispatch", where: raw("((published_at IS NULL) AND (dead_lettered_at IS NULL))"))
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model payment_provider_account {
+  provider_account_id  String   @id @db.VarChar(36)
+  tenant_id            String   @db.VarChar(191)
+  provider             String   @db.VarChar(64)
+  external_account_ref String   @db.VarChar(255)
+  status               String   @default("active") @db.VarChar(32)
+  created_at           DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+  updated_at           DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@unique([provider, external_account_ref], map: "uq_payment_provider_account_external")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model payment_provider_event {
+  provider_event_id    String    @id @db.VarChar(36)
+  payload_hash         String    @default("") @db.VarChar(64)
+  processing_attempts  Int       @default(0)
+  last_error           String?   @db.VarChar(1024)
+  provider_account_ref String?   @db.VarChar(255)
+  tenant_id            String    @db.VarChar(191)
+  provider             String    @db.VarChar(64)
+  external_event_id    String    @db.VarChar(255)
+  event_type           String    @db.VarChar(128)
+  payload_json         Json
+  signature_valid      Boolean
+  processing_status    String    @default("received") @db.VarChar(32)
+  received_at          DateTime  @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+  processed_at         DateTime? @db.Timestamptz(3)
+
+  @@unique([tenant_id, provider, external_event_id], map: "uq_payment_provider_event_external")
+  @@index([processing_status, received_at, provider_event_id], map: "ix_payment_provider_event_processing", where: raw("((processing_status)::text = ANY ((ARRAY['received'::character varying, 'failed'::character varying])::text[]))"))
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model payment_provider_subscription {
+  provider_subscription_id  String   @id @db.VarChar(36)
+  provider                  String   @db.VarChar(64)
+  tenant_id                 String   @db.VarChar(191)
+  subject_id                String   @db.VarChar(255)
+  provider_account_id       String?  @db.VarChar(36)
+  external_subscription_ref String   @db.VarChar(255)
+  status                    String   @default("active") @db.VarChar(32)
+  created_at                DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+  updated_at                DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@unique([tenant_id, provider, external_subscription_ref], map: "uq_payment_provider_subscription_external")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model payment_reversal {
+  reversal_id           String   @id @db.VarChar(36)
+  provider              String   @db.VarChar(64)
+  tenant_id             String   @db.VarChar(191)
+  settlement_id         String   @db.VarChar(36)
+  external_reversal_ref String   @db.VarChar(255)
+  amount_minor          BigInt
+  reason                String   @db.VarChar(255)
+  status                String   @default("succeeded") @db.VarChar(32)
+  created_at            DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@unique([tenant_id, provider, external_reversal_ref], map: "uq_payment_reversal_external")
+  @@index([tenant_id, settlement_id, created_at(sort: Desc), reversal_id(sort: Desc)], map: "ix_payment_reversal_settlement")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model payment_settlement {
+  settlement_id        String   @id @db.VarChar(36)
+  provider             String   @db.VarChar(64)
+  tenant_id            String   @db.VarChar(191)
+  provider_event_id    String?  @db.VarChar(36)
+  checkout_id          String?  @db.VarChar(36)
+  external_payment_ref String   @db.VarChar(255)
+  amount_minor         BigInt
+  currency             String   @db.Char(3)
+  status               String   @default("succeeded") @db.VarChar(32)
+  created_at           DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@unique([tenant_id, provider, external_payment_ref], map: "uq_payment_settlement_external")
+  @@index([tenant_id, checkout_id, created_at(sort: Desc), settlement_id(sort: Desc)], map: "ix_payment_settlement_checkout", where: raw("(checkout_id IS NOT NULL)"))
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model payment_subscription_period {
+  period_id                String   @id @db.VarChar(36)
+  tenant_id                String   @db.VarChar(191)
+  provider_subscription_id String   @db.VarChar(36)
+  period_start             DateTime @db.Timestamptz(3)
+  period_end               DateTime @db.Timestamptz(3)
+  status                   String   @default("open") @db.VarChar(32)
+  created_at               DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@unique([provider_subscription_id, period_start, period_end], map: "uq_payment_subscription_period_window")
+}
