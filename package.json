@@ -16,6 +16,7 @@
     "sql:check": "tsx scripts/verify-sql-naming.ts",
     "verify": "pnpm lint && pnpm typecheck && pnpm build && pnpm sql:check && pnpm contract:check && pnpm test",
     "db:apply-schema": "tsx scripts/apply-schema.ts",
+    "db:verify-schema": "tsx scripts/verify-schema.ts",
     "db:seed": "tsx scripts/seed-billing.ts",
     "internal:expire-credit-holds": "tsx scripts/expire-credit-holds.ts",
     "worker:payment-events": "tsx scripts/process-payment-events.ts",

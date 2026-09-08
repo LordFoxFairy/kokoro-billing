@@ -52,6 +52,42 @@ URI `options`中的search_path必须被安装client最终设置覆盖；验收�
 
 该局部修复与当前API/SQL事实源一致，可独立验证；完整Prisma/目录重写仍受ADR-0003阶段门约束。
 
+### B5 全量 catalog drift 放置门（2026-09-08）
+
+| 项 | 结论 |
+|---|---|
+| Owner | Billing 离线数据库治理；Root 设计/提交，billing_owner 单一实现 writer，数据/TS reviewer 只读 |
+| 当前事实 | d062748，35 表 canonical SQL，B4 安装已验证；现有 schema 断言仅覆盖局部，无完整 drift CLI；当前工作树无源码变更 |
+| 目标职责 | 以同一服务器上由 canonical SQL 新装的参照库，比对目标库结构；目标库只读，不修复、不 reset、不修改业务数据 |
+| 目录比较 | 可放 scripts/ 或运行时 src/common/database/；采用 scripts/，这是安装/验收工具，运行时不反向 import；不新建目录 |
+| 粒度 | catalog 读取/比较、临时参照库编排、连接生命周期、CLI 职责分开；跨文件结构类型独立，测试复用 test/integration/ 与 test/unit/ |
+| 依赖 | scripts 使用 pg 与 B4 installer；目标连接 READ ONLY REPEATABLE READ、固定 search_path/UTC 与预算；管理连接只创建/清理自有随机参照库 |
+| 数据/API | database/schema.sql 唯一可编辑事实源；无 API/业务 SQL/Prisma/消费者变更。参照库同实例保证 catalog 输出同版本；app 不需要 CREATEDB |
+| 删除 | 不维护人工 expected schema/JSON 快照；保留已有业务完整性测试，完整比对不是其替代 |
+| 验证 | pnpm db:verify-schema、lint/typecheck/build/sql:check/contract:check/test；真实 PG 正例与缺 CHECK、错 predicate、类型/default/nullability/额外对象等反例；CI 接在安装后 |
+
+命令输入：`DATABASE_URL` 是只读目标，`SCHEMA_ADMIN_URL` 是显式管理连接（CI 指定同一实例的 postgres database），
+不得隐式拿应用凭据创建数据库。管理凭据只用于自己生成、成功创建并跟踪的 `billing_reference_<random>` 数据库；
+必须约束 target/admin 的实例身份（本阶段匹配 URL host/port，连接核对 server address/port/version），拒绝不同实例。
+管理URL的schema/options不得污染参照库；不改角色/全局设置。目标URL重复schema参数全部检查，只支持public。
+临时参照库从 template0 创建，canonical SQL 经现有 installer 安装；无 FORCE DROP、无终止非本进程 backend。
+创建失败不得删除同名非自有库；finally关闭自己连接后删除自己的库，清理失败显式报错而非输出成功。连接/query/close 均有界。
+
+比较项目：全部用户 relation 的 schema/name/kind/persistence/RLS flags，全部表列的有序名字、format_type（含 typmod）、nullability、default、
+identity/generated/collation；全部 PK/UNIQUE/CHECK/EXCLUDE/FK 的定义、validation、deferrability；全部索引的定义、
+predicate、unique/valid/ready 状态。约束/索引使用 pg_get_constraintdef/pg_get_indexdef/pg_get_expr，不比较 OID、统计、
+数据、owner/ACL。额外用户 relation/type/routine/trigger/rule/policy 必须报告；无外键由完整约束比较保证。NOT NULL 以列属性为稳定事实，
+PG18 新增约束 catalog 表示不得成为跨版本误报。对象字段排序确定，保留 SQL 字面量语义，不盲目压缩空白或小写化。
+输出 canonical SHA256、服务器版本、对象数量与按对象键排列的 missing/unexpected/changed；不得输出连接串/秘密。
+目标/参照数据库 encoding、locale/provider 必须比较，PG16 daticulocale 与 PG18 datlocale 明确处理。
+CREATE DATABASE 返回未知时不猜测所有权 DROP，报告随机名与清理未确认状态并失败。
+B5 的 scripts/schema-database-session.ts 只管理治理连接的预算、错误与关闭，不供 runtime 使用；不修改 B4 installer。
+目标结构快照在单一只读事务内获取；工具验证的是该快照，不阻止不遵守部署独占协议的并发 DDL，也不检查业务数据正确性。
+
+官方语义核验（2026-09-08）：[pg_attribute](https://www.postgresql.org/docs/16/catalog-pg-attribute.html)、
+[pg_constraint](https://www.postgresql.org/docs/16/catalog-pg-constraint.html)、
+[catalog 输出函数](https://www.postgresql.org/docs/16/functions-info.html)。本地 PG18 实测与 CI16 分开记录。
+
 ## 1. Owner 与边界
 
 Billing 是一个可独立部署的 TypeScript 模块化单体，拥有 Payment、Subscription、Checkout、Refund、Credit、Ledger、

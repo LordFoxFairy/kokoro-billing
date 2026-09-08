@@ -35,6 +35,7 @@ jobs:
           --health-retries=20
     env:
       DATABASE_URL: postgresql://kokoro_app:example-password@127.0.0.1:5432/kokoro_billing
+      SCHEMA_ADMIN_URL: postgresql://kokoro_app:example-password@127.0.0.1:5432/postgres
       REDIS_URL: redis://127.0.0.1:6379
       REDIS_TEST_URL: redis://127.0.0.1:6379
     steps:
@@ -70,6 +71,9 @@ jobs:
 
       - name: Run real infrastructure integration tests
         run: pnpm test:integration
+
+      - name: Verify canonical PostgreSQL catalog
+        run: pnpm db:verify-schema
 
       - name: Verify repository
         run: pnpm verify

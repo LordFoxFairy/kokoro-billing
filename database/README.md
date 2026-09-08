@@ -17,8 +17,25 @@ management role with CREATEDB and the fixture capabilities (the CI PostgreSQL se
 random databases, and backend-termination tests target only the matching fixture database and query marker. They never install into or reset
 the management database itself.
 
-The SQL's `IF NOT EXISTS` does not make non-empty installation supported. Complete catalog drift validation is still pending B5 in
-`docs/IMPLEMENTATION_PLAN.md`; existing partial schema assertions must not be described as complete drift coverage.
+The SQL's `IF NOT EXISTS` does not make non-empty installation supported.
+
+## Full canonical catalog verification
+
+Run `pnpm db:verify-schema` with `DATABASE_URL` (read-only target) and explicit `SCHEMA_ADMIN_URL` (management connection on the same
+host/port/server). The admin role needs CREATEDB; the application role does not. Both URLs support only public schema. Do not put admin
+credentials in application configuration. CI provides the management URL separately.
+
+The verifier creates a random `billing_reference_<uuid>` database from template0, installs the canonical SQL, then compares a read-only
+REPEATABLE READ target snapshot. It compares all 35 relations, 368 columns, 127 constraints (NOT NULL is a column property), 83 indexes,
+plus database locale metadata and unexpected types/routines/triggers/rules/policies. Definitions retain precision, defaults, validation,
+partial predicates, persistence and RLS flags. No data is copied and no target DDL/DML is executed. A differing locale from template0 is
+reported as drift; this tool does not claim database data, owner/ACL, statistics, every extension feature or concurrent DDL equivalence.
+
+Output includes canonical SHA256, server version, counts and missing/unexpected/changed objects. Drift exits 1. Configuration failures do
+not print URLs or credentials. An unconfirmed CREATE or failed cleanup reports only the internally generated reference name and stage:
+inspect ownership before manual cleanup; never bulk-drop by prefix. Confirmed own databases are closed and dropped in finally without FORCE.
+The integration fixtures require broader privileges for their isolated negative cases; only their own random databases are mutated.
+See `docs/IMPLEMENTATION_PLAN.md` for local PG18 evidence and the unexecuted PG16 CI boundary.
 
 Billing facts remain in PostgreSQL. Redis is limited to coordination and short-lived hints. Settlement acceptance and credit-hold expiry use
 PostgreSQL command receipts with a request digest, persisted result, idempotency key and explicit `command_identity`; partial unique indexes bind

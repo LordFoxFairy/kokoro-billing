@@ -10,7 +10,7 @@
 - 唯一任务板：[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)；最新目标：[ADR-0003](ADR/0003-nestjs-prisma-sql-first-alignment.md)。
 - 当前仍为Fastify + pg + Zod3，全局四层不是新代码模板。已撤销子仓AGENTS中的强制四层规则；Nest/Prisma尚未切换。
 - Prisma稳定候选为7.10.0；npm latest实际指向8.0.0-rc.13，未采用预发布。选择SQL-first唯一canonical + generated Prisma；
-  不删除CHECK/锁/索引，不保留Prisma读/pg写双轨。业务切换前仍需完整drift、模型/writer映射、事务及契约门。
+  不删除CHECK/锁/索引，不保留Prisma读/pg写双轨。业务切换前仍需Prisma生成/事务承接、writer公开边界及契约门。
 - `7a193ba`基线：lint/typecheck/build/sql:check/contract:check通过，17条route parity；无依赖test为84通过/80跳过。
   复用本机PostgreSQL18.4/Redis，用独立临时database执行integration为80通过；全套46文件/164测试通过，0失败0跳过。
   临时库已删除；没有清空共享Redis。该结果不是CI PostgreSQL16、provider sandbox、镜像或生产验证。
@@ -18,7 +18,9 @@
 - B4离线Schema安装保护已实施并经独立审查/主控验证：public-only目标、所有用户namespace非空对象保护、单事务锁、回滚、
   server/client预算与连接错误处理。新增21项真实PG反例；主控全套185通过，独立integration101通过，0失败0跳过；
   build产物HTTP health/ready/401/BFF catalog与SIGTERM smoke通过。交付SHA与命令见任务板。
-- 完整catalog drift另列B5，Prisma与Nest另列B6/B7/B8，不把局部交付称为整仓规范化完成。
+- B5 全量catalog drift已实现并获数据/TS独立复审放行：35表/368列/127约束/83索引，含partial predicate、locale、persistence、RLS与额外执行对象；
+  目标只读，显式管理连接仅创建并清理本轮template0参照库，安全输出差异与未知资源名。Root实际验收与交付SHA见任务板。
+- Prisma与Nest仍属B6/B7/B8；35表当前writer调查已写入同一任务板，shared receipt/audit/outbox的公开能力仍待设计，不把B5称为整仓规范化完成。
 
 ## 已实现
 

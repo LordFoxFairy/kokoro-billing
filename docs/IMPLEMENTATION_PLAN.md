@@ -25,7 +25,7 @@
 | B2 / P0 / TS模块与契约审查 | Billing / billing_ts_review（gpt-5.6-sol）/ Root | 只读src/contract/test/CI/文档 | 已复核旧四层门禁、repository编排、HTTP混责与wire偏差 | 已审查 |
 | B3 / P0 / 三文档与ADR收敛 | Billing / Root / B1+B2 reviewers | AGENTS、三文档、ADR-0003、CURRENT、本任务板及README/INDEX导航 | 当前态/目标态、唯一schema、契约策略一致；两位reviewer局部放行B4，完整重写门待验 | 已验收：9c890728c49458b38245682873273bd6d6b40d2c |
 | B4 / P1 / 空库安装保护 | Billing / billing_owner（gpt-5.6-sol）/ B1+B2+Root | worker仅3个代码/测试文件；Root交接后更新database README、INDEX、CURRENT、ACCEPTANCE | 独占DB、TDD、非空/custom schema/并发/回滚/锁与JS超时/backend终止；主控提交/复验 | 已验收：93c06dfa33d38601e51534972890bfda50ea614d |
-| B5 / P0 / 全量catalog drift | Billing / 后续续派billing_owner / Root | 安装/验证scripts、integration、生成治理文档；派前冻结精确文件集 | 比较canonical参照库的35表全部列/约束/索引/predicate；缺CHECK与错predicate反例 | 待派工；依赖B4 |
+| B5 / P0 / 全量catalog drift | Billing / 后续续派billing_owner / Root | 安装/验证scripts、integration、生成治理文档；派前冻结精确文件集 | 比较canonical参照库的35表全部列/约束/索引/predicate；缺CHECK与错predicate反例 | 独立审查通过、Root验证通过；待提交后干净HEAD复验 |
 | B6 / P0 / Prisma承接验证 | Billing / 后续续派billing_owner / Root | 固定依赖/生成链/模型/数据生命周期/独立验证；派前冻结文件集 | stable版本、无第二schema、typedCRUD+同tx锁/receipt/outbox+BigInt+错误+生成drift；不切生产writer | 待派工；依赖B5 |
 | B7 / P1 / 工具链与架构门 | Billing / 后续续派billing_owner / 独立reviewer | package/lock/TS/ESLint/format/CI/architecture精确集派前批准 | Node24、版本固定、完整typed gate；AST有效/违规样本替代禁modules/强制ports；单独格式切片 | 待派工；不放宽门禁 |
 | B8 / P0 / Nest+Prisma闭合业务切换 | Billing / 后续续派billing_owner / Root+独立reviewer | 先完整35表映射/provider图/事务组卡，再授权src/SQL/contract/test/worker集 | 先稳定查询范式，后整个共享Credit事务组；同一事务不混pg/Prisma，旧实现随闭合切片删除；中间未闭合commit不发布 | 待设计门；依赖B5/B6/B7 |
@@ -133,3 +133,108 @@ SQL SHA256保持`57b6ff2cd09de0835b2c608575dea74644163ab591e21fa477855476661920b
 仍未运行/未交付：B5全量drift、Prisma生成/运行、Nest业务重写、format门、Node24工具链切换、CI PG16、镜像RC、真实支付sandbox、
 跨仓消费者与生产DR。SQL权限/目标拒绝测试不能替代全量数据库故障矩阵；pool.end极端驱动故障没有额外注入证据。
 后续owner：Billing实现负责人续接B5；Root继续跨仓裁决/审查/最终验收；Root门禁问题归Root及各既有owner，保持可见不降门。
+
+## B5 执行卡（全量 catalog drift）
+
+- 基线：`/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing` / `codex/billing-ts-prisma-alignment` / `d06274847c45215c8ba5cedbe44a5c938b3de20b`。Root 已先更新三文档与本卡，均为本切片设计，交接后 Root 停写 Billing。
+- 设计门：本仓 `docs/TECHNICAL_DESIGN.md` B5 放置表、`docs/DATA_MODEL.md`、`docs/API_CONTRACT.md`；以这些绝对工作目录下文件为当前批准方案。未决：PG16真实执行、Prisma生成与业务迁移仍属后续门；B5无新的业务/API未决。
+- 实现：billing_owner / gpt-5.6-sol / 唯一 writer；审查：billing_data_review + billing_ts_review 只读，Root集成。
+- 允许文件：`scripts/schema-catalog.types.ts`、`scripts/schema-catalog.ts`、`scripts/schema-verification.ts`、`scripts/schema-database-session.ts`、`scripts/schema-verification.error.ts`、`scripts/verify-schema.ts`、`test/integration/schema-drift.test.ts`、`test/unit/schema-catalog.test.ts`、`test/unit/verify-schema.test.ts`、`test/unit/schema-verification-error.test.ts`、`package.json`、`.github/workflows/ci.yml`。如确需共用生命周期 helper，先报告具体位置/职责，由Root调整范围。
+- 排除：canonical SQL、contract、src、lockfile、所有其他仓；不改B4已验代码，文档收尾由Root交接后写。共享checkout的暂存/commit/分支由Root独占，worker交付文件清单与证据。
+- TDD：完整正例35表；删CHECK、同名改predicate、列type/precision/default/nullability、缺表/列/索引/UNIQUE、额外表/FK/type/function反例；目标数据保持、只读角色、配置拒绝和参照清理。覆盖差异比较排序/空白字面量保留；不用新增人工schema快照。
+- 验证：定向测试用 DATABASE_URL=postgresql://nako@127.0.0.1:5432/postgres 仅创建自有测试库；全套测试只在Root创建的本轮独占database运行。复用PG5432/Redis6379，禁止清理共享数据或启动服务。
+- 交付：实现负责人运行lint/typecheck/build与定向真实集成；Root复核SQL/OpenAPI hash、负例、完整verify/integration、CLI正反例、清理和diff后按切片提交。不得把目标整体标完成。
+
+B5 设计补充已由 Root 接受：relpersistence 防 UNLOGGED 假通过、RLS/trigger/rule/policy、数据库 encoding/locale/provider、创建结果未知不猜测清理；新增 session helper 授权已记录。
+2026-09-08 实现负责人首轮交付：24 integration + 1 unit通过；Root开始独立审查与全套复验，尚未验收/提交。
+
+## B6/B8 前置只读调查：35 表当前 writer（非业务切换放行）
+
+2026-09-08，billing_data_review 只读源码 d062748；Root复核目标owner。下表是事实盘点，不把未装配类/seed能力当已上线API。
+所有writer简称对应现有 `src/infrastructure/postgres/repositories` 中类；PG OutboxWorker为基础dispatch更新者。
+
+| 当前表 | 直接 SQL writer | 目标 owner / 待细化 |
+|---|---|---|
+| entitlement_credit_account | AdminGrant、AccountQuery、Redeem、GrantExpiry、SubscriptionGrant、ProviderEventProcessor、BillingSettlement、BillingAdmission、UsageSettlement、BillingReversal | credit |
+| entitlement_credit_grant | AdminGrant、Redeem、GrantExpiry、SubscriptionGrant、BillingSettlement、UsageSettlement、BillingReversal | credit |
+| entitlement_credit_hold | UsageSettlement | credit |
+| entitlement_credit_hold_allocation | UsageSettlement | credit |
+| entitlement_credit_journal | AdminGrant、Redeem、GrantExpiry、SubscriptionGrant、BillingSettlement、UsageSettlement、BillingReversal | credit的ledger能力 |
+| entitlement_usage_event | UsageSettlement | metering |
+| entitlement_usage_settlement | UsageSettlement | metering |
+| entitlement_command_receipt | AdminGrant、RedeemAdmin、CatalogAdmin、UsageSettlement、UsagePricingAdmin | 各用例模块；共享物理writer待设计 |
+| entitlement_outbox | AdminGrant、Redeem、GrantExpiry、SubscriptionGrant、BillingSettlement、UsageSettlement、BillingReversal；OutboxWorker具备更新能力 | credit；dispatch待设计 |
+| payment_provider_event | ProviderEventProcessor、ProviderEventAdmin、ProviderEventInbox | payment |
+| payment_settlement | BillingSettlement | payment |
+| payment_reversal | BillingReversal | refund |
+| entitlement_acquisition | SubscriptionGrant、BillingSettlement | credit |
+| entitlement_fulfillment | SubscriptionGrant、BillingSettlement | credit |
+| payment_outbox | ProviderEventAdmin、ProviderEventInbox、BillingSettlement、BillingReversal、运行时OutboxWorker | payment/refund共享writer待设计 |
+| entitlement_fulfillment_reversal | BillingReversal | credit |
+| payment_checkout | Checkout | checkout |
+| entitlement_audit_event | AdminGrant、RedeemAdmin、ProviderEventAdmin、CatalogAdmin、UsagePricingAdmin、BillingReversal | 实际跨模块audit待设计，不能按前缀强归credit |
+| entitlement_offer | CatalogAdmin（seed-only） | checkout |
+| entitlement_offer_revision | CatalogAdmin（seed-only） | checkout |
+| entitlement_usage_price_revision | UsagePricingAdmin（seed-only） | metering |
+| entitlement_usage_price_rate | UsagePricingAdmin（seed-only） | metering |
+| payment_provider_account | seed脚本，src无writer | payment |
+| payment_customer_binding | src/scripts未发现writer | payment |
+| payment_provider_subscription | ProviderEventProcessor | subscription |
+| payment_subscription_period | ProviderEventProcessor | subscription |
+| entitlement_subscription_term | ProviderEventProcessor | subscription |
+| payment_command_receipt | ProviderEventAdmin、BillingSettlement、BillingReversal | payment/refund共享writer待设计 |
+| entitlement_redeem_campaign | Redeem、RedeemAdmin（未装配） | credit |
+| entitlement_redeem_code_batch | RedeemAdmin（未装配） | credit |
+| entitlement_redeem_code | Redeem、RedeemAdmin（未装配） | credit |
+| entitlement_redeem | Redeem（未装配） | credit |
+| entitlement_billing_command_receipt | BillingAdmission | metering |
+| entitlement_billing_admission | BillingAdmission | metering |
+| entitlement_execution_event | BillingAdmission | metering |
+
+关键事务组：settlement acceptance（payment receipt/settlement/outbox/result）；fulfillment（锁settlement + account/acquisition/fulfillment/grant/journal/entitlement outbox）；
+refund（累计金额锁 + payment receipt/reversal/audit/payment outbox + credit reversal）；admission/capture/release/execution（billing receipt/admission/execution/usage + credit hold/allocation/account/grant/journal/outbox）；
+expiry（batch receipt + hold/allocation/account/outbox + exact result）；subscription event（inbox状态 + subscription/period/term + credit grant）；catalog/pricing（receipt + revision/rate + audit）。
+Outbox claim/续租/ack/retry与handler事务分离。ProviderEventProcessor外层application已有事务，内层savepoint复用同连接，不能误判为多个物理提交。
+
+待Root在B8设计门裁决：共享receipt/audit/outbox唯一物理writer与各用例的事务内公开能力；UsageSettlement的metering/credit职责拆分；
+ProviderEventProcessor跨payment/subscription/credit/refund编排；AccountQuery.ensureForSubject包含INSERT，不得将整类作为只读切片。
+AdminGrant/Redeem/RedeemAdmin/ProviderEventAdmin未发现运行入口；payment worker仅装配payment_outbox且处理PaymentProviderEventReceived，未有完整entitlement dispatch。
+
+2026-09-08版本再核验：prisma/client/adapter-pg 7.10.0仍可用；adapter使用pg ^8.16.3，Nest core12.0.1与platform-fastify12.0.1可用，
+后者依赖fastify5.12.1。仅npm view元数据，不是已安装兼容证据。官方[db pull](https://www.prisma.io/docs/cli/v7/db/pull)提供config与--print/--force，
+[Client生成](https://www.prisma.io/docs/orm/v7/prisma-client/setup-and-configuration/generating-prisma-client)要求显式output；后续仍用固定版本本地exec，不用浮动dlx。
+
+## B5 审查、交付与主控证据
+
+基线 d062748，Root唯一提交负责人；实现billing_owner，数据billing_data_review、TS billing_ts_review均已最终放行，无剩余已报P1/P2。
+Root交接后仅补三设计面、CURRENT/ACCEPTANCE、README/INDEX/database README和本卡；其他仓/SQL/contract/lockfile/src均未修改。
+
+审查修正：
+- relation加入persistence/RLS和额外trigger/rule/policy，避免UNLOGGED/行为对象漏检；数据库locale加入ICU rules。
+- target identity先只读事务、限定系统函数，真实public.current_setting同名函数写入反例证明未执行、marker不变。
+- 补同名partial index改predicate；定义用JSON组合，保留字面量，不手写第二Schema。
+- 有界session处理connect/query/backend error/close；JS deadline反例先将server预算调至5s，使100ms JS路径独立受测。
+- primary/cleanup错误分槽并显式失败哨兵；保留falsey rejection；安全资源错误图可穿过Aggregate/cause且防环，只输出受控随机名，不泄露URL/秘密。
+- reference清理测试按前后集合而非全局零；当前串行验收成立，不声明其他检查器同时增删参照时的完全隔离。CREATE结果未知不猜测DROP。
+
+真正RED/GREEN：新增能力在d062748缺失；开发中fixture错误不当业务RED。Root对冻结实现独占库删除CHECK后CLI真实exit1、报告missing，
+完整canonical CLI exit0。两轮review发现的旧实现缺口与修复后真实反例另见上述条目；不以最终测试数量倒推所有反例曾在旧提交执行。
+
+2026-09-08 Root冻结代码验证：Node22.22.2 / pnpm12.3.4 / PG18.4 / Redis6379 DB4，管理角色nako；创建并只清理本轮billing_accept_b5_*。
+定向fixtures自建billing_drift_*、billing_schema_*，参照库仅本轮billing_reference_*；没有共享reset/FLUSH/服务重启。
+
+| 命令 | 实际结果 |
+|---|---|
+| `pnpm db:apply-schema` | exit0 |
+| `DATABASE_URL=<本轮库> SCHEMA_ADMIN_URL=<同实例postgres管理库> pnpm db:verify-schema` | exit0；35 relations、368 columns、127 constraints（NOT NULL由列比较）、83 indexes，0差异 |
+| 同本轮库删除一个CHECK后再次 `pnpm db:verify-schema` | exit1，精确missing约束；只对本轮库反例 |
+| 真实DB/Redis环境 `pnpm verify` | exit0；lint/typecheck/build/sql:check/contract:check/test；51文件217测试通过，0失败0跳过 |
+| 同环境 `pnpm test:integration` | exit0；30文件129测试通过，0失败0跳过 |
+| `git diff --check` | exit0 |
+| Root topology | exit0 |
+| Root standard | exit1，208条/Billing15条，既有缺口仍待后续切片 |
+| Root `python3 -m pytest scripts/tests` | exit1，82通过/2既有handbook失败，与B4相同 |
+
+SQL SHA256仍57b6ff2cd09de0835b2c608575dea74644163ab591e21fa477855476661920bd；OpenAPI仍58fbe4fea083ba12e0db23f49e995b96500d01af0013febf40eba3093510ef63。
+未运行：PG16 CI（已接db:verify-schema步骤）、专门ICU rules运行反例、极端驱动release/close同步抛错注入、镜像/provider sandbox、Prisma/Nest、format门、跨仓消费者/生产DR。
+B5 runtime src不变，B4原生HTTP smoke是历史回归证据，不冒充本轮新smoke。B6下一步先复用现有生成/参照生命周期经验设计稳定Prisma生成与承接验证，不直接迁业务。

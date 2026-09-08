@@ -40,6 +40,9 @@ pnpm db:apply-schema
 pnpm dev
 ```
 
+结构验收使用 `pnpm db:verify-schema`：另行提供同实例管理连接 `SCHEMA_ADMIN_URL`（需要 CREATEDB），目标 `DATABASE_URL` 只读；
+仅创建/清理本轮参照库，详见 [数据库说明](database/README.md)。管理凭据不进入应用配置。
+
 默认监听 `127.0.0.1:4245`：
 
 ```bash

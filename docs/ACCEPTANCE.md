@@ -3,6 +3,13 @@
 验收必须在待交付 commit 的干净工作树上重新执行。历史报告、旧 CI、Agent 自报、被 skip 的 integration 和本地 fixture
 均不等于生产证据。
 
+## 2026-09-08 B5 catalog 验收切片
+
+`pnpm db:verify-schema` 必须在 canonical 正例退出0、缺CHECK/同名partial predicate漂移退出1，并保持目标数据不变。
+覆盖全catalog、只读identity与同名用户函数反例、只读角色、locale、额外对象、连接终止/JS deadline、falsey rejection、CLI秘密脱敏与嵌套资源错误。
+主控在独占临时database运行完整verify/integration；实际计数、SHA与Root既有失败见唯一任务板。
+本地PG18.4不替代尚未执行的PG16 CI；不比较数据/ACL/统计，不声明Prisma/Nest迁移或生产可靠性已完成。
+
 ## 2026-09-08 B4 安装保护切片
 
 当前允许范围由[IMPLEMENTATION_PLAN](IMPLEMENTATION_PLAN.md)确定；以下旧durable-command矩阵保留作回归基线，不再授权

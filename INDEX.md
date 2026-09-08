@@ -17,6 +17,9 @@
 | `src/interfaces/http/server.ts` | Fastify transport | Zod 边界校验、身份入口、snake_case/envelope/error 映射 |
 | `scripts/apply-schema.ts` | Schema job | advisory lock + blank-database guard + 单事务安装 |
 | `scripts/canonical-schema.ts` | 离线安装用例 | public-only、全用户namespace非空保护、受控连接错误/超时与事务回滚；不做B5全量drift |
+| `scripts/verify-schema.ts` | 全量catalog验证CLI | 目标只读、显式SCHEMA_ADMIN_URL、同实例临时参照、差异exit1 |
+| `scripts/schema-catalog.ts` / `schema-catalog.types.ts` | catalog读取与快照类型 | canonical SQL生成参照，不维护第二人工Schema |
+| `scripts/schema-verification.ts` / `schema-database-session.ts` / `schema-verification.error.ts` | 验证编排、连接生命周期、安全错误 | 各文件单一职责，原错/清理错保留，诊断不泄露凭据 |
 | `scripts/process-payment-events.ts` | Payment event worker | PostgreSQL row lease、重试、dead-letter 与 worker metrics |
 | `scripts/process-execution-events.ts` | Execution event batch | 顺序处理 received inbox event |
 | `scripts/expire-credit-holds.ts` | Expiry worker | 显式 tenant/batch identity；Redis lease 协调；PostgreSQL receipt/事务维护事实 |

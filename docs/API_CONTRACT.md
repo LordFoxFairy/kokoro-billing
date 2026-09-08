@@ -1,5 +1,7 @@
 # kokoro-billing API 契约策略
 
+B5 仅新增离线 catalog 验收命令，不变更 17 个 HTTP operation、wire schema、身份、状态或消费者；OpenAPI 保持不变。
+
 ## 2026-09-08 当前契约与目标差异
 
 下文是当前OpenAPI/运行时语义，并不表示已符合最新Root API手册。B3文档及B4安装保护切片不改任何HTTP字段、路径、
