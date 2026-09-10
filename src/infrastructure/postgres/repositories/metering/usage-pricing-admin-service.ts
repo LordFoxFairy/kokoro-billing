@@ -158,6 +158,29 @@ export class UsagePricingAdminService {
       if (receipt.status !== "processing")
         throw new Error("billing.command_unknown");
 
+      const [settings] = await this.connection.query<
+        { lock_timeout: string }[]
+      >("SELECT pg_catalog.current_setting('lock_timeout') AS lock_timeout");
+      const originalLockTimeout = settings[0]?.lock_timeout;
+      if (originalLockTimeout === undefined)
+        throw new PersistedDataInvariantError("billing.lock_timeout_not_found");
+      // Bound only this tenant lock wait; preserve tighter caller budgets.
+      await this.connection.query(
+        `SELECT pg_catalog.set_config('lock_timeout',
+          CASE WHEN $1::text::interval = INTERVAL '0 seconds'
+                 OR $1::text::interval > INTERVAL '1 second'
+               THEN '1000ms' ELSE $1::text END, true)`,
+        [originalLockTimeout],
+      );
+      await this.connection.query(
+        "SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('kokoro-billing:usage-pricing:' || $1, 0))",
+        [input.tenantId],
+      );
+      await this.connection.query(
+        "SELECT pg_catalog.set_config('lock_timeout', $1, true)",
+        [originalLockTimeout],
+      );
+      // A separate READ COMMITTED statement sees the preceding publisher's commit.
       const [revisions] = await this.connection.execute<RowDataPacket[]>(
         `SELECT COALESCE(MAX(revision), 0) AS revision FROM entitlement_usage_price_revision WHERE tenant_id = $1`,
         [input.tenantId],

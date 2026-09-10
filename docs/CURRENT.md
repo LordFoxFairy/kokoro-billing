@@ -7,6 +7,8 @@
 
 ## 当前规范化工作
 
+- B8-S2已修复READ COMMITTED下同tenant不同key价格发布revision竞争：tenant事务锁、独立MAX快照、1秒局部等待上限且保留更严格预算/立即恢复。双审无阻断，Root冻结树全套695/集成188通过，0失败0跳过，Schema/Prisma/源码与dist smoke/audit通过。RR冲突与整命令预算仍非本切片解决范围，精确证据见任务板。
+
 - B8-S1已修复Outbox持久载荷解码绕过重试/死信：复用原fenced失败路径，输入类型保持unknown直到校验，双审首轮P2已闭环。Root最终冻结树实跑687全套/180集成零失败零跳过，Schema/Prisma/源码与dist smoke/audit通过；未改变双编码字符串对象的原解析语义。精确hash/命令/隔离清理见任务板；续租drain和未知业务效果恢复仍待D1。
 
 - B8-G总门审计已汇总至唯一任务板：Nest依赖/模块与生产Prisma调用仍缺失，完整重写门尚未通过；B9a契约裁决必须前置B8，已纠正计划中的循环依赖。新增主动退款/复杂商品功能不自动扩入原Goal；现有退款/订阅正确性与工程收敛仍全部保留。
@@ -30,7 +32,7 @@
 - B7d实现`0f0e7647d4531e94b2a1d7d8858e970850000c6e`：固定Prettier3.9.6，format:check为verify首门；142文件一遍、4文件两遍机械收敛，两个旧文本检查器补格式前后反例。双审及Root冻结树完整443全套/157集成、0失败0跳过，Schema/Prisma零漂移，源码/dist smoke与audit0；干净ce5b628再次完整443/157、0失败0跳过，见任务板。
 
 - B7c已验收8fbf8e0：真实TS AST/resolver依赖门取代禁modules/强制ports，含80正反例和静态export来源追踪；双独立审查/Root冻结代码全验433全套、157集成、0跳过，catalog/Prisma无差异、源码/dist smoke和audit0。干净HEAD46dc851再次完整433/157、0跳过；精确命令/清理见任务板。
-- B8实证P1：不同key并发pricing发布争用revision（23505）仍待修；outbox解码逃逸及无限重领已由B8-S1修复，其余worker恢复问题仍待D1。
+- B8原实证P1已分切片修复：outbox解码逃逸为S1；READ COMMITTED不同key pricing版本竞争为S2。其余worker恢复、完整事务与生产Nest/Prisma承接仍待D1/B8。
 - UUID数据库切换涉及现有v1接受的非UUID资源ID，B9契约设计必须前置B8业务重写；线上数据/仓外消费者状态已询问，未据空GitHub发布记录作假设。
 
 - B7b已验收，交付3fd97f56bee0c4aff8f0a095b9c9af164fc3e7fb；双独立审查及Root干净HEAD复验354全套/157integration、0跳过，Schema/Prisma无差异，源码/dist smoke通过，audit0：TS6.0.3、typescript-eslint8.69.0、ESLint10.10.0，全手写typed规则；原8.70候选因安装时发布冷却期失败而未采用，无豁免。见唯一任务板。

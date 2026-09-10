@@ -1,6 +1,6 @@
 # Billing TypeScript / Prisma 规范化任务板
 
-更新：2026-09-10（B8-G总门审计）。唯一任务板；总范围是 Billing 工程收敛，不把第一轮审计视为整仓完成。
+更新：2026-09-10（B8-S2并发发布修复）。唯一任务板；总范围是 Billing 工程收敛，不把第一轮审计视为整仓完成。
 
 **Goal:** 按 Root TypeScript / SQL / API 手册明确 Billing 的模块、Prisma 数据访问、事务与契约方案，逐切片替换并验证。
 
@@ -1416,3 +1416,40 @@ Root实际命令与结果：
 - /tmp/billing-b8s1-root-smoke.py在自建空库分别启动真实源码与dist HTTP：health200、ready200、未认证401、可信BFF catalog200/request ID匹配、SIGTERM退出0。未启用provider，不冒称真实Stripe端到端。
 - Worker库billing_s1_1f084cc5c2974b13a1ba在所有连接/进程终态后由Root正常drop；两轮Root库billing_accept_b8s1_476aa04c281c429fbfca与billing_accept_b8s1_8a3abd846c7b4658acf5由各自脚本正常drop，无FORCE/共享清理。库不存在检查见Root本轮工具证据。
 - 未运行CI PostgreSQL16、镜像、provider sandbox、生产流量/灾备及新major消费者验收；本次不修改其他owner来清零历史门禁。Root其他用户/Agent变更保留。下一局部切片为pricing不同key并发revision竞争，尚未实施。
+
+
+## B8-S2 Pricing发布并发修复卡
+
+归属：Metering现有UsagePricingAdminService唯一发布writer；既有服务/集成文件局部修复，不改变职责/API/Schema，不新建目录或通用锁框架。方案经数据Astra与TS Sol只读核查，Root复核源码：首次发布没有aggregate行可锁，故不采用锁最新revision行或全表锁；采用tenant作用域事务advisory锁。此为必要一致性修复，不替代完整Nest/Prisma迁移。
+
+| 项目 | 本切片裁决 |
+|---|---|
+| 目标/优先级 | P1：不同command key同tenant发布不再竞争MAX+1导致23505；receipt/rates/audit与revision保持原子性和成功重放 |
+| 基线 | /Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing；codex/billing-ts-prisma-alignment；c0ce201d4aa2825b2d4f5ec23e08caf532332cff；本仓原干净，只有Root本任务卡 |
+| 执行与审查 | billing_toolchain_hardening/Astra唯一writer，Root派发后停止本仓写入；billing_data_review/Astra、billing_ts_review/Sol只读复核；Git及主工作树完整验收由Root串行负责 |
+| 文件集 | 仅src/infrastructure/postgres/repositories/metering/usage-pricing-admin-service.ts、test/integration/usage-pricing-admin.test.ts；如必需越界先报告，不改connection公共框架/contract/schema/deps；Root交接后维护本计划/CURRENT |
+| 锁/事务 | 原receipt claim/锁、digest及成功重放分支后，获取固定billing pricing namespace+tenant的事务advisory锁，再用独立SQL读取MAX；禁止把等待锁与MAX合成同一statement/CTE，禁止session锁/全局常量锁。保留UNIQUE最后防线与原原子事务 |
+| 等待预算 | 仅advisory锁阶段设置transaction-local lock_timeout上限1000ms，已有更严格lock_timeout不放宽，statement_timeout原样保留；读取并保存原设置，成功获得锁即恢复；SQL失败直接原rollback，禁止aborted事务先补SQL。不得修改role/database/global/session默认设置 |
+| 生命周期 | READ COMMITTED独立statement快照；若嵌套外层事务，xact锁持有至最外层commit，savepoint rollback恢复局部设置。此次不承诺REPEATABLE READ外层的无重试成功，不隐式改外层隔离级别；保留数据库冲突错误并回滚 |
+| TDD | 两独立连接同tenant不同key先真实RED23505，再GREEN连续revision及两份完整rates/audit/receipt，各自成功重放；跨tenant不互阻；超时零半写、更严格预算不放宽；嵌套成功恢复原设置并持锁至outer commit、嵌套失败rollback后outer可继续 |
+| 确定性 | 实际MAX结果后暂停A；旧实现B到MAX或新实现B被pg_locks证实等待后释放A。不能要求修复后B也先到MAX，所有gate finally释放、promise终态、短预算保证不挂测试；不伪造SQL/MAX结果 |
+| 资源 | Root自建template0独占随机库、安装canonical，复用PG实例；仅本例随机tenant/ID，禁止共享清理/重启/Redis/provider网络；worker停止连接后Root正常drop |
+| 验证交付 | Worker定向RED/GREEN、format/lint/tsc后冻结hash，不提交；双审及Root定向/全套真实PG、schema/Prisma、source/dist smoke/audit；Root显式4路径提交，任务外变更保留 |
+
+SQL依据核验日期2026-09-10：[PostgreSQL18事务advisory锁](https://www.postgresql.org/docs/18/explicit-locking.html#ADVISORY-LOCKS)、[READ COMMITTED快照](https://www.postgresql.org/docs/18/transaction-iso.html#XACT-READ-COMMITTED)、[lock_timeout](https://www.postgresql.org/docs/18/runtime-config-client.html)。1000ms是本切片工程预算，不是官方推荐或实测SLO；hash理论碰撞仅增加等待、不影响唯一性，不声称绝无碰撞。
+
+
+### B8-S2实现、审查与主控验收
+
+状态：唯一writer交付 → 数据Astra/TS Sol双审无阻断P1/P2 → Root主工作树完整验证通过，Root负责显式路径提交。范围仅当前READ COMMITTED发布竞争，不宣称整体B8完成。
+
+- 生产新增23行：成功重放后保存lock_timeout原文本、仅将0或宽于1秒收紧至1000ms，以固定namespace+tenant取得事务advisory锁，立即恢复原值，再以独立statement读取MAX。全部新内建函数使用pg_catalog限定；不改原receipt、MAX、rates/audit及catch/rollback逻辑。
+- 新增8项真实PG用例，共9项：原immutable/idempotent/quote保留；两连接同tenant真实竞争及完整两份revision/rates/receipt/audit和重放；跨tenant独立、嵌套成功预算恢复/outer commit前锁保留；receipt重放绕过竞争锁；0/2s/40ms lock_timeout及30ms更严格statement_timeout四组；RR旧snapshot冲突保留23505与回滚。
+- RED session69279 exit1，6失败/3通过，真实23505约束uq_entitlement_usage_price_revision_site_number；/tmp/billing-s2-red.log。最终GREEN session30298 exit0，9通过/0跳过；/tmp/billing-s2-green-final.log。首轮typed lint发现Promise.withResolvers不在当前lib以及expect.any不安全赋值，已改普通gate/直接真实outcome断言，未放宽规则。
+- 最终format/lint/tsc session45984 exit0；/tmp/billing-s2-gates-frozen.log。冻结service SHA256 75b71452c372410f23532625afb5c32939504b97de54f40b8f6a41d60d079ac8；test SHA256 b5e59aca637d6748a6344ce395517a70874e462b3eb7a4b8029759bdd687e46a。两审查员核hash与真实日志，未运行数据库，Root独立核验。
+- Root定向`pnpm exec vitest run test/integration/usage-pricing-admin.test.ts`：session23186 exit0，9通过/0跳过，/tmp/billing-s2-root-target.log。Worker与Root连接全部退出后，Root正常drop billing_s2_ca2d6eb3dc574fde97a5，检查不存在。
+- Root完整冻结树`/tmp/billing-b8s2-root-verify.sh` session47063 exit0（chunk757fcc），/tmp/billing-b8s2-root.icVXqK：frozen install、db:apply-schema、pnpm verify（format/lint/typecheck/build/SQL/17route/test）、test:integration、db:verify-schema、prisma:check、source/dist HTTP smoke、audit、diffcheck全部通过。
+- 全套62文件695通过，独立integration33文件188通过，均0失败0跳过；catalog 35表368列127约束83索引且differences=[]，Prisma同源无漂移，audit五级漏洞均0。源码及dist health200/ready200/匿名401/BFF catalog200+request ID一致/SIGTERM退出0。
+- 独占Root库billing_accept_b8s2_2a38729af8d549b2a7b7在全部命令终态后正常drop；不清共享Redis、不修改role/database默认设置、不触真实支付。两表SQL/OpenAPI hash仍57b6ff…/58fbe4…，依赖锁与生成provenance未变。
+- 保留风险：1000ms只约束新增advisory等待，不是整个命令deadline；READ COMMITTED同tenant串行，hash碰撞可能额外等待；外层RR既有snapshot仍可23505，错误回滚而不假称自动成功。完整Nest/Prisma事务/worker生命周期、Checkout未知结果、退款/订阅实施和major消费者仍待B8/B9；CI16/镜像/真实provider sandbox未运行。
+- S1提交c0ce201曾由Root干净HEAD完整复验：session7728 exit0，/tmp/billing-b8s1-root.uaeEB0，687全套/180集成及全门通过，库billing_accept_b8s1_c42ef1db5a864c068ae4已正常drop。本次S2证据不借历史结果替代。
