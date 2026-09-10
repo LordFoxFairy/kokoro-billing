@@ -1,6 +1,6 @@
 # Billing TypeScript / Prisma 规范化任务板
 
-日期：2026-09-08。唯一任务板；总范围是 Billing 工程收敛，不把第一轮审计视为整仓完成。
+更新：2026-09-10（B8-G总门审计）。唯一任务板；总范围是 Billing 工程收敛，不把第一轮审计视为整仓完成。
 
 **Goal:** 按 Root TypeScript / SQL / API 手册明确 Billing 的模块、Prisma 数据访问、事务与契约方案，逐切片替换并验证。
 
@@ -28,8 +28,8 @@
 | B5 / P0 / 全量catalog drift | Billing / billing_owner / 数据+TS+Root | 精确文件集见B5执行卡；Root交接后文档与提交 | 比较canonical参照库的35表全部列/约束/索引/predicate；缺CHECK与错predicate反例 | 已验收：9663db58bd85eb810b94df6120de050530c79d2f |
 | B6 / P0 / Prisma承接验证 | Billing / 后续续派billing_owner / Root | 固定依赖/生成链/模型/数据生命周期/独立验证；派前冻结文件集 | stable版本、无第二schema、typedCRUD+同tx锁/receipt/outbox+BigInt+错误+生成drift；不切生产writer | 已验收：B6a c7ef9fa；B6b 2793882；生产迁移仍归B8 |
 | B7 / P1 / 工具链与架构门 | Billing / billing_toolchain_hardening / 独立reviewer | package/lock/TS/ESLint/format/CI/architecture精确集派前批准 | Node24、版本固定、完整typed gate；AST有效/违规样本替代禁modules/强制ports；单独格式切片 | B7a已验收058bdf3；B7b已验收3fd97f5；B7c已验收8fbf8e0（干净46dc851复验）；B7d已验收0f0e764；干净ce5b628复验443全套/157集成、0失败0跳过 |
-| B8 / P0 / Nest+Prisma闭合业务切换 | Billing / 后续续派billing_owner / Root+独立reviewer | 先完整35表映射/provider图/事务组卡，再授权src/SQL/contract/test/worker集 | 先稳定查询范式，后整个共享Credit事务组；同一事务不混pg/Prisma，旧实现随闭合切片删除；中间未闭合commit不发布 | B8-D1/D2a内部设计已审查；其余B8-D2、major消费者与完整Schema门仍待；依赖B5/B6/B7已验 |
-| B9 / P1 / 契约与外部副作用 | Billing / 后续续派billing_owner / Root | owner contract先行；消费者另开owner任务，无本仓写入权 | envelope/request-id/UTC/error/202语义；checkout claim→网络→finalize及unknown恢复；实际消费者固定artifact | 待契约裁决/依赖B8 |
+| B8 / P0 / Nest+Prisma闭合业务切换 | Billing / 后续续派billing_owner / Root+独立reviewer | 先完整35表映射/provider图/事务组卡，再授权src/SQL/contract/test/worker集 | 先稳定查询范式，后整个共享Credit事务组；同一事务不混pg/Prisma，旧实现随闭合切片删除；中间未闭合commit不发布 | B8-D1/D2a/D2c及D2d机制已审查；生产未切换，完整Schema/major及订阅商业资格仍待；后续顺序见B8-G，B9a前置而非循环依赖 |
+| B9 / P1 / 契约与外部副作用 | Billing / 后续续派billing_owner / Root | owner contract先行；消费者另开owner任务，无本仓写入权 | envelope/request-id/UTC/error/202语义；checkout claim→网络→finalize及unknown恢复；实际消费者固定artifact | B9a契约裁决/机器源前置B8；B9b消费者与外部副作用随owner实现验收，不再笼统依赖B8 |
 | B10 / P1 / 运行可靠性验收 | Billing / 后续续派billing_owner / Root | worker/reconciliation/retention/smoke与文档；派前批准文件集 | execution并发lease、orphan检测、append-only角色、预算取消、provider sandbox、CI PG16/镜像/DR分层证据 | 待派工 |
 
 ## 阶段门
@@ -37,9 +37,9 @@
 - [x] B0：当前门禁与真实依赖基线已记录。
 - [x] B1/B2：独立审查已接收并由Root复核。
 - [x] B3：明确Prisma目标与当前差异，三文档一致；B4局部数据设计经billing_data_review放行。
-- [ ] 完整业务/Prisma重写门：catalog drift、生成链及隔离事务承接已通过；35表writer/模块DAG及Checkout内部恢复设计已审查；完整Schema、其余业务事务组与breaking消费者裁决仍待完成。
+- [ ] 完整业务/Prisma重写门：catalog drift、生成链及隔离事务承接已通过；35表writer/DAG及Checkout/Refund/Subscription机制已审查；商业资格、完整canonical/机器major与消费者裁决仍待。局部内部放行不授权绕过Root §8.1。
 - [x] B4交付、两阶段review、Root主工作树重跑验证与commit；见93c06df。
-- [x] B5完整catalog drift与B6a/B6b生成/隔离事务承接已验收；下一切片B7，不代表生产Prisma切换。
+- [x] B5完整catalog drift与B6a/B6b生成/隔离事务承接已验收；B7亦已完成其工具链切片；这些均不代表生产Prisma切换。
 
 ## B4执行卡（仅离线安装局部修复）
 
@@ -1297,3 +1297,82 @@ Root执行当前sql:check、contract:check17routes、diff通过（chunk397e7e）
 未运行完整format/lint/typecheck/test/build/integration/catalog/Prisma/smoke/audit，因本轮无生产源码/测试/依赖/机器源变化；最新完整665/158仍绑定8b55a57，不迁移其验收到本轮设计。
 未完成：商业发放资格未确认，当前metadata/现代周期/active-trialing发放问题未修；真实数据及仓外v1消费者/major切换、外部退款创建、订阅退款/补偿与完整canonical/生产Nest-Prisma仍待闭环。
 下一步Root核剩余总设计门和数据/契约决策，避免继续以单点设计代替生产切换；Goal保持原完整范围active。本轮有提交与改变行动依据的解析证据，不属于无进展或已完成。
+
+## B8-G总切换门审计卡
+
+上一轮分类：进展。1132906d70e6723dd65f1ece14621847659879f9提交订阅机制R2与12解析场景证据；机制局部放行，商业规则/整体切换仍待。
+
+| 项目 | 本轮范围 |
+|---|---|
+| 目标 | 逐项核完整Goal与三设计门，形成唯一剩余实施顺序和必要用户决策，纠正任务板过时依赖/状态，不再把局部设计当整体完成 |
+| Owner/角色 | Root唯一Billing文档writer/Git；billing_ts_review/Sol只读本地BFF/Web/Agent/Scheduler当前消费者与artifact证据；其余仓零写入 |
+| 基线 | /Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing，codex/billing-ts-prisma-alignment，1132906，起始干净 |
+| 文件/放置 | Root只修改既有IMPLEMENTATION_PLAN/CURRENT，复用唯一计划而不新建任务中心；三设计/contract/schema/实现只读 |
+| 独立工作 | Root核全Goal验收与批准/未批准边界、现有测试覆盖及迁移顺序；Sol核具体本地消费者调用/身份/header/artifact/测试，不由负检索推断仓外无人使用 |
+| 禁区 | 不读连接秘密或探测真实账务库，不请求provider网络、不改Git remote状态、不修改其他owner/源码/SQL/机器契约/依赖 |
+| 验证/交付 | 以实际当前文件/测试入口/生成与机器源为证据分类完成/未实现/待验/待决，Root交叉复核再提交两文档；商业与真实数据决策不凭空填默认值 |
+
+
+### B8-G完整目标逐项审计（源码基线1132906）
+
+本表是当前优先级与最终验收条件，纠正上方历史执行卡中的“下一阶段”字样；历史命令/commit证据原样保留。
+
+| 原目标/必要门 | 当前权威证据与分类 | 进入最终验收还缺什么 |
+|---|---|---|
+| 35表完整catalog drift | B5/B6实现已验收；当前SQL SHA57b6ff…、generated provenance匹配同源，35表368列127约束83索引为最近真实安装证据 | 新canonical后对全部对象重跑真实fresh install/drift及故障反例，旧35数量不证明新字段通过 |
+| SQL唯一源→只读Prisma生成 | scripts/prisma-generation、database/generated/schema.prisma/provenance与Client生成链存在；本轮offline generate通过 | 目标Schema再生/两次一致/反篡改/catalog与源码dist Client真实连接重验 |
+| TypeScript规范与工具链 | B7实现；本轮format/lint/typecheck/build/SQL/17route全部通过 | 新业务代码同样门禁，不能因遗留bug放松typed/import规则 |
+| 七个Nest feature及真实DI/lifecycle | package无@nestjs依赖，src/modules不存在，无NestFactory运行入口；未实现 | 固定稳定兼容Nest依赖、真实模块DAG/Provider图、源码及build HTTP/三个worker实例化/关闭验收 |
+| Prisma唯一生产数据栈 | src（排除generated）无PrismaClient/adapter导入，bootstrap仍createPostgres服务；未实现 | 完整事务组改为Prisma；删除旧业务pg层/转发/重复SQL，不以装包或fixture证明生产切换 |
+| Credit/Ledger唯一writer、事务/幂等 | D1设计/隔离Prisma能力通过，实际Refund/PaymentEvents仍直接碰Credit；未实现 | Credit公开能力承接acquisition/fulfillment/grant/hold/allocation/journal全组，嵌套rollback-only/tenant/锁序与竞态实际通过 |
+| 目标SQL命名/UUID/账户namespace | D1 35表映射与D2a/c/d字段目标已审查，canonical仍原命名/VARCHAR | 完整canonical与contract身份所有权同时对齐；真实数据演进方式需事实确认 |
+| Checkout事务外网络/unknown恢复 | D2a仅内部设计；原Promise.race/持锁网络仍在src | 有界真实取消、稳定身份、短事务claim/fenced finalize、持久恢复、迟到响应及UI相同intent重试闭环 |
+| Payment/Refund现有链正确性 | S0仅一次性paid-only已修；D2b/c发现事实-only202、退款状态/金额/关联及held/zero delta问题 | 准确观察/明确任务handler/T2原子Credit与query结果；不是新增商户主动退款的同义词 |
+| Subscription事实与Credit发放 | D2d机制通过，当前metadata/旧周期/active-trialing路径未修；商业资格待确认 | 可信Checkout+Invoice line周期/固定授权、批准政策、future/late/replay/recovery、真实PG/provider事件链 |
+| Metering/execution并发 | UUID hold派生usage ID溢出未修；process-execution-events仍无跨进程lease的SELECT received循环 | D1 usage-hold绑定、receipt原子性、跨进程fence/有限重试/取消drain及两连接故障验证 |
+| Reconciliation | 原repository/service与部分测试存在，scripts/bootstrap/interfaces未找到真实reconciliation入口 | 具名owner只读快照/orphan与不变量报告、可运行入口/有界周期触发、审计重试；不自动修账 |
+| 数据权限/retention | canonical无GRANT/REVOKE/角色policy；docs有目标而无应用角色/清理执行证据 | 定义应用append-only与运维权限、保留/脱敏/GC允许集合和legal-hold保护；用独占角色/数据库验权限，不猜法定年限或自行删真实事实 |
+| 新major及消费者artifact | 机器v1仍stable；BFF/Web手写投影无Billing immutable artifact pin；未实现 | B9a先决定/发布owner schema+version/commit/digest，再实际消费者固定并验证；不原位改stable v1或留长期alias |
+| 最终完整验收 | 最近完整665/158绑定8b55a57；本轮只无DBverify，不能覆盖新运行时/集成 | 当前最终commit全门+真实PG/Redis+schema/Prisma+HTTP与worker smoke+适用BFF/Web消费者；CI16/镜像/provider sandbox等未实跑如实留缺口，不借文档宣称通过 |
+
+### B8-G范围校正：既不缩小Goal，也不额外制造阻塞
+
+完整原Goal必须做到现有Payment/Subscription/Checkout/Refund/Credit/Ledger/Metering/Reconciliation工程与真实行为收敛、owner消费者和可靠性闭环；上述未实现项不得删除或用当前Fastify/pg长期维持来结题。
+但此前D2c/d交付说明把“外部退款创建、line-specific扩展、通用多item/proration/补偿政策”混列在未完成列表，容易被误读为所有这些新产品功能都是原Goal的前置条件。现明确区分：
+- **必需**：现有退款接受/回调事实准确、已存在的比例Credit冲正完整；已经公开的allocation_mode含义应由major消除假承诺或实现真实已批准语义，不能静默接受后忽略。
+- **需业务确认才新增**：主动调用provider创建退款、全新行项目模型、复杂订阅商品/赠送/补偿等。原Goal没有明确请求新增这些能力，本地4消费者也无主动退款用例证据；不擅自增加为结题门，不以新增功能无人决策阻塞既定工程目标。
+- **仍真实待决**：现有订阅active/trialing行为将如何转成经账单证据支持的明确policy；不是仅升级框架可替用户决定的商业变更。已询问，未把拒发所有订阅当成完成。
+本校正只消除自加要求，D2c/d为这些未来扩展保留的注意事项仍有效；不改变已审内部机制、不宣布未来扩展已实现或永不支持。
+
+### B8-G本地消费者与跨仓切片证据
+
+只读审查billing_ts_review/Sol；本地基线BFF26eec0112c83ea98aa045896d385c89ad88b45d2、Web0441603731f70e06b9f6b7860146baa654742c7b、Agent e24b4aab05ee6df811c21089effbe1f91d7c2f2c、Scheduler468700ff1f14a7b4f2a46b9e33b2eabfc291b08c。
+Root独立读取以下相关代码/机器契约确认链路（chunkb6184f）：
+- /Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro/src/billing/pricing.ts:91-98 发起POST仅含content-type，没有稳定Idempotency-Key；同源adapter /Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro/src/app/api/billing/checkout/route.ts:50 每次无header请求生成随机key，未知结果后重试会形成新的Checkout命令。后续需purchase intent稳定key，不按每次HTTP生成新身份。
+- /Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-bff/src/http/routes/owner.ts:166-219实际catalog/checkout路径；Checkout先拉Billing catalog，用plan.id构造offer_revision_id/amount_minor/currency/quote_snapshot并直接投影checkout_url。
+- Billing机器checkout声明201，BFF owner.ts:219原样透传；/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-bff/contract/openapi/v1/openapi.yaml:1637只声明200。审查指出现测试double默认200未覆盖真实201；这是静态contract偏差，未声称本轮跨进程HTTP实跑。
+- BFF identity/upstream将受信namespace映射tenant、user映射subject/actor并注入service/request credential；Web读取密封session，不能把body自报身份当接口迁移捷径。
+- 未找到Billing contract repo/commit/digest生成client pin；BFF自有OpenAPI和Web历史generated provenance不证明它们消费了固定Billing artifact。
+Agent/Scheduler在本次本地源码范围未找到实际Billing runtime client；Scheduler测试名billing.reconcile不是调用证据。无主动provider退款消费者。以上负检索不证明仓外无人使用或不存在真实收费，部署事实仍待用户确认。
+
+### B8-G去循环的实际实施顺序
+
+1. **B9a前置裁决**：确认真实数据/仓外v1消费者，批准新major切换及订阅policy；形成明确contract资源ID/命令identity/状态query/错误/幂等语义。当前B9“依赖B8”的粗表已纠正，不能B8等B9、B9又等B8。
+2. **完整三设计门**：将已审D1/D2机制收敛成一致的机器canonical Schema与owner contract，补齐剩余应用权限/retention及Reconciliation运行设计；记录精确验证命令与当前commit。数据演进如涉及既有账务另立ADR，默认只在自建空库验证、不清真实库。
+3. **Nest/Prisma生产切片**：重新核稳定兼容依赖，单一实现writer；先公共事务/配置/身份/错误/lifecycle，再按完整共享Credit事务组承接七业务能力及三个worker，不做pg/Prisma同事务拼接。依设计删除旧全局四层和转发/alias，未闭合中间commit不发布，不用fixture门冒称运行时切换。
+4. **Owner验证后消费者串行切换**：Billing机器artifact先由owner固定version/commit/digest；BFF再固定并更新catalog/Checkout/必要query投影及201语义，Web固定BFF形状与稳定purchase intent。各仓按自己的AGENTS/已有writer状态派发，Root不抢写；没有真实Agent/Scheduler消费者就不编造client修改。
+5. **最终集成放行**：主工作树重跑全部门禁、真实服务/worker恢复与消费者集成；所有失败/skip与真实provider/镜像/部署证据分层报告。完成须是实际目标Nest+Prisma代码，不是当前绿灯或设计目录齐全。
+
+### B8-G当前本地执行证据
+
+Root在主工作树执行`env -u DATABASE_URL -u SCHEMA_ADMIN_URL -u REDIS_URL -u REDIS_TEST_URL pnpm verify`，session57992终态exit0（chunkd2b780），日志/tmp/billing-bg-local-verify.log。
+format:check、lint、typecheck、build、SQL、17route契约、offline Prisma Client生成均通过；Vitest29文件507通过、33文件158跳过、0失败，11.84s。
+158集成跳过是刻意未提供真实基础设施环境，不作为完整test/integration通过；日志127.0.0.1:1 Redis拒绝来自失败路径测试，进程退出0，无共享基础设施变更。
+本轮未运行真实db:apply-schema/db:verify-schema/prisma:check/test:integration、source/dist网络smoke、provider sandbox、CI16/镜像/DR；最近相关全套证据仍绑定8b55a57，不转算给新设计。
+Root对src/test/database/contract/package/lock做当前1132906零差异检查，生成与dist为ignored构建产物，最终提交只两文档。Root SQL手册/Agent gitlink/.tmp原有改动保持不变。
+
+### B8-G审查结论与立即可推进项
+
+数据Astra复核/tmp/billing-bg-audit-sha256.txt两hash、Goal范围及507/158日志，审计放行；无整体完成声明。普通新major方向已另外异步询问用户，未获批准即不切换；不是清库授权。
+审查指出不能让全部必要工作空等B9a：既有outbox decode绕过重试/死信、pricing不同key revision竞争均有真实缺陷证据，不涉及新商业规则/资源ID/API breaking。
+因此Root继续按§8.1局部修复门推进这两项必要可靠性修复，先outbox；保持完整Goal，局部修复不替代Nest/Prisma最终迁移。重写的硬前置与已存在代码的独立纠错分开。

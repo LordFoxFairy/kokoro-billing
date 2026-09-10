@@ -7,6 +7,10 @@
 
 ## 当前规范化工作
 
+- B8-G总门审计已汇总至唯一任务板：Nest依赖/模块与生产Prisma调用仍缺失，完整重写门尚未通过；B9a契约裁决必须前置B8，已纠正计划中的循环依赖。新增主动退款/复杂商品功能不自动扩入原Goal；现有退款/订阅正确性与工程收敛仍全部保留。
+- 当前本地消费者为Web→BFF→Billing catalog/checkout：稳定purchase-intent key缺失、Billing201与BFF机器200不一致、Billing artifact未固定，均待owner新major后同切；未以本地负检索推断仓外无人调用。真实收费数据/仓外消费者及订阅发放policy已询问未决。
+- 本轮无DB `pnpm verify` 实跑format/lint/typecheck/build/SQL/17route及Prisma生成通过，507测试通过、158集成跳过、0失败；不是全套集成/新运行时验收，日志与基线见任务板。
+
 - B8-D2d订阅身份/账单证据/两阶段Credit发放机制已获数据Astra/TS Sol R2局部放行，首轮2P2（未来周期状态、无webhook补查）闭环。商业资格已向用户询问，未按active/trialing默认当收款；12个本地真实解析签名场景由Root复验，生产metadata/周期/发放代码仍未修，三表与query变化仍是目标。
 
 - B8-D2c退款内部设计已获数据Astra/TS Sol R2审查放行（首轮1P1/2P2闭环），并非实现放行：渠道观察与Credit效果分阶段、Refund.id去重、账户/付款精确关联、比例零delta和held保护。当前parser真实本地签名16场景复现非成功状态被归成功、累计金额/身份fallback及字符串金额放大；Root重跑通过。生产代码未修，详情见任务板；不是Stripe sandbox。
