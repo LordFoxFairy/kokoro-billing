@@ -1,3 +1,4 @@
+import { assertDefined } from '../assert-defined.js';
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { createBillingConnection } from '../../src/infrastructure/postgres/connection.js';
@@ -8,7 +9,7 @@ const integration = describe.skipIf(!databaseUrl);
 
 integration('entitlement catalog', () => {
   it('lists only published, active, non-deleted revisions for a site', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const service = createPostgresCatalogService(connection);
     const tenantId = randomUUID();
     const offerId = randomUUID();
@@ -48,7 +49,7 @@ integration('entitlement catalog', () => {
   });
 
   it('uses a limit-plus-one keyset cursor bound to the catalog tenant', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const service = createPostgresCatalogService(connection);
     const tenantId = randomUUID();
     const otherTenantId = randomUUID();

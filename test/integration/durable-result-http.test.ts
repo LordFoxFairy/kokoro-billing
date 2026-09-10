@@ -4,6 +4,8 @@ import { createBillingConnection } from '../../src/infrastructure/postgres/conne
 import { createPostgresBillingSettlementService } from '../../src/infrastructure/postgres/create-postgres-services.js';
 import { createBillingServer } from '../../src/interfaces/http/server.js';
 
+const anyString: unknown = expect.any(String);
+
 const databaseUrl = process.env.DATABASE_URL;
 const integration = describe.skipIf(databaseUrl === undefined);
 
@@ -31,21 +33,21 @@ integration('durable result HTTP invariants', () => {
       'idempotency-key': idempotencyKey,
     };
     const server = createBillingServer({
-      checkout: { create: async () => { throw new Error('unused checkout'); } },
-      usage: { expireExpiredHolds: async (input) => ({ batchId: input.batchId, expiredHoldIds: [] }) },
+      checkout: { create: async () => { return Promise.reject(new Error('unused checkout')); } },
+      usage: { expireExpiredHolds: async (input) => Promise.resolve(({ batchId: input.batchId, expiredHoldIds: [] })) },
       settlement,
-      reversal: { recordReversal: async () => 'unused-refund' },
-      webhook: { accept: async () => ({ providerEventId: 'unused-event', processingStatus: 'received' as const }) },
-      account: { getForSubject: async () => null },
+      reversal: { recordReversal: async () => Promise.resolve('unused-refund') },
+      webhook: { accept: async () => Promise.resolve(({ providerEventId: 'unused-event', processingStatus: 'received' as const })) },
+      account: { getForSubject: async () => Promise.resolve(null) },
       auth: {
-        user: async () => null,
-        bff: async () => null,
-        admin: async () => null,
-        webhook: async () => false,
-        internal: async (request) => request.headers['x-kokoro-tenant-id'] === tenantId
+        user: async () => Promise.resolve(null),
+        bff: async () => Promise.resolve(null),
+        admin: async () => Promise.resolve(null),
+        webhook: async () => Promise.resolve(false),
+        internal: async (request) => Promise.resolve(request.headers['x-kokoro-tenant-id'] === tenantId
           && request.headers['x-kokoro-service'] === 'payment-worker'
           ? { tenantId, serviceId: 'payment-worker' }
-          : null,
+          : null),
       },
     });
 
@@ -62,7 +64,7 @@ integration('durable result HTTP invariants', () => {
       expect(replay.statusCode).toBe(500);
       expect(replay.json()).toMatchObject({
         error: { code: 'billing.internal_error', message: 'internal billing error' },
-        meta: { request_id: expect.any(String) },
+        meta: { request_id: anyString },
       });
       expect(JSON.stringify(replay.json())).not.toContain('billing.command_result_invalid');
     } finally {

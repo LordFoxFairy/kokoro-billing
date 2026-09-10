@@ -24,7 +24,7 @@ export async function withSchemaSession<T>(
     statement_timeout: timeoutMs,
   });
   let client: PoolClient | undefined;
-  let result: T | undefined;
+  let result: { value: T } | undefined;
   let primaryError: unknown;
   let hasPrimaryError = false;
   let cleanupError: unknown;
@@ -52,7 +52,8 @@ export async function withSchemaSession<T>(
     }
   };
   try {
-    client = await pool.connect();
+    const activeClient = await pool.connect();
+    client = activeClient;
     client.on("error", onError);
     const query: CatalogQuery = async (sql, values) => {
       if (connectionError) throw connectionError;
@@ -75,7 +76,7 @@ export async function withSchemaSession<T>(
       });
       try {
         return await Promise.race([
-          client!.query(sql, values),
+          activeClient.query(sql, values),
           deadline,
           disconnected,
         ]);
@@ -84,7 +85,7 @@ export async function withSchemaSession<T>(
         if (timer) clearTimeout(timer);
       }
     };
-    result = await work(query);
+    result = { value: await work(query) };
     if (connectionError && !hasPrimaryError) {
       primaryError = connectionError;
       hasPrimaryError = true;
@@ -131,5 +132,6 @@ export async function withSchemaSession<T>(
     );
   if (hasPrimaryError) throw primaryError;
   if (hasCleanupError) throw cleanupError;
-  return result!;
+  if (!result) throw new Error("schema work completed without a result");
+  return result.value;
 }

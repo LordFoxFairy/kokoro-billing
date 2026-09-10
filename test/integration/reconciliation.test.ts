@@ -1,3 +1,4 @@
+import { assertDefined } from '../assert-defined.js';
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { createBillingConnection } from '../../src/infrastructure/postgres/connection.js';
@@ -8,7 +9,7 @@ const integration = describe.skipIf(!databaseUrl);
 
 integration('billing reconciliation', () => {
   it('detects projection drift against grant and journal facts', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const tenantId = randomUUID();
     const accountId = randomUUID();
     try {
@@ -25,7 +26,7 @@ integration('billing reconciliation', () => {
   });
 
   it('detects held projection drift against active holds and allocations', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const tenantId = randomUUID();
     const accountId = randomUUID();
     const holdId = randomUUID();
@@ -49,7 +50,7 @@ integration('billing reconciliation', () => {
   });
 
   it('detects payment fulfillment gaps and failed provider events', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const tenantId = randomUUID();
     const settlementId = randomUUID();
     const providerEventId = randomUUID();
@@ -77,7 +78,7 @@ integration('billing reconciliation', () => {
   });
 
   it('detects a succeeded reversal without a committed fulfillment reversal', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const service = createPostgresBillingSettlementService(connection);
     const tenantId = randomUUID();
     const settlementId = randomUUID();

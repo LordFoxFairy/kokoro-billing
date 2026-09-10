@@ -91,7 +91,7 @@ export class CreditAccountQueryService {
   }
 
   public async byModelForSubject(tenantId: string, subjectId: string): Promise<{ periodStart: string; items: unknown[] }> {
-    const [rows] = await this.connection.execute<RowDataPacket[]>(
+    const [rows] = await this.connection.execute<(RowDataPacket & { model_binding_id: string | null; model_name: string | null; spent_micros: string; run_count: string })[]>(
       `SELECT h.model_binding_id, COALESCE(h.label_key, h.feature_key) AS model_name,
               COALESCE(SUM(CASE WHEN j.amount_micros < 0 THEN -j.amount_micros ELSE 0 END), 0) AS spent_micros,
               COUNT(DISTINCT CASE WHEN j.amount_micros < 0 THEN j.source_ref END) AS run_count

@@ -2,7 +2,7 @@ import { createBillingConnection, runWithBillingContext } from '../src/infrastru
 import { OutboxWorker } from '../src/infrastructure/postgres/outbox-worker.js';
 import { createProviderRegistry } from '../src/infrastructure/providers/payment/provider-registry.js';
 import { ALL_PAYMENT_PROVIDERS } from '../src/config/provider-config.js';
-import { recordWorkerResult, setOldestPendingAgeSeconds, startWorkerMetricsServer, type WorkerResult } from '../src/infrastructure/worker-metrics.js';
+import { recordWorkerResult, setOldestPendingAgeSeconds, startWorkerMetricsServer } from '../src/infrastructure/worker-metrics.js';
 import type { RowDataPacket } from '../src/infrastructure/postgres/connection.js';
 import { createPostgresBillingReversalService, createPostgresBillingSettlementService, createPostgresProviderEventProcessor, createPostgresSubscriptionGrantService } from '../src/infrastructure/postgres/create-postgres-services.js';
 
@@ -48,7 +48,7 @@ try {
         await processor.process(providerEventId);
       }));
       if (result !== false) {
-        recordWorkerResult(result as WorkerResult);
+        recordWorkerResult(result);
         if (result === 'published') processed += 1;
         if (result === 'retrying') retried += 1;
         if (result === 'dead_lettered') deadLettered += 1;

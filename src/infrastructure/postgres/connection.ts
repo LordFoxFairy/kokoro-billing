@@ -29,8 +29,8 @@ class PostgresConnection implements SqlConnection {
 
   private async client(): Promise<Pool | PoolClient> {
     const transaction = billingContext.getStore()?.transactions.get(this);
-    if (transaction) return transaction.client;
-    return this.pool;
+    if (transaction) return Promise.resolve(transaction.client);
+    return Promise.resolve(this.pool);
   }
 
   private async runQuery<T extends QueryResult>(sql: string, values: unknown[] | undefined): Promise<[T, unknown[]]> {

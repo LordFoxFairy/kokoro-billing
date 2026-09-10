@@ -1,3 +1,4 @@
+import { assertDefined } from '../assert-defined.js';
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { createBillingConnection } from '../../src/infrastructure/postgres/connection.js';
@@ -8,7 +9,7 @@ const integration = describe.skipIf(!databaseUrl);
 
 integration('checkout quote snapshot', () => {
   it('creates one checkout and replays the same snapshot idempotently', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const service = createPostgresCheckoutService(connection);
     const tenantId = randomUUID();
     const offerId = randomUUID();
@@ -49,7 +50,7 @@ integration('checkout quote snapshot', () => {
   });
 
   it('does not create a checkout from an expired quote', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const service = createPostgresCheckoutService(connection);
     await expect(service.create({
       tenantId: randomUUID(), subjectId: randomUUID(), idempotencyKey: `expired-${randomUUID()}`,
@@ -59,7 +60,7 @@ integration('checkout quote snapshot', () => {
   });
 
   it('requires a current sellable offer before creating a checkout', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const service = createPostgresCheckoutService(connection);
     await expect(service.create({
       tenantId: randomUUID(), subjectId: randomUUID(), idempotencyKey: randomUUID(), offerRevisionId: randomUUID(),
@@ -69,7 +70,7 @@ integration('checkout quote snapshot', () => {
   });
 
   it('persists a hosted provider session and replays it without creating a second session', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const tenantId = randomUUID();
     const offerId = randomUUID();
     const revisionId = randomUUID();
@@ -85,7 +86,7 @@ integration('checkout quote snapshot', () => {
       const service = createPostgresCheckoutService(connection, {
         hostedProvider: {
           provider: 'fake',
-          createSession: async (input) => { calls += 1; return { provider: 'fake', sessionId: `session-${input.checkoutId}`, checkoutUrl: 'https://provider.example/checkout/session' }; },
+          createSession: async (input) => { calls += 1; return Promise.resolve({ provider: 'fake', sessionId: `session-${input.checkoutId}`, checkoutUrl: 'https://provider.example/checkout/session' }); },
         },
         publicBaseUrl: 'https://app.example',
       });

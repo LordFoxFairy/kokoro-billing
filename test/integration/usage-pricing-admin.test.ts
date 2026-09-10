@@ -1,3 +1,4 @@
+import { assertDefined } from '../assert-defined.js';
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { createBillingConnection } from '../../src/infrastructure/postgres/connection.js';
@@ -8,7 +9,7 @@ const integration = describe.skipIf(!databaseUrl);
 
 integration('admin usage pricing revisions', () => {
   it('publishes an immutable revision, is idempotent, and serves quotes', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const admin = createPostgresUsagePricingAdminService(connection);
     const pricing = createPostgresUsagePricingService(connection);
     const tenantId = randomUUID();

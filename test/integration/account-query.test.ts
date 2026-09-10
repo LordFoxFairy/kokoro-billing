@@ -1,3 +1,4 @@
+import { assertDefined } from '../assert-defined.js';
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { createBillingConnection } from '../../src/infrastructure/postgres/connection.js';
@@ -8,7 +9,7 @@ const integration = describe.skipIf(!databaseUrl);
 
 integration('user credit account query', () => {
   it('returns only the account owned by the verified site and subject context', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const tenantId = randomUUID();
     const subjectId = randomUUID();
     const accountId = randomUUID();
@@ -23,7 +24,7 @@ integration('user credit account query', () => {
   });
 
   it('paginates the ledger with an opaque cursor without resetting balance snapshots', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const tenantId = randomUUID();
     const subjectId = randomUUID();
     const accountId = randomUUID();
@@ -46,7 +47,7 @@ integration('user credit account query', () => {
   });
 
   it('does not emit a continuation cursor when the result count exactly equals the requested limit', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const tenantId = randomUUID();
     const subjectId = randomUUID();
     const accountId = randomUUID();
@@ -64,7 +65,7 @@ integration('user credit account query', () => {
   });
 
   it('binds ledger cursors to tenant and subject scope', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const tenantId = randomUUID();
     const firstSubjectId = randomUUID();
     const secondSubjectId = randomUUID();
@@ -83,7 +84,7 @@ integration('user credit account query', () => {
   });
 
   it('excludes a journal row whose tenant differs from the referenced account tenant', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const tenantId = randomUUID();
     const otherTenantId = randomUUID();
     const subjectId = randomUUID();

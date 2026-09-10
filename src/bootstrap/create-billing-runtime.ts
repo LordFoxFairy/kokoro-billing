@@ -92,9 +92,9 @@ export async function createBillingRuntime(config: BillingRuntimeConfig): Promis
             ? params.provider
             : undefined;
           const secret = typeof provider === 'string' ? config.providerSecrets[provider] : undefined;
-          return typeof provider === 'string'
+          return Promise.resolve(typeof provider === 'string'
             && typeof secret === 'string'
-            && verifyProviderWebhook(providerRegistry, provider, request.headers, Buffer.from(request.rawBody ?? ''), secret);
+            && verifyProviderWebhook(providerRegistry, provider, request.headers, Buffer.from(request.rawBody ?? ''), secret));
         },
       },
       resolveWebhookAccountRef: (provider) => config.providerAccountRefs[provider] ?? null,

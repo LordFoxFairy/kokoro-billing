@@ -1,3 +1,4 @@
+import { assertDefined } from '../assert-defined.js';
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -20,9 +21,9 @@ integration("full canonical catalog drift", () => {
   let targetUrl: string;
   beforeEach(async () => {
     database = `billing_drift_${randomUUID().replaceAll("-", "")}`;
-    admin = new Pool({ connectionString: adminUrl!, max: 1 });
+    admin = new Pool({ connectionString: assertDefined(adminUrl), max: 1 });
     await admin.query(`CREATE DATABASE "${database}" TEMPLATE template0`);
-    const url = new URL(adminUrl!);
+    const url = new URL(assertDefined(adminUrl));
     url.pathname = `/${database}`;
     url.search = "";
     targetUrl = url.toString();
@@ -51,7 +52,7 @@ integration("full canonical catalog drift", () => {
   async function verify(url = targetUrl) {
     return verifySchema({
       databaseUrl: url,
-      schemaAdminUrl: adminUrl!,
+      schemaAdminUrl: assertDefined(adminUrl),
       canonicalSql,
     });
   }
@@ -81,7 +82,7 @@ integration("full canonical catalog drift", () => {
     await admin.query(
       `CREATE DATABASE "${alternate}" TEMPLATE template0 ENCODING 'SQL_ASCII' LC_COLLATE 'C' LC_CTYPE 'C'`,
     );
-    const url = new URL(adminUrl!);
+    const url = new URL(assertDefined(adminUrl));
     url.pathname = `/${alternate}`;
     url.search = "";
     try {
@@ -206,7 +207,7 @@ integration("full canonical catalog drift", () => {
     await expect(
       verifySchema({
         databaseUrl: "postgresql://x@127.0.0.1:1/x?schema=private",
-        schemaAdminUrl: adminUrl!,
+        schemaAdminUrl: assertDefined(adminUrl),
         canonicalSql,
       }),
     ).rejects.toThrow(/schema must be public/iu);
@@ -295,16 +296,15 @@ integration("full canonical catalog drift", () => {
     await expect(
       withSchemaSession(
         "postgresql://fixture@127.0.0.1:1/fixture",
-        async () => undefined,
+        async () => Promise.resolve(undefined),
         100,
       ),
     ).rejects.toThrow();
     expect(Date.now() - started).toBeLessThan(1_000);
   });
 
-  it("preserves a falsey rejection from session work", async () => {
-    await expect(
-      withSchemaSession(targetUrl, async () => Promise.reject(undefined)),
-    ).rejects.toBeUndefined();
+  it.each([undefined, null, false, 0, ''])("preserves the exact falsey rejection %j from session work", async (reason) => {
+    const rejectWork = (failure: unknown): Promise<never> => Promise.resolve().then(() => { throw failure; });
+    await expect(withSchemaSession(targetUrl, () => rejectWork(reason))).rejects.toBe(reason);
   });
 });

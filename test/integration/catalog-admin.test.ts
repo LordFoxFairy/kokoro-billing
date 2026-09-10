@@ -1,3 +1,4 @@
+import { assertDefined } from '../assert-defined.js';
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { createBillingConnection } from '../../src/infrastructure/postgres/connection.js';
@@ -9,7 +10,7 @@ const integration = describe.skipIf(!databaseUrl);
 
 integration('catalog admin revisions', () => {
   it('publishes a new immutable revision and records operator audit', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const tenantId = randomUUID();
     const service = createPostgresCatalogAdminService(connection);
     try {

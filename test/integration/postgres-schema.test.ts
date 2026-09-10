@@ -1,3 +1,4 @@
+import { assertDefined } from '../assert-defined.js';
 import { describe, expect, it } from 'vitest';
 import { createBillingConnection } from '../../src/infrastructure/postgres/connection.js';
 import type { RowDataPacket } from '../../src/infrastructure/postgres/connection.js';
@@ -7,7 +8,7 @@ const integration = describe.skipIf(!databaseUrl);
 
 integration('billing canonical PostgreSQL schema', () => {
   it('contains only owner-prefixed Billing tables and no schema history table', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     try {
       const [tables] = await connection.query<(RowDataPacket & { table_name: string })[]>(
         `SELECT table_name
@@ -29,7 +30,7 @@ integration('billing canonical PostgreSQL schema', () => {
   });
 
   it('uses application-owned cross-table integrity and UTC millisecond timestamps', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     try {
       const [relations] = await connection.query<(RowDataPacket & { constraint_type: string })[]>(
         `SELECT constraint_type
@@ -62,7 +63,7 @@ integration('billing canonical PostgreSQL schema', () => {
   });
 
   it('installs the deliberate dispatch and tenant query indexes', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     try {
       const [indexes] = await connection.query<(RowDataPacket & { index_name: string })[]>(
         `SELECT indexname AS index_name
@@ -86,7 +87,7 @@ integration('billing canonical PostgreSQL schema', () => {
   });
 
   it('does not persist an unverified signature claim for trusted internal execution events', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     try {
       const [columns] = await connection.query<(RowDataPacket & { column_name: string })[]>(
         `SELECT column_name
@@ -101,7 +102,7 @@ integration('billing canonical PostgreSQL schema', () => {
   });
 
   it('uses command identity without a durable receipt lease in the single-transaction claim model', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     try {
       const [columns] = await connection.query<(RowDataPacket & { table_name: string; column_name: string })[]>(
         `SELECT table_name, column_name

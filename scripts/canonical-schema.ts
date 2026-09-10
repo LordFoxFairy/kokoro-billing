@@ -57,7 +57,7 @@ export async function installCanonicalSchema(input: CanonicalSchemaInstallation)
   });
 
   let client: PoolClient | undefined;
-  let failure: unknown;
+  let failure: { error: unknown } | undefined;
   let brokenClient = false;
   let clientReleased = false;
   let connectionError: Error | undefined;
@@ -77,7 +77,8 @@ export async function installCanonicalSchema(input: CanonicalSchemaInstallation)
     }
   };
   try {
-    client = await pool.connect();
+    const activeClient = await pool.connect();
+    client = activeClient;
     client.on('error', onConnectionError);
     const query = async <T extends QueryResultRow = QueryResultRow>(text: string, values?: unknown[]): Promise<QueryResult<T>> => {
       if (connectionError) throw connectionError;
@@ -92,7 +93,7 @@ export async function installCanonicalSchema(input: CanonicalSchemaInstallation)
           reject(new Error(`canonical schema database query exceeded ${clientQueryTimeoutMs}ms`));
         }, clientQueryTimeoutMs);
       });
-      try { return await Promise.race([client!.query<T>(text, values), deadline, disconnected]); }
+      try { return await Promise.race([activeClient.query<T>(text, values), deadline, disconnected]); }
       finally {
         rejectActiveQuery = undefined;
         if (timeout) clearTimeout(timeout);
@@ -150,7 +151,7 @@ export async function installCanonicalSchema(input: CanonicalSchemaInstallation)
       await rollbackWithoutMasking(() => query('ROLLBACK'), error, () => { brokenClient = true; });
     }
   } catch (error) {
-    failure = error;
+    failure = { error };
   } finally {
     releaseClient(brokenClient);
     let closeTimer: NodeJS.Timeout | undefined;
@@ -163,8 +164,8 @@ export async function installCanonicalSchema(input: CanonicalSchemaInstallation)
         pool.removeListener('error', onConnectionError);
       });
       await Promise.race([closing, closeDeadline]);
-    } catch (closeError) { failure ??= closeError; }
+    } catch (closeError) { failure ??= { error: closeError }; }
     if (closeTimer) clearTimeout(closeTimer);
   }
-  if (failure !== undefined) throw failure;
+  if (failure !== undefined) throw failure.error;
 }

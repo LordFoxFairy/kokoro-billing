@@ -232,7 +232,7 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
     },
   });
   app.addHook('onRequest', (_request, _reply, done) => { runWithBillingContext(() => done()); });
-  app.addHook('onRequest', async (request) => { request.billingStartedAt = process.hrtime.bigint(); });
+  app.addHook('onRequest', async (request) => { request.billingStartedAt = process.hrtime.bigint(); return Promise.resolve(); });
   app.addHook('onResponse', async (request, reply) => {
     const route = request.routeOptions.url ?? request.url.split('?')[0] ?? 'unknown';
     const durationSeconds = request.billingStartedAt === undefined ? 0 : Number(process.hrtime.bigint() - request.billingStartedAt) / 1e9;
@@ -517,7 +517,10 @@ export const createBillingServer = (dependencies: BillingHttpDependencies): Fast
         : typeof request.headers['x-kokoro-tenant-id'] === 'string' ? request.headers['x-kokoro-tenant-id'] : null;
       if (!tenantId) throw new Error('billing.tenant_mismatch');
       if (parsed?.payloadTenantId && parsed.payloadTenantId !== tenantId) throw new Error('billing.tenant_mismatch');
-      const result = await dependencies.webhook.accept({ tenantId: tenantId, provider, providerAccountRef, externalEventId: parsed?.eventId ?? String(body.id ?? ''), eventType: parsed?.eventType ?? String(body.type ?? 'unknown'), rawPayload: body, signatureValid: true });
+      const externalEventId = parsed?.eventId ?? body.id ?? '';
+      const eventType = parsed?.eventType ?? body.type ?? 'unknown';
+      if (typeof externalEventId !== 'string' || typeof eventType !== 'string') throw new Error('billing.provider_payload_invalid');
+      const result = await dependencies.webhook.accept({ tenantId: tenantId, provider, providerAccountRef, externalEventId, eventType, rawPayload: body, signatureValid: true });
       return reply.code(202).send({ data: { event_id: result.providerEventId, status: result.processingStatus }, meta: { request_id: request.id } });
     } catch (error) { return sendError(reply, error); }
   });

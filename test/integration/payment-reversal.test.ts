@@ -1,3 +1,4 @@
+import { assertDefined } from '../assert-defined.js';
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { createBillingConnection } from '../../src/infrastructure/postgres/connection.js';
@@ -9,7 +10,7 @@ const integration = describe.skipIf(!databaseUrl);
 
 integration('payment reversal to credit reversal', () => {
   it('reverses only the unconsumed grant amount exactly once', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const settlement = createPostgresBillingSettlementService(connection);
     const reversal = createPostgresBillingReversalService(connection);
     const tenantId = randomUUID();
@@ -38,7 +39,7 @@ integration('payment reversal to credit reversal', () => {
   });
 
   it('rejects a reversal replay with a changed financial payload', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const service = createPostgresBillingReversalService(connection);
     const settlementService = createPostgresBillingSettlementService(connection);
     const tenantId = randomUUID();
@@ -57,8 +58,8 @@ integration('payment reversal to credit reversal', () => {
   });
 
   it('serializes concurrent retries from independent PostgreSQL connections', async () => {
-    const firstConnection = await createBillingConnection(databaseUrl!);
-    const secondConnection = await createBillingConnection(databaseUrl!);
+    const firstConnection = await createBillingConnection(assertDefined(databaseUrl));
+    const secondConnection = await createBillingConnection(assertDefined(databaseUrl));
     const settlement = createPostgresBillingSettlementService(firstConnection);
     const tenantId = randomUUID();
     const settlementId = randomUUID();
@@ -103,7 +104,7 @@ integration('payment reversal to credit reversal', () => {
   });
 
   it('allocates concurrent-safe proportional provider partial refunds', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const settlement = createPostgresBillingSettlementService(connection);
     const reversal = createPostgresBillingReversalService(connection);
     const tenantId = randomUUID();

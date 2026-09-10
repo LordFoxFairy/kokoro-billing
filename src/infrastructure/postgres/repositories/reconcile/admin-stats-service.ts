@@ -25,13 +25,13 @@ export class AdminStatsService {
       countByStatus(this.connection, 'payment_settlement', 'status', tenantId),
       countByStatus(this.connection, 'payment_reversal', 'status', tenantId),
       countByStatus(this.connection, 'payment_provider_event', 'processing_status', tenantId),
-      this.connection.execute<RowDataPacket[]>('SELECT COUNT(*) AS count FROM entitlement_credit_account WHERE tenant_id = $1', [tenantId]),
-      this.connection.execute<RowDataPacket[]>('SELECT COUNT(*) AS count FROM entitlement_credit_grant WHERE tenant_id = $1', [tenantId]),
-      this.connection.execute<RowDataPacket[]>('SELECT COALESCE(SUM(remaining_micros), 0) AS amount FROM entitlement_credit_grant WHERE tenant_id = $1', [tenantId]),
+      this.connection.execute<Record<string, string>[]>('SELECT COUNT(*) AS count FROM entitlement_credit_account WHERE tenant_id = $1', [tenantId]),
+      this.connection.execute<Record<string, string>[]>('SELECT COUNT(*) AS count FROM entitlement_credit_grant WHERE tenant_id = $1', [tenantId]),
+      this.connection.execute<Record<string, string>[]>('SELECT COALESCE(SUM(remaining_micros), 0) AS amount FROM entitlement_credit_grant WHERE tenant_id = $1', [tenantId]),
       amountByCurrency(this.connection, 'payment_settlement', tenantId),
       amountByCurrency(this.connection, 'payment_reversal', tenantId),
     ]);
-    const scalar = (result: [RowDataPacket[], unknown], key: string): string => String((result[0][0] as Record<string, unknown> | undefined)?.[key] ?? '0');
+    const scalar = (result: [Record<string, string>[], unknown], key: string): string => result[0][0]?.[key] ?? '0';
     return {
       checkouts: checkout,
       settlements: { byStatus: settlement, succeededAmountMinorByCurrency: settlementAmounts },
@@ -70,7 +70,7 @@ export class AdminStatsService {
   }
 
   public async listPaymentOperations(tenantId: string): Promise<Record<string, unknown>[]> {
-    const [rows] = await this.connection.execute<RowDataPacket[]>(
+    const [rows] = await this.connection.execute<(RowDataPacket & { subject_id: string | null; provider: string | null; external_ref: string | null; currency: string | null })[]>(
       `SELECT operation_id, tenant_id, operation_type, subject_id, provider, external_ref,
               amount_minor, currency, status, created_at
          FROM (

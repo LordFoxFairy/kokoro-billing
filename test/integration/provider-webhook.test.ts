@@ -1,3 +1,4 @@
+import { assertDefined } from '../assert-defined.js';
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import type { RowDataPacket } from '../../src/infrastructure/postgres/connection.js';
@@ -9,7 +10,7 @@ const integration = describe.skipIf(!databaseUrl);
 
 integration('provider webhook inbox', () => {
   it('stores a signed provider event once and returns the same fact on replay', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const service = createPostgresProviderEventInboxService(connection);
     const tenantId = randomUUID();
     const externalEventId = `evt-${randomUUID()}`;
@@ -39,7 +40,7 @@ integration('provider webhook inbox', () => {
   });
 
   it('rejects an event before persistence when the provider signature is invalid', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const service = createPostgresProviderEventInboxService(connection);
     await expect(service.accept({
       tenantId: randomUUID(),
@@ -53,7 +54,7 @@ integration('provider webhook inbox', () => {
   });
 
   it('rejects the same external event id with a different payload', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const service = createPostgresProviderEventInboxService(connection);
     const tenantId = randomUUID();
     const externalEventId = `evt-${randomUUID()}`;
@@ -66,7 +67,7 @@ integration('provider webhook inbox', () => {
   });
 
   it('requeues a failed event with a durable audited command', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const inbox = createPostgresProviderEventInboxService(connection);
     const admin = createPostgresProviderEventAdminService(connection);
     const tenantId = randomUUID();
@@ -74,7 +75,7 @@ integration('provider webhook inbox', () => {
       const accepted = await inbox.accept({ tenantId, provider: 'mock', externalEventId: `evt-${randomUUID()}`, eventType: 'payment.succeeded', rawPayload: { ok: true }, signatureValid: true });
       await connection.execute(`UPDATE payment_provider_event SET processing_status = 'failed', last_error = 'temporary' WHERE provider_event_id = $1`, [accepted.providerEventId]);
       const first = await admin.retry({ tenantId, providerEventId: accepted.providerEventId, operatorId: 'operator-1', reason: 'provider timeout', idempotencyKey: `retry-${randomUUID()}` });
-      const replay = await admin.retry({ tenantId, providerEventId: accepted.providerEventId, operatorId: 'operator-1', reason: 'provider timeout', idempotencyKey: (await connection.query<(RowDataPacket & { idempotency_key: string })[]>('SELECT idempotency_key FROM payment_command_receipt WHERE tenant_id = $1 AND command_name = \'ProviderEventRetry\'', [tenantId]))[0][0]!.idempotency_key });
+      const replay = await admin.retry({ tenantId, providerEventId: accepted.providerEventId, operatorId: 'operator-1', reason: 'provider timeout', idempotencyKey: assertDefined((await connection.query<(RowDataPacket & { idempotency_key: string })[]>('SELECT idempotency_key FROM payment_command_receipt WHERE tenant_id = $1 AND command_name = \'ProviderEventRetry\'', [tenantId]))[0][0]).idempotency_key });
       expect(first).toEqual({ providerEventId: accepted.providerEventId, processingStatus: 'received' });
       expect(replay).toEqual(first);
       const [outbox] = await connection.query<(RowDataPacket & { published_at: Date | null; attempts: number })[]>('SELECT published_at, attempts FROM payment_outbox WHERE aggregate_type = \'provider_event\' AND aggregate_id = $1', [accepted.providerEventId]);
@@ -88,7 +89,7 @@ integration('provider webhook inbox', () => {
   });
 
   it('lists only the current site and supports processing-status filtering', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const inbox = createPostgresProviderEventInboxService(connection);
     const admin = createPostgresProviderEventAdminService(connection);
     const tenantId = randomUUID();

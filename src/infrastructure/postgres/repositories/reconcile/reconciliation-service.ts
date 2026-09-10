@@ -40,7 +40,7 @@ export class ReconciliationService {
       .filter((row) => row.balanceMicros !== row.grantRemainingMicros || row.balanceMicros !== row.journalMicros || row.heldMicros !== row.activeHoldMicros || row.heldMicros !== row.activeAllocationMicros || row.activeHoldMicros !== row.activeAllocationMicros);
 
     const settlementPredicate = tenantId === undefined ? '' : 'AND s.tenant_id = $1';
-    const [settlementRows] = await this.connection.query<RowDataPacket[]>(
+    const [settlementRows] = await this.connection.query<(RowDataPacket & { acquisition_id: string | null; fulfillment_id: string | null; fulfillment_status: string | null })[]>(
       `SELECT s.settlement_id, s.status, a.acquisition_id, f.fulfillment_id, f.status AS fulfillment_status
          FROM payment_settlement s
          LEFT JOIN entitlement_acquisition a ON a.tenant_id = s.tenant_id AND a.source_kind = 'payment_settlement' AND a.source_ref = s.settlement_id
@@ -53,7 +53,7 @@ export class ReconciliationService {
     const settlementDrifts = settlementRows.map((row) => ({ settlementId: String(row.settlement_id), status: String(row.status), acquisitionId: row.acquisition_id === null ? null : String(row.acquisition_id), fulfillmentId: row.fulfillment_id === null ? null : String(row.fulfillment_id), fulfillmentStatus: row.fulfillment_status === null ? null : String(row.fulfillment_status) }));
 
     const reversalPredicate = tenantId === undefined ? '' : 'AND r.tenant_id = $1';
-    const [reversalRows] = await this.connection.query<RowDataPacket[]>(
+    const [reversalRows] = await this.connection.query<(RowDataPacket & { fulfillment_reversal_id: string | null; fulfillment_reversal_status: string | null })[]>(
       `SELECT r.reversal_id, r.status, fr.fulfillment_reversal_id, fr.status AS fulfillment_reversal_status
          FROM payment_reversal r
          LEFT JOIN entitlement_fulfillment_reversal fr ON fr.tenant_id = r.tenant_id AND fr.payment_reversal_id = r.reversal_id
@@ -65,7 +65,7 @@ export class ReconciliationService {
     const reversalDrifts = reversalRows.map((row) => ({ reversalId: String(row.reversal_id), status: String(row.status), fulfillmentReversalId: row.fulfillment_reversal_id === null ? null : String(row.fulfillment_reversal_id), fulfillmentReversalStatus: row.fulfillment_reversal_status === null ? null : String(row.fulfillment_reversal_status) }));
 
     const providerEventPredicate = tenantId === undefined ? '' : 'AND tenant_id = $1';
-    const [providerEventRows] = await this.connection.query<RowDataPacket[]>(
+    const [providerEventRows] = await this.connection.query<(RowDataPacket & { last_error: string | null })[]>(
       `SELECT provider_event_id, provider, external_event_id, event_type, processing_attempts, last_error
          FROM payment_provider_event
         WHERE processing_status = 'failed' ${providerEventPredicate}`,

@@ -1,3 +1,4 @@
+import { assertDefined } from '../assert-defined.js';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -10,7 +11,7 @@ const integration = describe.skipIf(!managementUrl);
 const canonicalSql = await readFile(resolve(process.cwd(), 'database/schema.sql'), 'utf8');
 
 function databaseUrl(database: string, query = ''): string {
-  const url = new URL(managementUrl!);
+  const url = new URL(assertDefined(managementUrl));
   url.pathname = `/${database}`;
   url.search = query;
   return url.toString();
@@ -22,7 +23,7 @@ integration('canonical schema installation', () => {
 
   beforeEach(async () => {
     database = `billing_schema_${randomUUID().replaceAll('-', '')}`;
-    admin = new Pool({ connectionString: managementUrl!, max: 1 });
+    admin = new Pool({ connectionString: assertDefined(managementUrl), max: 1 });
     await admin.query(`CREATE DATABASE "${database}"`);
   });
 

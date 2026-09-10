@@ -1,8 +1,12 @@
+import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { createBillingConnection, type RowDataPacket } from '../../src/infrastructure/postgres/connection.js';
 import { createPostgresCheckoutService } from '../../src/infrastructure/postgres/create-postgres-services.js';
 import { createBillingServer } from '../../src/interfaces/http/server.js';
+
+const dataEnvelope = z.object({ data: z.record(z.string(), z.unknown()) });
+const errorEnvelope = z.object({ error: z.record(z.string(), z.unknown()) });
 
 const databaseUrl = process.env.DATABASE_URL;
 const integration = describe.skipIf(databaseUrl === undefined);
@@ -23,19 +27,19 @@ integration('checkout durable HTTP replay', () => {
     const idempotencyKey = `checkout-${randomUUID()}`;
     const server = createBillingServer({
       checkout: { create: (input) => checkout.create(input) },
-      usage: { expireExpiredHolds: async (input) => ({ batchId: input.batchId, expiredHoldIds: [] }) },
-      settlement: { recordSettlement: async (input) => ({ settlementId: input.settlementId, accepted: true }) },
-      reversal: { recordReversal: async () => 'unused-refund' },
-      webhook: { accept: async () => ({ providerEventId: 'unused-event', processingStatus: 'received' as const }) },
-      account: { getForSubject: async () => null },
+      usage: { expireExpiredHolds: async (input) => Promise.resolve(({ batchId: input.batchId, expiredHoldIds: [] })) },
+      settlement: { recordSettlement: async (input) => Promise.resolve(({ settlementId: input.settlementId, accepted: true })) },
+      reversal: { recordReversal: async () => Promise.resolve('unused-refund') },
+      webhook: { accept: async () => Promise.resolve(({ providerEventId: 'unused-event', processingStatus: 'received' as const })) },
+      account: { getForSubject: async () => Promise.resolve(null) },
       auth: {
-        user: async (request) => request.headers['x-kokoro-tenant-id'] === tenantId
+        user: async (request) => Promise.resolve(request.headers['x-kokoro-tenant-id'] === tenantId
           ? { tenantId, subjectId }
-          : null,
-        bff: async () => null,
-        internal: async () => null,
-        admin: async () => null,
-        webhook: async () => false,
+          : null),
+        bff: async () => Promise.resolve(null),
+        internal: async () => Promise.resolve(null),
+        admin: async () => Promise.resolve(null),
+        webhook: async () => Promise.resolve(false),
       },
     });
     const headers = { 'x-kokoro-tenant-id': tenantId, 'idempotency-key': idempotencyKey };
@@ -96,9 +100,9 @@ integration('checkout durable HTTP replay', () => {
 
       expect(first.statusCode).toBe(201);
       expect(reorderedReplay.statusCode).toBe(201);
-      expect(reorderedReplay.json().data.checkout_id).toBe(first.json().data.checkout_id);
+      expect(dataEnvelope.parse(reorderedReplay.json<unknown>()).data.checkout_id).toBe(dataEnvelope.parse(first.json<unknown>()).data.checkout_id);
       expect(drift.statusCode).toBe(409);
-      expect(drift.json().error.code).toBe('billing.idempotency_conflict');
+      expect(errorEnvelope.parse(drift.json<unknown>()).error.code).toBe('billing.idempotency_conflict');
       const [rows] = await connection.query<RowDataPacket[]>(
         'SELECT checkout_id FROM payment_checkout WHERE tenant_id = $1 AND idempotency_key = $2',
         [tenantId, idempotencyKey],

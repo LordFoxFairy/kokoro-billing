@@ -30,7 +30,7 @@ export class RedeemService {
       const code = codes[0] as { code_id: string; campaign_id: string; status: string; program_key: string; credit_micros: string | number; max_redemptions: number; redeemed_count: number; campaign_status: string; starts_at: Date; ends_at: Date | null } | undefined;
       const now = Date.now();
       if (!code || code.status !== 'issued' || code.campaign_status !== 'active' || new Date(code.starts_at).getTime() > now || (code.ends_at && new Date(code.ends_at).getTime() <= now) || code.redeemed_count >= code.max_redemptions) throw new Error('billing.redeem_invalid');
-      const [accounts] = await this.connection.execute<RowDataPacket[]>(`SELECT credit_account_id, subject_id FROM entitlement_credit_account WHERE tenant_id = $1 AND subject_id = $2 FOR UPDATE`, [input.tenantId, input.subjectId]);
+      const [accounts] = await this.connection.execute<(RowDataPacket & { credit_account_id: string; subject_id: string })[]>(`SELECT credit_account_id, subject_id FROM entitlement_credit_account WHERE tenant_id = $1 AND subject_id = $2 FOR UPDATE`, [input.tenantId, input.subjectId]);
       let accountId = String(accounts[0]?.credit_account_id ?? '');
       if (!accountId) {
         accountId = randomUUID();

@@ -1,3 +1,4 @@
+import { assertDefined } from '../assert-defined.js';
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { createBillingConnection } from '../../src/infrastructure/postgres/connection.js';
@@ -8,7 +9,7 @@ const integration = describe.skipIf(!databaseUrl);
 
 integration('subscription query pagination', () => {
   it('uses a limit-plus-one keyset cursor bound to tenant and subject', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const tenantId = randomUUID();
     const subjectId = randomUUID();
     const otherSubjectId = randomUUID();
@@ -43,7 +44,7 @@ integration('subscription query pagination', () => {
   });
 
   it('does not emit a cursor for an exact final page', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const tenantId = randomUUID();
     const subjectId = randomUUID();
     try {

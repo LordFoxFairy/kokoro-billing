@@ -1,3 +1,4 @@
+import { assertDefined } from '../assert-defined.js';
 import { describe, expect, it } from 'vitest';
 import { RedisIdempotencyHint } from '../../src/infrastructure/redis/idempotency-hint.js';
 import { createClient } from 'redis';
@@ -7,8 +8,8 @@ const integration = describe.skipIf(!url);
 
 integration('billing Redis idempotency hint', () => {
   it('stores only a short-lived key-presence marker', async () => {
-    const redis = new RedisIdempotencyHint(url!);
-    const raw = createClient({ url: url! });
+    const redis = new RedisIdempotencyHint(assertDefined(url));
+    const raw = createClient({ url: assertDefined(url) });
     await Promise.all([redis.connect(), raw.connect()]);
     const key = `test:${Date.now()}`;
     const redisKey = `billing:idempotency:${key}`;
@@ -23,8 +24,8 @@ integration('billing Redis idempotency hint', () => {
   });
 
   it('does not interpret a malformed legacy value as replay or conflict', async () => {
-    const redis = new RedisIdempotencyHint(url!);
-    const raw = createClient({ url: url! });
+    const redis = new RedisIdempotencyHint(assertDefined(url));
+    const raw = createClient({ url: assertDefined(url) });
     await Promise.all([redis.connect(), raw.connect()]);
     const key = `invalid:${Date.now()}`;
     const redisKey = `billing:idempotency:${key}`;

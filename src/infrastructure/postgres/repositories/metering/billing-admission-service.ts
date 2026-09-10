@@ -285,8 +285,10 @@ export class BillingAdmissionService {
     if (!admission) throw new Error('billing.admission_not_found');
     if (event.event_type === 'execution.accepted') {
       const parsedReceipt = event.receipt_json === null ? {} : parsePersistedJson(event.receipt_json, jsonRecordSchema, 'billing.execution_receipt_invalid');
+      const acceptedProviderRef = parsedReceipt.provider_operation_ref ?? 'event';
+      if (typeof acceptedProviderRef !== 'string') throw new Error('billing.execution_receipt_invalid');
       const acceptedAt = typeof parsedReceipt.accepted_at === 'string' ? new Date(parsedReceipt.accepted_at) : new Date(event.occurred_at);
-      await this.capture(tenantId, admission.admission_id, { invocationId: event.invocation_id, executionId: event.execution_id, acceptedProviderRef: String(parsedReceipt.provider_operation_ref ?? 'event'), acceptedAt, serviceReceipt: parsedReceipt, receiptSchemaVersion: event.receipt_schema_version }, `execution-event:${eventId}`);
+      await this.capture(tenantId, admission.admission_id, { invocationId: event.invocation_id, executionId: event.execution_id, acceptedProviderRef, acceptedAt, serviceReceipt: parsedReceipt, receiptSchemaVersion: event.receipt_schema_version }, `execution-event:${eventId}`);
     } else if (event.event_type === 'execution.rejected' || event.event_type === 'execution.failed') {
       const serviceReceipt = event.receipt_json === null ? undefined : parsePersistedJson(event.receipt_json, jsonRecordSchema, 'billing.execution_receipt_invalid');
       await this.release({

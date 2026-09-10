@@ -1,3 +1,4 @@
+import { assertDefined } from '../assert-defined.js';
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { createBillingConnection } from '../../src/infrastructure/postgres/connection.js';
@@ -9,7 +10,7 @@ const integration = describe.skipIf(!databaseUrl);
 
 integration('credit grant expiry', () => {
   it('expires unused grant balance transactionally and is replay-safe', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const service = createPostgresGrantExpiryService(connection);
     const tenantId = randomUUID();
     const accountId = randomUUID();
@@ -40,7 +41,7 @@ integration('credit grant expiry', () => {
   });
 
   it('defers expiry while an active hold still owns grant allocation', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const service = createPostgresGrantExpiryService(connection);
     const tenantId = randomUUID();
     const accountId = randomUUID();
@@ -84,7 +85,7 @@ integration('credit grant expiry', () => {
   });
 
   it('uses tenant-scoped application predicates instead of database relationship constraints', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const siteA = randomUUID();
     const siteB = randomUUID();
     const accountId = randomUUID();

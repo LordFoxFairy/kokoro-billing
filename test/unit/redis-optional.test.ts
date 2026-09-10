@@ -16,7 +16,7 @@ describe('optional Redis coordination', () => {
       overallTimeoutMs: 50,
     });
     await expect(lease.connect()).rejects.toBeInstanceOf(Error);
-    await expect(lease.runExclusive('expiry', 30, async () => 'completed')).resolves.toBe('completed');
+    await expect(lease.runExclusive('expiry', 30, async () => Promise.resolve('completed'))).resolves.toBe('completed');
     await lease.close();
   });
 });

@@ -47,7 +47,9 @@ const nodeSetupSchema = z.object({
 const pnpmSetupSchema = z.object({ version: z.literal("11.25.0") }).strict();
 const devPins = {
   "@types/node": "24.13.3",
-  typescript: "5.9.3",
+  typescript: "6.0.3",
+  "typescript-eslint": "8.69.0",
+  eslint: "10.10.0",
   vitest: "5.0.0",
   vite: "8.2.2",
 };

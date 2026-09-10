@@ -1,5 +1,12 @@
+import { z } from 'zod';
 import { describe, expect, it } from 'vitest';
 import { createBillingServer } from '../../src/interfaces/http/server.js';
+
+const anyString: unknown = expect.any(String);
+
+const metaEnvelope = z.object({ meta: z.record(z.string(), z.unknown()) });
+const dataEnvelope = z.object({ data: z.record(z.string(), z.unknown()) });
+const errorEnvelope = z.object({ error: z.record(z.string(), z.unknown()) });
 
 const admissionResult = { admissionId: 'adm-1', holdId: 'hold-1', mode: 'credit' as const, pricePolicyRevisionId: 'price-1', amountMicros: '42', currency: 'CRD' as const, status: 'held' as const };
 const calls: { capture: unknown[]; release: unknown[]; events: unknown[] } = { capture: [], release: [], events: [] };
@@ -12,53 +19,53 @@ const lossyHintMarks: Array<{ readonly key: string; readonly ttlSeconds: number 
 
 const idempotencyHintDouble = {
   markSeen: async (key: string, ttlSeconds: number) => {
-    if (key.includes('hint-timeout')) throw new Error('redis timeout');
+    if (key.includes('hint-timeout')) return Promise.reject(new Error('redis timeout'));
     lossyHintMarks.push({ key, ttlSeconds });
-  },
+  return Promise.resolve(); },
 };
 
 const server = createBillingServer({
   idempotencyHint: idempotencyHintDouble,
-  catalog: { listSellable: async () => ({ items: [{ id: 'offer-revision-1', key: 'pro', name: 'Pro', currency: 'USD', amountMinor: '1999', creditMicros: '1000000', billingInterval: 'month' }] }) },
+  catalog: { listSellable: async () => Promise.resolve(({ items: [{ id: 'offer-revision-1', key: 'pro', name: 'Pro', currency: 'USD', amountMinor: '1999', creditMicros: '1000000', billingInterval: 'month' }] })) },
   checkout: { create: async (input) => {
     checkoutCalls.push(input);
     const receiptKey = `${input.tenantId}:${input.idempotencyKey}`;
     const priorAmount = checkoutReceiptAmounts.get(receiptKey);
-    if (priorAmount !== undefined && priorAmount !== input.amountMinor) throw new Error('billing.idempotency_conflict');
+    if (priorAmount !== undefined && priorAmount !== input.amountMinor) return Promise.reject(new Error('billing.idempotency_conflict'));
     checkoutReceiptAmounts.set(receiptKey, input.amountMinor);
-    return { checkoutId: 'checkout-1', status: 'created', amountMinor: 1999, currency: 'USD', expiresAt: new Date('2030-01-01') };
+    return Promise.resolve({ checkoutId: 'checkout-1', status: 'created', amountMinor: 1999, currency: 'USD', expiresAt: new Date('2030-01-01') });
   } },
   usage: { expireExpiredHolds: async (input) => {
     expiryCalls.push(input);
-    return { batchId: input.batchId, expiredHoldIds: ['hold-1'] };
+    return Promise.resolve({ batchId: input.batchId, expiredHoldIds: ['hold-1'] });
   } },
   settlement: { recordSettlement: async (input) => {
     settlementCalls.push(input);
-    return { settlementId: input.settlementId, accepted: true };
+    return Promise.resolve({ settlementId: input.settlementId, accepted: true });
   } },
-  reversal: { recordReversal: async (input) => { reversalCalls.push(input); return 'refund-1'; } },
-  webhook: { accept: async () => ({ providerEventId: 'evt-1', processingStatus: 'received' as const }) },
-  account: { getForSubject: async () => ({ accountId: 'account-1', availableMicros: '42', heldMicros: '0' }) },
+  reversal: { recordReversal: async (input) => { reversalCalls.push(input); return Promise.resolve('refund-1'); } },
+  webhook: { accept: async () => Promise.resolve(({ providerEventId: 'evt-1', processingStatus: 'received' as const })) },
+  account: { getForSubject: async () => Promise.resolve(({ accountId: 'account-1', availableMicros: '42', heldMicros: '0' })) },
   admission: {
-    create: async () => admissionResult,
-    capture: async (...input) => { calls.capture.push(input); return { ...admissionResult, status: 'accepted_without_charge' as const }; },
-    release: async (...input) => { calls.release.push(input); return { ...admissionResult, status: 'rejected' as const }; },
-    recordExecutionEvent: async (...input) => { calls.events.push(input); return { eventId: 'event-1', status: 'received' as const }; },
+    create: async () => Promise.resolve(admissionResult),
+    capture: async (...input) => { calls.capture.push(input); return Promise.resolve({ ...admissionResult, status: 'accepted_without_charge' as const }); },
+    release: async (...input) => { calls.release.push(input); return Promise.resolve({ ...admissionResult, status: 'rejected' as const }); },
+    recordExecutionEvent: async (...input) => { calls.events.push(input); return Promise.resolve({ eventId: 'event-1', status: 'received' as const }); },
   },
   auth: {
-    user: async (request) => request.headers['x-kokoro-service'] === undefined ? { tenantId: String(request.headers['x-kokoro-tenant-id']), subjectId: 'subject-1' } : null,
-    bff: async (request) => request.headers['x-kokoro-service'] === 'web-bff'
+    user: async (request) => Promise.resolve(request.headers['x-kokoro-service'] === undefined ? { tenantId: String(request.headers['x-kokoro-tenant-id']), subjectId: 'subject-1' } : null),
+    bff: async (request) => Promise.resolve(request.headers['x-kokoro-service'] === 'web-bff'
       && request.headers['x-kokoro-internal-secret'] === 'secret'
       && request.headers.authorization === 'Bearer secret'
       && typeof request.headers['x-kokoro-tenant-id'] === 'string'
       && (request.headers['x-kokoro-subject'] === undefined || typeof request.headers['x-kokoro-subject'] === 'string')
       ? { tenantId: request.headers['x-kokoro-tenant-id'], serviceId: 'web-bff', ...(typeof request.headers['x-kokoro-subject'] === 'string' ? { subjectId: request.headers['x-kokoro-subject'] } : {}) }
-      : null,
-    internal: async (request) => ({ tenantId: String(request.headers['x-kokoro-tenant-id']), serviceId: String(request.headers['x-kokoro-service']) }),
-    admin: async (request) => request.headers['x-kokoro-role'] === 'billing.admin'
+      : null),
+    internal: async (request) => Promise.resolve(({ tenantId: String(request.headers['x-kokoro-tenant-id']), serviceId: String(request.headers['x-kokoro-service']) })),
+    admin: async (request) => Promise.resolve(request.headers['x-kokoro-role'] === 'billing.admin'
       ? { tenantId: String(request.headers['x-kokoro-tenant-id']), operatorId: String(request.headers['x-kokoro-operator']), role: 'billing.admin' }
-      : null,
-    webhook: async () => true,
+      : null),
+    webhook: async () => Promise.resolve(true),
   },
 });
 
@@ -71,7 +78,7 @@ describe('clean-build Billing v1 transport', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
       data: { offers: [{ id: 'offer-revision-1', key: 'pro', name: 'Pro', currency: 'USD', amount_minor: '1999', credit_micros: '1000000', billing_interval: 'month' }] },
-      meta: { request_id: expect.any(String) },
+      meta: { request_id: anyString },
     });
     expect(response.json()).not.toHaveProperty('requestId');
   });
@@ -79,9 +86,9 @@ describe('clean-build Billing v1 transport', () => {
   it('uses meta.request_id and snake_case for the user ledger surface', async () => {
     const response = await server.inject({ method: 'GET', url: '/v1/billing/me/credit-account', headers: { 'x-kokoro-tenant-id': 'tenant-1' } });
     expect(response.statusCode).toBe(200);
-    expect(response.json().meta.request_id).toEqual(expect.any(String));
-    expect(response.json().data.account_id).toBe('account-1');
-    expect(response.json().data.available_micros).toBe('42');
+    expect(metaEnvelope.parse(response.json<unknown>()).meta.request_id).toEqual(anyString);
+    expect(dataEnvelope.parse(response.json<unknown>()).data.account_id).toBe('account-1');
+    expect(dataEnvelope.parse(response.json<unknown>()).data.available_micros).toBe('42');
     expect(response.json()).not.toHaveProperty('requestId');
   });
 
@@ -93,7 +100,7 @@ describe('clean-build Billing v1 transport', () => {
     expect(checkoutCalls.at(-1)).toEqual(expect.objectContaining({
       offerRevisionId: 'offer-revision-1', amountMinor: 1999, currency: 'USD', quoteSnapshot: { key: 'pro', creditMicros: '1000000', name: 'Pro', pricingRevisionId: 'price-1' },
     }));
-    expect(response.json().data).toEqual({ checkout_id: 'checkout-1', status: 'created', amount_minor: '1999', currency: 'USD', expires_at: '2030-01-01T00:00:00.000Z' });
+    expect(dataEnvelope.parse(response.json<unknown>()).data).toEqual({ checkout_id: 'checkout-1', status: 'created', amount_minor: '1999', currency: 'USD', expires_at: '2030-01-01T00:00:00.000Z' });
     expect(response.json()).not.toHaveProperty('requestId');
   });
 
@@ -113,7 +120,7 @@ describe('clean-build Billing v1 transport', () => {
     } });
     const account = await server.inject({ method: 'GET', url: '/v1/billing/me/credit-account', headers: bffHeaders });
     expect(checkout.statusCode).toBe(403);
-    expect(checkout.json().error.code).toBe('billing.service_subject_required');
+    expect(errorEnvelope.parse(checkout.json<unknown>()).error.code).toBe('billing.service_subject_required');
     expect(account.statusCode).toBe(401);
   });
 
@@ -128,7 +135,7 @@ describe('clean-build Billing v1 transport', () => {
     for (const testCase of cases) {
       const response = await server.inject({ method: 'GET', url: '/v1/commerce/catalog', headers: testCase.headers });
       expect(response.statusCode, testCase.name).toBe(403);
-      expect(response.json().error.code, testCase.name).toBe('billing.service_auth_failed');
+      expect(errorEnvelope.parse(response.json<unknown>()).error.code, testCase.name).toBe('billing.service_auth_failed');
     }
   });
 
@@ -140,9 +147,9 @@ describe('clean-build Billing v1 transport', () => {
     const conflict = await server.inject({ method: 'POST', url: '/v1/billing/checkout', headers: { ...bffHeaders, 'idempotency-key': 'bff-replay-123456' }, payload: { ...payload, amount_minor: '2999' } });
     expect(first.statusCode).toBe(201);
     expect(duplicate.statusCode).toBe(201);
-    expect(duplicate.json().data.checkout_id).toBe(first.json().data.checkout_id);
+    expect(dataEnvelope.parse(duplicate.json<unknown>()).data.checkout_id).toBe(dataEnvelope.parse(first.json<unknown>()).data.checkout_id);
     expect(conflict.statusCode).toBe(409);
-    expect(conflict.json().error.code).toBe('billing.idempotency_conflict');
+    expect(errorEnvelope.parse(conflict.json<unknown>()).error.code).toBe('billing.idempotency_conflict');
     expect(checkoutCalls).toHaveLength(callsBefore + 3);
   });
 
@@ -209,8 +216,8 @@ describe('clean-build Billing v1 transport', () => {
   it('uses the v1 envelope for errors without a top-level requestId', async () => {
     const response = await server.inject({ method: 'POST', url: '/v1/billing/checkout', headers: { 'x-kokoro-tenant-id': 'tenant-1' }, payload: {} });
     expect(response.statusCode).toBe(400);
-    expect(response.json()).toMatchObject({ error: { code: 'billing.idempotency_required', retryable: false, details: {} }, meta: { request_id: expect.any(String) } });
-    expect(response.json().error).not.toHaveProperty('request_id');
+    expect(response.json()).toMatchObject({ error: { code: 'billing.idempotency_required', retryable: false, details: {} }, meta: { request_id: anyString } });
+    expect(errorEnvelope.parse(response.json<unknown>()).error).not.toHaveProperty('request_id');
     expect(response.json()).not.toHaveProperty('requestId');
   });
 
@@ -219,14 +226,14 @@ describe('clean-build Billing v1 transport', () => {
       billing_subject: { kind: 'project', ref: 'subject-1' }, payer_ref: 'payer-1', feature_key: 'chat', surface: 'ga', invocation_id: 'inv-1', execution_id: 'exec-1', meter_kind: 'model_invocation', account_id: 'forged', amount: '1',
     } });
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.code).toBe('billing.invalid_request');
+    expect(errorEnvelope.parse(response.json<unknown>()).error.code).toBe('billing.invalid_request');
   });
 
   it('maps admission, capture, release and event commands without exposing internal DTO names', async () => {
     const create = await server.inject({ method: 'POST', url: '/v1/internal/entitlement/admissions', headers: internalHeaders, payload: { billing_subject: { kind: 'project', ref: 'subject-1' }, payer_ref: 'payer-1', feature_key: 'chat', surface: 'ga', invocation_id: 'inv-1', execution_id: 'exec-1', meter_kind: 'model_invocation' } });
     expect(create.statusCode).toBe(201);
-    expect(create.json().data).toEqual({ admission_id: 'adm-1', hold_id: 'hold-1', mode: 'credit', price_policy_revision_id: 'price-1', amount: '42', currency: 'CRD', status: 'held' });
-    expect(create.json().meta.request_id).toEqual(expect.any(String));
+    expect(dataEnvelope.parse(create.json<unknown>()).data).toEqual({ admission_id: 'adm-1', hold_id: 'hold-1', mode: 'credit', price_policy_revision_id: 'price-1', amount: '42', currency: 'CRD', status: 'held' });
+    expect(metaEnvelope.parse(create.json<unknown>()).meta.request_id).toEqual(anyString);
 
     const capture = await server.inject({ method: 'POST', url: '/v1/internal/entitlement/admissions/adm-1/capture', headers: internalHeaders, payload: { invocation_id: 'inv-1', execution_id: 'exec-1', accepted_provider_ref: 'provider-op-1', accepted_at: '2026-09-01T00:00:00Z', service_receipt: { result_digest: 'digest' }, receipt_schema_version: '1' } });
     expect(capture.statusCode).toBe(200);
@@ -256,7 +263,7 @@ describe('clean-build Billing v1 transport', () => {
       },
     });
     expect(event.statusCode).toBe(400);
-    expect(event.json().error.code).toBe('billing.invalid_request');
+    expect(errorEnvelope.parse(event.json<unknown>()).error.code).toBe('billing.invalid_request');
     expect(calls.events).toHaveLength(priorEventCalls);
   });
 
@@ -284,7 +291,7 @@ describe('clean-build Billing v1 transport', () => {
     });
 
     expect(response.statusCode).toBe(202);
-    expect(response.json().data).toEqual({ settlement_id: 'settlement-1', accepted: true });
+    expect(dataEnvelope.parse(response.json<unknown>()).data).toEqual({ settlement_id: 'settlement-1', accepted: true });
     expect(settlementCalls.at(-1)).toEqual({
       settlementId: 'settlement-1',
       tenantId: 'tenant-1',
@@ -352,7 +359,7 @@ describe('clean-build Billing v1 transport', () => {
       payload: { batch_id: 'expiry-batch-1', limit: 25 },
     });
     expect(accepted.statusCode).toBe(202);
-    expect(accepted.json().data).toEqual({ batch_id: 'expiry-batch-1', expired_hold_ids: ['hold-1'] });
+    expect(dataEnvelope.parse(accepted.json<unknown>()).data).toEqual({ batch_id: 'expiry-batch-1', expired_hold_ids: ['hold-1'] });
     expect(expiryCalls.at(-1)).toEqual({
       tenantId: 'tenant-1',
       batchId: 'expiry-batch-1',

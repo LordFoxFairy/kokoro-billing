@@ -1,3 +1,4 @@
+import { assertDefined } from '../assert-defined.js';
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { createBillingConnection } from '../../src/infrastructure/postgres/connection.js';
@@ -9,7 +10,7 @@ const integration = describe.skipIf(!databaseUrl);
 
 integration('usage authorization and settlement', () => {
   it('holds by grant burn order, captures actual usage and releases the difference', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const settlement = createPostgresBillingSettlementService(connection);
     const usage = createPostgresUsageSettlementService(connection);
     const tenantId = randomUUID();
@@ -42,7 +43,7 @@ integration('usage authorization and settlement', () => {
   });
 
   it('releases an active hold idempotently without debiting the account', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const settlement = createPostgresBillingSettlementService(connection);
     const usage = createPostgresUsageSettlementService(connection);
     const tenantId = randomUUID();
@@ -64,7 +65,7 @@ integration('usage authorization and settlement', () => {
   });
 
   it('expires abandoned holds and returns their reservation to the account', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const settlement = createPostgresBillingSettlementService(connection);
     const usage = createPostgresUsageSettlementService(connection);
     const tenantId = randomUUID();
@@ -90,7 +91,7 @@ integration('usage authorization and settlement', () => {
   });
 
   it('rejects a usage event replay with a different payload', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const usage = createPostgresUsageSettlementService(connection);
     const tenantId = randomUUID();
     try {

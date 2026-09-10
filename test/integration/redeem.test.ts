@@ -1,3 +1,4 @@
+import { assertDefined } from '../assert-defined.js';
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import type { RowDataPacket } from '../../src/infrastructure/postgres/connection.js';
@@ -11,7 +12,7 @@ const secret = 'integration-redeem-secret-012345678901234567890123';
 
 integration('redeem card keys', () => {
   it('issues plaintext once, stores only HMAC, and atomically grants once', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const admin = createPostgresRedeemAdminService(connection, secret);
     const redeem = createPostgresRedeemService(connection, secret);
     const tenantId = randomUUID();
@@ -23,8 +24,8 @@ integration('redeem card keys', () => {
       const replayBatch = await admin.issueCodes({ tenantId, campaignId: campaign.campaignId, count: 1, operatorId: 'test-operator', reason: 'integration test', idempotencyKey: batchKey });
       expect(replayBatch.codes).toEqual([]);
       const [stored] = await connection.query<(RowDataPacket & { code_hash: string })[]>('SELECT code_hash FROM entitlement_redeem_code WHERE batch_id = $1', [batch.batchId]);
-      const plaintext = batch.codes[0]!;
-      expect(stored[0]!.code_hash).toBe(hashRedeemCode(plaintext, secret));
+      const plaintext = assertDefined(batch.codes[0]);
+      expect(assertDefined(stored[0]).code_hash).toBe(hashRedeemCode(plaintext, secret));
       const input = { tenantId, subjectId: randomUUID(), code: plaintext, idempotencyKey: `redeem-${randomUUID()}` } as const;
       const first = await redeem.redeem(input);
       expect(await redeem.redeem(input)).toEqual(first);

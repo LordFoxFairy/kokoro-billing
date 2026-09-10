@@ -49,7 +49,9 @@ export async function runPrisma(
       await delay(200);
       if (groupExists())
         try {
-          process.kill(-child.pid!, "SIGKILL");
+          const pid = child.pid;
+          if (pid === undefined) throw new Error("missing PID");
+          process.kill(-pid, "SIGKILL");
         } catch (error) {
           if (!isMissingProcess(error)) diagnostics.push(String(error));
         }

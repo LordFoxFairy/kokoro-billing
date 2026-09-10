@@ -1,3 +1,4 @@
+import { assertDefined } from '../assert-defined.js';
 import { randomUUID } from "node:crypto";
 import { Prisma } from "../../src/generated/prisma/client.js";
 import { readSafeInteger } from "../../src/application/ports/safe-integer.js";
@@ -7,6 +8,8 @@ import {
   type PrismaDatabaseFixture,
 } from "./prisma-database.fixture.js";
 
+const anyObject: unknown = expect.any(Object);
+
 const adminUrl = process.env.SCHEMA_ADMIN_URL;
 const integration = describe.skipIf(!adminUrl);
 const id = () => randomUUID();
@@ -15,7 +18,7 @@ const hash = "a".repeat(64);
 integration("Prisma PostgreSQL persistence", () => {
   let fixture!: PrismaDatabaseFixture;
   beforeEach(async () => {
-    fixture = await createPrismaDatabaseFixture(adminUrl!);
+    fixture = await createPrismaDatabaseFixture(assertDefined(adminUrl));
   });
   afterEach(async () => fixture?.close());
 
@@ -204,7 +207,7 @@ integration("Prisma PostgreSQL persistence", () => {
           available_micros: -1n,
         },
       }),
-    ).rejects.toMatchObject({ code: "P2039", meta: expect.any(Object) });
+    ).rejects.toMatchObject({ code: "P2039", meta: anyObject });
     const identity = id();
     const backendPids: number[] = [];
     const runConcurrentCreates = async (failIndex?: number) => {
@@ -228,17 +231,17 @@ integration("Prisma PostgreSQL persistence", () => {
             return await fixture.client.$transaction(
               async (tx) => {
                 if (index === failIndex) {
-                  await arrivals[index === 0 ? 1 : 0]!.promise;
+                  await assertDefined(arrivals[index === 0 ? 1 : 0]).promise;
                   throw new Error("early fixture failure");
                 }
                 const pid = await tx.$queryRaw<
                   Array<{ pid: number }>
                 >`SELECT pg_catalog.pg_backend_pid() AS pid`;
-                backendPids.push(pid[0]!.pid);
+                backendPids.push(assertDefined(pid[0]).pid);
                 arrived = true;
-                arrivals[index]!.resolveArrival();
+                assertDefined(arrivals[index]).resolveArrival();
                 await createGate;
-                if (failIndex !== undefined) return pid[0]!.pid;
+                if (failIndex !== undefined) return assertDefined(pid[0]).pid;
                 await tx.entitlement_command_receipt.create({
                   data: {
                     receipt_id: id(),
@@ -249,12 +252,12 @@ integration("Prisma PostgreSQL persistence", () => {
                     payload_hash: hash,
                   },
                 });
-                return pid[0]!.pid;
+                return assertDefined(pid[0]).pid;
               },
               { timeout: 2_000 },
             );
           } catch (error) {
-            if (!arrived) arrivals[index]!.rejectArrival(error);
+            if (!arrived) assertDefined(arrivals[index]).rejectArrival(error);
             throw error;
           }
         })(),
@@ -287,7 +290,7 @@ integration("Prisma PostgreSQL persistence", () => {
     const rejected = results.find((result) => result.status === "rejected");
     expect(rejected).toMatchObject({
       status: "rejected",
-      reason: { code: "P2002", meta: expect.any(Object) },
+      reason: { code: "P2002", meta: anyObject },
     });
     expect(new Set(backendPids).size).toBe(2);
     const winner =
@@ -305,7 +308,7 @@ integration("Prisma PostgreSQL persistence", () => {
           payload_hash: hash,
         },
       }),
-    ).rejects.toMatchObject({ code: "P2002", meta: expect.any(Object) });
+    ).rejects.toMatchObject({ code: "P2002", meta: anyObject });
     await fixture.client.entitlement_command_receipt.create({
       data: {
         receipt_id: id(),
@@ -343,7 +346,7 @@ integration("Prisma PostgreSQL persistence", () => {
         const backend = await tx.$queryRaw<
           Array<{ pid: number }>
         >`SELECT pg_catalog.pg_backend_pid() AS pid`;
-        holderPid = backend[0]!.pid;
+        holderPid = assertDefined(backend[0]).pid;
         await tx.$queryRaw`SELECT credit_account_id FROM public.entitlement_credit_account WHERE tenant_id = ${"tenant"} AND credit_account_id = ${accountId} FOR UPDATE`;
         locked();
         await gate;

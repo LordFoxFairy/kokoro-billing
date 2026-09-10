@@ -11,9 +11,9 @@ describe('Redis timeout and retry policy', () => {
       if (attempts === 1) {
         const error = new Error('timed out');
         Object.defineProperty(error, 'code', { value: 'ETIMEDOUT' });
-        throw error;
+        return Promise.reject(error);
       }
-      return 'ok';
+      return Promise.resolve('ok');
     });
     expect(result).toBe('ok');
     expect(attempts).toBe(2);
@@ -23,7 +23,7 @@ describe('Redis timeout and retry policy', () => {
     let attempts = 0;
     await expect(runIdempotentRedisOperation('read', policy, async () => {
       attempts += 1;
-      throw new Error('invalid command');
+      return Promise.reject(new Error('invalid command'));
     })).rejects.toThrow('invalid command');
     expect(attempts).toBe(1);
   });

@@ -1,3 +1,4 @@
+import { assertDefined } from '../assert-defined.js';
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import type { RowDataPacket } from '../../src/infrastructure/postgres/connection.js';
@@ -7,12 +8,14 @@ import {
   createPostgresUsageSettlementService,
 } from '../../src/infrastructure/postgres/create-postgres-services.js';
 
+const payloadHashMatcher: unknown = expect.stringMatching(/^[0-9a-f]{64}$/u);
+
 const databaseUrl = process.env.DATABASE_URL;
 const integration = describe.skipIf(!databaseUrl);
 
 integration('durable Billing command receipts', () => {
   it('replays settlement acceptance from PostgreSQL after the Redis hint can expire', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const settlement = createPostgresBillingSettlementService(connection);
     const tenantId = randomUUID();
     const settlementId = randomUUID();
@@ -56,7 +59,7 @@ integration('durable Billing command receipts', () => {
         command_name: 'payment.settlement.accept',
         command_identity: settlementId,
         idempotency_key: idempotencyKey,
-        payload_hash: expect.stringMatching(/^[0-9a-f]{64}$/u),
+        payload_hash: payloadHashMatcher,
         status: 'succeeded',
         result_json: { settlementId, accepted: true },
       });
@@ -66,7 +69,7 @@ integration('durable Billing command receipts', () => {
   });
 
   it('rejects settlement key reuse for a different command payload', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const settlement = createPostgresBillingSettlementService(connection);
     const tenantId = randomUUID();
     const idempotencyKey = `settlement-${randomUUID()}`;
@@ -100,7 +103,7 @@ integration('durable Billing command receipts', () => {
   });
 
   it('rejects settlement payload drift under the same key and settlement identity', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const settlement = createPostgresBillingSettlementService(connection);
     const tenantId = randomUUID();
     const settlementId = randomUUID();
@@ -123,8 +126,8 @@ integration('durable Billing command receipts', () => {
   });
 
   it('serializes concurrent settlement retries onto one durable receipt', async () => {
-    const firstConnection = await createBillingConnection(databaseUrl!);
-    const secondConnection = await createBillingConnection(databaseUrl!);
+    const firstConnection = await createBillingConnection(assertDefined(databaseUrl));
+    const secondConnection = await createBillingConnection(assertDefined(databaseUrl));
     const tenantId = randomUUID();
     const settlementId = randomUUID();
     const input = {
@@ -155,7 +158,7 @@ integration('durable Billing command receipts', () => {
   });
 
   it('replays an expiry batch result without consuming the next eligible batch', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const settlement = createPostgresBillingSettlementService(connection);
     const usage = createPostgresUsageSettlementService(connection);
     const tenantId = randomUUID();
@@ -237,7 +240,7 @@ integration('durable Billing command receipts', () => {
       );
       expect(receipts).toEqual([expect.objectContaining({
         command_identity: batchId,
-        payload_hash: expect.stringMatching(/^[0-9a-f]{64}$/u),
+        payload_hash: payloadHashMatcher,
         status: 'succeeded',
         result_json: { batchId, expiredHoldIds: [firstHoldId] },
       })]);
@@ -247,7 +250,7 @@ integration('durable Billing command receipts', () => {
   });
 
   it('rejects expiry payload drift under the same key and batch identity', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const usage = createPostgresUsageSettlementService(connection);
     const tenantId = randomUUID();
     const batchId = `expiry-batch-${randomUUID()}`;
@@ -265,7 +268,7 @@ integration('durable Billing command receipts', () => {
     { status: 'unknown', expected: 'billing.command_unknown' },
     { status: 'processing', expected: 'billing.command_unknown' },
   ] as const)('returns the stable $status outcome for a durable settlement receipt', async ({ status, expected }) => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const settlement = createPostgresBillingSettlementService(connection);
     const tenantId = randomUUID();
     const input = {
@@ -295,7 +298,7 @@ integration('durable Billing command receipts', () => {
     { status: 'unknown', expected: 'billing.command_unknown' },
     { status: 'processing', expected: 'billing.command_unknown' },
   ] as const)('returns the stable $status outcome for a durable expiry receipt', async ({ status, expected }) => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const usage = createPostgresUsageSettlementService(connection);
     const tenantId = randomUUID();
     const input = {

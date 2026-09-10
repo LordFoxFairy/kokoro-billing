@@ -39,17 +39,17 @@ export function compareSchemaCatalogs(
     for (const key of [...new Set([...left.keys(), ...right.keys()])].sort()) {
       const wanted = left.get(key);
       const found = right.get(key);
-      if (!left.has(key))
-        differences.push({ category, key, kind: "unexpected", actual: found! });
-      else if (!right.has(key))
-        differences.push({ category, key, kind: "missing", expected: wanted! });
-      else if (wanted !== found)
+      if (wanted === undefined && found !== undefined)
+        differences.push({ category, key, kind: "unexpected", actual: found });
+      else if (found === undefined && wanted !== undefined)
+        differences.push({ category, key, kind: "missing", expected: wanted });
+      else if (wanted !== undefined && found !== undefined && wanted !== found)
         differences.push({
           category,
           key,
           kind: "changed",
-          expected: wanted!,
-          actual: found!,
+          expected: wanted,
+          actual: found,
         });
     }
   }

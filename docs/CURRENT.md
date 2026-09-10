@@ -1,11 +1,14 @@
 # kokoro-billing 当前状态
 
-更新时间：2026-09-08。当前规范化分支为 `codex/billing-ts-prisma-alignment`；最终验收必须绑定交付时的 `HEAD`、
+更新时间：2026-09-10。当前规范化分支为 `codex/billing-ts-prisma-alignment`；最终验收必须绑定交付时的 `HEAD`、
 干净工作树和当次命令输出，不能继承历史报告。
 
 本文中的“已实现”表示可在当前源码、Schema、contract 与测试中定位；不表示已获得生产流量、SLO、容量或灾难恢复证据。
 
 ## 当前规范化工作
+
+- B7b源码通过双独立审查及Root冻结工作树新验收（354全套/157integration、0跳过；Schema/Prisma无差异，源码/dist smoke通过，audit0；交付commit与干净HEAD复验见任务板）：TS6.0.3、typescript-eslint8.69.0、ESLint10.10.0，全手写typed规则；原8.70候选因安装时发布冷却期失败而未采用，无豁免。见唯一任务板。
+- **P0待修（B8）**：默认UUID hold生成hold:${UUID}共41字符usage event ID，超过canonical VARCHAR(36)，真实扣款路径报SQLSTATE22001并回滚；B7b短ID边界fixture不是完整capture成功证据。
 
 - B7a已实现Node24.20.0统一、Vitest5/Vite8、精确依赖及engineStrict，CI/release补齐catalog与Prisma门；审计0漏洞。交付058bdf3，Root干净HEAD318项全套与137项integration通过，源码/dist HTTP smoke通过；精确证据见任务板。生产仍Fastify/pg，typed全仓lint/AST/格式归B7后续。
 - 唯一任务板：[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)；最新目标：[ADR-0003](ADR/0003-nestjs-prisma-sql-first-alignment.md)。

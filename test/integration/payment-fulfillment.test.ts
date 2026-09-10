@@ -1,3 +1,4 @@
+import { assertDefined } from '../assert-defined.js';
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { createBillingConnection } from '../../src/infrastructure/postgres/connection.js';
@@ -8,7 +9,7 @@ const integration = describe.skipIf(!databaseUrl);
 
 integration('payment settlement to credit fulfillment', () => {
   it('fulfills a settlement exactly once and writes one grant and journal', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const service = createPostgresBillingSettlementService(connection);
     const tenantId = randomUUID();
     const accountId = randomUUID();
@@ -34,8 +35,8 @@ integration('payment settlement to credit fulfillment', () => {
   });
 
   it('serializes concurrent fulfillment attempts on the settlement source fact', async () => {
-    const firstConnection = await createBillingConnection(databaseUrl!);
-    const secondConnection = await createBillingConnection(databaseUrl!);
+    const firstConnection = await createBillingConnection(assertDefined(databaseUrl));
+    const secondConnection = await createBillingConnection(assertDefined(databaseUrl));
     const tenantId = randomUUID();
     const accountId = randomUUID();
     const settlementId = randomUUID();
@@ -59,7 +60,7 @@ integration('payment settlement to credit fulfillment', () => {
   });
 
   it('rejects reuse of an external payment reference with a different settlement id', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const service = createPostgresBillingSettlementService(connection);
     const tenantId = randomUUID();
     const sourceRef = `test-conflict-payment-${randomUUID()}`;
@@ -74,7 +75,7 @@ integration('payment settlement to credit fulfillment', () => {
   });
 
   it('scopes external payment references by provider', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const service = createPostgresBillingSettlementService(connection);
     const tenantId = randomUUID();
     const externalPaymentRef = `shared-provider-ref-${randomUUID()}`;
@@ -89,7 +90,7 @@ integration('payment settlement to credit fulfillment', () => {
   });
 
   it('rejects fulfillment replay with a different grant payload', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const service = createPostgresBillingSettlementService(connection);
     const tenantId = randomUUID();
     const accountId = randomUUID();

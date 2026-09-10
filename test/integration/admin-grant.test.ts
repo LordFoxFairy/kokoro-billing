@@ -1,3 +1,4 @@
+import { assertDefined } from '../assert-defined.js';
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { createBillingConnection } from '../../src/infrastructure/postgres/connection.js';
@@ -8,7 +9,7 @@ const integration = describe.skipIf(!databaseUrl);
 
 integration('admin credit grant', () => {
   it('requires a reason and creates one auditable grant/journal on replay', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const service = createPostgresAdminGrantService(connection);
     const input = { tenantId: randomUUID(), subjectId: randomUUID(), accountId: randomUUID(), amountMicros: 25, programKey: 'support', operatorId: 'operator-1', reason: 'support adjustment', idempotencyKey: `admin-grant-${randomUUID()}` } as const;
     try {
@@ -26,7 +27,7 @@ integration('admin credit grant', () => {
   });
 
   it('rejects an account id that belongs to a different subject', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const service = createPostgresAdminGrantService(connection);
     const tenantId = randomUUID();
     const accountId = randomUUID();

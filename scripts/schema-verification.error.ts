@@ -28,7 +28,10 @@ export function findSchemaVerificationResourceError(
       /^billing_reference_[0-9a-f]{32}$/u.test(current.referenceName)
     )
       return current;
-    if (current instanceof AggregateError) pending.push(...current.errors);
+    if (current instanceof AggregateError) {
+      const errors: unknown[] = current.errors;
+      pending.push(...errors);
+    }
     if (current.cause !== undefined) pending.push(current.cause);
   }
   return undefined;

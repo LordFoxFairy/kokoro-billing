@@ -27,7 +27,7 @@
 | B4 / P1 / 空库安装保护 | Billing / billing_owner（gpt-5.6-sol）/ B1+B2+Root | worker仅3个代码/测试文件；Root交接后更新database README、INDEX、CURRENT、ACCEPTANCE | 独占DB、TDD、非空/custom schema/并发/回滚/锁与JS超时/backend终止；主控提交/复验 | 已验收：93c06dfa33d38601e51534972890bfda50ea614d |
 | B5 / P0 / 全量catalog drift | Billing / billing_owner / 数据+TS+Root | 精确文件集见B5执行卡；Root交接后文档与提交 | 比较canonical参照库的35表全部列/约束/索引/predicate；缺CHECK与错predicate反例 | 已验收：9663db58bd85eb810b94df6120de050530c79d2f |
 | B6 / P0 / Prisma承接验证 | Billing / 后续续派billing_owner / Root | 固定依赖/生成链/模型/数据生命周期/独立验证；派前冻结文件集 | stable版本、无第二schema、typedCRUD+同tx锁/receipt/outbox+BigInt+错误+生成drift；不切生产writer | 已验收：B6a c7ef9fa；B6b 2793882；生产迁移仍归B8 |
-| B7 / P1 / 工具链与架构门 | Billing / 后续续派billing_owner / 独立reviewer | package/lock/TS/ESLint/format/CI/architecture精确集派前批准 | Node24、版本固定、完整typed gate；AST有效/违规样本替代禁modules/强制ports；单独格式切片 | B7a已验收058bdf3；B7b/c/d待派工，不放宽门禁 |
+| B7 / P1 / 工具链与架构门 | Billing / 后续续派billing_owner / 独立reviewer | package/lock/TS/ESLint/format/CI/architecture精确集派前批准 | Node24、版本固定、完整typed gate；AST有效/违规样本替代禁modules/强制ports；单独格式切片 | B7a已验收058bdf3；B7b冻结待审查；B7c/d待实施，不放宽门禁 |
 | B8 / P0 / Nest+Prisma闭合业务切换 | Billing / 后续续派billing_owner / Root+独立reviewer | 先完整35表映射/provider图/事务组卡，再授权src/SQL/contract/test/worker集 | 先稳定查询范式，后整个共享Credit事务组；同一事务不混pg/Prisma，旧实现随闭合切片删除；中间未闭合commit不发布 | 待设计门；依赖B5/B6/B7 |
 | B9 / P1 / 契约与外部副作用 | Billing / 后续续派billing_owner / Root | owner contract先行；消费者另开owner任务，无本仓写入权 | envelope/request-id/UTC/error/202语义；checkout claim→网络→finalize及unknown恢复；实际消费者固定artifact | 待契约裁决/依赖B8 |
 | B10 / P1 / 运行可靠性验收 | Billing / 后续续派billing_owner / Root | worker/reconciliation/retention/smoke与文档；派前批准文件集 | execution并发lease、orphan检测、append-only角色、预算取消、provider sandbox、CI PG16/镜像/DR分层证据 | 待派工 |
@@ -556,13 +556,13 @@ Root已读官方TS6发布说明与typescript-eslint dependency-versions，后续
 | 目标/当前事实 | 当前recommended只对src启unsafe；CLI完整recommendedTypeChecked+no-non-null基线56文件313条，详见下列文件；生产Fastify/pg未变 |
 | 配置文件 | package.json/pnpm-lock.yaml、eslint.config.mjs、tsconfig.json/tsconfig.build.json（必要固定输出rootDir）、test/architecture/toolchain.test.ts（同步精确pins）；新test/architecture/typed-lint.test.ts验证实际ESLint运行正反例 |
 | 目录/粒度 | 类型修复在原归属文件，不搬模块。typed lint测试放既有architecture而非生产scripts；多个test共享非空前置断言时允许单文件test/assert-defined.ts，不新建单文件fixtures目录；不把测试helper导入src |
-| 依赖 | Node24.20.0/pnpm11.25.0/Vitest5/Vite8/Prisma7.10保持；升级TS6.0.3、typescript-eslint8.70.0、ESLint10.10.0，@eslint/js10.0.1保持；其他直接依赖不变 |
+| 依赖 | Node24.20.0/pnpm11.25.0/Vitest5/Vite8/Prisma7.10保持；升级TS6.0.3、typescript-eslint8.69.0、ESLint10.10.0，@eslint/js10.0.1保持；其他直接依赖不变 |
 | 门禁 | recommendedTypeChecked覆盖全部手写src/scripts/test/root TS config；明确unsafe、Promise、no-non-null、switch穷尽；forceConsistentCasingInFileNames及noUncheckedSideEffectImports显式true；generated只按精确路径忽略lint，仍生成/typecheck/build，不手改生成物 |
 | 行为/API/SQL | 普通输入/输出、数值、事务、错误原对象与falsey异常传播保持；不改SQL/API/权限/receipt/锁/状态。类型边界局部收窄，不生成另一wire契约；若发现必须改变业务语义先报告Root，不以重写旧pg逻辑夹带B8 |
 | 删除 | src-only unsafe配置、非空/无用断言、重复preset规则；不引入any、双重断言、ts-ignore、eslint-disable、ignoreDeprecations或给对象强行String来掩盖未知输入 |
 | 验证/交付 | 先实际typed lint正反例RED，再规则+修复GREEN；保留全部原业务断言，不能靠移走/skip测试、无意义await过门；Root独占库full verify/integration/catalog/Prisma/源码与dist smoke及audit，明确文件暂存提交 |
 
-Root复核matrix：TS6.0.3（Apache-2.0、Node>=14.17）为typescript-eslint8.70.0（MIT，TS>=4.8.4<6.1、ESLint^8.57/^9/^10）最高稳定兼容线；
+Root最终matrix：TS6.0.3（Apache-2.0、Node>=14.17）与typescript-eslint8.69.0（MIT，TS>=4.8.4<6.1、ESLint^8.57/^9/^10）互兼容；选择依据包括9月8日发布冷却门，详见下方裁决。
 ESLint10.10.0、@eslint/js10.0.1（MIT）兼容Node24。registry TS latest7.0.2不满足lint peer，明确不选，不是退回更易过门版本。
 TS6保持显式ES2022/NodeNext/types；rootDir默认变化须build确认dist/src与dist/scripts，显式side-effect import检查，不用弃用项消音。
 Root采纳switch选项allowDefaultCaseForExhaustiveSwitch=true、considerDefaultExhaustiveForUnions=false、requireDefaultForNonUnion=false：
@@ -634,3 +634,78 @@ Worker不操作Git/文档/生产基础设施；构建/生成仅在已固定离�
 异步fixture优先Promise.resolve/reject明确表达契约；涉及抛错的stub要保留拒绝而非变为同步throw，不能插入无意义await只满足require-await。
 unknown日志使用受控形状/安全消息；不得误删原始异常与Aggregate/cause或falsey rejection反例。
 官方工具语义：TS6 release-notes、typescript-eslint users/configs与switch-exhaustiveness-check；版本与执行证据分开，最终兼容靠实际门禁。
+
+
+### B7b 执行中裁决与冻结交接（2026-09-10续接）
+
+前轮分类：进展。唯一writer已完成源码修复并交回PG窗口；最终报告前Agent因usage limit终止。
+Root当次检查：旧exec20753句柄不存在，Agent状态errored，未发现Billing测试进程，专有billing_typed_b7b_*数据库无残留；
+不把观察超时当终止，其他仓正在运行的Vitest保留不动。Root接管唯一writer及Git，按/tmp/billing-b7b-delivery-sha256.txt核对冻结文件。
+交付仍为0ec3080后的未提交工作树，独立审查/Root完整验收尚待完成，不把旧日志直接充当新验收。
+
+**版本裁决（发生于2026-09-08）**：8.70.0于2026-09-07T18:18:09.654Z发布，安装时不足pnpm11默认1440分钟。
+第一次install自动添加11条minimumReleaseAgeExclude；Root未批准，writer恢复workspace基线字节。
+随后真实pnpm preflight/frozen报ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION；没有配置age0、trustLockfile或任何豁免。
+Root重新核验8.69.0（2026-08-31T17:08:46.355Z、MIT、相同TS<6.1/ESLint10 peer），选择当时最高已过冷却期的稳定兼容版本。
+只恢复本轮未提交lock到HEAD，再按8.69 manifest正规安装成功；TS6.0.3/ESLint10.10.0及全部严格规则保持，不退回原8.67。
+9月10日续接保留已冻结版本进行验收，不因时间流逝在验收中途重新解析浮动latest；下次升级重新核验。
+来源：[pnpm11发布默认](https://github.com/pnpm/pnpm.io/blob/main/blog/releases/11.0.md)、
+[发布冷却与锁验证语义](https://pnpm.io/settings/dependency-resolution)、
+[8.70变更](https://github.com/typescript-eslint/typescript-eslint/releases/tag/v8.70.0)；版本时间/peer另经npm view实际核验。
+
+Root已在实施前逐项批准的局部行为例外（不再笼统称所有输入行为不变）：
+1. checkout persisted snapshot.creditMicros只接受string|number，再执行既有digits/safe-integer校验；其他形状报billing.checkout_quote_invalid，不发credit。
+2. execution receipt.provider_operation_ref只接受string；null/undefined保持event fallback，其他形状报billing.execution_receipt_invalid，失败不能扣款或完成capture receipt。
+3. HTTP webhook优先使用parseWebhook结果；只有缺省的eventId/eventType才校验raw fallback为string，null/undefined仍空ID/unknown；无效fallback报既有400 billing.provider_payload_invalid。已解析字段不因未使用的raw字段被误拒。
+4. canonical installer用独立错误槽保存包括undefined/null/false/0/空串的原始异常，close错误不覆盖主错误；新增test/unit/canonical-schema-errors.test.ts单元故障注入。
+
+以上新增授权测试只在已有HTTP/业务integration文件内；新增单元文件的owner为离线Schema安装错误/清理，不是数据库integration，未改installer公开API。
+另新test/assert-defined.ts为多个测试共用的实际null/undefined前置检查，保留0/false/空串；生产不导入测试helper。
+worker报告RED：HTTP原202而预期400两项；numeric-array quote原被String接受并发credit；receipt对象/数组/布尔/数字原全resolve四项；
+installer undefined异常吞掉/null被close错误覆盖两项。日志仅是交付证据，Root独立验证后才放行。
+
+**新增P0，B8/Metering负责人必须修复**：src/infrastructure/postgres/repositories/metering/usage-settlement-service.ts的ensureUsageEventForHold
+生成hold:${UUID}共41字符，而database/schema.sql的entitlement_usage_event.usage_event_id为VARCHAR(36)。真实默认UUID路径报SQLSTATE22001。
+B7b的receipt类型测试使用统一的合法短opaque hold fixture，仅隔离类型边界，并保留默认UUID失败与余额/hold/event/receipt回滚characterization；
+这不是成功capture证据。B8必须换成满足canonical ID模型、tenant/幂等稳定的生成方案，并将该characterization替换成默认UUID真实成功/重放/并发断言；
+不通过改宽字段、改短生产UUID、skip或保留只覆盖短ID的测试冒充完成。生产切换前此项未修即不放行。
+
+| 审查任务 | 基线/范围 | 角色/交付 |
+|---|---|---|
+| B7b-R | 0ec3080+冻结源码hash；全typed配置、局部边界与错误、保留测试 | billing_data_review规格只读，Root提交/独占库完整验收；随后billing_ts_review代码复核 |
+| B7c-R | 0ec3080+当时变化中B7b，只读AST调查 | billing_ts_review已交建议；Root尚未批准B7c实施，不改目标provider图 |
+
+B7c只读事实：84手写src文件、215唯一source边，7组旧application Service↔ports纯type SCC，未解析/动态边0；
+application跨业务feature无实际调用，仅依赖共享transaction port；实际跨领域编排仍位于legacy infrastructure。
+因此application-only无环不能证明Credit唯一writer。B7c将保留tenant/SQL/auth门、替换禁modules/强制ports的机械门；
+值/类型图分别建模，类型耦合如何随B8闭环由Root设计裁决，当前不宣称架构迁移完成。
+
+
+### B7b 冻结工作树独立审查与Root验收（2026-09-10）
+
+规格审查billing_data_review（Astra）与代码审查billing_ts_review（Sol）依次放行，无新增P1/P2；绑定
+/tmp/billing-b7b-delivery-sha256.txt的64源码文件，Root前后hash核对完全一致。规格reviewer另运行真实ESLint全树exit0、
+typed-lint/canonical-schema-errors/HTTP server三文件22项通过；代码reviewer独立检查错误槽、boxed result、artifact逆序回滚、async契约与SQL Row字段。
+两者均未写文件/操作基础设施，Root统一验收，不将reviewer结论代替完整运行。
+
+Root日志/tmp/billing-b7b-root.ovKWqD（以下都是本次新执行，不继承9月8日worker日志）：
+- Node24.20.0/pnpm11.25.0，pnpm install --frozen-lockfile exit0（当前缓存环境，非冷缓存声明）。
+- 自有billing_accept_b7b_<random>从template0安装canonical，pnpm db:apply-schema exit0。
+- DATABASE_URL/SCHEMA_ADMIN_URL/REDIS_URL/**REDIS_TEST_URL**明确设置；pnpm verify exit0：58文件354项通过，0失败0跳过，34.99s。
+  包括完整typed lint、TS6 typecheck/build、SQL门与17-route contract；dist/src及dist/scripts输出保持。
+- pnpm test:integration exit0：32文件157项通过，0失败0跳过，28.68s；包含在全套内，不相加。
+- pnpm db:verify-schema / pnpm prisma:check exit0：35表368列127约束83索引，catalog/生成均0差异；SQL与OpenAPI hash和基线相同。
+- 源码node --import tsx src/main.ts和新构建node dist/src/main.js分别真实启动：health200、ready200、anonymous credit-account401、
+  trusted-BFF commerce/catalog200、offers数组与request-id header/meta一致、SIGTERM退出0；随机本地端口，无provider外网调用。
+- pnpm audit --json exit0：info/low/moderate/high/critical均0。所有生产直接包精确版本保持；Prisma Client锁的TS peer suffix随TS6改变，不宣称lock逐字不变。
+- git diff --check exit0；trap在所有命令终态后正常删除本轮唯一数据库，未强制断开/重启/清空共享PG/Redis，其他仓进程未动。
+
+354项相较B7a318项净增36：typed lint4、installer错误注入6、HTTP边界6、quote边界8、receipt边界7+UUID已知失败characterization1、falsey session扩展4。
+明确：该UUID characterization通过是证明当前错误/回滚，不是生产capture成功；B8 P0依旧未解决。
+
+Root首次探针需更正的证据亦保留/tmp/billing-b7b-root.Le58Cx：遗漏REDIS_TEST_URL导致350通过/4跳过、integration153通过/4跳过，
+smoke把内部items误当wire字段而触发KeyError，真实wire为offers。该次不是全门通过；只修正Root临时probe/env，未改生产实现/测试门，
+随后在全新独占库完整重跑得到上面0跳过结果，audit在首次probe失败后未执行、在重跑中真实执行。
+
+B7b实现+对应测试+五份必要文档由Root按明确文件集提交；提交SHA与干净HEAD复验另记。B7c AST、B7d格式、B8 Nest/Prisma业务切换、
+B9契约/消费者/外部副作用、B10可靠性/镜像仍未完成。未跑Docker/PG16 CI/provider sandbox/消费者验证，不扩大本切片放行范围。

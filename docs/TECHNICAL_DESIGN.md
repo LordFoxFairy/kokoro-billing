@@ -366,3 +366,14 @@ B7b切片范围为已有角色文件内类型收窄、测试fixture及配置，�
 non-null断言由显式事实/fixture前置条件替代，HTTP JSON以unknown+schema/实际断言收窄，不用泛型强转假验证；保留falsey异常原值和事务清理语义。
 ESLint实际配置通过test/architecture/typed-lint.test.ts的正反例验证覆盖面、unsafe/Promise/穷尽性，不仅匹配配置文字。
 具体版本、switch选项及允许文件由唯一任务卡冻结；三设计面一致于“无业务SQL/API变更”，完整Nest/Prisma业务迁移仍须B8设计门。
+
+
+### B7b 冻结方案修正（2026-09-10记录9月8日裁决）
+
+TypeScript6.0.3 + typescript-eslint8.69.0 + ESLint10.10.0为本切片实际冻结版本；原8.70候选在安装当时未过pnpm默认发布冷却期，
+不加豁免、不改变规则强度，采用相同peer且成熟的8.69。完整命令和版本证据见IMPLEMENTATION_PLAN的B7b执行中裁决。
+JSON边界仅收紧非标量quote credit、非string provider reference与缺省parsed结果时的非法webhook ID/type，复用既有错误体系；
+installer新增单元异常注入，保证falsey主异常不被资源关闭异常覆盖。文件归属/范围按任务板新增授权，不扩展生产owner/SQL/API。
+
+独立已知P0：默认UUID hold加hold:前缀生成41字符usage ID，超过canonical VARCHAR(36)，真实capture报22001并回滚。
+B8的ID/事务设计必须闭环此问题；B7b短opaque ID fixture只隔离receipt类型校验，明确不代表默认生产capture路径可用。

@@ -32,8 +32,12 @@ export async function comparePrismaArtifacts(
   return {
     missing: [...expected.keys()].filter((k) => !actual.has(k)).sort(),
     extra: [...actual.keys()].filter((k) => !expected.has(k)).sort(),
-    changed: [...expected.keys()]
-      .filter((k) => actual.has(k) && !expected.get(k)!.equals(actual.get(k)!))
+    changed: [...expected.entries()]
+      .filter(([key, value]) => {
+        const actualValue = actual.get(key);
+        return actualValue !== undefined && !value.equals(actualValue);
+      })
+      .map(([key]) => key)
       .sort(),
   };
 }
@@ -49,48 +53,42 @@ async function publishUnlocked(
 ): Promise<void> {
   const move = operations.rename ?? rename;
   const token = randomUUID();
-  const prepared = paths.map((path) =>
-    resolve(destinationRoot, `${path}.next-${token}`),
-  );
-  const backups = paths.map((path) =>
-    resolve(destinationRoot, `${path}.backup-${token}`),
-  );
-  const hadOriginal = [false, false];
-  const targetVacated = [false, false];
-  let swapped = 0;
+  const entries = paths.map((path) => ({
+    source: resolve(stagingRoot, path),
+    target: resolve(destinationRoot, path),
+    prepared: resolve(destinationRoot, `${path}.next-${token}`),
+    backup: resolve(destinationRoot, `${path}.backup-${token}`),
+    hadOriginal: false,
+    targetVacated: false,
+  }));
+  const prepared = entries.map((entry) => entry.prepared);
+  const backups = entries.map((entry) => entry.backup);
   let publishError: unknown;
   let publishFailed = false;
   const preparedCleanupErrors: unknown[] = [];
   try {
-    for (let i = 0; i < paths.length; i += 1) {
-      await mkdir(dirname(prepared[i]!), { recursive: true });
-      await cp(resolve(stagingRoot, paths[i]!), prepared[i]!, {
-        recursive: true,
-      });
+    for (const entry of entries) {
+      await mkdir(dirname(entry.prepared), { recursive: true });
+      await cp(entry.source, entry.prepared, { recursive: true });
     }
-    for (let i = 0; i < paths.length; i += 1) {
+    for (const entry of entries) {
       try {
-        await move(resolve(destinationRoot, paths[i]!), backups[i]!);
-        hadOriginal[i] = true;
-        targetVacated[i] = true;
+        await move(entry.target, entry.backup);
+        entry.hadOriginal = true;
+        entry.targetVacated = true;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-        targetVacated[i] = true;
+        entry.targetVacated = true;
       }
-      await move(prepared[i]!, resolve(destinationRoot, paths[i]!));
-      swapped += 1;
+      await move(entry.prepared, entry.target);
     }
   } catch (error) {
     const rollbackErrors: unknown[] = [];
-    for (let i = Math.min(swapped, paths.length - 1); i >= 0; i -= 1)
+    for (const entry of [...entries].reverse())
       try {
-        if (!targetVacated[i]) continue;
-        await rm(resolve(destinationRoot, paths[i]!), {
-          recursive: true,
-          force: true,
-        });
-        if (hadOriginal[i])
-          await move(backups[i]!, resolve(destinationRoot, paths[i]!));
+        if (!entry.targetVacated) continue;
+        await rm(entry.target, { recursive: true, force: true });
+        if (entry.hadOriginal) await move(entry.backup, entry.target);
       } catch (rollbackError) {
         rollbackErrors.push(rollbackError);
       }

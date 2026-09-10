@@ -1,6 +1,9 @@
+import { z } from 'zod';
 import { describe, expect, it } from 'vitest';
 import { createBillingRuntime } from '../../src/bootstrap/create-billing-runtime.js';
 import type { BillingRuntimeConfig } from '../../src/config/runtime-config.js';
+
+const dataEnvelope = z.object({ data: z.record(z.string(), z.unknown()) });
 
 const databaseUrl = process.env.DATABASE_URL;
 const integration = describe.skipIf(databaseUrl === undefined);
@@ -34,7 +37,7 @@ integration('runtime recovery without Redis', () => {
       try {
         const response = await runtime.server.inject({ method: 'GET', url: '/readyz' });
         expect(response.statusCode).toBe(200);
-        expect(response.json().data).toMatchObject({
+        expect(dataEnvelope.parse(response.json<unknown>()).data).toMatchObject({
           status: 'ready',
           dependencies: { postgres: 'ok', redis: 'degraded' },
         });

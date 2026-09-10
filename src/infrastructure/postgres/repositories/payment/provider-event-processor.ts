@@ -40,8 +40,9 @@ const object = (value: string | Record<string, unknown>): Record<string, unknown
 
 const snapshot = (value: string | Record<string, unknown>): { programKey: string; creditMicros: number } => {
   const data = object(value);
-  if (typeof data.key !== 'string' || !/^\d+$/u.test(String(data.creditMicros ?? ''))) throw new Error('billing.checkout_quote_invalid');
-  return { programKey: data.key, creditMicros: readSafeInteger(String(data.creditMicros), 'credit_micros') };
+  const creditMicros = data.creditMicros;
+  if (typeof data.key !== 'string' || (typeof creditMicros !== 'string' && typeof creditMicros !== 'number') || !/^\d+$/u.test(String(creditMicros))) throw new Error('billing.checkout_quote_invalid');
+  return { programKey: data.key, creditMicros: readSafeInteger(String(creditMicros), 'credit_micros') };
 };
 
 /** Worker-side payment event dispatcher. HTTP only writes inbox/outbox. */

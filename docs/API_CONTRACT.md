@@ -172,3 +172,12 @@ Billing OpenAPI source
 - 当前 checker 不执行 historical OpenAPI breaking diff，也没有机器 provenance manifest/artifact publish job。
 - Ledger `created_at` 是 epoch milliseconds，不符合平台 RFC 3339 UTC 目标。
 - Route parity 不能证明运行时 Zod 与 OpenAPI 字段语义完全一致；在补齐 shape 前需人工逐 route review。
+
+
+## B7b 输入边界收窄记录（2026-09-10）
+
+本切片未改变canonical OpenAPI字段/路由/版本。内部持久化quote credit只接受string|number并继续既有整数范围校验；
+execution receipt的provider_operation_ref若存在且非null，须为string，否则处理时报billing.execution_receipt_invalid并回滚capture。
+null/缺省保持event fallback。webhook先使用provider解析结果，仅对缺省结果的raw ID/type fallback做string校验；
+非法对象/数组/布尔/数字fallback返回既有400 billing.provider_payload_invalid，null/缺省保持既有空ID/unknown。
+这是显式记录的输入收窄，不宣称错误输入行为完全不变；完整机器契约/消费者切换仍归B9。

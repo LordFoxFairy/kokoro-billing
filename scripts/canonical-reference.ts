@@ -17,7 +17,7 @@ export async function withCanonicalReference<T>(
     throw new Error("SCHEMA_ADMIN_URL schema parameters must all be public");
   const name = `billing_reference_${randomUUID().replaceAll("-", "")}`;
   let created = false;
-  let result: T | undefined;
+  let result: { value: T } | undefined;
   let primary: unknown;
   let failed = false;
   let cleanup: unknown;
@@ -43,7 +43,7 @@ export async function withCanonicalReference<T>(
       databaseUrl: reference.toString(),
       schemaSql: canonicalSql,
     });
-    result = await work(reference.toString());
+    result = { value: await work(reference.toString()) };
   } catch (error) {
     primary = error;
     failed = true;
@@ -68,5 +68,6 @@ export async function withCanonicalReference<T>(
         : cleanup,
     });
   if (failed) throw primary;
-  return result!;
+  if (!result) throw new Error("schema work completed without a result");
+  return result.value;
 }

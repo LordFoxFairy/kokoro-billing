@@ -99,11 +99,11 @@ export const createBillingAuth = (options: BillingAuthOptions): BillingAuth => {
   }
   if (options.mode === 'internal-header') {
     return {
-      user: async (request) => internalHeaderUser(request),
-      internal: async (request) => trustedInternal(request, options.internalServiceSecret),
-      bff: async (request) => trustedBff(request, options.internalServiceSecret, bffServiceToken),
-      admin: async (request) => trustedAdmin(request, options.operatorProxySecret),
-      webhook: async () => true,
+      user: async (request) => Promise.resolve(internalHeaderUser(request)),
+      internal: async (request) => Promise.resolve(trustedInternal(request, options.internalServiceSecret)),
+      bff: async (request) => Promise.resolve(trustedBff(request, options.internalServiceSecret, bffServiceToken)),
+      admin: async (request) => Promise.resolve(trustedAdmin(request, options.operatorProxySecret)),
+      webhook: async () => Promise.resolve(true),
     };
   }
 
@@ -126,9 +126,9 @@ export const createBillingAuth = (options: BillingAuthOptions): BillingAuth => {
         return null;
       }
     },
-    internal: async (request) => trustedInternal(request, options.internalServiceSecret),
-    bff: async (request) => trustedBff(request, options.internalServiceSecret, bffServiceToken),
-    admin: async (request) => trustedAdmin(request, options.operatorProxySecret),
-    webhook: async () => true,
+    internal: async (request) => Promise.resolve(trustedInternal(request, options.internalServiceSecret)),
+    bff: async (request) => Promise.resolve(trustedBff(request, options.internalServiceSecret, bffServiceToken)),
+    admin: async (request) => Promise.resolve(trustedAdmin(request, options.operatorProxySecret)),
+    webhook: async () => Promise.resolve(true),
   };
 };

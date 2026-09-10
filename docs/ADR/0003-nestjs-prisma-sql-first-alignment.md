@@ -128,7 +128,7 @@ Node22安装被engineStrict拒绝；镜像digest从官方registry核验但daemon
 
 ### B7b 编译器与类型感知lint裁决（2026-09-08）
 
-采用TS6.0.3（Apache-2.0）+typescript-eslint8.70.0（MIT）+ESLint10.10.0（MIT），@eslint/js10.0.1保持。
+采用TS6.0.3（Apache-2.0）+typescript-eslint8.69.0（MIT）+ESLint10.10.0（MIT），@eslint/js10.0.1保持。
 保留5.9会落后于兼容稳定编译器；TS7.0.2超过当前lint peer<6.1；选择最新稳定且互兼容的6.0.3，不双装编译器。
 维护状态以Microsoft/typescript-eslint/ESLint官方发布和registry peer为证；保留既有Node24/ESM工具链，不引入新编译/运行方式。
 风险：TS6推断/defaults、类型lint增加未知边界与async fixture错误、编译输出root；用全套行为/类型/生成/smoke验证，而不是ignoreDeprecations或禁用规则。
@@ -139,3 +139,9 @@ Node22安装被engineStrict拒绝；镜像digest从官方registry核验但daemon
 来源：[TS6](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-6-0.html)、
 [typed configs](https://typescript-eslint.io/users/configs/)、
 [switch options](https://typescript-eslint.io/rules/switch-exhaustiveness-check/)。本段为目标裁决，交付与验证见任务板。
+
+
+B7b执行修正：原8.70候选在2026-09-08不足pnpm默认24小时冷却期，实际安装门拒绝；选择相同TS6/ESLint10 peer且已过冷却期的8.69.0。
+不保留安装器自动生成的release-age豁免，不设置trustLockfile或关闭安全策略。精确时间、命令与9月10日冻结续接见任务板。
+B7b批准3处未知JSON值收窄和installer falsey异常保留，正常字符串/数值语义保持；无SQL/机器contract更改。
+默认UUID hold生成41字符usage ID的既有P0缺陷已真实复现，B8必须解决；短ID边界fixture不作为完整扣款链路证明。

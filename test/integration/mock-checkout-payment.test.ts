@@ -1,3 +1,4 @@
+import { assertDefined } from '../assert-defined.js';
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { createBillingConnection } from '../../src/infrastructure/postgres/connection.js';
@@ -12,7 +13,7 @@ const integration = describe.skipIf(!databaseUrl);
 
 integration('mock checkout payment processor', () => {
   it('uses the normal settlement/fulfillment path and grants the published catalog credit', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const tenantId = randomUUID();
     const subjectId = randomUUID();
     const offerId = randomUUID();
@@ -77,7 +78,7 @@ integration('mock checkout payment processor', () => {
   });
 
   it('processes a subscription period once and grants the published revision credit', async () => {
-    const connection = await createBillingConnection(databaseUrl!);
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
     const tenantId = randomUUID();
     const teamId = randomUUID();
     const offerId = randomUUID();
@@ -121,7 +122,7 @@ integration('mock checkout payment processor', () => {
       const [subscriptions] = await connection.query<(RowDataPacket & { provider_account_id: string })[]>('SELECT provider_account_id FROM payment_provider_subscription WHERE tenant_id = $1 AND subject_id = $2', [tenantId, teamId]);
       expect(subscriptions[0]?.provider_account_id).toBe(providerAccountId);
       const [subscriptionGrants] = await connection.query<(RowDataPacket & { expires_at: Date | string })[]>(`SELECT g.expires_at FROM entitlement_credit_grant g WHERE g.tenant_id = $1 AND g.source_kind = 'subscription_period'`, [tenantId]);
-      expect(new Date(subscriptionGrants[0]!.expires_at).getTime()).toBe(Math.floor(periodEnd.getTime() / 1_000) * 1_000);
+      expect(new Date(assertDefined(subscriptionGrants[0]).expires_at).getTime()).toBe(Math.floor(periodEnd.getTime() / 1_000) * 1_000);
       const [terms] = await connection.query('SELECT term_id, grant_micros, status FROM entitlement_subscription_term WHERE tenant_id = $1 AND subject_id = $2', [tenantId, teamId]);
       expect(terms).toHaveLength(1);
       const canceledEvent = await inbox.accept({
@@ -151,5 +152,42 @@ integration('mock checkout payment processor', () => {
       await connection.execute('DELETE FROM entitlement_offer WHERE tenant_id = $1', [tenantId]);
       await connection.end();
     }
+  });
+});
+
+integration('persisted checkout quote input types', () => {
+  it.each([
+    ['decimal string', '100', true], ['number', 100, true],
+    ['object', {}, false], ['empty array', [], false], ['numeric array', [100], false],
+    ['boolean', true, false], ['null', null, false], ['missing', undefined, false],
+  ] as const)('validates %s before settlement or credit issuance', async (_name, creditMicros, valid) => {
+    const connection = await createBillingConnection(assertDefined(databaseUrl));
+    const tenantId = randomUUID();
+    const subjectId = randomUUID();
+    const offerId = randomUUID();
+    const revisionId = randomUUID();
+    try {
+      await connection.execute(`INSERT INTO entitlement_offer (offer_id, tenant_id, offer_key, status) VALUES ($1, $2, 'typed-quote', 'active')`, [offerId, tenantId]);
+      await connection.execute(`INSERT INTO entitlement_offer_revision
+        (offer_revision_id, offer_id, tenant_id, revision, name, currency, amount_minor, credit_micros, billing_interval, status, published_at)
+        VALUES ($1, $2, $3, 1, 'Typed quote', 'USD', 100, 100, 'month', 'published', CURRENT_TIMESTAMP(3))`, [revisionId, offerId, tenantId]);
+      const created = await createPostgresCheckoutService(connection).create({ tenantId, subjectId, idempotencyKey: randomUUID(), offerRevisionId: revisionId,
+        amountMinor: 100, currency: 'USD', quoteSnapshot: { key: 'typed-quote', creditMicros: '100' }, expiresAt: new Date(Date.now() + 300_000) });
+      await connection.execute('UPDATE payment_checkout SET quote_snapshot_json = $1::jsonb WHERE tenant_id = $2 AND checkout_id = $3', [JSON.stringify({ key: 'typed-quote', creditMicros }), tenantId, created.checkoutId]);
+      const eventId = randomUUID();
+      const event = await createPostgresProviderEventInboxService(connection).accept({ tenantId, provider: 'mock', externalEventId: eventId, eventType: 'payment_succeeded', signatureValid: true,
+        rawPayload: { eventId, eventType: 'payment_succeeded', data: { orderId: created.checkoutId } } });
+      const processor = createPostgresProviderEventProcessor(connection, new Map([['mock', new MockWebhookProvider()]]), createPostgresBillingSettlementService(connection), createPostgresBillingReversalService(connection), createPostgresSubscriptionGrantService(connection));
+      if (valid) await processor.process(event.providerEventId);
+      else await expect(processor.process(event.providerEventId)).rejects.toThrow('billing.checkout_quote_invalid');
+      const [grants] = await connection.query<(RowDataPacket & { original_micros: string })[]>('SELECT original_micros FROM entitlement_credit_grant WHERE tenant_id = $1', [tenantId]);
+      const [settlements] = await connection.query('SELECT settlement_id FROM payment_settlement WHERE tenant_id = $1', [tenantId]);
+      const [journal] = await connection.query('SELECT journal_id FROM entitlement_credit_journal WHERE tenant_id = $1', [tenantId]);
+      const [states] = await connection.query<(RowDataPacket & { processing_status: string })[]>('SELECT processing_status FROM payment_provider_event WHERE tenant_id = $1 AND provider_event_id = $2', [tenantId, event.providerEventId]);
+      expect(grants).toEqual(valid ? [{ original_micros: '100' }] : []);
+      expect(settlements).toHaveLength(valid ? 1 : 0);
+      expect(journal).toHaveLength(valid ? 1 : 0);
+      expect(states).toEqual([{ processing_status: valid ? 'processed' : 'received' }]);
+    } finally { await connection.end(); }
   });
 });

@@ -1,3 +1,4 @@
+import { assertDefined } from '../assert-defined.js';
 import { randomUUID } from "node:crypto";
 import { readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -20,9 +21,9 @@ integration("generated Prisma Client", () => {
   let url: string;
   beforeAll(async () => {
     database = `billing_prisma_${randomUUID().replaceAll("-", "")}`;
-    admin = new Pool({ connectionString: adminUrl!, max: 1 });
+    admin = new Pool({ connectionString: assertDefined(adminUrl), max: 1 });
     await admin.query(`CREATE DATABASE "${database}" TEMPLATE template0`);
-    const parsed = new URL(adminUrl!);
+    const parsed = new URL(assertDefined(adminUrl));
     parsed.pathname = `/${database}`;
     url = parsed.toString();
     await installCanonicalSchema({
@@ -42,10 +43,10 @@ integration("generated Prisma Client", () => {
     const expectedRoot = await temporaryGenerationRoot();
     const actualRoot = await temporaryGenerationRoot();
     try {
-      await withCanonicalReference(adminUrl!, sql, async (referenceUrl) =>
+      await withCanonicalReference(assertDefined(adminUrl), sql, async (referenceUrl) =>
         generateArtifacts(referenceUrl, sql, expectedRoot),
       );
-      await withCanonicalReference(adminUrl!, sql, async (referenceUrl) =>
+      await withCanonicalReference(assertDefined(adminUrl), sql, async (referenceUrl) =>
         generateArtifacts(referenceUrl, sql, actualRoot),
       );
 
@@ -117,7 +118,7 @@ integration("generated Prisma Client", () => {
       withCanonicalReference(
         "postgresql://fixture@127.0.0.1:1/postgres?schema=public&schema=private",
         "SELECT 1",
-        async () => undefined,
+        async () => Promise.resolve(undefined),
       ),
     ).rejects.toThrow(/schema parameters must all be public/iu);
   });
