@@ -27,7 +27,7 @@
 | B4 / P1 / 空库安装保护 | Billing / billing_owner（gpt-5.6-sol）/ B1+B2+Root | worker仅3个代码/测试文件；Root交接后更新database README、INDEX、CURRENT、ACCEPTANCE | 独占DB、TDD、非空/custom schema/并发/回滚/锁与JS超时/backend终止；主控提交/复验 | 已验收：93c06dfa33d38601e51534972890bfda50ea614d |
 | B5 / P0 / 全量catalog drift | Billing / billing_owner / 数据+TS+Root | 精确文件集见B5执行卡；Root交接后文档与提交 | 比较canonical参照库的35表全部列/约束/索引/predicate；缺CHECK与错predicate反例 | 已验收：9663db58bd85eb810b94df6120de050530c79d2f |
 | B6 / P0 / Prisma承接验证 | Billing / 后续续派billing_owner / Root | 固定依赖/生成链/模型/数据生命周期/独立验证；派前冻结文件集 | stable版本、无第二schema、typedCRUD+同tx锁/receipt/outbox+BigInt+错误+生成drift；不切生产writer | 已验收：B6a c7ef9fa；B6b 2793882；生产迁移仍归B8 |
-| B7 / P1 / 工具链与架构门 | Billing / 后续续派billing_owner / 独立reviewer | package/lock/TS/ESLint/format/CI/architecture精确集派前批准 | Node24、版本固定、完整typed gate；AST有效/违规样本替代禁modules/强制ports；单独格式切片 | B7a已验收058bdf3；B7b冻结待审查；B7c/d待实施，不放宽门禁 |
+| B7 / P1 / 工具链与架构门 | Billing / 后续续派billing_owner / 独立reviewer | package/lock/TS/ESLint/format/CI/architecture精确集派前批准 | Node24、版本固定、完整typed gate；AST有效/违规样本替代禁modules/强制ports；单独格式切片 | B7a已验收058bdf3；B7b已验收3fd97f5；B7c/d待实施，不放宽门禁 |
 | B8 / P0 / Nest+Prisma闭合业务切换 | Billing / 后续续派billing_owner / Root+独立reviewer | 先完整35表映射/provider图/事务组卡，再授权src/SQL/contract/test/worker集 | 先稳定查询范式，后整个共享Credit事务组；同一事务不混pg/Prisma，旧实现随闭合切片删除；中间未闭合commit不发布 | 待设计门；依赖B5/B6/B7 |
 | B9 / P1 / 契约与外部副作用 | Billing / 后续续派billing_owner / Root | owner contract先行；消费者另开owner任务，无本仓写入权 | envelope/request-id/UTC/error/202语义；checkout claim→网络→finalize及unknown恢复；实际消费者固定artifact | 待契约裁决/依赖B8 |
 | B10 / P1 / 运行可靠性验收 | Billing / 后续续派billing_owner / Root | worker/reconciliation/retention/smoke与文档；派前批准文件集 | execution并发lease、orphan检测、append-only角色、预算取消、provider sandbox、CI PG16/镜像/DR分层证据 | 待派工 |
@@ -709,3 +709,17 @@ smoke把内部items误当wire字段而触发KeyError，真实wire为offers。该
 
 B7b实现+对应测试+五份必要文档由Root按明确文件集提交；提交SHA与干净HEAD复验另记。B7c AST、B7d格式、B8 Nest/Prisma业务切换、
 B9契约/消费者/外部副作用、B10可靠性/镜像仍未完成。未跑Docker/PG16 CI/provider sandbox/消费者验证，不扩大本切片放行范围。
+
+
+### B7b 提交与干净HEAD最终验收
+
+实现交付：`3fd97f56bee0c4aff8f0a095b9c9af164fc3e7fb`（69文件：64源码/配置/测试与5份文档）。
+Root在该干净HEAD重新全跑，日志`/tmp/billing-b7b-final.7UxmBh`，exec9823正常终态exit0：
+- frozen install、独占空库apply、pnpm verify全部exit0；58文件354测试，0失败0跳过，35.25s。
+- 独立pnpm test:integration：32文件157测试，0失败0跳过，28.40s（全套子集）。
+- catalog35表368列127约束83索引0差异；Prisma check0差异；SQL/17-route contract/typecheck/build皆在实际门内。
+- 当前构建后再次源码及dist HTTP smoke：health/ready200、匿名401、受信BFF catalog200、offers与request-id断言、SIGTERM退出0。
+- audit所有严重度0；git status干净、diff --check0；结束trap正常清理该次独占库，未操作他人服务/数据。
+
+B7b仅此切片已验收；B7c/d、B8–B10及默认UUID capture P0仍未完成，Goal保持active。下一关键路径为B7c架构门设计与实施，
+Root继续统一writer/provider/事务方案；不把typed lint通过等同于已迁移Nest/Prisma或已完成计费业务。
