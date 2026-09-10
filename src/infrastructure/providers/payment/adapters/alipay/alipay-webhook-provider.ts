@@ -1,8 +1,14 @@
 import { createSign, createVerify } from "node:crypto";
 import type { IncomingHttpHeaders } from "node:http";
 import { z } from "zod";
-import type { ParsedWebhookEvent, PaymentWebhookProvider } from "../../../../../application/payment/ports/provider-types.js";
-import { PAYMENT_WEBHOOK_EVENT, WebhookError } from "../../../../../application/payment/ports/provider-types.js";
+import type {
+  ParsedWebhookEvent,
+  PaymentWebhookProvider,
+} from "../../../../../application/payment/ports/provider-types.js";
+import {
+  PAYMENT_WEBHOOK_EVENT,
+  WebhookError,
+} from "../../../../../application/payment/ports/provider-types.js";
 import { minorAmount, providerPayloadTenantId } from "../normalize.js";
 import { webhookMetadataSchema } from "../normalize.js";
 
@@ -11,7 +17,9 @@ const alipayParamsSchema = z.record(z.string(), z.string());
 // 排除 sign / sign_type 与空值，按 key 升序拼 `k=v&...`——Alipay 异步通知 RSA2 验签的待签内容。
 export function buildAlipaySignContent(params: Record<string, string>): string {
   return Object.keys(params)
-    .filter((key) => key !== "sign" && key !== "sign_type" && params[key] !== "")
+    .filter(
+      (key) => key !== "sign" && key !== "sign_type" && params[key] !== "",
+    )
     .sort()
     .map((key) => `${key}=${params[key]}`)
     .join("&");
@@ -29,7 +37,9 @@ export function signAlipayNotification(
 }
 
 // passback_params 里我方回填的业务标识（JSON 字符串）；解析失败则视作空 metadata。
-function readPassback(params: Record<string, string>): z.infer<typeof webhookMetadataSchema> {
+function readPassback(
+  params: Record<string, string>,
+): z.infer<typeof webhookMetadataSchema> {
   const raw = params.passback_params;
   if (!raw) {
     return webhookMetadataSchema.parse({});
@@ -54,7 +64,11 @@ export class AlipayWebhookProvider implements PaymentWebhookProvider {
     return params;
   }
 
-  verifySignature(_headers: IncomingHttpHeaders, rawBody: Buffer, secret: string): boolean {
+  verifySignature(
+    _headers: IncomingHttpHeaders,
+    rawBody: Buffer,
+    secret: string,
+  ): boolean {
     const parsed = alipayParamsSchema.safeParse(this.decodeBody(rawBody));
     if (!parsed.success) {
       return false;
@@ -94,16 +108,50 @@ export class AlipayWebhookProvider implements PaymentWebhookProvider {
       );
     }
     const metadata = readPassback(params);
-    const orderId = metadata.orderId ?? metadata.checkoutId ?? params.out_trade_no ?? null;
+    const orderId =
+      metadata.orderId ?? metadata.checkoutId ?? params.out_trade_no ?? null;
 
     // 退款异步通知带 refund_fee；否则按交易状态判定支付成功。
     if (params.refund_fee) {
-      return { eventId, eventType: PAYMENT_WEBHOOK_EVENT.refundSucceeded, payloadTenantId: providerPayloadTenantId(metadata), providerAccountRef: params.app_id ?? null, externalPaymentRef: null, externalReversalRef: params.trade_no ?? eventId, refundAmountMinor: minorAmount(params.refund_fee), orderId, subscription: null };
+      return {
+        eventId,
+        eventType: PAYMENT_WEBHOOK_EVENT.refundSucceeded,
+        payloadTenantId: providerPayloadTenantId(metadata),
+        providerAccountRef: params.app_id ?? null,
+        externalPaymentRef: null,
+        externalReversalRef: params.trade_no ?? eventId,
+        refundAmountMinor: minorAmount(params.refund_fee),
+        orderId,
+        subscription: null,
+      };
     }
-    if (params.trade_status === "TRADE_SUCCESS" || params.trade_status === "TRADE_FINISHED") {
-      return { eventId, eventType: PAYMENT_WEBHOOK_EVENT.paymentSucceeded, payloadTenantId: providerPayloadTenantId(metadata), providerAccountRef: params.app_id ?? null, externalPaymentRef: params.trade_no ?? eventId, externalReversalRef: null, refundAmountMinor: null, orderId, subscription: null };
+    if (
+      params.trade_status === "TRADE_SUCCESS" ||
+      params.trade_status === "TRADE_FINISHED"
+    ) {
+      return {
+        eventId,
+        eventType: PAYMENT_WEBHOOK_EVENT.paymentSucceeded,
+        payloadTenantId: providerPayloadTenantId(metadata),
+        providerAccountRef: params.app_id ?? null,
+        externalPaymentRef: params.trade_no ?? eventId,
+        externalReversalRef: null,
+        refundAmountMinor: null,
+        orderId,
+        subscription: null,
+      };
     }
     // 其余状态（WAIT_BUYER_PAY/TRADE_CLOSED 等）ack，不产生订单副作用。
-    return { eventId, eventType: params.trade_status ?? "unknown", payloadTenantId: providerPayloadTenantId(metadata), providerAccountRef: params.app_id ?? null, externalPaymentRef: null, externalReversalRef: null, refundAmountMinor: null, orderId: null, subscription: null };
+    return {
+      eventId,
+      eventType: params.trade_status ?? "unknown",
+      payloadTenantId: providerPayloadTenantId(metadata),
+      providerAccountRef: params.app_id ?? null,
+      externalPaymentRef: null,
+      externalReversalRef: null,
+      refundAmountMinor: null,
+      orderId: null,
+      subscription: null,
+    };
   }
 }

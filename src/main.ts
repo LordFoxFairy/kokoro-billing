@@ -1,5 +1,5 @@
-import { createBillingRuntime } from './bootstrap/create-billing-runtime.js';
-import { readBillingRuntimeConfig } from './config/runtime-config.js';
+import { createBillingRuntime } from "./bootstrap/create-billing-runtime.js";
+import { readBillingRuntimeConfig } from "./config/runtime-config.js";
 
 const config = readBillingRuntimeConfig();
 const runtime = await createBillingRuntime(config);
@@ -12,7 +12,10 @@ const shutdown = async (): Promise<void> => {
   let timer: NodeJS.Timeout | undefined;
   const deadline = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(
-      () => reject(new Error(`billing shutdown exceeded ${config.shutdownDeadlineMs}ms`)),
+      () =>
+        reject(
+          new Error(`billing shutdown exceeded ${config.shutdownDeadlineMs}ms`),
+        ),
       config.shutdownDeadlineMs,
     );
   });
@@ -24,10 +27,12 @@ const shutdown = async (): Promise<void> => {
 
 const handleSignal = (signal: NodeJS.Signals): void => {
   void shutdown().catch((error: unknown) => {
-    process.stderr.write(`kokoro-billing shutdown failed signal=${signal} error=${error instanceof Error ? error.message : String(error)}\n`);
+    process.stderr.write(
+      `kokoro-billing shutdown failed signal=${signal} error=${error instanceof Error ? error.message : String(error)}\n`,
+    );
     process.exit(1);
   });
 };
 
-process.once('SIGTERM', () => handleSignal('SIGTERM'));
-process.once('SIGINT', () => handleSignal('SIGINT'));
+process.once("SIGTERM", () => handleSignal("SIGTERM"));
+process.once("SIGINT", () => handleSignal("SIGINT"));

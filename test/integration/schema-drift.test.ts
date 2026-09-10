@@ -1,4 +1,4 @@
-import { assertDefined } from '../assert-defined.js';
+import { assertDefined } from "../assert-defined.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -303,8 +303,16 @@ integration("full canonical catalog drift", () => {
     expect(Date.now() - started).toBeLessThan(1_000);
   });
 
-  it.each([undefined, null, false, 0, ''])("preserves the exact falsey rejection %j from session work", async (reason) => {
-    const rejectWork = (failure: unknown): Promise<never> => Promise.resolve().then(() => { throw failure; });
-    await expect(withSchemaSession(targetUrl, () => rejectWork(reason))).rejects.toBe(reason);
-  });
+  it.each([undefined, null, false, 0, ""])(
+    "preserves the exact falsey rejection %j from session work",
+    async (reason) => {
+      const rejectWork = (failure: unknown): Promise<never> =>
+        Promise.resolve().then(() => {
+          throw failure;
+        });
+      await expect(
+        withSchemaSession(targetUrl, () => rejectWork(reason)),
+      ).rejects.toBe(reason);
+    },
+  );
 });

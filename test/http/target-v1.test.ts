@@ -1,6 +1,6 @@
-import { z } from 'zod';
-import { describe, expect, it } from 'vitest';
-import { createBillingServer } from '../../src/interfaces/http/server.js';
+import { z } from "zod";
+import { describe, expect, it } from "vitest";
+import { createBillingServer } from "../../src/interfaces/http/server.js";
 
 const anyString: unknown = expect.any(String);
 
@@ -8,329 +8,751 @@ const metaEnvelope = z.object({ meta: z.record(z.string(), z.unknown()) });
 const dataEnvelope = z.object({ data: z.record(z.string(), z.unknown()) });
 const errorEnvelope = z.object({ error: z.record(z.string(), z.unknown()) });
 
-const admissionResult = { admissionId: 'adm-1', holdId: 'hold-1', mode: 'credit' as const, pricePolicyRevisionId: 'price-1', amountMicros: '42', currency: 'CRD' as const, status: 'held' as const };
-const calls: { capture: unknown[]; release: unknown[]; events: unknown[] } = { capture: [], release: [], events: [] };
+const admissionResult = {
+  admissionId: "adm-1",
+  holdId: "hold-1",
+  mode: "credit" as const,
+  pricePolicyRevisionId: "price-1",
+  amountMicros: "42",
+  currency: "CRD" as const,
+  status: "held" as const,
+};
+const calls: { capture: unknown[]; release: unknown[]; events: unknown[] } = {
+  capture: [],
+  release: [],
+  events: [],
+};
 const checkoutCalls: unknown[] = [];
 const checkoutReceiptAmounts = new Map<string, number>();
 const settlementCalls: unknown[] = [];
 const reversalCalls: unknown[] = [];
 const expiryCalls: unknown[] = [];
-const lossyHintMarks: Array<{ readonly key: string; readonly ttlSeconds: number }> = [];
+const lossyHintMarks: Array<{
+  readonly key: string;
+  readonly ttlSeconds: number;
+}> = [];
 
 const idempotencyHintDouble = {
   markSeen: async (key: string, ttlSeconds: number) => {
-    if (key.includes('hint-timeout')) return Promise.reject(new Error('redis timeout'));
+    if (key.includes("hint-timeout"))
+      return Promise.reject(new Error("redis timeout"));
     lossyHintMarks.push({ key, ttlSeconds });
-  return Promise.resolve(); },
+    return Promise.resolve();
+  },
 };
 
 const server = createBillingServer({
   idempotencyHint: idempotencyHintDouble,
-  catalog: { listSellable: async () => Promise.resolve(({ items: [{ id: 'offer-revision-1', key: 'pro', name: 'Pro', currency: 'USD', amountMinor: '1999', creditMicros: '1000000', billingInterval: 'month' }] })) },
-  checkout: { create: async (input) => {
-    checkoutCalls.push(input);
-    const receiptKey = `${input.tenantId}:${input.idempotencyKey}`;
-    const priorAmount = checkoutReceiptAmounts.get(receiptKey);
-    if (priorAmount !== undefined && priorAmount !== input.amountMinor) return Promise.reject(new Error('billing.idempotency_conflict'));
-    checkoutReceiptAmounts.set(receiptKey, input.amountMinor);
-    return Promise.resolve({ checkoutId: 'checkout-1', status: 'created', amountMinor: 1999, currency: 'USD', expiresAt: new Date('2030-01-01') });
-  } },
-  usage: { expireExpiredHolds: async (input) => {
-    expiryCalls.push(input);
-    return Promise.resolve({ batchId: input.batchId, expiredHoldIds: ['hold-1'] });
-  } },
-  settlement: { recordSettlement: async (input) => {
-    settlementCalls.push(input);
-    return Promise.resolve({ settlementId: input.settlementId, accepted: true });
-  } },
-  reversal: { recordReversal: async (input) => { reversalCalls.push(input); return Promise.resolve('refund-1'); } },
-  webhook: { accept: async () => Promise.resolve(({ providerEventId: 'evt-1', processingStatus: 'received' as const })) },
-  account: { getForSubject: async () => Promise.resolve(({ accountId: 'account-1', availableMicros: '42', heldMicros: '0' })) },
+  catalog: {
+    listSellable: async () =>
+      Promise.resolve({
+        items: [
+          {
+            id: "offer-revision-1",
+            key: "pro",
+            name: "Pro",
+            currency: "USD",
+            amountMinor: "1999",
+            creditMicros: "1000000",
+            billingInterval: "month",
+          },
+        ],
+      }),
+  },
+  checkout: {
+    create: async (input) => {
+      checkoutCalls.push(input);
+      const receiptKey = `${input.tenantId}:${input.idempotencyKey}`;
+      const priorAmount = checkoutReceiptAmounts.get(receiptKey);
+      if (priorAmount !== undefined && priorAmount !== input.amountMinor)
+        return Promise.reject(new Error("billing.idempotency_conflict"));
+      checkoutReceiptAmounts.set(receiptKey, input.amountMinor);
+      return Promise.resolve({
+        checkoutId: "checkout-1",
+        status: "created",
+        amountMinor: 1999,
+        currency: "USD",
+        expiresAt: new Date("2030-01-01"),
+      });
+    },
+  },
+  usage: {
+    expireExpiredHolds: async (input) => {
+      expiryCalls.push(input);
+      return Promise.resolve({
+        batchId: input.batchId,
+        expiredHoldIds: ["hold-1"],
+      });
+    },
+  },
+  settlement: {
+    recordSettlement: async (input) => {
+      settlementCalls.push(input);
+      return Promise.resolve({
+        settlementId: input.settlementId,
+        accepted: true,
+      });
+    },
+  },
+  reversal: {
+    recordReversal: async (input) => {
+      reversalCalls.push(input);
+      return Promise.resolve("refund-1");
+    },
+  },
+  webhook: {
+    accept: async () =>
+      Promise.resolve({
+        providerEventId: "evt-1",
+        processingStatus: "received" as const,
+      }),
+  },
+  account: {
+    getForSubject: async () =>
+      Promise.resolve({
+        accountId: "account-1",
+        availableMicros: "42",
+        heldMicros: "0",
+      }),
+  },
   admission: {
     create: async () => Promise.resolve(admissionResult),
-    capture: async (...input) => { calls.capture.push(input); return Promise.resolve({ ...admissionResult, status: 'accepted_without_charge' as const }); },
-    release: async (...input) => { calls.release.push(input); return Promise.resolve({ ...admissionResult, status: 'rejected' as const }); },
-    recordExecutionEvent: async (...input) => { calls.events.push(input); return Promise.resolve({ eventId: 'event-1', status: 'received' as const }); },
+    capture: async (...input) => {
+      calls.capture.push(input);
+      return Promise.resolve({
+        ...admissionResult,
+        status: "accepted_without_charge" as const,
+      });
+    },
+    release: async (...input) => {
+      calls.release.push(input);
+      return Promise.resolve({
+        ...admissionResult,
+        status: "rejected" as const,
+      });
+    },
+    recordExecutionEvent: async (...input) => {
+      calls.events.push(input);
+      return Promise.resolve({
+        eventId: "event-1",
+        status: "received" as const,
+      });
+    },
   },
   auth: {
-    user: async (request) => Promise.resolve(request.headers['x-kokoro-service'] === undefined ? { tenantId: String(request.headers['x-kokoro-tenant-id']), subjectId: 'subject-1' } : null),
-    bff: async (request) => Promise.resolve(request.headers['x-kokoro-service'] === 'web-bff'
-      && request.headers['x-kokoro-internal-secret'] === 'secret'
-      && request.headers.authorization === 'Bearer secret'
-      && typeof request.headers['x-kokoro-tenant-id'] === 'string'
-      && (request.headers['x-kokoro-subject'] === undefined || typeof request.headers['x-kokoro-subject'] === 'string')
-      ? { tenantId: request.headers['x-kokoro-tenant-id'], serviceId: 'web-bff', ...(typeof request.headers['x-kokoro-subject'] === 'string' ? { subjectId: request.headers['x-kokoro-subject'] } : {}) }
-      : null),
-    internal: async (request) => Promise.resolve(({ tenantId: String(request.headers['x-kokoro-tenant-id']), serviceId: String(request.headers['x-kokoro-service']) })),
-    admin: async (request) => Promise.resolve(request.headers['x-kokoro-role'] === 'billing.admin'
-      ? { tenantId: String(request.headers['x-kokoro-tenant-id']), operatorId: String(request.headers['x-kokoro-operator']), role: 'billing.admin' }
-      : null),
+    user: async (request) =>
+      Promise.resolve(
+        request.headers["x-kokoro-service"] === undefined
+          ? {
+              tenantId: String(request.headers["x-kokoro-tenant-id"]),
+              subjectId: "subject-1",
+            }
+          : null,
+      ),
+    bff: async (request) =>
+      Promise.resolve(
+        request.headers["x-kokoro-service"] === "web-bff" &&
+          request.headers["x-kokoro-internal-secret"] === "secret" &&
+          request.headers.authorization === "Bearer secret" &&
+          typeof request.headers["x-kokoro-tenant-id"] === "string" &&
+          (request.headers["x-kokoro-subject"] === undefined ||
+            typeof request.headers["x-kokoro-subject"] === "string")
+          ? {
+              tenantId: request.headers["x-kokoro-tenant-id"],
+              serviceId: "web-bff",
+              ...(typeof request.headers["x-kokoro-subject"] === "string"
+                ? { subjectId: request.headers["x-kokoro-subject"] }
+                : {}),
+            }
+          : null,
+      ),
+    internal: async (request) =>
+      Promise.resolve({
+        tenantId: String(request.headers["x-kokoro-tenant-id"]),
+        serviceId: String(request.headers["x-kokoro-service"]),
+      }),
+    admin: async (request) =>
+      Promise.resolve(
+        request.headers["x-kokoro-role"] === "billing.admin"
+          ? {
+              tenantId: String(request.headers["x-kokoro-tenant-id"]),
+              operatorId: String(request.headers["x-kokoro-operator"]),
+              role: "billing.admin",
+            }
+          : null,
+      ),
     webhook: async () => Promise.resolve(true),
   },
 });
 
-const internalHeaders = { 'x-kokoro-tenant-id': 'tenant-1', 'x-kokoro-service': 'agent', 'idempotency-key': 'key-123456' };
-const bffHeaders = { 'x-kokoro-tenant-id': 'tenant-1', 'x-kokoro-service': 'web-bff', 'x-kokoro-internal-secret': 'secret', authorization: 'Bearer secret', 'x-kokoro-subject': 'subject-1' };
+const internalHeaders = {
+  "x-kokoro-tenant-id": "tenant-1",
+  "x-kokoro-service": "agent",
+  "idempotency-key": "key-123456",
+};
+const bffHeaders = {
+  "x-kokoro-tenant-id": "tenant-1",
+  "x-kokoro-service": "web-bff",
+  "x-kokoro-internal-secret": "secret",
+  authorization: "Bearer secret",
+  "x-kokoro-subject": "subject-1",
+};
 
-describe('clean-build Billing v1 transport', () => {
-  it('uses only the data/meta envelope and snake_case for the user catalog surface', async () => {
-    const response = await server.inject({ method: 'GET', url: '/v1/commerce/catalog', headers: { 'x-kokoro-tenant-id': 'tenant-1' } });
+describe("clean-build Billing v1 transport", () => {
+  it("uses only the data/meta envelope and snake_case for the user catalog surface", async () => {
+    const response = await server.inject({
+      method: "GET",
+      url: "/v1/commerce/catalog",
+      headers: { "x-kokoro-tenant-id": "tenant-1" },
+    });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
-      data: { offers: [{ id: 'offer-revision-1', key: 'pro', name: 'Pro', currency: 'USD', amount_minor: '1999', credit_micros: '1000000', billing_interval: 'month' }] },
+      data: {
+        offers: [
+          {
+            id: "offer-revision-1",
+            key: "pro",
+            name: "Pro",
+            currency: "USD",
+            amount_minor: "1999",
+            credit_micros: "1000000",
+            billing_interval: "month",
+          },
+        ],
+      },
       meta: { request_id: anyString },
     });
-    expect(response.json()).not.toHaveProperty('requestId');
+    expect(response.json()).not.toHaveProperty("requestId");
   });
 
-  it('uses meta.request_id and snake_case for the user ledger surface', async () => {
-    const response = await server.inject({ method: 'GET', url: '/v1/billing/me/credit-account', headers: { 'x-kokoro-tenant-id': 'tenant-1' } });
+  it("uses meta.request_id and snake_case for the user ledger surface", async () => {
+    const response = await server.inject({
+      method: "GET",
+      url: "/v1/billing/me/credit-account",
+      headers: { "x-kokoro-tenant-id": "tenant-1" },
+    });
     expect(response.statusCode).toBe(200);
-    expect(metaEnvelope.parse(response.json<unknown>()).meta.request_id).toEqual(anyString);
-    expect(dataEnvelope.parse(response.json<unknown>()).data.account_id).toBe('account-1');
-    expect(dataEnvelope.parse(response.json<unknown>()).data.available_micros).toBe('42');
-    expect(response.json()).not.toHaveProperty('requestId');
+    expect(
+      metaEnvelope.parse(response.json<unknown>()).meta.request_id,
+    ).toEqual(anyString);
+    expect(dataEnvelope.parse(response.json<unknown>()).data.account_id).toBe(
+      "account-1",
+    );
+    expect(
+      dataEnvelope.parse(response.json<unknown>()).data.available_micros,
+    ).toBe("42");
+    expect(response.json()).not.toHaveProperty("requestId");
   });
 
-  it('adapts snake_case quote_snapshot fields to the existing checkout service DTO', async () => {
-    const response = await server.inject({ method: 'POST', url: '/v1/billing/checkout', headers: { 'x-kokoro-tenant-id': 'tenant-1', 'idempotency-key': 'checkout-v1-123456' }, payload: {
-      offer_revision_id: 'offer-revision-1', amount_minor: '1999', currency: 'USD', quote_snapshot: { key: 'pro', credit_micros: '1000000', name: 'Pro', pricing_revision_id: 'price-1' },
-    } });
+  it("adapts snake_case quote_snapshot fields to the existing checkout service DTO", async () => {
+    const response = await server.inject({
+      method: "POST",
+      url: "/v1/billing/checkout",
+      headers: {
+        "x-kokoro-tenant-id": "tenant-1",
+        "idempotency-key": "checkout-v1-123456",
+      },
+      payload: {
+        offer_revision_id: "offer-revision-1",
+        amount_minor: "1999",
+        currency: "USD",
+        quote_snapshot: {
+          key: "pro",
+          credit_micros: "1000000",
+          name: "Pro",
+          pricing_revision_id: "price-1",
+        },
+      },
+    });
     expect(response.statusCode).toBe(201);
-    expect(checkoutCalls.at(-1)).toEqual(expect.objectContaining({
-      offerRevisionId: 'offer-revision-1', amountMinor: 1999, currency: 'USD', quoteSnapshot: { key: 'pro', creditMicros: '1000000', name: 'Pro', pricingRevisionId: 'price-1' },
-    }));
-    expect(dataEnvelope.parse(response.json<unknown>()).data).toEqual({ checkout_id: 'checkout-1', status: 'created', amount_minor: '1999', currency: 'USD', expires_at: '2030-01-01T00:00:00.000Z' });
-    expect(response.json()).not.toHaveProperty('requestId');
+    expect(checkoutCalls.at(-1)).toEqual(
+      expect.objectContaining({
+        offerRevisionId: "offer-revision-1",
+        amountMinor: 1999,
+        currency: "USD",
+        quoteSnapshot: {
+          key: "pro",
+          creditMicros: "1000000",
+          name: "Pro",
+          pricingRevisionId: "price-1",
+        },
+      }),
+    );
+    expect(dataEnvelope.parse(response.json<unknown>()).data).toEqual({
+      checkout_id: "checkout-1",
+      status: "created",
+      amount_minor: "1999",
+      currency: "USD",
+      expires_at: "2030-01-01T00:00:00.000Z",
+    });
+    expect(response.json()).not.toHaveProperty("requestId");
   });
 
-  it('allows the authenticated web BFF to read the catalog and create checkout', async () => {
-    const catalog = await server.inject({ method: 'GET', url: '/v1/commerce/catalog', headers: bffHeaders });
-    const checkout = await server.inject({ method: 'POST', url: '/v1/billing/checkout', headers: { ...bffHeaders, 'idempotency-key': 'bff-checkout-123456' }, payload: {
-      offer_revision_id: 'offer-revision-1', amount_minor: '1999', currency: 'USD', quote_snapshot: { key: 'pro', credit_micros: '1000000' },
-    } });
+  it("allows the authenticated web BFF to read the catalog and create checkout", async () => {
+    const catalog = await server.inject({
+      method: "GET",
+      url: "/v1/commerce/catalog",
+      headers: bffHeaders,
+    });
+    const checkout = await server.inject({
+      method: "POST",
+      url: "/v1/billing/checkout",
+      headers: { ...bffHeaders, "idempotency-key": "bff-checkout-123456" },
+      payload: {
+        offer_revision_id: "offer-revision-1",
+        amount_minor: "1999",
+        currency: "USD",
+        quote_snapshot: { key: "pro", credit_micros: "1000000" },
+      },
+    });
     expect(catalog.statusCode).toBe(200);
     expect(checkout.statusCode).toBe(201);
-    expect(checkoutCalls.at(-1)).toMatchObject({ tenantId: 'tenant-1', subjectId: 'subject-1', idempotencyKey: 'bff-checkout-123456' });
+    expect(checkoutCalls.at(-1)).toMatchObject({
+      tenantId: "tenant-1",
+      subjectId: "subject-1",
+      idempotencyKey: "bff-checkout-123456",
+    });
   });
 
-  it('requires the BFF subject context for checkout while keeping user-only reads JWT-only', async () => {
-    const checkout = await server.inject({ method: 'POST', url: '/v1/billing/checkout', headers: { ...Object.fromEntries(Object.entries(bffHeaders).filter(([key]) => key !== 'x-kokoro-subject')), 'idempotency-key': 'bff-missing-subject-123456' }, payload: {
-      offer_revision_id: 'offer-revision-1', amount_minor: '1999', currency: 'USD', quote_snapshot: { key: 'pro', credit_micros: '1000000' },
-    } });
-    const account = await server.inject({ method: 'GET', url: '/v1/billing/me/credit-account', headers: bffHeaders });
+  it("requires the BFF subject context for checkout while keeping user-only reads JWT-only", async () => {
+    const checkout = await server.inject({
+      method: "POST",
+      url: "/v1/billing/checkout",
+      headers: {
+        ...Object.fromEntries(
+          Object.entries(bffHeaders).filter(
+            ([key]) => key !== "x-kokoro-subject",
+          ),
+        ),
+        "idempotency-key": "bff-missing-subject-123456",
+      },
+      payload: {
+        offer_revision_id: "offer-revision-1",
+        amount_minor: "1999",
+        currency: "USD",
+        quote_snapshot: { key: "pro", credit_micros: "1000000" },
+      },
+    });
+    const account = await server.inject({
+      method: "GET",
+      url: "/v1/billing/me/credit-account",
+      headers: bffHeaders,
+    });
     expect(checkout.statusCode).toBe(403);
-    expect(errorEnvelope.parse(checkout.json<unknown>()).error.code).toBe('billing.service_subject_required');
+    expect(errorEnvelope.parse(checkout.json<unknown>()).error.code).toBe(
+      "billing.service_subject_required",
+    );
     expect(account.statusCode).toBe(401);
   });
 
-  it('rejects forged or incomplete BFF credentials without downgrading to user auth', async () => {
-    const without = (name: string): Record<string, string> => Object.fromEntries(Object.entries(bffHeaders).filter(([key]) => key !== name));
+  it("rejects forged or incomplete BFF credentials without downgrading to user auth", async () => {
+    const without = (name: string): Record<string, string> =>
+      Object.fromEntries(
+        Object.entries(bffHeaders).filter(([key]) => key !== name),
+      );
     const cases = [
-      { name: 'forged service', headers: { ...bffHeaders, 'x-kokoro-service': 'model' } },
-      { name: 'missing internal secret', headers: without('x-kokoro-internal-secret') },
-      { name: 'missing service bearer', headers: without('authorization') },
-      { name: 'missing tenant context', headers: without('x-kokoro-tenant-id') },
+      {
+        name: "forged service",
+        headers: { ...bffHeaders, "x-kokoro-service": "model" },
+      },
+      {
+        name: "missing internal secret",
+        headers: without("x-kokoro-internal-secret"),
+      },
+      { name: "missing service bearer", headers: without("authorization") },
+      {
+        name: "missing tenant context",
+        headers: without("x-kokoro-tenant-id"),
+      },
     ];
     for (const testCase of cases) {
-      const response = await server.inject({ method: 'GET', url: '/v1/commerce/catalog', headers: testCase.headers });
+      const response = await server.inject({
+        method: "GET",
+        url: "/v1/commerce/catalog",
+        headers: testCase.headers,
+      });
       expect(response.statusCode, testCase.name).toBe(403);
-      expect(errorEnvelope.parse(response.json<unknown>()).error.code, testCase.name).toBe('billing.service_auth_failed');
+      expect(
+        errorEnvelope.parse(response.json<unknown>()).error.code,
+        testCase.name,
+      ).toBe("billing.service_auth_failed");
     }
   });
 
-  it('replays a duplicate BFF checkout with the same key and rejects a changed payload', async () => {
+  it("replays a duplicate BFF checkout with the same key and rejects a changed payload", async () => {
     const callsBefore = checkoutCalls.length;
-    const payload = { offer_revision_id: 'offer-revision-1', amount_minor: '1999', currency: 'USD', quote_snapshot: { key: 'pro', credit_micros: '1000000' } };
-    const first = await server.inject({ method: 'POST', url: '/v1/billing/checkout', headers: { ...bffHeaders, 'idempotency-key': 'bff-replay-123456' }, payload });
-    const duplicate = await server.inject({ method: 'POST', url: '/v1/billing/checkout', headers: { ...bffHeaders, 'idempotency-key': 'bff-replay-123456' }, payload });
-    const conflict = await server.inject({ method: 'POST', url: '/v1/billing/checkout', headers: { ...bffHeaders, 'idempotency-key': 'bff-replay-123456' }, payload: { ...payload, amount_minor: '2999' } });
+    const payload = {
+      offer_revision_id: "offer-revision-1",
+      amount_minor: "1999",
+      currency: "USD",
+      quote_snapshot: { key: "pro", credit_micros: "1000000" },
+    };
+    const first = await server.inject({
+      method: "POST",
+      url: "/v1/billing/checkout",
+      headers: { ...bffHeaders, "idempotency-key": "bff-replay-123456" },
+      payload,
+    });
+    const duplicate = await server.inject({
+      method: "POST",
+      url: "/v1/billing/checkout",
+      headers: { ...bffHeaders, "idempotency-key": "bff-replay-123456" },
+      payload,
+    });
+    const conflict = await server.inject({
+      method: "POST",
+      url: "/v1/billing/checkout",
+      headers: { ...bffHeaders, "idempotency-key": "bff-replay-123456" },
+      payload: { ...payload, amount_minor: "2999" },
+    });
     expect(first.statusCode).toBe(201);
     expect(duplicate.statusCode).toBe(201);
-    expect(dataEnvelope.parse(duplicate.json<unknown>()).data.checkout_id).toBe(dataEnvelope.parse(first.json<unknown>()).data.checkout_id);
+    expect(dataEnvelope.parse(duplicate.json<unknown>()).data.checkout_id).toBe(
+      dataEnvelope.parse(first.json<unknown>()).data.checkout_id,
+    );
     expect(conflict.statusCode).toBe(409);
-    expect(errorEnvelope.parse(conflict.json<unknown>()).error.code).toBe('billing.idempotency_conflict');
+    expect(errorEnvelope.parse(conflict.json<unknown>()).error.code).toBe(
+      "billing.idempotency_conflict",
+    );
     expect(checkoutCalls).toHaveLength(callsBefore + 3);
   });
 
-  it('delegates reordered checkout JSON to the durable command authority', async () => {
+  it("delegates reordered checkout JSON to the durable command authority", async () => {
     const callsBefore = checkoutCalls.length;
     const marksBefore = lossyHintMarks.length;
-    const headers = { ...bffHeaders, 'idempotency-key': 'bff-reordered-123456' };
-    const first = await server.inject({ method: 'POST', url: '/v1/billing/checkout', headers, payload: {
-      offer_revision_id: 'offer-revision-1', amount_minor: '1999', currency: 'USD', quote_snapshot: { key: 'pro', credit_micros: '1000000' },
-    } });
-    const reordered = await server.inject({ method: 'POST', url: '/v1/billing/checkout', headers, payload: {
-      quote_snapshot: { credit_micros: '1000000', key: 'pro' }, currency: 'USD', amount_minor: '1999', offer_revision_id: 'offer-revision-1',
-    } });
+    const headers = {
+      ...bffHeaders,
+      "idempotency-key": "bff-reordered-123456",
+    };
+    const first = await server.inject({
+      method: "POST",
+      url: "/v1/billing/checkout",
+      headers,
+      payload: {
+        offer_revision_id: "offer-revision-1",
+        amount_minor: "1999",
+        currency: "USD",
+        quote_snapshot: { key: "pro", credit_micros: "1000000" },
+      },
+    });
+    const reordered = await server.inject({
+      method: "POST",
+      url: "/v1/billing/checkout",
+      headers,
+      payload: {
+        quote_snapshot: { credit_micros: "1000000", key: "pro" },
+        currency: "USD",
+        amount_minor: "1999",
+        offer_revision_id: "offer-revision-1",
+      },
+    });
 
     expect(first.statusCode).toBe(201);
     expect(reordered.statusCode).toBe(201);
     expect(checkoutCalls).toHaveLength(callsBefore + 2);
     expect(lossyHintMarks.slice(marksBefore)).toEqual([
-      { key: 'POST:/v1/billing/checkout:tenant-1:bff-reordered-123456', ttlSeconds: 300 },
-      { key: 'POST:/v1/billing/checkout:tenant-1:bff-reordered-123456', ttlSeconds: 300 },
+      {
+        key: "POST:/v1/billing/checkout:tenant-1:bff-reordered-123456",
+        ttlSeconds: 300,
+      },
+      {
+        key: "POST:/v1/billing/checkout:tenant-1:bff-reordered-123456",
+        ttlSeconds: 300,
+      },
     ]);
   });
 
-  it('continues to the durable command authority when the Redis hint times out', async () => {
+  it("continues to the durable command authority when the Redis hint times out", async () => {
     const callsBefore = checkoutCalls.length;
     const response = await server.inject({
-      method: 'POST',
-      url: '/v1/billing/checkout',
-      headers: { ...bffHeaders, 'idempotency-key': 'checkout-hint-timeout-123456' },
-      payload: { offer_revision_id: 'offer-revision-1', amount_minor: '1999', currency: 'USD', quote_snapshot: { key: 'pro', credit_micros: '1000000' } },
+      method: "POST",
+      url: "/v1/billing/checkout",
+      headers: {
+        ...bffHeaders,
+        "idempotency-key": "checkout-hint-timeout-123456",
+      },
+      payload: {
+        offer_revision_id: "offer-revision-1",
+        amount_minor: "1999",
+        currency: "USD",
+        quote_snapshot: { key: "pro", credit_micros: "1000000" },
+      },
     });
 
     expect(response.statusCode).toBe(201);
     expect(checkoutCalls).toHaveLength(callsBefore + 1);
   });
 
-  it('passes the trusted admin operator into the durable refund command', async () => {
+  it("passes the trusted admin operator into the durable refund command", async () => {
     const response = await server.inject({
-      method: 'POST',
-      url: '/v1/admin/billing/refunds',
+      method: "POST",
+      url: "/v1/admin/billing/refunds",
       headers: {
-        'x-kokoro-tenant-id': 'tenant-1',
-        'x-kokoro-operator': 'operator-1',
-        'x-kokoro-role': 'billing.admin',
-        'idempotency-key': 'admin-refund-123456',
+        "x-kokoro-tenant-id": "tenant-1",
+        "x-kokoro-operator": "operator-1",
+        "x-kokoro-role": "billing.admin",
+        "idempotency-key": "admin-refund-123456",
       },
       payload: {
-        settlement_id: 'settlement-1',
-        external_ref: 'refund-1',
-        amount_minor: '500',
-        allocation_mode: 'proportional',
-        reason: 'customer request',
+        settlement_id: "settlement-1",
+        external_ref: "refund-1",
+        amount_minor: "500",
+        allocation_mode: "proportional",
+        reason: "customer request",
       },
     });
 
     expect(response.statusCode).toBe(202);
     expect(reversalCalls.at(-1)).toMatchObject({
-      tenantId: 'tenant-1',
-      operatorId: 'operator-1',
-      idempotencyKey: 'admin-refund-123456',
+      tenantId: "tenant-1",
+      operatorId: "operator-1",
+      idempotencyKey: "admin-refund-123456",
     });
   });
 
-  it('uses the v1 envelope for errors without a top-level requestId', async () => {
-    const response = await server.inject({ method: 'POST', url: '/v1/billing/checkout', headers: { 'x-kokoro-tenant-id': 'tenant-1' }, payload: {} });
+  it("uses the v1 envelope for errors without a top-level requestId", async () => {
+    const response = await server.inject({
+      method: "POST",
+      url: "/v1/billing/checkout",
+      headers: { "x-kokoro-tenant-id": "tenant-1" },
+      payload: {},
+    });
     expect(response.statusCode).toBe(400);
-    expect(response.json()).toMatchObject({ error: { code: 'billing.idempotency_required', retryable: false, details: {} }, meta: { request_id: anyString } });
-    expect(errorEnvelope.parse(response.json<unknown>()).error).not.toHaveProperty('request_id');
-    expect(response.json()).not.toHaveProperty('requestId');
+    expect(response.json()).toMatchObject({
+      error: {
+        code: "billing.idempotency_required",
+        retryable: false,
+        details: {},
+      },
+      meta: { request_id: anyString },
+    });
+    expect(
+      errorEnvelope.parse(response.json<unknown>()).error,
+    ).not.toHaveProperty("request_id");
+    expect(response.json()).not.toHaveProperty("requestId");
   });
 
-  it('rejects caller-selected account and amount fields at admission boundary', async () => {
-    const response = await server.inject({ method: 'POST', url: '/v1/internal/entitlement/admissions', headers: internalHeaders, payload: {
-      billing_subject: { kind: 'project', ref: 'subject-1' }, payer_ref: 'payer-1', feature_key: 'chat', surface: 'ga', invocation_id: 'inv-1', execution_id: 'exec-1', meter_kind: 'model_invocation', account_id: 'forged', amount: '1',
-    } });
+  it("rejects caller-selected account and amount fields at admission boundary", async () => {
+    const response = await server.inject({
+      method: "POST",
+      url: "/v1/internal/entitlement/admissions",
+      headers: internalHeaders,
+      payload: {
+        billing_subject: { kind: "project", ref: "subject-1" },
+        payer_ref: "payer-1",
+        feature_key: "chat",
+        surface: "ga",
+        invocation_id: "inv-1",
+        execution_id: "exec-1",
+        meter_kind: "model_invocation",
+        account_id: "forged",
+        amount: "1",
+      },
+    });
     expect(response.statusCode).toBe(400);
-    expect(errorEnvelope.parse(response.json<unknown>()).error.code).toBe('billing.invalid_request');
+    expect(errorEnvelope.parse(response.json<unknown>()).error.code).toBe(
+      "billing.invalid_request",
+    );
   });
 
-  it('maps admission, capture, release and event commands without exposing internal DTO names', async () => {
-    const create = await server.inject({ method: 'POST', url: '/v1/internal/entitlement/admissions', headers: internalHeaders, payload: { billing_subject: { kind: 'project', ref: 'subject-1' }, payer_ref: 'payer-1', feature_key: 'chat', surface: 'ga', invocation_id: 'inv-1', execution_id: 'exec-1', meter_kind: 'model_invocation' } });
+  it("maps admission, capture, release and event commands without exposing internal DTO names", async () => {
+    const create = await server.inject({
+      method: "POST",
+      url: "/v1/internal/entitlement/admissions",
+      headers: internalHeaders,
+      payload: {
+        billing_subject: { kind: "project", ref: "subject-1" },
+        payer_ref: "payer-1",
+        feature_key: "chat",
+        surface: "ga",
+        invocation_id: "inv-1",
+        execution_id: "exec-1",
+        meter_kind: "model_invocation",
+      },
+    });
     expect(create.statusCode).toBe(201);
-    expect(dataEnvelope.parse(create.json<unknown>()).data).toEqual({ admission_id: 'adm-1', hold_id: 'hold-1', mode: 'credit', price_policy_revision_id: 'price-1', amount: '42', currency: 'CRD', status: 'held' });
-    expect(metaEnvelope.parse(create.json<unknown>()).meta.request_id).toEqual(anyString);
+    expect(dataEnvelope.parse(create.json<unknown>()).data).toEqual({
+      admission_id: "adm-1",
+      hold_id: "hold-1",
+      mode: "credit",
+      price_policy_revision_id: "price-1",
+      amount: "42",
+      currency: "CRD",
+      status: "held",
+    });
+    expect(metaEnvelope.parse(create.json<unknown>()).meta.request_id).toEqual(
+      anyString,
+    );
 
-    const capture = await server.inject({ method: 'POST', url: '/v1/internal/entitlement/admissions/adm-1/capture', headers: internalHeaders, payload: { invocation_id: 'inv-1', execution_id: 'exec-1', accepted_provider_ref: 'provider-op-1', accepted_at: '2026-09-01T00:00:00Z', service_receipt: { result_digest: 'digest' }, receipt_schema_version: '1' } });
+    const capture = await server.inject({
+      method: "POST",
+      url: "/v1/internal/entitlement/admissions/adm-1/capture",
+      headers: internalHeaders,
+      payload: {
+        invocation_id: "inv-1",
+        execution_id: "exec-1",
+        accepted_provider_ref: "provider-op-1",
+        accepted_at: "2026-09-01T00:00:00Z",
+        service_receipt: { result_digest: "digest" },
+        receipt_schema_version: "1",
+      },
+    });
     expect(capture.statusCode).toBe(200);
-    expect(calls.capture[0]).toEqual(['tenant-1', 'adm-1', expect.objectContaining({ invocationId: 'inv-1' }), 'key-123456']);
+    expect(calls.capture[0]).toEqual([
+      "tenant-1",
+      "adm-1",
+      expect.objectContaining({ invocationId: "inv-1" }),
+      "key-123456",
+    ]);
 
-    const release = await server.inject({ method: 'POST', url: '/v1/internal/entitlement/admissions/adm-1/release', headers: { ...internalHeaders, 'idempotency-key': 'release-123456' }, payload: { invocation_id: 'inv-1', reason: 'execution.failed', service_receipt: { result_digest: 'release-digest' } } });
+    const release = await server.inject({
+      method: "POST",
+      url: "/v1/internal/entitlement/admissions/adm-1/release",
+      headers: { ...internalHeaders, "idempotency-key": "release-123456" },
+      payload: {
+        invocation_id: "inv-1",
+        reason: "execution.failed",
+        service_receipt: { result_digest: "release-digest" },
+      },
+    });
     expect(release.statusCode).toBe(200);
-    expect(calls.release[0]).toEqual([{
-      tenantId: 'tenant-1', admissionId: 'adm-1', invocationId: 'inv-1', reason: 'execution.failed',
-      serviceReceipt: { result_digest: 'release-digest' }, idempotencyKey: 'release-123456',
-    }]);
+    expect(calls.release[0]).toEqual([
+      {
+        tenantId: "tenant-1",
+        admissionId: "adm-1",
+        invocationId: "inv-1",
+        reason: "execution.failed",
+        serviceReceipt: { result_digest: "release-digest" },
+        idempotencyKey: "release-123456",
+      },
+    ]);
 
-    const event = await server.inject({ method: 'POST', url: '/v1/internal/billing/execution-events', headers: { ...internalHeaders, 'idempotency-key': 'event-123456' }, payload: { event_id: 'event-1', event_type: 'execution.unknown', execution_id: 'exec-1', invocation_id: 'inv-1', occurred_at: '2026-09-01T00:00:00Z', receipt_schema_version: '1' } });
+    const event = await server.inject({
+      method: "POST",
+      url: "/v1/internal/billing/execution-events",
+      headers: { ...internalHeaders, "idempotency-key": "event-123456" },
+      payload: {
+        event_id: "event-1",
+        event_type: "execution.unknown",
+        execution_id: "exec-1",
+        invocation_id: "inv-1",
+        occurred_at: "2026-09-01T00:00:00Z",
+        receipt_schema_version: "1",
+      },
+    });
     expect(event.statusCode).toBe(202);
-    expect(calls.events[0]).toEqual([expect.objectContaining({ tenantId: 'tenant-1', eventId: 'event-1', eventType: 'execution.unknown', idempotencyKey: 'event-123456' })]);
+    expect(calls.events[0]).toEqual([
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        eventId: "event-1",
+        eventType: "execution.unknown",
+        idempotencyKey: "event-123456",
+      }),
+    ]);
   });
 
-  it('rejects the retired execution-event signature field instead of persisting an unverified claim', async () => {
+  it("rejects the retired execution-event signature field instead of persisting an unverified claim", async () => {
     const priorEventCalls = calls.events.length;
     const event = await server.inject({
-      method: 'POST',
-      url: '/v1/internal/billing/execution-events',
-      headers: { ...internalHeaders, 'idempotency-key': 'event-retired-signature' },
+      method: "POST",
+      url: "/v1/internal/billing/execution-events",
+      headers: {
+        ...internalHeaders,
+        "idempotency-key": "event-retired-signature",
+      },
       payload: {
-        event_id: 'event-2', event_type: 'execution.unknown', execution_id: 'exec-2', invocation_id: 'inv-2',
-        occurred_at: '2026-09-01T00:00:00Z', receipt_schema_version: '1', signature: 'unverified',
+        event_id: "event-2",
+        event_type: "execution.unknown",
+        execution_id: "exec-2",
+        invocation_id: "inv-2",
+        occurred_at: "2026-09-01T00:00:00Z",
+        receipt_schema_version: "1",
+        signature: "unverified",
       },
     });
     expect(event.statusCode).toBe(400);
-    expect(errorEnvelope.parse(event.json<unknown>()).error.code).toBe('billing.invalid_request');
+    expect(errorEnvelope.parse(event.json<unknown>()).error.code).toBe(
+      "billing.invalid_request",
+    );
     expect(calls.events).toHaveLength(priorEventCalls);
   });
 
-  it('limits the scheduler surface to its generic expiry command', async () => {
-    const forbidden = await server.inject({ method: 'POST', url: '/v1/internal/commands/expire-credit-holds', headers: { ...internalHeaders, 'x-kokoro-service': 'agent', 'idempotency-key': 'sweep-123456' }, payload: {} });
+  it("limits the scheduler surface to its generic expiry command", async () => {
+    const forbidden = await server.inject({
+      method: "POST",
+      url: "/v1/internal/commands/expire-credit-holds",
+      headers: {
+        ...internalHeaders,
+        "x-kokoro-service": "agent",
+        "idempotency-key": "sweep-123456",
+      },
+      payload: {},
+    });
     expect(forbidden.statusCode).toBe(403);
   });
 
-  it('passes the durable settlement identity and idempotency key into the application command', async () => {
+  it("passes the durable settlement identity and idempotency key into the application command", async () => {
     const response = await server.inject({
-      method: 'POST',
-      url: '/v1/internal/payment/settlements/accept',
+      method: "POST",
+      url: "/v1/internal/payment/settlements/accept",
       headers: {
-        'x-kokoro-tenant-id': 'tenant-1',
-        'x-kokoro-service': 'payment-worker',
-        'idempotency-key': 'settlement-command-1',
+        "x-kokoro-tenant-id": "tenant-1",
+        "x-kokoro-service": "payment-worker",
+        "idempotency-key": "settlement-command-1",
       },
       payload: {
-        settlement_id: 'settlement-1',
-        provider: 'stripe',
-        external_payment_ref: 'payment-1',
-        amount_minor: '1000',
-        currency: 'USD',
+        settlement_id: "settlement-1",
+        provider: "stripe",
+        external_payment_ref: "payment-1",
+        amount_minor: "1000",
+        currency: "USD",
       },
     });
 
     expect(response.statusCode).toBe(202);
-    expect(dataEnvelope.parse(response.json<unknown>()).data).toEqual({ settlement_id: 'settlement-1', accepted: true });
+    expect(dataEnvelope.parse(response.json<unknown>()).data).toEqual({
+      settlement_id: "settlement-1",
+      accepted: true,
+    });
     expect(settlementCalls.at(-1)).toEqual({
-      settlementId: 'settlement-1',
-      tenantId: 'tenant-1',
-      idempotencyKey: 'settlement-command-1',
-      provider: 'stripe',
-      externalPaymentRef: 'payment-1',
+      settlementId: "settlement-1",
+      tenantId: "tenant-1",
+      idempotencyKey: "settlement-command-1",
+      provider: "stripe",
+      externalPaymentRef: "payment-1",
       amountMinor: 1_000,
-      currency: 'USD',
+      currency: "USD",
     });
   });
 
-  it('does not let the byte-level Redis hint override settlement receipt semantics', async () => {
+  it("does not let the byte-level Redis hint override settlement receipt semantics", async () => {
     const headers = {
-      'x-kokoro-tenant-id': 'tenant-1',
-      'x-kokoro-service': 'payment-worker',
-      'idempotency-key': 'settlement-semantic-replay-1',
+      "x-kokoro-tenant-id": "tenant-1",
+      "x-kokoro-service": "payment-worker",
+      "idempotency-key": "settlement-semantic-replay-1",
     };
     const first = await server.inject({
-      method: 'POST',
-      url: '/v1/internal/payment/settlements/accept',
+      method: "POST",
+      url: "/v1/internal/payment/settlements/accept",
       headers,
       payload: {
-        settlement_id: 'settlement-semantic-1',
-        provider: 'stripe',
-        external_payment_ref: 'payment-semantic-1',
-        amount_minor: '1000',
-        currency: 'USD',
+        settlement_id: "settlement-semantic-1",
+        provider: "stripe",
+        external_payment_ref: "payment-semantic-1",
+        amount_minor: "1000",
+        currency: "USD",
       },
     });
     const reorderedReplay = await server.inject({
-      method: 'POST',
-      url: '/v1/internal/payment/settlements/accept',
+      method: "POST",
+      url: "/v1/internal/payment/settlements/accept",
       headers,
       payload: {
-        currency: 'USD',
-        amount_minor: '1000',
-        external_payment_ref: 'payment-semantic-1',
-        provider: 'stripe',
-        settlement_id: 'settlement-semantic-1',
+        currency: "USD",
+        amount_minor: "1000",
+        external_payment_ref: "payment-semantic-1",
+        provider: "stripe",
+        settlement_id: "settlement-semantic-1",
       },
     });
 
@@ -338,53 +760,56 @@ describe('clean-build Billing v1 transport', () => {
     expect(reorderedReplay.statusCode).toBe(202);
   });
 
-  it('requires an explicit expiry batch identity and passes it with the durable key', async () => {
+  it("requires an explicit expiry batch identity and passes it with the durable key", async () => {
     const headers = {
-      'x-kokoro-tenant-id': 'tenant-1',
-      'x-kokoro-service': 'scheduler',
-      'idempotency-key': 'expiry-command-1',
+      "x-kokoro-tenant-id": "tenant-1",
+      "x-kokoro-service": "scheduler",
+      "idempotency-key": "expiry-command-1",
     };
     const missingIdentity = await server.inject({
-      method: 'POST',
-      url: '/v1/internal/commands/expire-credit-holds',
+      method: "POST",
+      url: "/v1/internal/commands/expire-credit-holds",
       headers,
       payload: { limit: 25 },
     });
     expect(missingIdentity.statusCode).toBe(400);
 
     const accepted = await server.inject({
-      method: 'POST',
-      url: '/v1/internal/commands/expire-credit-holds',
+      method: "POST",
+      url: "/v1/internal/commands/expire-credit-holds",
       headers,
-      payload: { batch_id: 'expiry-batch-1', limit: 25 },
+      payload: { batch_id: "expiry-batch-1", limit: 25 },
     });
     expect(accepted.statusCode).toBe(202);
-    expect(dataEnvelope.parse(accepted.json<unknown>()).data).toEqual({ batch_id: 'expiry-batch-1', expired_hold_ids: ['hold-1'] });
+    expect(dataEnvelope.parse(accepted.json<unknown>()).data).toEqual({
+      batch_id: "expiry-batch-1",
+      expired_hold_ids: ["hold-1"],
+    });
     expect(expiryCalls.at(-1)).toEqual({
-      tenantId: 'tenant-1',
-      batchId: 'expiry-batch-1',
-      idempotencyKey: 'expiry-command-1',
+      tenantId: "tenant-1",
+      batchId: "expiry-batch-1",
+      idempotencyKey: "expiry-command-1",
       limit: 25,
     });
   });
 
-  it('lets PostgreSQL normalize the default expiry limit instead of trusting the Redis hint', async () => {
+  it("lets PostgreSQL normalize the default expiry limit instead of trusting the Redis hint", async () => {
     const headers = {
-      'x-kokoro-tenant-id': 'tenant-1',
-      'x-kokoro-service': 'scheduler',
-      'idempotency-key': 'expiry-default-replay-1',
+      "x-kokoro-tenant-id": "tenant-1",
+      "x-kokoro-service": "scheduler",
+      "idempotency-key": "expiry-default-replay-1",
     };
     const explicitDefault = await server.inject({
-      method: 'POST',
-      url: '/v1/internal/commands/expire-credit-holds',
+      method: "POST",
+      url: "/v1/internal/commands/expire-credit-holds",
       headers,
-      payload: { batch_id: 'expiry-default-batch-1', limit: 100 },
+      payload: { batch_id: "expiry-default-batch-1", limit: 100 },
     });
     const implicitDefault = await server.inject({
-      method: 'POST',
-      url: '/v1/internal/commands/expire-credit-holds',
+      method: "POST",
+      url: "/v1/internal/commands/expire-credit-holds",
       headers,
-      payload: { batch_id: 'expiry-default-batch-1' },
+      payload: { batch_id: "expiry-default-batch-1" },
     });
 
     expect(explicitDefault.statusCode).toBe(202);

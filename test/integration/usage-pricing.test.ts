@@ -1,15 +1,17 @@
-import { assertDefined } from '../assert-defined.js';
-import { randomUUID } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
-import { createBillingConnection } from '../../src/infrastructure/postgres/connection.js';
-import { createPostgresUsagePricingService } from '../../src/infrastructure/postgres/create-postgres-services.js';
+import { assertDefined } from "../assert-defined.js";
+import { randomUUID } from "node:crypto";
+import { describe, expect, it } from "vitest";
+import { createBillingConnection } from "../../src/infrastructure/postgres/connection.js";
+import { createPostgresUsagePricingService } from "../../src/infrastructure/postgres/create-postgres-services.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const integration = describe.skipIf(!databaseUrl);
 
-integration('usage pricing revisions', () => {
-  it('quotes token usage from the active immutable revision and exposes reservation micros', async () => {
-    const connection = await createBillingConnection(assertDefined(databaseUrl));
+integration("usage pricing revisions", () => {
+  it("quotes token usage from the active immutable revision and exposes reservation micros", async () => {
+    const connection = await createBillingConnection(
+      assertDefined(databaseUrl),
+    );
     const tenantId = randomUUID();
     const revisionId = randomUUID();
     const rateId = randomUUID();
@@ -28,7 +30,15 @@ integration('usage pricing revisions', () => {
          VALUES ($1, $2, $3, 'chat', 'pro', 1000000, 2000000, 500)`,
         [rateId, revisionId, tenantId],
       );
-      await expect(service.quote({ tenantId, featureKey: 'chat', labelKey: 'pro', inputTokens: 1000, outputTokens: 2000 })).resolves.toMatchObject({
+      await expect(
+        service.quote({
+          tenantId,
+          featureKey: "chat",
+          labelKey: "pro",
+          inputTokens: 1000,
+          outputTokens: 2000,
+        }),
+      ).resolves.toMatchObject({
         pricingRevisionId: revisionId,
         amountMicros: 5000,
         reservationMicros: 500,
@@ -40,12 +50,26 @@ integration('usage pricing revisions', () => {
          VALUES ($1, $2, $3, 'chat', 'micro', 1, 0, 1)`,
         [randomUUID(), revisionId, tenantId],
       );
-      await expect(service.quote({ tenantId, featureKey: 'chat', labelKey: 'micro', inputTokens: 1, outputTokens: 0 })).resolves.toMatchObject({
+      await expect(
+        service.quote({
+          tenantId,
+          featureKey: "chat",
+          labelKey: "micro",
+          inputTokens: 1,
+          outputTokens: 0,
+        }),
+      ).resolves.toMatchObject({
         amountMicros: 1,
       });
     } finally {
-      await connection.execute('DELETE FROM entitlement_usage_price_rate WHERE tenant_id = $1', [tenantId]);
-      await connection.execute('DELETE FROM entitlement_usage_price_revision WHERE tenant_id = $1', [tenantId]);
+      await connection.execute(
+        "DELETE FROM entitlement_usage_price_rate WHERE tenant_id = $1",
+        [tenantId],
+      );
+      await connection.execute(
+        "DELETE FROM entitlement_usage_price_revision WHERE tenant_id = $1",
+        [tenantId],
+      );
       await connection.end();
     }
   });

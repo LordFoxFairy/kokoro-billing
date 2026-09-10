@@ -40,10 +40,12 @@ const workflowSchema = z.object({
     }),
   }),
 });
-const nodeSetupSchema = z.object({
-  "node-version-file": z.literal(".node-version"),
-  cache: z.literal("pnpm"),
-}).strict();
+const nodeSetupSchema = z
+  .object({
+    "node-version-file": z.literal(".node-version"),
+    cache: z.literal("pnpm"),
+  })
+  .strict();
 const pnpmSetupSchema = z.object({ version: z.literal("11.25.0") }).strict();
 const devPins = {
   "@types/node": "24.13.3",
@@ -78,7 +80,8 @@ function checkManifest(manifestInput: unknown, lockInput: unknown): void {
   if (manifest.packageManager !== "pnpm@11.25.0") fail("manifest-pnpm");
   if (manifest.engines.node !== "24.20.0") fail("manifest-node");
   for (const [name, version] of Object.entries(devPins)) {
-    if (manifest.devDependencies[name] !== version) fail(`manifest-pin:${name}`);
+    if (manifest.devDependencies[name] !== version)
+      fail(`manifest-pin:${name}`);
   }
   for (const groupName of ["dependencies", "devDependencies"] as const) {
     const group = manifest[groupName];
@@ -89,7 +92,8 @@ function checkManifest(manifestInput: unknown, lockInput: unknown): void {
       const locked = importer[groupName][name];
       if (!locked) fail(`lock-missing:${name}`);
       if (locked.specifier !== version) fail(`lock-specifier:${name}`);
-      if (locked.version.split("(")[0] !== version) fail(`lock-version:${name}`);
+      if (locked.version.split("(")[0] !== version)
+        fail(`lock-version:${name}`);
     }
     for (const name of Object.keys(importer[groupName])) {
       if (!(name in group)) fail(`lock-extra:${name}`);
@@ -99,30 +103,50 @@ function checkManifest(manifestInput: unknown, lockInput: unknown): void {
 
 function checkRuntime(nodeVersion: string, workspaceInput: unknown): void {
   if (nodeVersion !== "24.20.0\n") fail("node-file");
-  if (!workspaceSchema.safeParse(workspaceInput).success) fail("workspace-engines");
+  if (!workspaceSchema.safeParse(workspaceInput).success)
+    fail("workspace-engines");
 }
 
 function checkWorkflow(input: unknown): void {
   const result = workflowSchema.safeParse(input);
   if (!result.success) {
     // Include the failing input path so malformed fixtures prove the intended cause.
-    fail(`workflow-shape:${result.error.issues.map((issue) => issue.path.join(".")).join(",")}`);
+    fail(
+      `workflow-shape:${result.error.issues.map((issue) => issue.path.join(".")).join(",")}`,
+    );
   }
   const steps = result.data.jobs.verify.steps;
-  const nodes = steps.filter((step) => step.uses?.startsWith("actions/setup-node@"));
-  const pnpms = steps.filter((step) => step.uses?.startsWith("pnpm/action-setup@"));
+  const nodes = steps.filter((step) =>
+    step.uses?.startsWith("actions/setup-node@"),
+  );
+  const pnpms = steps.filter((step) =>
+    step.uses?.startsWith("pnpm/action-setup@"),
+  );
   const node = nodes[0];
   const pnpm = pnpms[0];
-  if (nodes.length !== 1 || !node || !nodeSetupSchema.safeParse(node.with).success) {
+  if (
+    nodes.length !== 1 ||
+    !node ||
+    !nodeSetupSchema.safeParse(node.with).success
+  ) {
     fail("node-setup");
   }
-  if (pnpms.length !== 1 || !pnpm || !pnpmSetupSchema.safeParse(pnpm.with).success) {
+  if (
+    pnpms.length !== 1 ||
+    !pnpm ||
+    !pnpmSetupSchema.safeParse(pnpm.with).success
+  ) {
     fail("pnpm-setup");
   }
-  const commands = steps.flatMap((step) => step.run === undefined ? [] : [step.run]);
-  if (commands.some((command) => /\becho\s+["']?pnpm\b/iu.test(command))) fail("echo");
-  if (commands.some((command) => /\|\|\s*true\b/iu.test(command))) fail("ignore-failure");
-  if (commands.some((command) => /--no-optional\b/iu.test(command))) fail("no-optional");
+  const commands = steps.flatMap((step) =>
+    step.run === undefined ? [] : [step.run],
+  );
+  if (commands.some((command) => /\becho\s+["']?pnpm\b/iu.test(command)))
+    fail("echo");
+  if (commands.some((command) => /\|\|\s*true\b/iu.test(command)))
+    fail("ignore-failure");
+  if (commands.some((command) => /--no-optional\b/iu.test(command)))
+    fail("no-optional");
   // Only the current explicit gate commands are supported, not shell substring matches.
   let prior = Math.max(steps.indexOf(node), steps.indexOf(pnpm));
   for (const command of required) {
@@ -139,7 +163,9 @@ function checkDockerfile(text: string): void {
   let externalCount = 0;
   for (const raw of text.split("\n")) {
     if (!/^\s*FROM\b/iu.test(raw)) continue;
-    const match = /^\s*FROM\s+([\w:./@-]+)(?:\s+AS\s+([\w-]+))?\s*$/iu.exec(raw);
+    const match = /^\s*FROM\s+([\w:./@-]+)(?:\s+AS\s+([\w-]+))?\s*$/iu.exec(
+      raw,
+    );
     const source = match?.[1];
     if (!source) fail("docker-syntax");
     fromCount += 1;
@@ -163,27 +189,37 @@ const manifestFixture = {
   dependencies: { zod: "3.25.76" },
   devDependencies: { ...devPins, yaml: "2.9.0" },
 };
-function lockGroup(group: Record<string, string>): z.infer<typeof lockedDependencies> {
-  return Object.fromEntries(Object.entries(group).map(([name, version]) => [
-    name, { specifier: version, version },
-  ]));
+function lockGroup(
+  group: Record<string, string>,
+): z.infer<typeof lockedDependencies> {
+  return Object.fromEntries(
+    Object.entries(group).map(([name, version]) => [
+      name,
+      { specifier: version, version },
+    ]),
+  );
 }
 const importerFixture = {
   dependencies: lockGroup(manifestFixture.dependencies),
   devDependencies: lockGroup(manifestFixture.devDependencies),
 };
 const lockFixture = { importers: { ".": importerFixture } };
-const pnpmStep = { uses: "pnpm/action-setup@fixture", with: { version: "11.25.0" } };
+const pnpmStep = {
+  uses: "pnpm/action-setup@fixture",
+  with: { version: "11.25.0" },
+};
 const nodeStep = {
   uses: "actions/setup-node@fixture",
   with: { "node-version-file": ".node-version", cache: "pnpm" },
 };
 const gateSteps = required.map((run) => ({ run }));
 const workflowFixture = {
-  jobs: { verify: {
-    env: { SCHEMA_ADMIN_URL: "postgresql://localhost/fixture" },
-    steps: [pnpmStep, nodeStep, ...gateSteps],
-  } },
+  jobs: {
+    verify: {
+      env: { SCHEMA_ADMIN_URL: "postgresql://localhost/fixture" },
+      steps: [pnpmStep, nodeStep, ...gateSteps],
+    },
+  },
 };
 function withSteps(steps: unknown): unknown {
   return { jobs: { verify: { ...workflowFixture.jobs.verify, steps } } };
@@ -195,27 +231,65 @@ FROM ${approvedImage} AS runtime`;
 
 describe("toolchain governance", () => {
   it("pins the real manifest, lockfile, and local runtime policy", async () => {
-    const manifest: unknown = JSON.parse(await readFile("package.json", "utf8"));
+    const manifest: unknown = JSON.parse(
+      await readFile("package.json", "utf8"),
+    );
     const lock: unknown = parse(await readFile("pnpm-lock.yaml", "utf8"));
-    const workspace: unknown = parse(await readFile("pnpm-workspace.yaml", "utf8"));
+    const workspace: unknown = parse(
+      await readFile("pnpm-workspace.yaml", "utf8"),
+    );
     checkManifest(manifest, lock);
     checkRuntime(await readFile(".node-version", "utf8"), workspace);
   });
 
   it.each([
-    ["package manager", { ...manifestFixture, packageManager: "pnpm@11" }, "manifest-pnpm"],
-    ["Node runtime", { ...manifestFixture, engines: { node: "22.22.2" } }, "manifest-node"],
-    ...Object.entries(devPins).map(([name]) => [
-      name,
-      { ...manifestFixture, devDependencies: { ...manifestFixture.devDependencies, [name]: "7.0.2" } },
-      `manifest-pin:${name}`,
-    ] as const),
-    ...["^3.25.76", "~3.25.76", "latest", "3.25", "03.25.76", "3.25.76-beta.1"].map((version) => [
-      `floating or non-stable direct dependency ${version}`,
-      { ...manifestFixture, dependencies: { zod: version } },
-      "manifest-exact:zod",
-    ] as const),
-    ["floating dev dependency", { ...manifestFixture, devDependencies: { ...manifestFixture.devDependencies, yaml: "^2.9.0" } }, "manifest-exact:yaml"],
+    [
+      "package manager",
+      { ...manifestFixture, packageManager: "pnpm@11" },
+      "manifest-pnpm",
+    ],
+    [
+      "Node runtime",
+      { ...manifestFixture, engines: { node: "22.22.2" } },
+      "manifest-node",
+    ],
+    ...Object.entries(devPins).map(
+      ([name]) =>
+        [
+          name,
+          {
+            ...manifestFixture,
+            devDependencies: {
+              ...manifestFixture.devDependencies,
+              [name]: "7.0.2",
+            },
+          },
+          `manifest-pin:${name}`,
+        ] as const,
+    ),
+    ...[
+      "^3.25.76",
+      "~3.25.76",
+      "latest",
+      "3.25",
+      "03.25.76",
+      "3.25.76-beta.1",
+    ].map(
+      (version) =>
+        [
+          `floating or non-stable direct dependency ${version}`,
+          { ...manifestFixture, dependencies: { zod: version } },
+          "manifest-exact:zod",
+        ] as const,
+    ),
+    [
+      "floating dev dependency",
+      {
+        ...manifestFixture,
+        devDependencies: { ...manifestFixture.devDependencies, yaml: "^2.9.0" },
+      },
+      "manifest-exact:yaml",
+    ],
     ["missing manifest shape", {}, "manifest-shape"],
   ] as const)("rejects manifest regression: %s", (_name, manifest, code) => {
     expect(() => checkManifest(manifestFixture, lockFixture)).not.toThrow();
@@ -225,28 +299,60 @@ describe("toolchain governance", () => {
   it.each([
     ["dependencies", "zod", "3.25.76"],
     ["devDependencies", "yaml", "2.9.0"],
-  ] as const)("checks specifier and resolved version in %s", (group, name, version) => {
-    expect(() => checkManifest(manifestFixture, lockFixture)).not.toThrow();
-    for (const [entry, code] of [
-      [{ specifier: `^${version}`, version }, `lock-specifier:${name}`],
-      [{ specifier: version, version: "0.0.1(peer@1.0.0)" }, `lock-version:${name}`],
-    ] as const) {
-      const importer = { ...importerFixture, [group]: { ...importerFixture[group], [name]: entry } };
-      expect(() => checkManifest(manifestFixture, { importers: { ".": importer } })).toThrow(new Error(code));
-    }
-    const peerImporter = { ...importerFixture, [group]: {
-      ...importerFixture[group], [name]: { specifier: version, version: `${version}(peer@1.0.0)` },
-    } };
-    expect(() => checkManifest(manifestFixture, { importers: { ".": peerImporter } })).not.toThrow();
-    const missing = Object.fromEntries(Object.entries(importerFixture[group]).filter(([key]) => key !== name));
-    expect(() => checkManifest(manifestFixture, { importers: { ".": { ...importerFixture, [group]: missing } } })).toThrow(new Error(`lock-missing:${name}`));
-    const extra = { ...importerFixture[group], extra: { specifier: "1.0.0", version: "1.0.0" } };
-    expect(() => checkManifest(manifestFixture, { importers: { ".": { ...importerFixture, [group]: extra } } })).toThrow(new Error("lock-extra:extra"));
-  });
+  ] as const)(
+    "checks specifier and resolved version in %s",
+    (group, name, version) => {
+      expect(() => checkManifest(manifestFixture, lockFixture)).not.toThrow();
+      for (const [entry, code] of [
+        [{ specifier: `^${version}`, version }, `lock-specifier:${name}`],
+        [
+          { specifier: version, version: "0.0.1(peer@1.0.0)" },
+          `lock-version:${name}`,
+        ],
+      ] as const) {
+        const importer = {
+          ...importerFixture,
+          [group]: { ...importerFixture[group], [name]: entry },
+        };
+        expect(() =>
+          checkManifest(manifestFixture, { importers: { ".": importer } }),
+        ).toThrow(new Error(code));
+      }
+      const peerImporter = {
+        ...importerFixture,
+        [group]: {
+          ...importerFixture[group],
+          [name]: { specifier: version, version: `${version}(peer@1.0.0)` },
+        },
+      };
+      expect(() =>
+        checkManifest(manifestFixture, { importers: { ".": peerImporter } }),
+      ).not.toThrow();
+      const missing = Object.fromEntries(
+        Object.entries(importerFixture[group]).filter(([key]) => key !== name),
+      );
+      expect(() =>
+        checkManifest(manifestFixture, {
+          importers: { ".": { ...importerFixture, [group]: missing } },
+        }),
+      ).toThrow(new Error(`lock-missing:${name}`));
+      const extra = {
+        ...importerFixture[group],
+        extra: { specifier: "1.0.0", version: "1.0.0" },
+      };
+      expect(() =>
+        checkManifest(manifestFixture, {
+          importers: { ".": { ...importerFixture, [group]: extra } },
+        }),
+      ).toThrow(new Error("lock-extra:extra"));
+    },
+  );
 
   it("rejects malformed lock input", () => {
     expect(() => checkManifest(manifestFixture, lockFixture)).not.toThrow();
-    expect(() => checkManifest(manifestFixture, { importers: { ".": null } })).toThrow(new Error("lock-shape"));
+    expect(() =>
+      checkManifest(manifestFixture, { importers: { ".": null } }),
+    ).toThrow(new Error("lock-shape"));
   });
 
   it.each([
@@ -254,10 +360,15 @@ describe("toolchain governance", () => {
     ["24.20.0\n", { engineStrict: false }, "workspace-engines"],
     ["24.20.0\n", {}, "workspace-engines"],
     ["24.20.0\n", { engineStrict: "true" }, "workspace-engines"],
-  ] as const)("rejects weakened local runtime policy (%s, %j)", (node, workspace, code) => {
-    expect(() => checkRuntime("24.20.0\n", { engineStrict: true })).not.toThrow();
-    expect(() => checkRuntime(node, workspace)).toThrow(new Error(code));
-  });
+  ] as const)(
+    "rejects weakened local runtime policy (%s, %j)",
+    (node, workspace, code) => {
+      expect(() =>
+        checkRuntime("24.20.0\n", { engineStrict: true }),
+      ).not.toThrow();
+      expect(() => checkRuntime(node, workspace)).toThrow(new Error(code));
+    },
+  );
 
   it.each([".github/workflows/ci.yml", ".github/workflows/release-image.yml"])(
     "validates ordered verify job in %s",
@@ -268,40 +379,188 @@ describe("toolchain governance", () => {
     ["missing jobs", {}, "jobs"],
     ["wrong jobs type", { jobs: [] }, "jobs"],
     ["missing verify", { jobs: {} }, "jobs.verify"],
-    ["missing steps", { jobs: { verify: { env: workflowFixture.jobs.verify.env } } }, "jobs.verify.steps"],
+    [
+      "missing steps",
+      { jobs: { verify: { env: workflowFixture.jobs.verify.env } } },
+      "jobs.verify.steps",
+    ],
     ["wrong steps type", withSteps({}), "jobs.verify.steps"],
-    ["missing env", { jobs: { verify: { steps: workflowFixture.jobs.verify.steps } } }, "jobs.verify.env"],
-    ["wrong env type", { jobs: { verify: { ...workflowFixture.jobs.verify, env: [] } } }, "jobs.verify.env"],
-    ["missing schema admin URL", { jobs: { verify: { ...workflowFixture.jobs.verify, env: {} } } }, "jobs.verify.env.SCHEMA_ADMIN_URL"],
-    ["wrong schema admin URL type", { jobs: { verify: { ...workflowFixture.jobs.verify, env: { SCHEMA_ADMIN_URL: 1 } } } }, "jobs.verify.env.SCHEMA_ADMIN_URL"],
-    ["wrong run type", withSteps([pnpmStep, nodeStep, { run: 1 }, ...gateSteps.slice(1)]), "jobs.verify.steps.2.run"],
-    ["wrong uses type", withSteps([{ ...pnpmStep, uses: false }, nodeStep, ...gateSteps]), "jobs.verify.steps.0.uses"],
-    ...["if", "continue-on-error"].flatMap((key) => [
-      [`job ${key}`, { jobs: { verify: { ...workflowFixture.jobs.verify, [key]: true } } }, `jobs.verify.${key}`],
-      [`step ${key}`, withSteps([pnpmStep, nodeStep, { run: required[0], [key]: true }, ...gateSteps.slice(1)]), `jobs.verify.steps.2.${key}`],
-    ] as const),
-  ] as const)("rejects workflow shape regression: %s", (_name, workflow, path) => {
-    expect(() => checkWorkflow(workflowFixture)).not.toThrow();
-    expect(() => checkWorkflow(workflow)).toThrow(new Error(`workflow-shape:${path}`));
-  });
+    [
+      "missing env",
+      { jobs: { verify: { steps: workflowFixture.jobs.verify.steps } } },
+      "jobs.verify.env",
+    ],
+    [
+      "wrong env type",
+      { jobs: { verify: { ...workflowFixture.jobs.verify, env: [] } } },
+      "jobs.verify.env",
+    ],
+    [
+      "missing schema admin URL",
+      { jobs: { verify: { ...workflowFixture.jobs.verify, env: {} } } },
+      "jobs.verify.env.SCHEMA_ADMIN_URL",
+    ],
+    [
+      "wrong schema admin URL type",
+      {
+        jobs: {
+          verify: {
+            ...workflowFixture.jobs.verify,
+            env: { SCHEMA_ADMIN_URL: 1 },
+          },
+        },
+      },
+      "jobs.verify.env.SCHEMA_ADMIN_URL",
+    ],
+    [
+      "wrong run type",
+      withSteps([pnpmStep, nodeStep, { run: 1 }, ...gateSteps.slice(1)]),
+      "jobs.verify.steps.2.run",
+    ],
+    [
+      "wrong uses type",
+      withSteps([{ ...pnpmStep, uses: false }, nodeStep, ...gateSteps]),
+      "jobs.verify.steps.0.uses",
+    ],
+    ...["if", "continue-on-error"].flatMap(
+      (key) =>
+        [
+          [
+            `job ${key}`,
+            {
+              jobs: { verify: { ...workflowFixture.jobs.verify, [key]: true } },
+            },
+            `jobs.verify.${key}`,
+          ],
+          [
+            `step ${key}`,
+            withSteps([
+              pnpmStep,
+              nodeStep,
+              { run: required[0], [key]: true },
+              ...gateSteps.slice(1),
+            ]),
+            `jobs.verify.steps.2.${key}`,
+          ],
+        ] as const,
+    ),
+  ] as const)(
+    "rejects workflow shape regression: %s",
+    (_name, workflow, path) => {
+      expect(() => checkWorkflow(workflowFixture)).not.toThrow();
+      expect(() => checkWorkflow(workflow)).toThrow(
+        new Error(`workflow-shape:${path}`),
+      );
+    },
+  );
 
   it.each([
     ["missing node setup", [pnpmStep, ...gateSteps], "node-setup"],
-    ["duplicate node setup", [pnpmStep, nodeStep, nodeStep, ...gateSteps], "node-setup"],
-    ["node version overrides file", [pnpmStep, { ...nodeStep, with: { ...nodeStep.with, "node-version": "22" } }, ...gateSteps], "node-setup"],
-    ["wrong node version file", [pnpmStep, { ...nodeStep, with: { ...nodeStep.with, "node-version-file": ".nvmrc" } }, ...gateSteps], "node-setup"],
+    [
+      "duplicate node setup",
+      [pnpmStep, nodeStep, nodeStep, ...gateSteps],
+      "node-setup",
+    ],
+    [
+      "node version overrides file",
+      [
+        pnpmStep,
+        { ...nodeStep, with: { ...nodeStep.with, "node-version": "22" } },
+        ...gateSteps,
+      ],
+      "node-setup",
+    ],
+    [
+      "wrong node version file",
+      [
+        pnpmStep,
+        {
+          ...nodeStep,
+          with: { ...nodeStep.with, "node-version-file": ".nvmrc" },
+        },
+        ...gateSteps,
+      ],
+      "node-setup",
+    ],
     ["missing pnpm setup", [nodeStep, ...gateSteps], "pnpm-setup"],
-    ["duplicate pnpm setup", [pnpmStep, pnpmStep, nodeStep, ...gateSteps], "pnpm-setup"],
-    ["wrong pnpm version", [{ ...pnpmStep, with: { version: "11" } }, nodeStep, ...gateSteps], "pnpm-setup"],
-    ["late node setup", [pnpmStep, { run: required[0] }, nodeStep, ...gateSteps.slice(1)], "order"],
-    ["late pnpm setup", [nodeStep, { run: required[0] }, pnpmStep, ...gateSteps.slice(1)], "order"],
-    ...required.flatMap((command) => [
-      [`missing ${command}`, [pnpmStep, nodeStep, ...gateSteps.filter((step) => step.run !== command)], `missing:${command}`],
-      [`echo ${command}`, [pnpmStep, nodeStep, ...gateSteps.map((step) => step.run === command ? { run: `echo "${command}"` } : step)], "echo"],
-      [`ignored failure ${command}`, [pnpmStep, nodeStep, ...gateSteps.map((step) => step.run === command ? { run: `${command} || true` } : step)], "ignore-failure"],
-    ] as const),
-    ["no optional bindings", [pnpmStep, nodeStep, { run: `${required[0]} --no-optional` }, ...gateSteps.slice(1)], "no-optional"],
-    ["integration before schema", [pnpmStep, nodeStep, { run: required[0] }, { run: required[2] }, { run: required[1] }, ...gateSteps.slice(3)], "order"],
+    [
+      "duplicate pnpm setup",
+      [pnpmStep, pnpmStep, nodeStep, ...gateSteps],
+      "pnpm-setup",
+    ],
+    [
+      "wrong pnpm version",
+      [{ ...pnpmStep, with: { version: "11" } }, nodeStep, ...gateSteps],
+      "pnpm-setup",
+    ],
+    [
+      "late node setup",
+      [pnpmStep, { run: required[0] }, nodeStep, ...gateSteps.slice(1)],
+      "order",
+    ],
+    [
+      "late pnpm setup",
+      [nodeStep, { run: required[0] }, pnpmStep, ...gateSteps.slice(1)],
+      "order",
+    ],
+    ...required.flatMap(
+      (command) =>
+        [
+          [
+            `missing ${command}`,
+            [
+              pnpmStep,
+              nodeStep,
+              ...gateSteps.filter((step) => step.run !== command),
+            ],
+            `missing:${command}`,
+          ],
+          [
+            `echo ${command}`,
+            [
+              pnpmStep,
+              nodeStep,
+              ...gateSteps.map((step) =>
+                step.run === command ? { run: `echo "${command}"` } : step,
+              ),
+            ],
+            "echo",
+          ],
+          [
+            `ignored failure ${command}`,
+            [
+              pnpmStep,
+              nodeStep,
+              ...gateSteps.map((step) =>
+                step.run === command ? { run: `${command} || true` } : step,
+              ),
+            ],
+            "ignore-failure",
+          ],
+        ] as const,
+    ),
+    [
+      "no optional bindings",
+      [
+        pnpmStep,
+        nodeStep,
+        { run: `${required[0]} --no-optional` },
+        ...gateSteps.slice(1),
+      ],
+      "no-optional",
+    ],
+    [
+      "integration before schema",
+      [
+        pnpmStep,
+        nodeStep,
+        { run: required[0] },
+        { run: required[2] },
+        { run: required[1] },
+        ...gateSteps.slice(3),
+      ],
+      "order",
+    ],
   ] as const)("rejects workflow gate regression: %s", (_name, steps, code) => {
     expect(() => checkWorkflow(workflowFixture)).not.toThrow();
     expect(() => checkWorkflow(withSteps(steps))).toThrow(new Error(code));
@@ -309,11 +568,21 @@ describe("toolchain governance", () => {
 
   it("accepts reordered YAML mapping keys and unrelated steps between gates", () => {
     expect(() => checkWorkflow(workflowFixture)).not.toThrow();
-    const reorderedNode = { with: { cache: "pnpm", "node-version-file": ".node-version" }, uses: nodeStep.uses };
-    expect(() => checkWorkflow(withSteps([
-      pnpmStep, reorderedNode, { run: required[0] },
-      { uses: "aquasecurity/trivy-action@fixture" }, ...gateSteps.slice(1),
-    ]))).not.toThrow();
+    const reorderedNode = {
+      with: { cache: "pnpm", "node-version-file": ".node-version" },
+      uses: nodeStep.uses,
+    };
+    expect(() =>
+      checkWorkflow(
+        withSteps([
+          pnpmStep,
+          reorderedNode,
+          { run: required[0] },
+          { uses: "aquasecurity/trivy-action@fixture" },
+          ...gateSteps.slice(1),
+        ]),
+      ),
+    ).not.toThrow();
   });
 
   it("checks the real Dockerfile", async () => {
@@ -322,23 +591,79 @@ describe("toolchain governance", () => {
 
   it("accepts case and leading whitespace and only previously defined stages", () => {
     expect(() => checkDockerfile(dockerFixture)).not.toThrow();
-    expect(() => checkDockerfile(dockerFixture.replaceAll("FROM", "  fRoM").replaceAll(" AS ", " aS "))).not.toThrow();
-    expect(() => checkDockerfile(dockerFixture.replace("FROM package-manager AS build", "FROM PACKAGE-MANAGER AS build"))).not.toThrow();
+    expect(() =>
+      checkDockerfile(
+        dockerFixture.replaceAll("FROM", "  fRoM").replaceAll(" AS ", " aS "),
+      ),
+    ).not.toThrow();
+    expect(() =>
+      checkDockerfile(
+        dockerFixture.replace(
+          "FROM package-manager AS build",
+          "FROM PACKAGE-MANAGER AS build",
+        ),
+      ),
+    ).not.toThrow();
   });
 
   it.each([
     ["empty Dockerfile", "", "docker-empty"],
     ["comment-only Dockerfile", "# FROM node:latest\n", "docker-empty"],
-    ["unapproved image", dockerFixture.replace(approvedImage, "node:latest"), "docker-image"],
-    ["extra external FROM", `${dockerFixture}\n  from node:latest as extra`, "docker-image"],
-    ["extra approved external FROM", `${dockerFixture}\nFROM ${approvedImage} AS extra`, "docker-external-count"],
-    ["missing external runtime", dockerFixture.replace(`FROM ${approvedImage} AS runtime`, "FROM package-manager AS runtime"), "docker-external-count"],
-    ["forward stage reference", dockerFixture.replace("FROM package-manager AS build", "FROM runtime AS build"), "docker-image"],
-    ["unknown stage", `${dockerFixture}\nFROM unknown-stage AS extra`, "docker-image"],
-    ["duplicate stage", `${dockerFixture}\nFROM build AS build`, "docker-stage-duplicate"],
-    ...["FROM", "  from --platform=linux/amd64 node:latest AS extra", "FROM node:latest AS bad extra", "FROM node:latest \\", "FROM node:latest # comment"].map((line) => [
-      `unparsed ${line}`, `${dockerFixture}\n${line}`, "docker-syntax",
-    ] as const),
+    [
+      "unapproved image",
+      dockerFixture.replace(approvedImage, "node:latest"),
+      "docker-image",
+    ],
+    [
+      "extra external FROM",
+      `${dockerFixture}\n  from node:latest as extra`,
+      "docker-image",
+    ],
+    [
+      "extra approved external FROM",
+      `${dockerFixture}\nFROM ${approvedImage} AS extra`,
+      "docker-external-count",
+    ],
+    [
+      "missing external runtime",
+      dockerFixture.replace(
+        `FROM ${approvedImage} AS runtime`,
+        "FROM package-manager AS runtime",
+      ),
+      "docker-external-count",
+    ],
+    [
+      "forward stage reference",
+      dockerFixture.replace(
+        "FROM package-manager AS build",
+        "FROM runtime AS build",
+      ),
+      "docker-image",
+    ],
+    [
+      "unknown stage",
+      `${dockerFixture}\nFROM unknown-stage AS extra`,
+      "docker-image",
+    ],
+    [
+      "duplicate stage",
+      `${dockerFixture}\nFROM build AS build`,
+      "docker-stage-duplicate",
+    ],
+    ...[
+      "FROM",
+      "  from --platform=linux/amd64 node:latest AS extra",
+      "FROM node:latest AS bad extra",
+      "FROM node:latest \\",
+      "FROM node:latest # comment",
+    ].map(
+      (line) =>
+        [
+          `unparsed ${line}`,
+          `${dockerFixture}\n${line}`,
+          "docker-syntax",
+        ] as const,
+    ),
   ] as const)("rejects Docker regression: %s", (_name, docker, code) => {
     expect(() => checkDockerfile(dockerFixture)).not.toThrow();
     expect(() => checkDockerfile(docker)).toThrow(new Error(code));

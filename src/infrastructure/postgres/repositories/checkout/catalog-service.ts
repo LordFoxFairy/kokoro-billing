@@ -1,5 +1,5 @@
-import type { RowDataPacket, SqlConnection } from '../../database.js';
-import { z } from 'zod';
+import type { RowDataPacket, SqlConnection } from "../../database.js";
+import { z } from "zod";
 
 export type CatalogPlan = {
   readonly id: string;
@@ -8,9 +8,12 @@ export type CatalogPlan = {
   readonly currency: string;
   readonly amountMinor: string;
   readonly creditMicros: string;
-  readonly billingInterval: 'once' | 'month' | 'year';
+  readonly billingInterval: "once" | "month" | "year";
 };
-export type CatalogPage = { readonly items: readonly CatalogPlan[]; readonly nextCursor?: string };
+export type CatalogPage = {
+  readonly items: readonly CatalogPlan[];
+  readonly nextCursor?: string;
+};
 
 type CatalogRow = RowDataPacket & {
   offer_revision_id: string;
@@ -20,35 +23,72 @@ type CatalogRow = RowDataPacket & {
   currency: string;
   amount_minor: string | number;
   credit_micros: string | number;
-  billing_interval: CatalogPlan['billingInterval'];
+  billing_interval: CatalogPlan["billingInterval"];
 };
-type CatalogCursor = { readonly version: 1; readonly scope: string; readonly tenantId: string; readonly offerKey: string; readonly revision: string; readonly offerRevisionId: string };
-const catalogCursorSchema = z.object({
-  version: z.literal(1), scope: z.string().min(1), tenantId: z.string().min(1), offerKey: z.string(),
-  revision: z.string().regex(/^\d+$/u), offerRevisionId: z.string().min(1),
-}).strict();
+type CatalogCursor = {
+  readonly version: 1;
+  readonly scope: string;
+  readonly tenantId: string;
+  readonly offerKey: string;
+  readonly revision: string;
+  readonly offerRevisionId: string;
+};
+const catalogCursorSchema = z
+  .object({
+    version: z.literal(1),
+    scope: z.string().min(1),
+    tenantId: z.string().min(1),
+    offerKey: z.string(),
+    revision: z.string().regex(/^\d+$/u),
+    offerRevisionId: z.string().min(1),
+  })
+  .strict();
 
 export class CatalogService {
   public constructor(private readonly connection: SqlConnection) {}
 
-  public listSellable(tenantId: string, limit: number, cursor?: string): Promise<CatalogPage> {
-    return this.listPublished(tenantId, limit, cursor, 'catalog.sellable');
+  public listSellable(
+    tenantId: string,
+    limit: number,
+    cursor?: string,
+  ): Promise<CatalogPage> {
+    return this.listPublished(tenantId, limit, cursor, "catalog.sellable");
   }
 
-  public listAdmin(tenantId: string, limit: number, cursor?: string): Promise<CatalogPage> {
-    return this.listPublished(tenantId, limit, cursor, 'catalog.admin');
+  public listAdmin(
+    tenantId: string,
+    limit: number,
+    cursor?: string,
+  ): Promise<CatalogPage> {
+    return this.listPublished(tenantId, limit, cursor, "catalog.admin");
   }
 
-  private async listPublished(tenantId: string, requestedLimit: number, encodedCursor: string | undefined, scope: string): Promise<CatalogPage> {
+  private async listPublished(
+    tenantId: string,
+    requestedLimit: number,
+    encodedCursor: string | undefined,
+    scope: string,
+  ): Promise<CatalogPage> {
     const limit = Math.min(Math.max(Math.trunc(requestedLimit), 1), 100);
-    const cursor = encodedCursor === undefined ? undefined : decodeCatalogCursor(encodedCursor, tenantId, scope);
-    const cursorPredicate = cursor === undefined
-      ? ''
-      : `AND (o.offer_key > $2 OR (o.offer_key = $2 AND (r.revision < $3 OR (r.revision = $3 AND r.offer_revision_id > $4))))`;
-    const values = cursor === undefined
-      ? [tenantId, limit + 1]
-      : [tenantId, cursor.offerKey, cursor.revision, cursor.offerRevisionId, limit + 1];
-    const limitPlaceholder = cursor === undefined ? '$2' : '$5';
+    const cursor =
+      encodedCursor === undefined
+        ? undefined
+        : decodeCatalogCursor(encodedCursor, tenantId, scope);
+    const cursorPredicate =
+      cursor === undefined
+        ? ""
+        : `AND (o.offer_key > $2 OR (o.offer_key = $2 AND (r.revision < $3 OR (r.revision = $3 AND r.offer_revision_id > $4))))`;
+    const values =
+      cursor === undefined
+        ? [tenantId, limit + 1]
+        : [
+            tenantId,
+            cursor.offerKey,
+            cursor.revision,
+            cursor.offerRevisionId,
+            limit + 1,
+          ];
+    const limitPlaceholder = cursor === undefined ? "$2" : "$5";
     const [rows] = await this.connection.execute<CatalogRow[]>(
       `SELECT r.offer_revision_id, o.offer_key, r.revision, r.name, r.currency, r.amount_minor,
               r.credit_micros, r.billing_interval
@@ -74,7 +114,14 @@ export class CatalogService {
     if (!hasMore || last === undefined) return { items };
     return {
       items,
-      nextCursor: encodeCatalogCursor({ version: 1, scope, tenantId, offerKey: last.offer_key, revision: String(last.revision), offerRevisionId: last.offer_revision_id }),
+      nextCursor: encodeCatalogCursor({
+        version: 1,
+        scope,
+        tenantId,
+        offerKey: last.offer_key,
+        revision: String(last.revision),
+        offerRevisionId: last.offer_revision_id,
+      }),
     };
   }
 }
@@ -89,15 +136,27 @@ const toCatalogPlan = (row: CatalogRow): CatalogPlan => ({
   billingInterval: row.billing_interval,
 });
 
-const encodeCatalogCursor = (cursor: CatalogCursor): string => Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url');
+const encodeCatalogCursor = (cursor: CatalogCursor): string =>
+  Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
 
-function decodeCatalogCursor(value: string, tenantId: string, scope: string): CatalogCursor {
+function decodeCatalogCursor(
+  value: string,
+  tenantId: string,
+  scope: string,
+): CatalogCursor {
   try {
-    const parsed: unknown = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'));
+    const parsed: unknown = JSON.parse(
+      Buffer.from(value, "base64url").toString("utf8"),
+    );
     const result = catalogCursorSchema.safeParse(parsed);
-    if (!result.success || result.data.scope !== scope || result.data.tenantId !== tenantId) throw new Error();
+    if (
+      !result.success ||
+      result.data.scope !== scope ||
+      result.data.tenantId !== tenantId
+    )
+      throw new Error();
     return result.data;
   } catch {
-    throw new Error('billing.invalid_cursor');
+    throw new Error("billing.invalid_cursor");
   }
 }

@@ -1,4 +1,4 @@
-import { assertDefined } from '../assert-defined.js';
+import { assertDefined } from "../assert-defined.js";
 import { randomUUID } from "node:crypto";
 import { readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -43,11 +43,17 @@ integration("generated Prisma Client", () => {
     const expectedRoot = await temporaryGenerationRoot();
     const actualRoot = await temporaryGenerationRoot();
     try {
-      await withCanonicalReference(assertDefined(adminUrl), sql, async (referenceUrl) =>
-        generateArtifacts(referenceUrl, sql, expectedRoot),
+      await withCanonicalReference(
+        assertDefined(adminUrl),
+        sql,
+        async (referenceUrl) =>
+          generateArtifacts(referenceUrl, sql, expectedRoot),
       );
-      await withCanonicalReference(assertDefined(adminUrl), sql, async (referenceUrl) =>
-        generateArtifacts(referenceUrl, sql, actualRoot),
+      await withCanonicalReference(
+        assertDefined(adminUrl),
+        sql,
+        async (referenceUrl) =>
+          generateArtifacts(referenceUrl, sql, actualRoot),
       );
 
       expect(await comparePrismaArtifacts(expectedRoot, actualRoot)).toEqual({

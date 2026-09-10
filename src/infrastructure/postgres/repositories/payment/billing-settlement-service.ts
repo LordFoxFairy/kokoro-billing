@@ -1,11 +1,17 @@
-import { randomUUID } from 'node:crypto';
-import { z } from 'zod';
-import type { SqlConnection, ResultSetHeader, RowDataPacket } from '../../database.js';
-import { parsePersistedJson, PersistedDataInvariantError } from '../../json.js';
-import { canonicalJsonDigest } from '../../canonical-json.js';
+import { randomUUID } from "node:crypto";
+import { z } from "zod";
+import type {
+  SqlConnection,
+  ResultSetHeader,
+  RowDataPacket,
+} from "../../database.js";
+import { parsePersistedJson, PersistedDataInvariantError } from "../../json.js";
+import { canonicalJsonDigest } from "../../canonical-json.js";
 
-const SETTLEMENT_ACCEPT_COMMAND = 'payment.settlement.accept';
-const settlementAcceptanceSchema = z.object({ settlementId: z.string().min(1), accepted: z.literal(true) }).strict();
+const SETTLEMENT_ACCEPT_COMMAND = "payment.settlement.accept";
+const settlementAcceptanceSchema = z
+  .object({ settlementId: z.string().min(1), accepted: z.literal(true) })
+  .strict();
 
 export type RecordSettlementInput = {
   readonly settlementId: string;
@@ -40,24 +46,40 @@ export type SettlementAcceptanceResult = {
   readonly accepted: true;
 };
 
-type SettlementRow = RowDataPacket & { settlement_id: string; tenant_id: string; provider: string; external_payment_ref: string; amount_minor: number; currency: string; status: string };
-type FulfillmentRow = RowDataPacket & { fulfillment_id: string; credit_grant_id: string; journal_id: string };
+type SettlementRow = RowDataPacket & {
+  settlement_id: string;
+  tenant_id: string;
+  provider: string;
+  external_payment_ref: string;
+  amount_minor: number;
+  currency: string;
+  status: string;
+};
+type FulfillmentRow = RowDataPacket & {
+  fulfillment_id: string;
+  credit_grant_id: string;
+  journal_id: string;
+};
 type SettlementReceiptRow = RowDataPacket & {
   receipt_id: string;
   command_identity: string | null;
   idempotency_key: string;
   payload_hash: string;
-  status: 'processing' | 'succeeded' | 'failed' | 'unknown';
+  status: "processing" | "succeeded" | "failed" | "unknown";
   result_json: unknown;
 };
 
 export class BillingSettlementService {
   public constructor(private readonly connection: SqlConnection) {}
 
-  public async recordSettlement(input: RecordSettlementInput): Promise<SettlementAcceptanceResult> {
-    if (!Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0) throw new RangeError('amountMinor must be positive');
-    const provider = input.provider ?? 'internal';
-    if (!/^[a-z0-9][a-z0-9_-]{0,63}$/u.test(provider)) throw new RangeError('provider must be a normalized identifier');
+  public async recordSettlement(
+    input: RecordSettlementInput,
+  ): Promise<SettlementAcceptanceResult> {
+    if (!Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0)
+      throw new RangeError("amountMinor must be positive");
+    const provider = input.provider ?? "internal";
+    if (!/^[a-z0-9][a-z0-9_-]{0,63}$/u.test(provider))
+      throw new RangeError("provider must be a normalized identifier");
     const payloadHash = canonicalJsonDigest({
       command: `${SETTLEMENT_ACCEPT_COMMAND}/v1`,
       settlementId: input.settlementId,
@@ -68,7 +90,10 @@ export class BillingSettlementService {
       providerEventId: input.providerEventId ?? null,
       checkoutId: input.checkoutId ?? null,
     });
-    const result = { settlementId: input.settlementId, accepted: true } as const;
+    const result = {
+      settlementId: input.settlementId,
+      accepted: true,
+    } as const;
     await this.connection.beginTransaction();
     try {
       const [receiptInsert] = await this.connection.execute<ResultSetHeader>(
@@ -76,7 +101,14 @@ export class BillingSettlementService {
           (receipt_id, tenant_id, command_name, command_identity, idempotency_key, payload_hash, status)
          VALUES ($1, $2, $3, $4, $5, $6, 'processing')
          ON CONFLICT DO NOTHING`,
-        [randomUUID(), input.tenantId, SETTLEMENT_ACCEPT_COMMAND, input.settlementId, input.idempotencyKey, payloadHash],
+        [
+          randomUUID(),
+          input.tenantId,
+          SETTLEMENT_ACCEPT_COMMAND,
+          input.settlementId,
+          input.idempotencyKey,
+          payloadHash,
+        ],
       );
       const [receipts] = await this.connection.execute<SettlementReceiptRow[]>(
         `SELECT receipt_id, command_identity, idempotency_key, payload_hash, status, result_json
@@ -84,25 +116,53 @@ export class BillingSettlementService {
           WHERE tenant_id = $1 AND command_name = $2
             AND (idempotency_key = $3 OR command_identity = $4)
           FOR UPDATE`,
-        [input.tenantId, SETTLEMENT_ACCEPT_COMMAND, input.idempotencyKey, input.settlementId],
+        [
+          input.tenantId,
+          SETTLEMENT_ACCEPT_COMMAND,
+          input.idempotencyKey,
+          input.settlementId,
+        ],
       );
-      if (receipts.length !== 1) throw new Error('billing.idempotency_conflict');
+      if (receipts.length !== 1)
+        throw new Error("billing.idempotency_conflict");
       const receipt = receipts[0];
-      if (!receipt) throw new PersistedDataInvariantError('billing.command_receipt_not_found_after_insert');
-      if (receipt.payload_hash !== payloadHash || receipt.command_identity !== input.settlementId) throw new Error('billing.idempotency_conflict');
-      if (receipt.status === 'succeeded') {
-        const replay = parsePersistedJson(receipt.result_json, settlementAcceptanceSchema, 'billing.command_result_invalid');
+      if (!receipt)
+        throw new PersistedDataInvariantError(
+          "billing.command_receipt_not_found_after_insert",
+        );
+      if (
+        receipt.payload_hash !== payloadHash ||
+        receipt.command_identity !== input.settlementId
+      )
+        throw new Error("billing.idempotency_conflict");
+      if (receipt.status === "succeeded") {
+        const replay = parsePersistedJson(
+          receipt.result_json,
+          settlementAcceptanceSchema,
+          "billing.command_result_invalid",
+        );
         await this.connection.commit();
         return replay;
       }
-      if (receipt.status === 'failed') throw new Error('billing.command_failed');
-      if (receipt.status === 'unknown' || receiptInsert.affectedRows !== 1) throw new Error('billing.command_unknown');
+      if (receipt.status === "failed")
+        throw new Error("billing.command_failed");
+      if (receipt.status === "unknown" || receiptInsert.affectedRows !== 1)
+        throw new Error("billing.command_unknown");
       await this.connection.execute(
         `INSERT INTO payment_settlement
           (settlement_id, tenant_id, provider_event_id, checkout_id, provider, external_payment_ref, amount_minor, currency, status)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'succeeded')
           ON CONFLICT DO NOTHING`,
-        [input.settlementId, input.tenantId, input.providerEventId ?? null, input.checkoutId ?? null, provider, input.externalPaymentRef, input.amountMinor, input.currency],
+        [
+          input.settlementId,
+          input.tenantId,
+          input.providerEventId ?? null,
+          input.checkoutId ?? null,
+          provider,
+          input.externalPaymentRef,
+          input.amountMinor,
+          input.currency,
+        ],
       );
       const [rows] = await this.connection.execute<SettlementRow[]>(
         `SELECT settlement_id, tenant_id, provider, external_payment_ref, amount_minor, currency, status
@@ -110,24 +170,50 @@ export class BillingSettlementService {
         [input.tenantId, provider, input.externalPaymentRef],
       );
       const row = rows[0];
-      if (!row) throw new Error('billing.settlement_not_found');
-      if (row.settlement_id !== input.settlementId || row.tenant_id !== input.tenantId || row.provider !== provider || row.external_payment_ref !== input.externalPaymentRef || String(row.amount_minor) !== String(input.amountMinor) || row.currency !== input.currency) {
-        throw new Error('billing.idempotency_conflict');
+      if (!row) throw new Error("billing.settlement_not_found");
+      if (
+        row.settlement_id !== input.settlementId ||
+        row.tenant_id !== input.tenantId ||
+        row.provider !== provider ||
+        row.external_payment_ref !== input.externalPaymentRef ||
+        String(row.amount_minor) !== String(input.amountMinor) ||
+        row.currency !== input.currency
+      ) {
+        throw new Error("billing.idempotency_conflict");
       }
       const [receiptUpdate] = await this.connection.execute<ResultSetHeader>(
         `INSERT INTO payment_outbox
           (outbox_id, tenant_id, aggregate_type, aggregate_id, event_type, payload_json)
          VALUES ($1, $2, 'payment_settlement', $3, 'PaymentSettlementRecorded', $4)
          ON CONFLICT DO NOTHING`,
-        [randomUUID(), input.tenantId, input.settlementId, JSON.stringify({ settlementId: input.settlementId, provider, externalPaymentRef: input.externalPaymentRef, amountMinor: input.amountMinor, currency: input.currency })],
+        [
+          randomUUID(),
+          input.tenantId,
+          input.settlementId,
+          JSON.stringify({
+            settlementId: input.settlementId,
+            provider,
+            externalPaymentRef: input.externalPaymentRef,
+            amountMinor: input.amountMinor,
+            currency: input.currency,
+          }),
+        ],
       );
       await this.connection.execute(
         `UPDATE payment_command_receipt
             SET status = 'succeeded', result_json = $1, updated_at = CURRENT_TIMESTAMP(3)
           WHERE receipt_id = $2 AND tenant_id = $3 AND command_name = $4 AND status = 'processing'`,
-        [JSON.stringify(result), receipt.receipt_id, input.tenantId, SETTLEMENT_ACCEPT_COMMAND],
+        [
+          JSON.stringify(result),
+          receipt.receipt_id,
+          input.tenantId,
+          SETTLEMENT_ACCEPT_COMMAND,
+        ],
       );
-      if (receiptUpdate.affectedRows !== 1) throw new PersistedDataInvariantError('billing.command_receipt_transition_invalid');
+      if (receiptUpdate.affectedRows !== 1)
+        throw new PersistedDataInvariantError(
+          "billing.command_receipt_transition_invalid",
+        );
       await this.connection.commit();
       return result;
     } catch (error) {
@@ -136,8 +222,11 @@ export class BillingSettlementService {
     }
   }
 
-  public async fulfillSettlement(input: FulfillSettlementInput): Promise<FulfillmentResult> {
-    if (!Number.isSafeInteger(input.grantMicros) || input.grantMicros <= 0) throw new RangeError('grantMicros must be positive');
+  public async fulfillSettlement(
+    input: FulfillSettlementInput,
+  ): Promise<FulfillmentResult> {
+    if (!Number.isSafeInteger(input.grantMicros) || input.grantMicros <= 0)
+      throw new RangeError("grantMicros must be positive");
     await this.connection.beginTransaction();
     try {
       const [settlements] = await this.connection.execute<SettlementRow[]>(
@@ -146,8 +235,9 @@ export class BillingSettlementService {
         [input.settlementId, input.tenantId],
       );
       const settlement = settlements[0];
-      if (!settlement) throw new Error('billing.settlement_not_found');
-      if (settlement.status !== 'succeeded') throw new Error('billing.settlement_not_succeeded');
+      if (!settlement) throw new Error("billing.settlement_not_found");
+      if (settlement.status !== "succeeded")
+        throw new Error("billing.settlement_not_succeeded");
 
       const [existing] = await this.connection.execute<FulfillmentRow[]>(
         `SELECT f.fulfillment_id, g.credit_grant_id, j.journal_id,
@@ -162,8 +252,21 @@ export class BillingSettlementService {
         [input.tenantId, input.settlementId],
       );
       if (existing[0]) {
-        const prior = existing[0] as FulfillmentRow & { subject_id: string; program_key: string; quantity_micros: string | number; credit_account_id: string; original_micros: string | number };
-        if (prior.subject_id !== input.subjectId || prior.program_key !== input.programKey || String(prior.quantity_micros) !== String(input.grantMicros) || prior.credit_account_id !== input.accountId || String(prior.original_micros) !== String(input.grantMicros)) throw new Error('billing.idempotency_conflict');
+        const prior = existing[0] as FulfillmentRow & {
+          subject_id: string;
+          program_key: string;
+          quantity_micros: string | number;
+          credit_account_id: string;
+          original_micros: string | number;
+        };
+        if (
+          prior.subject_id !== input.subjectId ||
+          prior.program_key !== input.programKey ||
+          String(prior.quantity_micros) !== String(input.grantMicros) ||
+          prior.credit_account_id !== input.accountId ||
+          String(prior.original_micros) !== String(input.grantMicros)
+        )
+          throw new Error("billing.idempotency_conflict");
         await this.connection.commit();
         return {
           fulfillmentId: prior.fulfillment_id,
@@ -183,7 +286,8 @@ export class BillingSettlementService {
         [input.tenantId, input.subjectId],
       );
       const account = accounts[0] as { credit_account_id: string } | undefined;
-      if (!account || account.credit_account_id !== input.accountId) throw new Error('billing.credit_account_mismatch');
+      if (!account || account.credit_account_id !== input.accountId)
+        throw new Error("billing.credit_account_mismatch");
 
       const acquisitionId = randomUUID();
       await this.connection.execute(
@@ -191,15 +295,23 @@ export class BillingSettlementService {
           (acquisition_id, tenant_id, subject_id, source_kind, source_ref, program_key, quantity_micros)
          VALUES ($1, $2, $3, 'payment_settlement', $4, $5, $6)
          ON CONFLICT DO NOTHING`,
-        [acquisitionId, input.tenantId, input.subjectId, input.settlementId, input.programKey, input.grantMicros],
+        [
+          acquisitionId,
+          input.tenantId,
+          input.subjectId,
+          input.settlementId,
+          input.programKey,
+          input.grantMicros,
+        ],
       );
       const [acquisitions] = await this.connection.execute<RowDataPacket[]>(
         `SELECT acquisition_id FROM entitlement_acquisition
           WHERE tenant_id = $1 AND source_kind = 'payment_settlement' AND source_ref = $2 AND program_key = $3 FOR UPDATE`,
         [input.tenantId, input.settlementId, input.programKey],
       );
-      const acquisition = acquisitions[0] as { acquisition_id: string } | undefined;
-      if (!acquisition) throw new Error('billing.acquisition_not_found');
+      const acquisition = acquisitions[0] as
+        { acquisition_id: string } | undefined;
+      if (!acquisition) throw new Error("billing.acquisition_not_found");
 
       const fulfillmentId = randomUUID();
       await this.connection.execute(
@@ -213,8 +325,9 @@ export class BillingSettlementService {
         `SELECT fulfillment_id FROM entitlement_fulfillment WHERE tenant_id = $1 AND acquisition_id = $2 FOR UPDATE`,
         [input.tenantId, acquisition.acquisition_id],
       );
-      const fulfillment = fulfillments[0] as { fulfillment_id: string } | undefined;
-      if (!fulfillment) throw new Error('billing.fulfillment_not_found');
+      const fulfillment = fulfillments[0] as
+        { fulfillment_id: string } | undefined;
+      if (!fulfillment) throw new Error("billing.fulfillment_not_found");
 
       const grantId = randomUUID();
       await this.connection.execute(
@@ -223,7 +336,15 @@ export class BillingSettlementService {
            original_micros, remaining_micros, effective_at)
          VALUES ($1, $2, $3, 'payment_settlement', $4, $5, $6, $7, CURRENT_TIMESTAMP(3))
          ON CONFLICT DO NOTHING`,
-        [grantId, input.tenantId, input.accountId, input.settlementId, input.programKey, input.grantMicros, input.grantMicros],
+        [
+          grantId,
+          input.tenantId,
+          input.accountId,
+          input.settlementId,
+          input.programKey,
+          input.grantMicros,
+          input.grantMicros,
+        ],
       );
       const [grants] = await this.connection.execute<RowDataPacket[]>(
         `SELECT credit_grant_id FROM entitlement_credit_grant
@@ -231,20 +352,33 @@ export class BillingSettlementService {
         [input.tenantId, input.settlementId, input.programKey],
       );
       const grant = grants[0] as { credit_grant_id: string } | undefined;
-      if (!grant) throw new Error('billing.credit_grant_not_found');
+      if (!grant) throw new Error("billing.credit_grant_not_found");
 
       const [sequences] = await this.connection.execute<RowDataPacket[]>(
         `SELECT COALESCE(MAX(journal_seq), 0) AS journal_seq FROM entitlement_credit_journal WHERE tenant_id = $1 AND credit_account_id = $2`,
         [input.tenantId, input.accountId],
       );
-      const nextSequence = (BigInt(String((sequences[0] as { journal_seq: number | string }).journal_seq)) + 1n).toString();
+      const nextSequence = (
+        BigInt(
+          String(
+            (sequences[0] as { journal_seq: number | string }).journal_seq,
+          ),
+        ) + 1n
+      ).toString();
       const journalId = randomUUID();
       await this.connection.execute(
         `INSERT INTO entitlement_credit_journal
           (journal_id, tenant_id, credit_account_id, journal_seq, entry_kind, amount_micros, source_kind, source_ref)
          VALUES ($1, $2, $3, $4, 'grant', $5, 'payment_settlement', $6)
          ON CONFLICT DO NOTHING`,
-        [journalId, input.tenantId, input.accountId, nextSequence, input.grantMicros, input.settlementId],
+        [
+          journalId,
+          input.tenantId,
+          input.accountId,
+          nextSequence,
+          input.grantMicros,
+          input.settlementId,
+        ],
       );
       const [journals] = await this.connection.execute<RowDataPacket[]>(
         `SELECT journal_id FROM entitlement_credit_journal
@@ -252,7 +386,7 @@ export class BillingSettlementService {
         [input.tenantId, input.settlementId],
       );
       const journal = journals[0] as { journal_id: string } | undefined;
-      if (!journal) throw new Error('billing.journal_not_found');
+      if (!journal) throw new Error("billing.journal_not_found");
 
       const [accountUpdate] = await this.connection.execute<ResultSetHeader>(
         `UPDATE entitlement_credit_account
@@ -260,16 +394,29 @@ export class BillingSettlementService {
           WHERE tenant_id = $2 AND credit_account_id = $3`,
         [input.grantMicros, input.tenantId, input.accountId],
       );
-      if (accountUpdate.affectedRows !== 1) throw new Error('billing.credit_projection_drift');
+      if (accountUpdate.affectedRows !== 1)
+        throw new Error("billing.credit_projection_drift");
       await this.connection.execute(
         `INSERT INTO entitlement_outbox
           (outbox_id, tenant_id, aggregate_type, aggregate_id, event_type, payload_json)
          VALUES ($1, $2, 'fulfillment', $3, 'EntitlementFulfilled', $4)
          ON CONFLICT DO NOTHING`,
-        [randomUUID(), input.tenantId, fulfillment.fulfillment_id, JSON.stringify({ settlementId: input.settlementId, grantId: grant.credit_grant_id })],
+        [
+          randomUUID(),
+          input.tenantId,
+          fulfillment.fulfillment_id,
+          JSON.stringify({
+            settlementId: input.settlementId,
+            grantId: grant.credit_grant_id,
+          }),
+        ],
       );
       await this.connection.commit();
-      return { fulfillmentId: fulfillment.fulfillment_id, grantId: grant.credit_grant_id, journalId: journal.journal_id };
+      return {
+        fulfillmentId: fulfillment.fulfillment_id,
+        grantId: grant.credit_grant_id,
+        journalId: journal.journal_id,
+      };
     } catch (error) {
       await this.connection.rollback();
       throw error;

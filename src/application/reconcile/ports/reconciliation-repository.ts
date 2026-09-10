@@ -1,5 +1,5 @@
-import type { AdminStats } from '../queries/admin-stats-service.js';
-import type { ReconciliationReport } from '../services/reconciliation-service.js';
+import type { AdminStats } from "../queries/admin-stats-service.js";
+import type { ReconciliationReport } from "../services/reconciliation-service.js";
 
 export interface AdminStatsRepository {
   get(tenantId: string): Promise<AdminStats>;

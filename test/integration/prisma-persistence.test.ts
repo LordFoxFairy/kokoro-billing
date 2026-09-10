@@ -1,4 +1,4 @@
-import { assertDefined } from '../assert-defined.js';
+import { assertDefined } from "../assert-defined.js";
 import { randomUUID } from "node:crypto";
 import { Prisma } from "../../src/generated/prisma/client.js";
 import { readSafeInteger } from "../../src/application/ports/safe-integer.js";

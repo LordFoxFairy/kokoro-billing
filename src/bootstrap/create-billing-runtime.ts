@@ -1,12 +1,15 @@
-import type { FastifyInstance } from 'fastify';
-import { createBillingConnection } from '../infrastructure/postgres/connection.js';
-import { createBillingServer } from '../interfaces/http/server.js';
-import { parseProviderWebhook, verifyProviderWebhook } from '../application/payment/ports/provider-registry.js';
-import { createProviderRegistry } from '../infrastructure/providers/payment/provider-registry.js';
-import { RedisIdempotencyHint } from '../infrastructure/redis/idempotency-hint.js';
-import { StripeCheckoutProvider } from '../infrastructure/providers/stripe-checkout-provider.js';
-import { createBillingAuth } from '../infrastructure/auth/billing-auth.js';
-import type { BillingRuntimeConfig } from '../config/runtime-config.js';
+import type { FastifyInstance } from "fastify";
+import { createBillingConnection } from "../infrastructure/postgres/connection.js";
+import { createBillingServer } from "../interfaces/http/server.js";
+import {
+  parseProviderWebhook,
+  verifyProviderWebhook,
+} from "../application/payment/ports/provider-registry.js";
+import { createProviderRegistry } from "../infrastructure/providers/payment/provider-registry.js";
+import { RedisIdempotencyHint } from "../infrastructure/redis/idempotency-hint.js";
+import { StripeCheckoutProvider } from "../infrastructure/providers/stripe-checkout-provider.js";
+import { createBillingAuth } from "../infrastructure/auth/billing-auth.js";
+import type { BillingRuntimeConfig } from "../config/runtime-config.js";
 import {
   createPostgresBillingAdmissionService,
   createPostgresBillingReversalService,
@@ -18,7 +21,7 @@ import {
   createPostgresProviderEventInboxService,
   createPostgresSubscriptionQueryService,
   createPostgresUsageSettlementService,
-} from '../infrastructure/postgres/create-postgres-services.js';
+} from "../infrastructure/postgres/create-postgres-services.js";
 
 export type BillingRuntime = Readonly<{
   server: FastifyInstance;
@@ -26,21 +29,33 @@ export type BillingRuntime = Readonly<{
 }>;
 
 /** Composition root for PostgreSQL, Redis, provider adapters, application services and HTTP. */
-export async function createBillingRuntime(config: BillingRuntimeConfig): Promise<BillingRuntime> {
+export async function createBillingRuntime(
+  config: BillingRuntimeConfig,
+): Promise<BillingRuntime> {
   const connection = await createBillingConnection(config.databaseUrl);
-  const idempotencyHint = new RedisIdempotencyHint(config.redisUrl, 'billing:idempotency', config.redisTimeouts);
+  const idempotencyHint = new RedisIdempotencyHint(
+    config.redisUrl,
+    "billing:idempotency",
+    config.redisTimeouts,
+  );
 
   try {
     try {
       await idempotencyHint.connect();
     } catch (error) {
-      process.stderr.write(`kokoro-billing redis hint unavailable during startup error=${error instanceof Error ? error.message : String(error)}\n`);
+      process.stderr.write(
+        `kokoro-billing redis hint unavailable during startup error=${error instanceof Error ? error.message : String(error)}\n`,
+      );
     }
 
     const checkout = createPostgresCheckoutService(connection, {
-      ...(config.enabledProviders.includes('stripe') && config.stripeSecretKey
+      ...(config.enabledProviders.includes("stripe") && config.stripeSecretKey
         ? {
-            hostedProvider: new StripeCheckoutProvider(config.stripeSecretKey, config.stripeAccountRef, config.stripeTimeouts),
+            hostedProvider: new StripeCheckoutProvider(
+              config.stripeSecretKey,
+              config.stripeAccountRef,
+              config.stripeTimeouts,
+            ),
             publicBaseUrl: config.publicBaseUrl,
           }
         : {}),
@@ -56,7 +71,9 @@ export async function createBillingRuntime(config: BillingRuntimeConfig): Promis
     const account = createPostgresCreditAccountQueryService(connection);
     const providerRegistry = createProviderRegistry(
       config.enabledProviders,
-      config.wechatApiV3Key === undefined ? {} : { wechatApiV3Key: config.wechatApiV3Key },
+      config.wechatApiV3Key === undefined
+        ? {}
+        : { wechatApiV3Key: config.wechatApiV3Key },
     );
     const auth = createBillingAuth({
       mode: config.authMode,
@@ -78,9 +95,15 @@ export async function createBillingRuntime(config: BillingRuntimeConfig): Promis
       admission,
       subscriptionRead: subscriptions,
       webhook,
-      parseWebhook: (provider, payload) => parseProviderWebhook(providerRegistry, provider, payload),
-      ...(config.authMode === 'jwks'
-        ? { resolveWebhookTenant: (provider: string, externalAccountRef: string) => providerAccounts.resolveTenantId(provider, externalAccountRef) }
+      parseWebhook: (provider, payload) =>
+        parseProviderWebhook(providerRegistry, provider, payload),
+      ...(config.authMode === "jwks"
+        ? {
+            resolveWebhookTenant: (
+              provider: string,
+              externalAccountRef: string,
+            ) => providerAccounts.resolveTenantId(provider, externalAccountRef),
+          }
         : {}),
       account,
       accountRead: account,
@@ -88,16 +111,32 @@ export async function createBillingRuntime(config: BillingRuntimeConfig): Promis
         ...auth,
         webhook: async (request) => {
           const params: unknown = request.params;
-          const provider = params !== null && typeof params === 'object' && 'provider' in params && typeof params.provider === 'string'
-            ? params.provider
-            : undefined;
-          const secret = typeof provider === 'string' ? config.providerSecrets[provider] : undefined;
-          return Promise.resolve(typeof provider === 'string'
-            && typeof secret === 'string'
-            && verifyProviderWebhook(providerRegistry, provider, request.headers, Buffer.from(request.rawBody ?? ''), secret));
+          const provider =
+            params !== null &&
+            typeof params === "object" &&
+            "provider" in params &&
+            typeof params.provider === "string"
+              ? params.provider
+              : undefined;
+          const secret =
+            typeof provider === "string"
+              ? config.providerSecrets[provider]
+              : undefined;
+          return Promise.resolve(
+            typeof provider === "string" &&
+              typeof secret === "string" &&
+              verifyProviderWebhook(
+                providerRegistry,
+                provider,
+                request.headers,
+                Buffer.from(request.rawBody ?? ""),
+                secret,
+              ),
+          );
         },
       },
-      resolveWebhookAccountRef: (provider) => config.providerAccountRefs[provider] ?? null,
+      resolveWebhookAccountRef: (provider) =>
+        config.providerAccountRefs[provider] ?? null,
       health: {
         postgres: () => connection.ping(),
         redis: () => idempotencyHint.ping(),
@@ -110,9 +149,18 @@ export async function createBillingRuntime(config: BillingRuntimeConfig): Promis
       close: async () => {
         if (closed) return;
         closed = true;
-        const results = await Promise.allSettled([server.close(), idempotencyHint.close(), connection.end()]);
-        const failures = results.filter((result) => result.status === 'rejected');
-        if (failures.length > 0) throw new Error(`${failures.length} billing resources failed to close`);
+        const results = await Promise.allSettled([
+          server.close(),
+          idempotencyHint.close(),
+          connection.end(),
+        ]);
+        const failures = results.filter(
+          (result) => result.status === "rejected",
+        );
+        if (failures.length > 0)
+          throw new Error(
+            `${failures.length} billing resources failed to close`,
+          );
       },
     };
   } catch (error) {

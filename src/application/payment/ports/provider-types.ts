@@ -1,12 +1,12 @@
-import type { IncomingHttpHeaders } from 'node:http';
+import type { IncomingHttpHeaders } from "node:http";
 
 export const PAYMENT_WEBHOOK_EVENT = {
-  paymentSucceeded: 'payment_succeeded',
-  refundSucceeded: 'refund_succeeded',
-  subscriptionUpdated: 'subscription_updated',
+  paymentSucceeded: "payment_succeeded",
+  refundSucceeded: "refund_succeeded",
+  subscriptionUpdated: "subscription_updated",
 } as const;
 
-export type SubscriptionStatus = 'active' | 'past_due' | 'canceled';
+export type SubscriptionStatus = "active" | "past_due" | "canceled";
 export type ParsedSubscriptionEvent = {
   readonly providerSubscriptionId: string;
   readonly teamId: string;
@@ -31,10 +31,21 @@ export type ParsedWebhookEvent = {
 };
 export interface PaymentWebhookProvider {
   readonly kind: string;
-  verifySignature(headers: IncomingHttpHeaders, rawBody: Buffer, secret: string): boolean;
+  verifySignature(
+    headers: IncomingHttpHeaders,
+    rawBody: Buffer,
+    secret: string,
+  ): boolean;
   decodeBody?(rawBody: Buffer): unknown;
   parseEvent(payload: unknown): ParsedWebhookEvent;
 }
 export class WebhookError extends Error {
-  public constructor(public readonly code: string, message: string, public readonly statusCode: number) { super(message); this.name = 'WebhookError'; }
+  public constructor(
+    public readonly code: string,
+    message: string,
+    public readonly statusCode: number,
+  ) {
+    super(message);
+    this.name = "WebhookError";
+  }
 }

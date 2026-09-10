@@ -14,7 +14,7 @@
     "build": "pnpm prisma:generate && tsc -p tsconfig.build.json",
     "contract:check": "tsx scripts/verify-openapi.ts",
     "sql:check": "tsx scripts/verify-sql-naming.ts",
-    "verify": "pnpm lint && pnpm typecheck && pnpm build && pnpm sql:check && pnpm contract:check && pnpm test",
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm build && pnpm sql:check && pnpm contract:check && pnpm test",
     "db:apply-schema": "tsx scripts/apply-schema.ts",
     "db:verify-schema": "tsx scripts/verify-schema.ts",
     "prisma:refresh": "tsx scripts/prisma-refresh.ts",
@@ -26,19 +26,22 @@
     "worker:execution-events": "tsx scripts/process-execution-events.ts",
     "test:integration": "pnpm prisma:generate && vitest run test/integration --no-file-parallelism",
     "dev": "tsx src/main.ts",
-    "start": "node dist/src/main.js"
+    "start": "node dist/src/main.js",
+    "format": "prettier --config .prettierrc.json --ignore-path .prettierignore --no-editorconfig --write \"{src,test,scripts}/**/*.{ts,mts,cts,tsx,js,mjs,cjs,json,yaml,yml}\" \"*.{ts,mts,cts,tsx,mjs,json,yaml,yml}\" \".github/**/*.{ts,mts,cts,tsx,js,mjs,cjs,json,yaml,yml}\" \".prettierrc.json\"",
+    "format:check": "prettier --config .prettierrc.json --ignore-path .prettierignore --no-editorconfig --check \"{src,test,scripts}/**/*.{ts,mts,cts,tsx,js,mjs,cjs,json,yaml,yml}\" \"*.{ts,mts,cts,tsx,mjs,json,yaml,yml}\" \".github/**/*.{ts,mts,cts,tsx,js,mjs,cjs,json,yaml,yml}\" \".prettierrc.json\""
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@types/node": "24.13.3",
     "@types/pg": "8.23.1",
     "eslint": "10.10.0",
+    "prettier": "3.9.6",
     "prisma": "7.10.0",
     "tsx": "4.23.12",
     "typescript": "6.0.3",
     "typescript-eslint": "8.69.0",
-    "vitest": "5.0.0",
     "vite": "8.2.2",
+    "vitest": "5.0.0",
     "yaml": "2.9.0"
   },
   "dependencies": {

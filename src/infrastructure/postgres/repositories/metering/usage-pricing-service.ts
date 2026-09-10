@@ -1,5 +1,5 @@
-import type { SqlConnection, RowDataPacket } from '../../database.js';
-import { readSafeInteger } from '../../../../application/ports/safe-integer.js';
+import type { SqlConnection, RowDataPacket } from "../../database.js";
+import { readSafeInteger } from "../../../../application/ports/safe-integer.js";
 
 export type UsageQuote = {
   readonly featureKey: string;
@@ -33,7 +33,9 @@ export class UsagePricingService {
   public constructor(private readonly connection: SqlConnection) {}
 
   public async listActive(tenantId: string): Promise<UsagePriceRate[]> {
-    const [rows] = await this.connection.execute<(RateRow & { feature_key: string; model_binding_id: string | null })[]>(
+    const [rows] = await this.connection.execute<
+      (RateRow & { feature_key: string; model_binding_id: string | null })[]
+    >(
       `SELECT r.feature_key, r.label_key, r.model_binding_id, r.usage_price_revision_id,
               r.input_micros_per_million, r.output_micros_per_million, r.reservation_micros
          FROM entitlement_usage_price_rate r
@@ -45,13 +47,33 @@ export class UsagePricingService {
         ORDER BY r.feature_key, r.label_key, r.model_binding_id, p.revision DESC, r.usage_price_rate_id DESC`,
       [tenantId],
     );
-    return rows.map((row) => ({ featureKey: row.feature_key, labelKey: row.label_key, modelBindingId: row.model_binding_id, pricingRevisionId: row.usage_price_revision_id, inputMicrosPerMillion: String(row.input_micros_per_million), outputMicrosPerMillion: String(row.output_micros_per_million), reservationMicros: String(row.reservation_micros) }));
+    return rows.map((row) => ({
+      featureKey: row.feature_key,
+      labelKey: row.label_key,
+      modelBindingId: row.model_binding_id,
+      pricingRevisionId: row.usage_price_revision_id,
+      inputMicrosPerMillion: String(row.input_micros_per_million),
+      outputMicrosPerMillion: String(row.output_micros_per_million),
+      reservationMicros: String(row.reservation_micros),
+    }));
   }
 
-  public async quote(input: { tenantId: string; featureKey: string; labelKey: string | null; inputTokens?: number; outputTokens?: number }): Promise<UsageQuote> {
+  public async quote(input: {
+    tenantId: string;
+    featureKey: string;
+    labelKey: string | null;
+    inputTokens?: number;
+    outputTokens?: number;
+  }): Promise<UsageQuote> {
     const inputTokens = input.inputTokens ?? 0;
     const outputTokens = input.outputTokens ?? 0;
-    if (!Number.isSafeInteger(inputTokens) || inputTokens < 0 || !Number.isSafeInteger(outputTokens) || outputTokens < 0) throw new RangeError('token counts must be non-negative safe integers');
+    if (
+      !Number.isSafeInteger(inputTokens) ||
+      inputTokens < 0 ||
+      !Number.isSafeInteger(outputTokens) ||
+      outputTokens < 0
+    )
+      throw new RangeError("token counts must be non-negative safe integers");
     const [rows] = await this.connection.execute<RateRow[]>(
       `SELECT r.usage_price_revision_id, r.label_key, r.input_micros_per_million,
               r.output_micros_per_million, r.reservation_micros
@@ -66,14 +88,25 @@ export class UsagePricingService {
       [input.tenantId, input.featureKey, input.labelKey],
     );
     const rate = rows[0];
-    if (!rate) throw new Error('billing.usage_price_not_found');
+    if (!rate) throw new Error("billing.usage_price_not_found");
     return this.toQuote(input.featureKey, rate, inputTokens, outputTokens);
   }
 
-  public async quoteForHold(input: { tenantId: string; holdId: string; inputTokens?: number; outputTokens?: number }): Promise<UsageQuote> {
+  public async quoteForHold(input: {
+    tenantId: string;
+    holdId: string;
+    inputTokens?: number;
+    outputTokens?: number;
+  }): Promise<UsageQuote> {
     const inputTokens = input.inputTokens ?? 0;
     const outputTokens = input.outputTokens ?? 0;
-    if (!Number.isSafeInteger(inputTokens) || inputTokens < 0 || !Number.isSafeInteger(outputTokens) || outputTokens < 0) throw new RangeError('token counts must be non-negative safe integers');
+    if (
+      !Number.isSafeInteger(inputTokens) ||
+      inputTokens < 0 ||
+      !Number.isSafeInteger(outputTokens) ||
+      outputTokens < 0
+    )
+      throw new RangeError("token counts must be non-negative safe integers");
     const [rows] = await this.connection.execute<RateRow[]>(
       `SELECT h.feature_key, h.label_key, h.pricing_revision_id AS usage_price_revision_id,
               r.input_micros_per_million, r.output_micros_per_million, r.reservation_micros
@@ -86,19 +119,40 @@ export class UsagePricingService {
       [input.tenantId, input.holdId],
     );
     const rate = rows[0] as (RateRow & { feature_key: string }) | undefined;
-    if (!rate) throw new Error('billing.usage_price_not_found');
+    if (!rate) throw new Error("billing.usage_price_not_found");
     return this.toQuote(rate.feature_key, rate, inputTokens, outputTokens);
   }
 
-  private toQuote(featureKey: string, rate: RateRow, inputTokens: number, outputTokens: number): UsageQuote {
-    const rawAmount = BigInt(rate.input_micros_per_million) * BigInt(inputTokens)
-      + BigInt(rate.output_micros_per_million) * BigInt(outputTokens);
+  private toQuote(
+    featureKey: string,
+    rate: RateRow,
+    inputTokens: number,
+    outputTokens: number,
+  ): UsageQuote {
+    const rawAmount =
+      BigInt(rate.input_micros_per_million) * BigInt(inputTokens) +
+      BigInt(rate.output_micros_per_million) * BigInt(outputTokens);
     // Charge one micros unit for any non-zero fractional result. Flooring would
     // create a systematic undercharge for token counts below one million.
     const amount = (rawAmount + 999_999n) / 1_000_000n;
     const amountNumber = Number(amount);
-    const reservationMicros = readSafeInteger(rate.reservation_micros, 'reservation_micros');
-    if (!Number.isSafeInteger(amountNumber) || !Number.isSafeInteger(reservationMicros)) throw new Error('billing.usage_amount_overflow');
-    return { featureKey, labelKey: rate.label_key, pricingRevisionId: rate.usage_price_revision_id, inputTokens, outputTokens, amountMicros: amountNumber, reservationMicros };
+    const reservationMicros = readSafeInteger(
+      rate.reservation_micros,
+      "reservation_micros",
+    );
+    if (
+      !Number.isSafeInteger(amountNumber) ||
+      !Number.isSafeInteger(reservationMicros)
+    )
+      throw new Error("billing.usage_amount_overflow");
+    return {
+      featureKey,
+      labelKey: rate.label_key,
+      pricingRevisionId: rate.usage_price_revision_id,
+      inputTokens,
+      outputTokens,
+      amountMicros: amountNumber,
+      reservationMicros,
+    };
   }
 }

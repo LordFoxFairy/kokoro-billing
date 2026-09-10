@@ -1,12 +1,12 @@
-import { createClient, type RedisClientType } from 'redis';
-import type { IdempotencyHint } from '../../application/ports/idempotency-hint.js';
+import { createClient, type RedisClientType } from "redis";
+import type { IdempotencyHint } from "../../application/ports/idempotency-hint.js";
 import {
   DEFAULT_REDIS_TIMEOUT_POLICY,
   closeRedisWithDeadline,
   connectRedisWithDeadline,
   runIdempotentRedisOperation,
   type RedisTimeoutPolicy,
-} from './timeout-policy.js';
+} from "./timeout-policy.js";
 
 /**
  * Redis stores only a lossy key-presence marker. PostgreSQL command receipts and
@@ -18,11 +18,19 @@ export class RedisIdempotencyHint implements IdempotencyHint {
 
   public constructor(
     url: string,
-    private readonly namespace = 'billing:idempotency',
+    private readonly namespace = "billing:idempotency",
     private readonly timeouts: RedisTimeoutPolicy = DEFAULT_REDIS_TIMEOUT_POLICY,
   ) {
-    this.client = createClient({ url, socket: { connectTimeout: timeouts.connectTimeoutMs, reconnectStrategy: false } });
-    this.client.on('error', (error) => process.stderr.write(`kokoro-billing redis error: ${String(error)}\n`));
+    this.client = createClient({
+      url,
+      socket: {
+        connectTimeout: timeouts.connectTimeoutMs,
+        reconnectStrategy: false,
+      },
+    });
+    this.client.on("error", (error) =>
+      process.stderr.write(`kokoro-billing redis error: ${String(error)}\n`),
+    );
   }
 
   public async connect(): Promise<void> {
@@ -39,8 +47,12 @@ export class RedisIdempotencyHint implements IdempotencyHint {
 
   public async close(): Promise<void> {
     if (this.connected) {
-      try { await closeRedisWithDeadline(this.client.quit(), this.timeouts); } catch (error) {
-        process.stderr.write(`kokoro-billing redis close failed error=${error instanceof Error ? error.message : String(error)}\n`);
+      try {
+        await closeRedisWithDeadline(this.client.quit(), this.timeouts);
+      } catch (error) {
+        process.stderr.write(
+          `kokoro-billing redis close failed error=${error instanceof Error ? error.message : String(error)}\n`,
+        );
         this.client.destroy();
       }
     }
@@ -48,9 +60,11 @@ export class RedisIdempotencyHint implements IdempotencyHint {
   }
 
   public async ping(): Promise<void> {
-    if (!this.connected) throw new Error('redis hint is not connected');
+    if (!this.connected) throw new Error("redis hint is not connected");
     try {
-      await runIdempotentRedisOperation('ping', this.timeouts, () => this.client.ping());
+      await runIdempotentRedisOperation("ping", this.timeouts, () =>
+        this.client.ping(),
+      );
     } catch (error) {
       this.disable();
       throw error;
@@ -60,7 +74,9 @@ export class RedisIdempotencyHint implements IdempotencyHint {
   public async markSeen(key: string, ttlSeconds: number): Promise<void> {
     if (!this.connected) return;
     try {
-      await runIdempotentRedisOperation('mark-seen', this.timeouts, () => this.client.set(this.key(key), 'seen', { NX: true, EX: ttlSeconds }));
+      await runIdempotentRedisOperation("mark-seen", this.timeouts, () =>
+        this.client.set(this.key(key), "seen", { NX: true, EX: ttlSeconds }),
+      );
     } catch (error) {
       this.disable();
       throw error;

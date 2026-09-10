@@ -5,13 +5,18 @@ export type HostedCheckoutInput = {
   readonly subjectId: string;
   readonly amountMinor: number;
   readonly currency: string;
-  readonly billingInterval: 'once' | 'month' | 'year';
+  readonly billingInterval: "once" | "month" | "year";
   readonly productName: string;
   readonly successUrl: string;
   readonly cancelUrl: string;
 };
 
-export type HostedCheckoutSession = { readonly provider: string; readonly sessionId: string; readonly checkoutUrl: string; readonly providerAccountRef?: string | null };
+export type HostedCheckoutSession = {
+  readonly provider: string;
+  readonly sessionId: string;
+  readonly checkoutUrl: string;
+  readonly providerAccountRef?: string | null;
+};
 
 export interface HostedCheckoutProvider {
   readonly provider: string;

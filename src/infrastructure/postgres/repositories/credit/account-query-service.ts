@@ -1,11 +1,14 @@
-import { randomUUID } from 'node:crypto';
-import type { SqlConnection, RowDataPacket } from '../../database.js';
-import { z } from 'zod';
+import { randomUUID } from "node:crypto";
+import type { SqlConnection, RowDataPacket } from "../../database.js";
+import { z } from "zod";
 
 export class CreditAccountQueryService {
   public constructor(private readonly connection: SqlConnection) {}
 
-  public async ensureForSubject(tenantId: string, subjectId: string): Promise<{ readonly accountId: string }> {
+  public async ensureForSubject(
+    tenantId: string,
+    subjectId: string,
+  ): Promise<{ readonly accountId: string }> {
     const accountId = randomUUID();
     await this.connection.execute(
       `INSERT INTO entitlement_credit_account (credit_account_id, tenant_id, subject_id)
@@ -17,17 +20,29 @@ export class CreditAccountQueryService {
       [tenantId, subjectId],
     );
     const row = rows[0] as { credit_account_id: string } | undefined;
-    if (!row) throw new Error('billing.credit_account_not_found');
+    if (!row) throw new Error("billing.credit_account_not_found");
     return { accountId: row.credit_account_id };
   }
 
-  public async getForSubject(tenantId: string, subjectId: string): Promise<Record<string, unknown> | null> {
+  public async getForSubject(
+    tenantId: string,
+    subjectId: string,
+  ): Promise<Record<string, unknown> | null> {
     const [accounts] = await this.connection.execute<RowDataPacket[]>(
       `SELECT credit_account_id, status, available_micros, held_micros, generation, updated_at
          FROM entitlement_credit_account WHERE tenant_id = $1 AND subject_id = $2`,
       [tenantId, subjectId],
     );
-    const account = accounts[0] as { credit_account_id: string; status: string; available_micros: number; held_micros: number; generation: number; updated_at: Date } | undefined;
+    const account = accounts[0] as
+      | {
+          credit_account_id: string;
+          status: string;
+          available_micros: number;
+          held_micros: number;
+          generation: number;
+          updated_at: Date;
+        }
+      | undefined;
     if (!account) return null;
     const [grants] = await this.connection.execute<RowDataPacket[]>(
       `SELECT credit_grant_id, program_key, original_micros, remaining_micros, effective_at, expires_at, burn_priority, status
@@ -54,20 +69,63 @@ export class CreditAccountQueryService {
     };
   }
 
-  public async summaryForSubject(tenantId: string, subjectId: string): Promise<{ balanceMicros: string; heldMicros: string; quotaMicros: string | null; quotaPeriod: string | null }> {
+  public async summaryForSubject(
+    tenantId: string,
+    subjectId: string,
+  ): Promise<{
+    balanceMicros: string;
+    heldMicros: string;
+    quotaMicros: string | null;
+    quotaPeriod: string | null;
+  }> {
     const [rows] = await this.connection.execute<RowDataPacket[]>(
       `SELECT available_micros, held_micros, quota_micros, quota_period FROM entitlement_credit_account WHERE tenant_id = $1 AND subject_id = $2`,
       [tenantId, subjectId],
     );
-    const row = rows[0] as { available_micros: string | number; held_micros: string | number; quota_micros: string | number | null; quota_period: string | null } | undefined;
-    return { balanceMicros: String(row?.available_micros ?? 0), heldMicros: String(row?.held_micros ?? 0), quotaMicros: row?.quota_micros === null || row?.quota_micros === undefined ? null : String(row.quota_micros), quotaPeriod: row?.quota_period ?? null };
+    const row = rows[0] as
+      | {
+          available_micros: string | number;
+          held_micros: string | number;
+          quota_micros: string | number | null;
+          quota_period: string | null;
+        }
+      | undefined;
+    return {
+      balanceMicros: String(row?.available_micros ?? 0),
+      heldMicros: String(row?.held_micros ?? 0),
+      quotaMicros:
+        row?.quota_micros === null || row?.quota_micros === undefined
+          ? null
+          : String(row.quota_micros),
+      quotaPeriod: row?.quota_period ?? null,
+    };
   }
 
-  public async ledgerForSubject(tenantId: string, subjectId: string, limit: number, cursor?: string): Promise<{ entries: unknown[]; nextCursor?: string }> {
+  public async ledgerForSubject(
+    tenantId: string,
+    subjectId: string,
+    limit: number,
+    cursor?: string,
+  ): Promise<{ entries: unknown[]; nextCursor?: string }> {
     const safeLimit = Math.min(Math.max(Math.trunc(limit), 1), 100);
-    const decodedCursor = cursor === undefined ? undefined : decodeLedgerCursor(cursor, tenantId, subjectId);
-    const cursorPredicate = decodedCursor === undefined ? '' : 'WHERE ledger.created_at < $3 OR (ledger.created_at = $4 AND (ledger.journal_seq < $5 OR (ledger.journal_seq = $6 AND ledger.journal_id < $7)))';
-    const cursorArgs = decodedCursor === undefined ? [] : [new Date(decodedCursor.createdAt), new Date(decodedCursor.createdAt), decodedCursor.journalSeq, decodedCursor.journalSeq, decodedCursor.journalId];
+    const decodedCursor =
+      cursor === undefined
+        ? undefined
+        : decodeLedgerCursor(cursor, tenantId, subjectId);
+    const cursorPredicate =
+      decodedCursor === undefined
+        ? ""
+        : "WHERE ledger.created_at < $3 OR (ledger.created_at = $4 AND (ledger.journal_seq < $5 OR (ledger.journal_seq = $6 AND ledger.journal_id < $7)))";
+    const cursorArgs =
+      decodedCursor === undefined
+        ? []
+        : [
+            new Date(decodedCursor.createdAt),
+            new Date(decodedCursor.createdAt),
+            decodedCursor.journalSeq,
+            decodedCursor.journalSeq,
+            decodedCursor.journalId,
+          ];
     const [rows] = await this.connection.query<RowDataPacket[]>(
       `SELECT ledger.journal_id, ledger.journal_seq, ledger.amount_micros, ledger.source_kind, ledger.created_at, ledger.balance_after_micros
          FROM (
@@ -78,20 +136,48 @@ export class CreditAccountQueryService {
             WHERE a.tenant_id = $1 AND a.subject_id = $2
          ) AS ledger
          ${cursorPredicate}
-        ORDER BY ledger.created_at DESC, ledger.journal_seq DESC, ledger.journal_id DESC LIMIT ${decodedCursor === undefined ? '$3' : '$8'}`,
+        ORDER BY ledger.created_at DESC, ledger.journal_seq DESC, ledger.journal_id DESC LIMIT ${decodedCursor === undefined ? "$3" : "$8"}`,
       [tenantId, subjectId, ...cursorArgs, safeLimit + 1],
     );
     const hasMore = rows.length > safeLimit;
     const pageRows = hasMore ? rows.slice(0, safeLimit) : rows;
-    const entries = pageRows.map((row) => ({ entryId: String(row.journal_id), deltaMicros: String(row.amount_micros), balanceAfterMicros: String(row.balance_after_micros), reason: String(row.source_kind), createdAt: new Date(row.created_at as string | Date).getTime(), runId: null }));
+    const entries = pageRows.map((row) => ({
+      entryId: String(row.journal_id),
+      deltaMicros: String(row.amount_micros),
+      balanceAfterMicros: String(row.balance_after_micros),
+      reason: String(row.source_kind),
+      createdAt: new Date(row.created_at as string | Date).getTime(),
+      runId: null,
+    }));
     if (!hasMore) return { entries };
     const last = pageRows.at(-1);
     if (!last) return { entries };
-    return { entries, nextCursor: encodeLedgerCursor({ version: 1, scope: 'credit.ledger', tenantId, subjectId, createdAt: toCursorDate(last.created_at), journalSeq: String(last.journal_seq), journalId: String(last.journal_id) }) };
+    return {
+      entries,
+      nextCursor: encodeLedgerCursor({
+        version: 1,
+        scope: "credit.ledger",
+        tenantId,
+        subjectId,
+        createdAt: toCursorDate(last.created_at),
+        journalSeq: String(last.journal_seq),
+        journalId: String(last.journal_id),
+      }),
+    };
   }
 
-  public async byModelForSubject(tenantId: string, subjectId: string): Promise<{ periodStart: string; items: unknown[] }> {
-    const [rows] = await this.connection.execute<(RowDataPacket & { model_binding_id: string | null; model_name: string | null; spent_micros: string; run_count: string })[]>(
+  public async byModelForSubject(
+    tenantId: string,
+    subjectId: string,
+  ): Promise<{ periodStart: string; items: unknown[] }> {
+    const [rows] = await this.connection.execute<
+      (RowDataPacket & {
+        model_binding_id: string | null;
+        model_name: string | null;
+        spent_micros: string;
+        run_count: string;
+      })[]
+    >(
       `SELECT h.model_binding_id, COALESCE(h.label_key, h.feature_key) AS model_name,
               COALESCE(SUM(CASE WHEN j.amount_micros < 0 THEN -j.amount_micros ELSE 0 END), 0) AS spent_micros,
               COUNT(DISTINCT CASE WHEN j.amount_micros < 0 THEN j.source_ref END) AS run_count
@@ -103,34 +189,71 @@ export class CreditAccountQueryService {
       [tenantId, subjectId],
     );
     const now = new Date();
-    const periodStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
-    return { periodStart, items: rows.map((row) => ({ modelBindingId: row.model_binding_id === null ? null : String(row.model_binding_id), modelName: String(row.model_name ?? '未归属'), spentMicros: String(row.spent_micros), runCount: Number(row.run_count) })) };
+    const periodStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+    ).toISOString();
+    return {
+      periodStart,
+      items: rows.map((row) => ({
+        modelBindingId:
+          row.model_binding_id === null ? null : String(row.model_binding_id),
+        modelName: String(row.model_name ?? "未归属"),
+        spentMicros: String(row.spent_micros),
+        runCount: Number(row.run_count),
+      })),
+    };
   }
 }
 
-type LedgerCursor = { readonly version: 1; readonly scope: 'credit.ledger'; readonly tenantId: string; readonly subjectId: string; readonly createdAt: string; readonly journalSeq: string; readonly journalId: string };
-const ledgerCursorSchema = z.object({
-  version: z.literal(1), scope: z.literal('credit.ledger'), tenantId: z.string().min(1), subjectId: z.string().min(1),
-  createdAt: z.string().datetime({ offset: true }), journalSeq: z.string().regex(/^\d+$/u), journalId: z.string().min(1),
-}).strict();
+type LedgerCursor = {
+  readonly version: 1;
+  readonly scope: "credit.ledger";
+  readonly tenantId: string;
+  readonly subjectId: string;
+  readonly createdAt: string;
+  readonly journalSeq: string;
+  readonly journalId: string;
+};
+const ledgerCursorSchema = z
+  .object({
+    version: z.literal(1),
+    scope: z.literal("credit.ledger"),
+    tenantId: z.string().min(1),
+    subjectId: z.string().min(1),
+    createdAt: z.string().datetime({ offset: true }),
+    journalSeq: z.string().regex(/^\d+$/u),
+    journalId: z.string().min(1),
+  })
+  .strict();
 
 function encodeLedgerCursor(cursor: LedgerCursor): string {
-  return Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url');
+  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
 }
 
 function toCursorDate(value: unknown): string {
   const date = value instanceof Date ? value : new Date(String(value));
-  if (Number.isNaN(date.getTime())) throw new Error('billing.invalid_cursor');
+  if (Number.isNaN(date.getTime())) throw new Error("billing.invalid_cursor");
   return date.toISOString();
 }
 
-function decodeLedgerCursor(value: string, tenantId: string, subjectId: string): LedgerCursor {
+function decodeLedgerCursor(
+  value: string,
+  tenantId: string,
+  subjectId: string,
+): LedgerCursor {
   try {
-    const parsed: unknown = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'));
+    const parsed: unknown = JSON.parse(
+      Buffer.from(value, "base64url").toString("utf8"),
+    );
     const result = ledgerCursorSchema.safeParse(parsed);
-    if (!result.success || result.data.tenantId !== tenantId || result.data.subjectId !== subjectId) throw new Error();
+    if (
+      !result.success ||
+      result.data.tenantId !== tenantId ||
+      result.data.subjectId !== subjectId
+    )
+      throw new Error();
     return result.data;
   } catch {
-    throw new Error('billing.invalid_cursor');
+    throw new Error("billing.invalid_cursor");
   }
 }

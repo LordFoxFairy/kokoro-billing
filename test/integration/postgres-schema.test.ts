@@ -1,16 +1,20 @@
-import { assertDefined } from '../assert-defined.js';
-import { describe, expect, it } from 'vitest';
-import { createBillingConnection } from '../../src/infrastructure/postgres/connection.js';
-import type { RowDataPacket } from '../../src/infrastructure/postgres/connection.js';
+import { assertDefined } from "../assert-defined.js";
+import { describe, expect, it } from "vitest";
+import { createBillingConnection } from "../../src/infrastructure/postgres/connection.js";
+import type { RowDataPacket } from "../../src/infrastructure/postgres/connection.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const integration = describe.skipIf(!databaseUrl);
 
-integration('billing canonical PostgreSQL schema', () => {
-  it('contains only owner-prefixed Billing tables and no schema history table', async () => {
-    const connection = await createBillingConnection(assertDefined(databaseUrl));
+integration("billing canonical PostgreSQL schema", () => {
+  it("contains only owner-prefixed Billing tables and no schema history table", async () => {
+    const connection = await createBillingConnection(
+      assertDefined(databaseUrl),
+    );
     try {
-      const [tables] = await connection.query<(RowDataPacket & { table_name: string })[]>(
+      const [tables] = await connection.query<
+        (RowDataPacket & { table_name: string })[]
+      >(
         `SELECT table_name
            FROM information_schema.tables
           WHERE table_schema = current_schema() AND table_type = 'BASE TABLE'
@@ -18,37 +22,67 @@ integration('billing canonical PostgreSQL schema', () => {
       );
       const names = tables.map((row) => row.table_name);
       expect(names.length).toBeGreaterThan(0);
-      expect(names.every((name) => name.startsWith('entitlement_') || name.startsWith('payment_'))).toBe(true);
-      expect(names.some((name) => name.includes('entitlement_entitlement'))).toBe(false);
-      expect(names).not.toContain('billing_schema_migrations');
-      expect(names).toContain('payment_command_receipt');
-      expect(names).toContain('entitlement_command_receipt');
-      expect(names).toContain('entitlement_billing_command_receipt');
+      expect(
+        names.every(
+          (name) =>
+            name.startsWith("entitlement_") || name.startsWith("payment_"),
+        ),
+      ).toBe(true);
+      expect(
+        names.some((name) => name.includes("entitlement_entitlement")),
+      ).toBe(false);
+      expect(names).not.toContain("billing_schema_migrations");
+      expect(names).toContain("payment_command_receipt");
+      expect(names).toContain("entitlement_command_receipt");
+      expect(names).toContain("entitlement_billing_command_receipt");
     } finally {
       await connection.end();
     }
   });
 
-  it('uses application-owned cross-table integrity and UTC millisecond timestamps', async () => {
-    const connection = await createBillingConnection(assertDefined(databaseUrl));
+  it("uses application-owned cross-table integrity and UTC millisecond timestamps", async () => {
+    const connection = await createBillingConnection(
+      assertDefined(databaseUrl),
+    );
     try {
-      const [relations] = await connection.query<(RowDataPacket & { constraint_type: string })[]>(
+      const [relations] = await connection.query<
+        (RowDataPacket & { constraint_type: string })[]
+      >(
         `SELECT constraint_type
            FROM information_schema.table_constraints
           WHERE constraint_schema = current_schema() AND constraint_type IN ('FOREIGN KEY', 'REFERENTIAL ACTION')`,
       );
       expect(relations).toEqual([]);
 
-      const [timestamps] = await connection.query<(RowDataPacket & { table_name: string; column_name: string; data_type: string; datetime_precision: number })[]>(
+      const [timestamps] = await connection.query<
+        (RowDataPacket & {
+          table_name: string;
+          column_name: string;
+          data_type: string;
+          datetime_precision: number;
+        })[]
+      >(
         `SELECT table_name, column_name, data_type, datetime_precision
            FROM information_schema.columns
           WHERE table_schema = current_schema() AND data_type IN ('timestamp without time zone', 'timestamp with time zone')
           ORDER BY table_name, column_name`,
       );
       expect(timestamps.length).toBeGreaterThan(0);
-      expect(timestamps.every((row) => row.data_type === 'timestamp with time zone' && row.datetime_precision === 3)).toBe(true);
+      expect(
+        timestamps.every(
+          (row) =>
+            row.data_type === "timestamp with time zone" &&
+            row.datetime_precision === 3,
+        ),
+      ).toBe(true);
 
-      const [moneyColumns] = await connection.query<(RowDataPacket & { table_name: string; column_name: string; data_type: string })[]>(
+      const [moneyColumns] = await connection.query<
+        (RowDataPacket & {
+          table_name: string;
+          column_name: string;
+          data_type: string;
+        })[]
+      >(
         `SELECT table_name, column_name, data_type
            FROM information_schema.columns
           WHERE table_schema = current_schema()
@@ -56,55 +90,76 @@ integration('billing canonical PostgreSQL schema', () => {
           ORDER BY table_name, column_name`,
       );
       expect(moneyColumns.length).toBeGreaterThan(0);
-      expect(moneyColumns.every((row) => row.data_type === 'bigint')).toBe(true);
+      expect(moneyColumns.every((row) => row.data_type === "bigint")).toBe(
+        true,
+      );
     } finally {
       await connection.end();
     }
   });
 
-  it('installs the deliberate dispatch and tenant query indexes', async () => {
-    const connection = await createBillingConnection(assertDefined(databaseUrl));
+  it("installs the deliberate dispatch and tenant query indexes", async () => {
+    const connection = await createBillingConnection(
+      assertDefined(databaseUrl),
+    );
     try {
-      const [indexes] = await connection.query<(RowDataPacket & { index_name: string })[]>(
+      const [indexes] = await connection.query<
+        (RowDataPacket & { index_name: string })[]
+      >(
         `SELECT indexname AS index_name
            FROM pg_indexes
           WHERE schemaname = current_schema()
             AND indexname IN ($1, $2, $3, $4, $5, $6)
           ORDER BY indexname`,
-        ['ix_entitlement_outbox_dispatch', 'ix_payment_outbox_dispatch', 'ix_payment_provider_event_processing', 'ix_payment_settlement_checkout', 'ix_entitlement_credit_hold_expiry', 'ix_entitlement_credit_grant_expiry'],
+        [
+          "ix_entitlement_outbox_dispatch",
+          "ix_payment_outbox_dispatch",
+          "ix_payment_provider_event_processing",
+          "ix_payment_settlement_checkout",
+          "ix_entitlement_credit_hold_expiry",
+          "ix_entitlement_credit_grant_expiry",
+        ],
       );
       expect(indexes.map((row) => row.index_name)).toEqual([
-        'ix_entitlement_credit_grant_expiry',
-        'ix_entitlement_credit_hold_expiry',
-        'ix_entitlement_outbox_dispatch',
-        'ix_payment_outbox_dispatch',
-        'ix_payment_provider_event_processing',
-        'ix_payment_settlement_checkout',
+        "ix_entitlement_credit_grant_expiry",
+        "ix_entitlement_credit_hold_expiry",
+        "ix_entitlement_outbox_dispatch",
+        "ix_payment_outbox_dispatch",
+        "ix_payment_provider_event_processing",
+        "ix_payment_settlement_checkout",
       ]);
     } finally {
       await connection.end();
     }
   });
 
-  it('does not persist an unverified signature claim for trusted internal execution events', async () => {
-    const connection = await createBillingConnection(assertDefined(databaseUrl));
+  it("does not persist an unverified signature claim for trusted internal execution events", async () => {
+    const connection = await createBillingConnection(
+      assertDefined(databaseUrl),
+    );
     try {
-      const [columns] = await connection.query<(RowDataPacket & { column_name: string })[]>(
+      const [columns] = await connection.query<
+        (RowDataPacket & { column_name: string })[]
+      >(
         `SELECT column_name
            FROM information_schema.columns
           WHERE table_schema = current_schema() AND table_name = 'entitlement_execution_event'
           ORDER BY ordinal_position`,
       );
-      expect(columns.map((row) => row.column_name)).not.toContain('signature');
+      expect(columns.map((row) => row.column_name)).not.toContain("signature");
     } finally {
       await connection.end();
     }
   });
 
-  it('uses command identity without a durable receipt lease in the single-transaction claim model', async () => {
-    const connection = await createBillingConnection(assertDefined(databaseUrl));
+  it("uses command identity without a durable receipt lease in the single-transaction claim model", async () => {
+    const connection = await createBillingConnection(
+      assertDefined(databaseUrl),
+    );
     try {
-      const [columns] = await connection.query<(RowDataPacket & { table_name: string; column_name: string })[]>(
+      const [columns] = await connection.query<
+        (RowDataPacket & { table_name: string; column_name: string })[]
+      >(
         `SELECT table_name, column_name
            FROM information_schema.columns
           WHERE table_schema = current_schema()
@@ -117,15 +172,23 @@ integration('billing canonical PostgreSQL schema', () => {
         names.push(row.column_name);
         receiptColumns.set(row.table_name, names);
       }
-      expect(receiptColumns.get('entitlement_billing_command_receipt')).toContain('command_identity');
-      expect(receiptColumns.get('entitlement_command_receipt')).not.toContain('lease_until');
-      expect(receiptColumns.get('payment_command_receipt')).not.toContain('lease_until');
+      expect(
+        receiptColumns.get("entitlement_billing_command_receipt"),
+      ).toContain("command_identity");
+      expect(receiptColumns.get("entitlement_command_receipt")).not.toContain(
+        "lease_until",
+      );
+      expect(receiptColumns.get("payment_command_receipt")).not.toContain(
+        "lease_until",
+      );
 
-      const [indexes] = await connection.query<(RowDataPacket & { index_name: string })[]>(
+      const [indexes] = await connection.query<
+        (RowDataPacket & { index_name: string })[]
+      >(
         `SELECT indexname AS index_name
            FROM pg_indexes
           WHERE schemaname = current_schema() AND indexname = $1`,
-        ['uq_entitlement_billing_receipt_identity'],
+        ["uq_entitlement_billing_receipt_identity"],
       );
       expect(indexes).toHaveLength(1);
     } finally {
