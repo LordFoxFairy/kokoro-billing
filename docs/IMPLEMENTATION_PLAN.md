@@ -1376,3 +1376,43 @@ Root对src/test/database/contract/package/lock做当前1132906零差异检查，
 数据Astra复核/tmp/billing-bg-audit-sha256.txt两hash、Goal范围及507/158日志，审计放行；无整体完成声明。普通新major方向已另外异步询问用户，未获批准即不切换；不是清库授权。
 审查指出不能让全部必要工作空等B9a：既有outbox decode绕过重试/死信、pricing不同key revision竞争均有真实缺陷证据，不涉及新商业规则/资源ID/API breaking。
 因此Root继续按§8.1局部修复门推进这两项必要可靠性修复，先outbox；保持完整Goal，局部修复不替代Nest/Prisma最终迁移。重写的硬前置与已存在代码的独立纠错分开。
+
+## B8-S1 Outbox损坏载荷局部修复卡
+
+归属与设计：既有OutboxWorker消费基础设施，把已领取行的严格payload解码纳入现有try/catch/finally，复用有fence的retry/dead-letter，不改变API、表、handler contract或业务语义。保留对象schema，不把坏JSON当{}或空ack。此局部修复遵循Root §8.1例外，不授权完整业务目录重写。
+
+| 项目 | 本次切片 |
+|---|---|
+| 目标/优先级 | P1：被现有parser拒绝的持久JSONB载荷进入有限重试/死信，不再无限重领；好事件保持正常消费 |
+| 基线 | /Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing，codex/billing-ts-prisma-alignment，0fd6a6cd372143f42a0eaed49d266afccecbc64a；起始源码干净，仅Root本卡 |
+| 角色 | billing_toolchain_hardening/Astra为唯一实现writer；Root在派发后停止本仓写入，负责资源/交接后Git与主工作树验收；数据/TS只读审查 |
+| 写入范围 | 只允许src/infrastructure/postgres/outbox-worker.ts和既有test/integration/outbox-worker.test.ts；不新建目录/文件、不改SQL/contract/deps/其他业务、文档由Root交接后修改 |
+| 根因/方案 | decode在claim commit后、消费try之前抛错，fenced失败路径没被执行；移至受保护消费阶段，不取消schema校验。不扩成新的队列框架、不顺手重写整个lease生命周期 |
+| TDD与行为 | 先真实PG RED，再最小GREEN；两outbox表的数组/scalar/JSON null坏载荷handler零调用，max1立即死信/lease清空/不再领取；max2第一次retry并next_attempt未来，第二次dead-letter、次数2、终态不重领；好对象仍发布 |
+| 资源/隔离 | Root独占随机database并安装canonical，复用已有PG；只改/删本例随机tenant/outbox行，不触共享数据/Redis，不启动provider/server；worker关闭自己连接后交Root正常drop |
+| 范围外 | attempt已耗尽但此前提交/ack丢失的业务恢复、完整renewal await/drain与Prisma writer切换仍在D1/B8；本切片不冒称这些已解决，不降低现有fence/预算 |
+| 验证/交付 | worker记录RED/GREEN及lint/typecheck/format；冻结两代码hash后两位reviewer、Root目标integration和完整门。Root显式路径提交，不合入其他用户/Agent变化 |
+
+
+### B8-S1交付与主控验收（源码基线0fd6a6c）
+
+状态：实现 → 双审 → 主工作树完整验证已通过，由Root显式路径提交；最终交付SHA由本节所属提交定位，提交后再对干净HEAD复验。
+- 唯一writer为billing_toolchain_hardening/Astra；实际修改仅outbox-worker.ts及既有integration文件，Root接管后更新本计划/CURRENT，无Schema、contract、依赖或业务handler变化。
+- 原decode位于已提交claim与消费try之间，坏值抛出绕过重试/死信。本次移至既有try内，保持parser原语义及token条件更新；类型边界改为unknown，成功解析后才收窄为对象。
+- 两表×五shape（数组、数字、布尔、普通字符串、JSON null）×max1/2共20反例，另加两合法对象正例；原三发布/handler失败/续租用例保留，并移除宽DELETE、改随机tenant filter。总计25项，比原来增加22项。
+- max1死信清lease；max2第一次retry且next_attempt未来、未到期不领取，仅本例调due后第二次死信。两者均不调用坏payload handler、不发布，终态再poll不增加attempt；好对象原样发布。
+- 保留边界：JSONB字符串内含可解析对象JSON时仍按原helper接受，本次不是禁止所有物理非object JSONB；续租在途await/drain、历史已提交效果/ack丢失与耗尽预算恢复仍待D1，Nest/Prisma完整目标保持未完成。
+
+审查与TDD：
+- Worker真实PG RED session88287 exit1，20失败/5通过，原因均为PersistedDataInvariantError逃出processOnce；GREEN25通过/0跳过。日志/tmp/billing-s1-red.log、/tmp/billing-s1-green-final.log。
+- 数据Astra首审无阻断；TS Sol首审P2指出Row泛型虚假收窄，writer只改payload_json: unknown后Sol复核放行，无剩余P1/P2。Reviewer不操作数据库，运行证据由Root独立确认。
+- 最终worker SHA256 6957b97acbef79b86c93deedf0ff014b14e9568f3b7ae556120829ffad78fd3e；integration SHA256 44cf40491a05db731ae7f8ad4dcb2ee5388ad774005eeabc26ed9ea85db957d5。
+
+Root实际命令与结果：
+- 独立目标实跑`pnpm exec vitest run test/integration/outbox-worker.test.ts`，session44956 exit0，1文件25通过、0失败0跳过；/tmp/billing-s1-root-target.log。
+- P2前完整session87438 exit0，/tmp/billing-b8s1-root.5wBzQg；P2后最终冻结树完整session66598 exit0（chunk3b8efb），/tmp/billing-b8s1-root.myAw7I。两轮均由Root执行/tmp/billing-b8s1-root-verify.sh，结果687全套/180集成，0失败0跳过；下述为最终轮，旧轮不替代最终轮。
+- Node24.20.0/pnpm11.25.0；`pnpm install --frozen-lockfile`、`pnpm db:apply-schema`、`pnpm verify`（format/lint/typecheck/build/sql/17route/test）均exit0；62文件687测试通过；独立`pnpm test:integration`33文件180通过。
+- `pnpm db:verify-schema`差异[]，35表368列127约束83索引；`pnpm prisma:check`通过，canonical/OpenAPI hash仍57b6ff…/58fbe4…；`pnpm audit --json`五级漏洞均0；`git diff --check`通过。
+- /tmp/billing-b8s1-root-smoke.py在自建空库分别启动真实源码与dist HTTP：health200、ready200、未认证401、可信BFF catalog200/request ID匹配、SIGTERM退出0。未启用provider，不冒称真实Stripe端到端。
+- Worker库billing_s1_1f084cc5c2974b13a1ba在所有连接/进程终态后由Root正常drop；两轮Root库billing_accept_b8s1_476aa04c281c429fbfca与billing_accept_b8s1_8a3abd846c7b4658acf5由各自脚本正常drop，无FORCE/共享清理。库不存在检查见Root本轮工具证据。
+- 未运行CI PostgreSQL16、镜像、provider sandbox、生产流量/灾备及新major消费者验收；本次不修改其他owner来清零历史门禁。Root其他用户/Agent变更保留。下一局部切片为pricing不同key并发revision竞争，尚未实施。

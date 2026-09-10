@@ -10,7 +10,7 @@ type OutboxTable = "entitlement_outbox" | "payment_outbox";
 type OutboxRow = RowDataPacket & {
   outbox_id: string;
   event_type: string;
-  payload_json: string | Record<string, unknown>;
+  payload_json: unknown;
   attempts: number;
 };
 export type OutboxProcessResult =
@@ -92,11 +92,6 @@ export class OutboxWorker {
     const selectedRow = row;
     if (selectedRow === undefined)
       throw new Error("billing.outbox_row_missing_after_lease");
-    const payload = parsePersistedJson(
-      selectedRow.payload_json,
-      jsonRecordSchema,
-      "billing.outbox_payload_invalid",
-    );
     let leaseLost = false;
     const renewLease = async (): Promise<void> => {
       const [renewal] = await this.leaseConnection.execute<ResultSetHeader>(
@@ -118,6 +113,11 @@ export class OutboxWorker {
       Math.max(1_000, Math.floor((this.leaseSeconds * 1_000) / 3)),
     );
     try {
+      const payload = parsePersistedJson(
+        selectedRow.payload_json,
+        jsonRecordSchema,
+        "billing.outbox_payload_invalid",
+      );
       await handler({
         outboxId: selectedRow.outbox_id,
         eventType: selectedRow.event_type,
