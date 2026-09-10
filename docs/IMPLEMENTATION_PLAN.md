@@ -1116,3 +1116,69 @@ Root临时图解析首版用Unicode词边界误漏payment核心，assert退出1�
 /Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/DATA_MODEL.md。
 尚未放行：major API与真实部署/数据演进、完整canonical Schema、订阅/退款/202终态、retention/权限，以及依赖安装或生产代码切换。
 下一设计面继续闭合这些剩余项；不能把内部设计审查代替完整B8切换，也不能长期停留Fastify/pg而宣布Goal完成。
+
+
+## B8-D2b付款/退款入口终态核查卡
+
+上一轮分类：进展。2a92260095bb7f9b8df29ff39b61d47c8e5bde00已提交Checkout内部恢复设计；双审R2放行，
+干净HEAD SQL/17route契约检查退出0。当前起始该HEAD且Billing干净，真实数据/v1仓外调用方尚待用户确认。
+
+| 项目 | 本轮范围 |
+|---|---|
+| 目标 | 将付款/退款三HTTP入口与后续worker链的静态缺口变成真实PG证据，为终态契约裁决提供依据；本轮不替用户决定新付款/退款业务 |
+| 角色/owner | Payment/Refund事实与Credit效果；Root唯一Billing文档writer/Git，billing_toolchain_hardening/Astra仅本地临时运行探针；数据审查员之后核证据 |
+| 基线/文件 | /Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing，codex/billing-ts-prisma-alignment，2a92260；Root只改当前任务板与必要CURRENT事实，调查员只写/tmp自有探针/日志，不改Billing/Git |
+| 资源 | Root创建并安装一个随机独占PG database供探针使用；复用既有PG/Redis，不reset/新启共享服务，调查员关闭自身连接，Root正常drop自己的库 |
+| 边界 | 实际createBillingRuntime HTTP身份/路由/receipt/SQL+生产worker过滤，不mock被测链；可经真实owner能力建立已fulfill付款基线，但须明确是fixture setup，不伪称HTTP自动fulfill |
+| 独立工作 | Root同时核机器contract描述、入口消费者与可用查询能力；不写调查员临时文件，不复述已派调查 |
+| 验证/交付 | HTTP结果、receipt/outbox/settlement/reversal/fulfillment/journal/余额每步前后值；worker真实领取返回与剩余Recorded事件；独占资源终态清理；不会把正好符合fact-only现状当作业务完成 |
+| 未决 | 新major/原有数据处理、事实记录是否应该承诺自动Credit效果与未来终态查询；本轮保持v1/SQL原样，不加空handler/自动provider退款/按金额猜Credit |
+
+
+### B8-D2b实跑与Root复验（2026-09-10）
+
+调查员最终探针exit0（chunk8a2cf0，无遗留session），冻结目录`/tmp/billing-b8d2b-probe/`包含probe.mjs、run.log、results.json、summary.json、sha256.txt。
+探针SHA256为6be4bfab0d25c9be111ba41e2cee0b28ceb06e98d9d5edf7dce74ed55f6c16af。前两版分别因探针统一ORDER BY引用不存在列、错误预期401而exit1；均在业务写入前关闭连接，保留first/second日志，不作为生产RED证据。
+Root先执行`shasum -a 256 -c /tmp/billing-b8d2b-probe/sha256.txt`四项通过，再复制原脚本仅替换结果输出绝对路径，独立随机tenant/identity，不改测试步骤：
+`DATABASE_URL=postgresql://nako@127.0.0.1:5432/billing_d2b_probe_5c2b1e6fd567401483e2 node --import tsx /tmp/billing-b8d2b-root-probe.mjs`。
+Root chunk4d20ee正常exit0，日志`/tmp/billing-b8d2b-root-run.log`与`/tmp/billing-b8d2b-root-results.json`。
+
+两次均实际createBillingRuntime、HTTP注入、service/admin-proxy认证、PG以及原scripts/process-payment-events.ts子进程；auth配置为jwks模式，但本次三路由不走用户JWT/JWKS验证，不声称实测JWKS网络。
+没有mock被测业务链、Stripe网络或provider服务端退款；不把本地探针计作Stripe sandbox。
+
+| 实际步骤 | Root与调查员一致结果 |
+|---|---|
+| 三入口错误凭据 | 3次403，tenant所有观察表零事实 |
+| settlement接受1000 minor | settlement、succeeded receipt、PaymentSettlementRecorded各1，Credit account/grant/journal/fulfillment均0 |
+| 原payment worker运行一次 | processed/retried/deadLettered/leaseLost均0，付款后SQL快照不变 |
+| 显式调用owner fulfillSettlement建立fixture | account/grant/journal/fulfillment各1、available=1000000 micros；这是准备退款前置账务，不是HTTP自动效果，owner重放无重复 |
+| internal proportional300与admin line_specific200 | reversal累计2/总额500 minor；receipt累计3；Credit余额/剩余grant保持1000000、journal仍1、fulfillment_reversal为0 |
+| 每个HTTP首次+同key重放+同identity新key | 共9次202，业务结果相同、事实与余额不重复变化；未覆盖漂移payload等其他语义 |
+| 原payment worker第二次 | 四项统计仍0，最终3条Recorded全部attempts0/published_at NULL/lease_token NULL |
+| admin审计 | 仅1条admin_refund，reason=line_specific:local admin refund fact；不是行分配执行证据 |
+
+每次15份SQL快照。Root子进程均exit0，runtime与Redis关闭，observer关闭前其他该库连接为空，observer随后end。
+调查员明确停止访问后Root完成复验；Root查询pg_stat_activity为空，再通过dropdb正常删除自己创建的billing_d2b_probe_5c2b1e6fd567401483e2，查询pg_database计数0（chunkc4f336 exit0）。未FORCE/清空Redis/新启共享服务/操作他人库。
+
+### B8-D2b契约与消费者静态交叉核查
+
+Root解析当前canonical OpenAPI的实际ref，输出`/tmp/billing-b8d2b-contract-observations.json`（基线2a92260）：
+- settlement必填body仅settlement_id/provider/external_payment_ref/amount_minor/currency，无Checkout/subject/program/Credit映射；202为Durable settlement acceptance result，响应仅settlement_id及accepted。
+- 两个refund入口没有机器requestBody，202泛V1SuccessResponse描述accepted for processing；运行时另有strict refund schema，不能用17route路径一致声称字段/语义一致。
+- 全部GET只有healthz、readyz、metrics、catalog、credit-account、credit-ledger、subscriptions；没有Checkout/付款/退款/operation终态查询。
+- 运行时refund allocation_mode枚举proportional/line_specific但无行选择字段，handler只拼入reason，未调用reverseCredits；付款handler只recordSettlement，不调用fulfillSettlement。
+- 原payment worker及其oldest-pending-age查询仅过滤PaymentProviderEventReceived；Recorded两类型生产者不在该消费过滤中。指标盲区为源码结论，本轮未实测Prometheus指标。
+- 本地BFF/Agent/Scheduler/Web运行树检索未发现上述三accept路由/Recorded类型的消费者，Billing仍有定义/生产/验证；仅是检索范围结论，不证明仓外无消费者或没有现存真实账务。
+
+这是事实记录与Credit效果之间未闭环的实证，不等同于已经裁决应自动fulfill/按比例reverse，更不是provider退款API完成。
+后续B8-D2需区分record事实、外部退款请求与Credit冲正的owner、状态和事务；以明确业务映射及终态可查询契约替代泛202承诺。
+本轮唯一写入集为本任务板和CURRENT，生产源码/测试/机器OpenAPI/canonical SQL/依赖不变；不借窄探针放行完整B8设计门或整仓迁移。
+
+### B8-D2b-E放行与交付边界
+
+数据审查billing_data_review/Astra复核冻结四hash及Root脚本仅输出路径不同，两轮结果一致，无使窄结论失效的P1/P2。
+源码server.ts三record调用、worker两处provider-event过滤及OpenAPI与观察一致；审查员不接触基础设施，不把只读审查冒充重跑。
+特别保留：provider事件处理器另有冲正调用，本结论不是“所有退款路径无效果”；不是外部HTTP部署、JWKS网络、Stripe sandbox或线上消费者验证。
+Root在主工作树实际执行sql:check通过、contract:check 17routes通过、diff --check退出0（chunka7438d）；真实runtime探针12HTTP/15快照/2原worker断言通过，非测试套件计数。
+本轮仅两份事实文档，未重跑format/lint/typecheck/build/全套unit与integration/catalog/Prisma/smoke/audit，原因是生产代码和机器源未变化；最近完整证据仍绑定8b55a57的665/158，不能移算为本轮完整验收。
+Root负责本两文件提交，Goal继续active，后续owner仍Billing负责人/Root：完成尚余退款/订阅/终态设计、真实数据及major消费者决策，再推进生产Nest/Prisma切换。

@@ -7,6 +7,9 @@
 
 ## 当前规范化工作
 
+- B8-D2b已完成当前付款/退款HTTP终态核查，未修复链路：真实runtime/认证/PG及原支付worker CLI中，3入口首次和两种重放共9次202，只落付款/退款事实和成功receipt；3条Recorded事件两次worker均未领取。显式owner fulfillment作为fixture建立1000000 micros余额后，300+200 minor退款仍未扣回Credit。接口接受、provider退款完成与Credit效果不可混称，详细证据见任务板。
+- 同轮机器契约核查：两个refund入口缺requestBody且202仍为泛型；现有17操作没有Checkout/付款/退款终态GET。allocation_mode当前只进入reason前缀，未执行分配算法。这些是待设计/实现缺口，不据此按金额猜授信规则或自动发起外部退款；v1/SQL/生产源码本轮保持原样。
+
 - B8-D2a Checkout持久claim/事务外调用/fenced finalize、历史unknown、恢复预算与账户/会话维度已通过数据/TS独立设计审查；首轮1P1/2P2闭环。Root用合法配置的真实SDK+本地HTTP故障服务器复现总deadline后继续请求/迟到成功，精确证据见任务板；不是Stripe sandbox。Undici8.10.2仅传输候选，未安装；原持锁调用与背景请求仍待生产替换，完整API/Schema/数据演进未放行。
 
 - B8-S0已实现Stripe一次性付款paid-only门：两种Checkout事件只有payment/paid且subscription缺省或NULL才允许发放。旧源码在独占PG真实回调链中复现unpaid提前创建settlement/account/grant/journal各1；修复后的完整665测试/158集成零失败零跳过，双审通过，精确冻结hash与Root命令见任务板。提交后仍须干净HEAD复验；不是Stripe sandbox或生产流量证据。
