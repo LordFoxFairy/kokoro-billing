@@ -79,7 +79,11 @@ Canonical machine-readable source 是
 
 ## 质量门禁
 
+手写代码使用仓内固定的 Prettier，`pnpm format` 写入格式，`pnpm format:check` 只检查；后者是 `verify` 的第一门。
+SQL、OpenAPI、Prisma 生成物和 lockfile 由各自工具治理，不混入格式重排。
+
 ```bash
+pnpm format:check
 pnpm lint
 pnpm typecheck
 pnpm test

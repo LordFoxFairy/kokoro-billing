@@ -3,6 +3,14 @@
 验收必须在待交付 commit 的干净工作树上重新执行。历史报告、旧 CI、Agent 自报、被 skip 的 integration 和本地 fixture
 均不等于生产证据。
 
+## B7d 格式治理切片
+
+实现为 `0f0e7647d4531e94b2a1d7d8858e970850000c6e`。固定本地 Prettier3.9.6、空配置、显式正向范围、精确生成排除，
+`pnpm verify` 首先执行 `pnpm format:check`；CI/release沿用同一verify入口。格式不替代typed lint、contract或数据门。
+必须证明未格式化反例被拒、格式结果通过且稳定；禁止旧route/any-off的真实guard和实际route matcher在格式前后保持有效。
+机械变更逐文件对照基线formatter输出，已批准四个两遍收敛文件单列，最后一遍字节不变；SQL/OpenAPI/生成schema/provenance保持原字节。
+双审和Root完整命令/计数、独占资源清理、首次临时smoke脚本失配及修复后重跑均见唯一任务板。B8及生产可靠性仍未放行。
+
 ## 2026-09-08 B5 catalog 验收切片
 
 `pnpm db:verify-schema` 必须在 canonical 正例退出0、缺CHECK/同名partial predicate漂移退出1，并保持目标数据不变。
