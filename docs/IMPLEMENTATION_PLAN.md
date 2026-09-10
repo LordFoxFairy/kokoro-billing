@@ -34,6 +34,28 @@
 
 ## 阶段门
 
+### B8-R2 事务规范固化与核心模型续审卡（2026-09-10）
+
+| 项 | 本轮决定 |
+|---|---|
+| 任务 / 基线 | P0：将用户确认的Prisma事务API约定落入共享手册，并继续履约事实/业务事务建模；Billing `fff756c0606cf5e5e35d778e40dd8b2f9adbd850`，Root `bbf8251d`，Billing分支及绝对工作目录沿上文 |
+| Owner / writer | Root唯一writer及提交人；Root手册拥有跨仓工程约定，Billing拥有业务模型；不修改System/IAM/其他业务仓 |
+| 现状 / 排除 | Billing当前Fastify/pg与35表未切换；Root既有03 SQL手册、Agent gitlink及.tmp变更保留，均不暂存 |
+| 位置 / 粒度 | 复用08 TypeScript手册§12.1/12.2为实现权威，04事务补充只链接；不新建跨仓事务SDK或重复规范文件。Billing复用三设计、CURRENT、任务板及必要ADR，不建新报告中心 |
+| 范围 / 依赖 | Root允许修改08、04及Billing上述既有文档；当前SQL/生成Prisma/源码/机器契约/依赖只读。先统一事务与幂等语义，再收敛核心事实，整仓实现仍须三设计门 |
+| 并行审查 | billing_model_r2 / gpt-5.6-sol / 只读：核acquisition与fulfillment当前writer/退款/订阅依赖，给合并边界与必要约束；Root负责总体裁决，不让reviewer改文件/提交/访问共享数据 |
+| 验证 / 交付 | Root检查diff、文档链接和相关手册测试；新模型只记设计证据，未执行的数据库/业务门不冒称通过。提交按Root手册与Billing模型两个owner切片；审查与结果回填本卡 |
+
+#### B8-R2 交付与验证记录
+
+- Root三设计裁决：保留五个核心Credit职责；payment/subscription的acquisition与fulfillment合并为永久CreditFulfillment（成功事实，不合入可消耗grant）。每tenant/source只允许一个program/一次发放，授权漂移冲突、换key同identity/digest重放；直接保存grant/journal引用。退款零delta独立结果与Subscription T1/T2保持。
+- 新模型入口：`/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/DATA_MODEL.md`、`/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/TECHNICAL_DESIGN.md`、`/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/API_CONTRACT.md`，与ADR-0003共同修正“固定35表一对一”约束。未形成第二可编辑Schema。
+- Root手册提交：`4e17f7f3888f45352330f35514dccfad7e15e7fb`，仅08与04；其他子仓引用统一事务约定，不复制Billing业务层。既有03 SQL/Agent/.tmp变更未触碰或暂存。
+- 独立审查billing_model_r2（Sol）核对源writer及三设计/Root手册，未发现同source多program成功的有效用例；Root复核现journal来源唯一性。首轮指出ADR旧35表放行措辞，Root已修；同时明确retention原行映射与当前canonical盘点，避免历史描述与目标并列。审查员复核三处修订后结论无阻断（仅文档一致性）。
+- 主控实际验证：`pnpm sql:check`通过；`pnpm contract:check`通过（17 routes）；两仓`git diff --check`通过；8份改动文档fence与本地链接检查通过。`python3 -m pytest scripts/tests/test_engineering_handbooks.py -q`为1通过/2失败；失败分别是旧18示例断言实际11、旧“参考依据”标题断言。通过HEAD手册快照在自有临时目录复现同两项失败，未放宽测试，临时目录自动清理。
+- 本轮仅文档：未运行业务lint/typecheck/unit/build/真实integration/db:apply-schema/catalog/Prisma生成/smoke；未改源码/SQL/机器契约/依赖，静态SQL/17route通过不证明新模型已执行。未访问支付或共享数据库/Redis，没有新增服务或运行资源。
+- 未决及后续owner：Billing继续评审receipt/outbox物理布局与按次/用量价格模型，再闭合目标canonical、生成Prisma、跨能力事务及消费者切片；真实历史数据/外部引用/major、订阅商业资格仍由对应切换门确认。本卡不放行清库、原位修改stable v1或整仓重写，也不将原Goal标为完成。
+
 ### B8-R 核心模型与结构复审卡
 
 用户最新指示：支付对接不是当前重点；重新检查Billing本体SQL、model和整体结构，而非只升级框架/ORM。基线bf128f508d7489da6598bfb8df962f927945dec8，分支codex/billing-ts-prisma-alignment，Billing起始干净。此前S3局部可靠性修复不证明核心模型成熟。

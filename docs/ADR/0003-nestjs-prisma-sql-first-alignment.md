@@ -25,6 +25,9 @@
 框架目标 Nest feature modules，比较 `src/<feature>` 与 `src/modules/<feature>` 后选择后者：本仓有七个业务能力以及 config、
 database、health、http、access、worker 等进程支持职责。只在切片需要时建文件，不预建空目录，不复制 System/IAM 源码。
 
+2026-09-10补充：业务事务统一复用Root TypeScript手册§12.1的Prisma框架API，不手写SQL提交/回滚；Redis仅辅助幂等，最终结果由本owner数据库保证。
+R2按事实生命周期合并acquisition/fulfillment，保留grant与journal独立性；其余物理布局逐用例审查，不以原35表一对一映射限制目标。
+
 ## 数据访问与生成边界
 
 1. `database/schema.sql` 保持唯一可编辑 canonical source；V1 无历史 migration 链。生成路径目标为
@@ -51,7 +54,7 @@ database、health、http、access、worker 等进程支持职责。只在切片�
 ## 业务与协议边界
 
 - Payment、Subscription、Checkout、Refund、Credit、Metering、Reconciliation 保持 Billing 内部 owner 能力；Credit 拥有余额、
-  grant、hold/allocation、journal、acquisition/fulfillment 写入规则。其他模块经 Credit 公开事务内能力调用，不 deep-import repository。
+  grant、hold/allocation、journal、fulfillment写入规则（2026-09-10 R2将acquisition授权并入永久fulfillment事实，见DATA_MODEL）。其他模块经 Credit 公开事务内能力调用，不 deep-import repository。
 - Ledger 是 Credit 的 append-only 能力，不新建独立跨仓 owner。Receipt/outbox 是各所属用例的一致性结构，不另建业务模块。
 - Payment worker 的事件分派是业务 Service 编排，不是数据库 Repository。API 和三个 worker 都使用受控生命周期，不能只迁 HTTP。
 - Hosted checkout 独立切片：持久 claim/提交 → 事务外 provider 调用 → 条件 finalize；稳定 provider idempotency identity、
@@ -78,7 +81,7 @@ B6a主控复验使用Node22.22.2/pnpm11.25.0；本机另有Node24.20.0。Node、
 
 ## 放行与退出条件
 
-先交付安装保护/完整 drift，再做隔离 Prisma 承接验证；schema 35 表命名/主键/约束/writer 映射、全部事务组迁移和契约消费者边界
+先交付安装保护/完整 drift，再做隔离 Prisma 承接验证；目标canonical Schema的表保留/合并/删除、命名/主键/约束/writer映射、全部事务组迁移和契约消费者边界
 审查完成后，才放行生产 Prisma/模块重写。可以分小 commit 构建，但未闭合切换的中间 commit 不作发布候选；最后删除旧全局
 四层、镜像 Service/port/factory、pg 业务查询和 Fastify 唯一入口，不保留兼容层。回退使用上一个已验 commit 与独立测试数据，
 不在带真实账务数据的环境执行 V1 清库。

@@ -30,10 +30,74 @@ Payment/Refund/Metering/Subscription仅编排调用。具体模块表见TECHNICA
 Canonical source：[`../database/schema.sql`](../database/schema.sql)。本文说明 owner、关系和不变量；列类型、nullable、
 default、CHECK 与索引的最终事实仍以 Schema 为准。
 
+## B8-R2 核心模型裁决（目标设计，尚未应用 Schema）
+
+本节基于当前实际writer与B8-R复审更新D1目标，而非保持旧表数的改名工程。采用业务模型驱动的模块化Billing；
+不部署第二账本，也不在本轮增加税务、发票引擎或现金复式总账。以下是关系与不变量设计，不是第二份可执行Schema。
+
+### 保留的核心事实与逻辑关系
+
+| 事实 | 唯一职责 / writer | 不合并的原因 |
+|---|---|---|
+| CreditAccount | Credit：单tenant/subject积分钱包的余额投影及串行写入锚点 | 快速查询与并发控制，不代替批次和历史流水 |
+| CreditGrant | Credit：来源批次、原始/剩余量、有效期和消耗顺序 | 随消费/到期变化，不能替代永久发放依据 |
+| CreditHold | Credit：一次预留的状态与数量 | 预留不等于实际扣减 |
+| CreditHoldAllocation | Credit：hold占用哪些grant，以及各批次确认/释放量 | 解释消费来源，避免只记一个总余额而丢失追溯 |
+| CreditJournal | Credit：不可变增减事实及账户序列 | 重建与核账依据，不是可覆盖的余额字段 |
+| CreditFulfillment | Credit：一次已成功发放的永久授权及结果 | 合并旧acquisition/fulfillment，仍独立于可消耗grant |
+
+逻辑关系（由同tenant校验/唯一约束/同事务维护，不创建数据库FK）：
+
+```text
+Payment settlement / Subscription period（已冻结授权） -> CreditFulfillment
+CreditFulfillment -> 精确CreditGrant + 正额grant journal
+CreditHold -> CreditHoldAllocation -> CreditGrant -> CreditAccount
+CreditJournal -> CreditAccount；Usage settlement -> CreditHold + Usage event
+Refund -> CreditFulfillmentReversal -> 精确原fulfillment/grant及可空冲正journal
+```
+
+Money = 最小货币单位整数 + currency_code；CreditAmount = 整数micros；UsageQuantity另有计量单位。
+默认一个subject一份可互换积分钱包，program是来源/政策而非余额分区；不把CRD当真实现金币种，不引入无需求的多钱包。
+按次产品价格、token用量及provider成本仍须消费者核对后确定各自有效profile，未在本轮删除旧定价路径或quota字段。
+
+### acquisition + fulfillment：合并为永久成功事实
+
+比较：①继续两表（不采用，当前两个writer都同事务创建并立即committed，未见独立授权受理生命周期）；
+②合并为CreditFulfillment（采用）；③直接并入grant（不采用，会把永久授权/结果与可消耗余额生命周期绑死）。
+当前证据为payment/billing-settlement-service.ts:292–330与credit/subscription-grant-service.ts:53–91，位于本仓
+src/infrastructure/postgres/repositories，基线fff756c；Schema当前仍保留两表。
+
+目标`billing_credit_fulfillment`承接以下字段语义：
+
+- 应用生成`id UUID`，对外/内部业务结果继续称fulfillmentId；tenant/subject为opaque，account/grant/grant_journal为同仓UUID引用。
+- source_kind限定本profile的payment_settlement/subscription_period，source_ref为已验证的settlement/period身份；
+  program_key、authorized_micros（正整数BIGINT）、effective_at/可空expires_at、
+  authorization_policy_version及authorization_digest保存不可变授权；有效期非空时expires_at须晚于effective_at。
+- grant_id、grant_journal_id非空且分别唯一；created_at/committed_at非空UTC毫秒瞬时点。只在发放成功事务中INSERT，
+  不设置pending/failed/reversed状态：等待属于来源用例，冲正属于独立reversal事实；原成功事实不随退款改写。
+- 当前一次性付款/单item订阅profile限定每个`(tenant_id, source_kind, source_ref)`只有一次发放、一个program、一份grant，
+  此组合建立UNIQUE，**不把program放进可重复发放的唯一键**。同source换program/subject/account/额度/窗口/政策为冲突。
+  该边界与现有journal的tenant/source/kind唯一性及D2c单grant退款一致，不为未请求的多program发行扩展账务profile。
+- 先查并校验永久成功结果，再检查首次发放资格；重放不因当前报价下架、订阅取消、周期过期或grant耗尽而再发放/失败。
+  digest按版本化规范化授权计算，不含投递Event ID、observed_at、当前时钟或可变provider DTO。
+- 在同一个Prisma事务中验证来源授权及同tenant/account/subject，创建fulfillment、grant、正额grant journal、更新account及必要outbox/result。
+  验证grant原始量/有效期与授权一致，journal的account/source/kind/amount与发放一致；UUID可预生成，不靠写入顺序替代完整性检查。
+  重放直接使用永久grant/journal引用，删除旧多态source JOIN + LIMIT 1的模糊选取。
+
+本轮只收敛已有payment/subscription履约profile；admin grant/redeem不被无证据地强制新增一套履约流程。
+Subscription T1把waiting/资格/固定授权保存在period/term及outbox，不建pending CreditFulfillment；T2才与Credit全组原子提交。
+退款仍按精确原fulfillment/grant和G/S快照计算，独立保存每笔CreditFulfillmentReversal；零delta也有永久成功结果、无journal。
+删除acquisition表/模型/引用、重写refund/reconciliation查询、生成Prisma与对应测试必须同一闭合实施切片完成；
+历史ID/数据/仓外引用处理仍受major与数据演进门约束，不据此次模型裁决直接清库。
+
+三receipt/两outbox的物理合并继续按去重域、状态和保留策略独立评审；不得受旧35表一对一或新表数指标驱动。
+核心同提交矩阵见TECHNICAL_DESIGN B8-R2；API影响见API_CONTRACT B8-R2。
+
 ## B8-D1 目标映射与一致性不变量（内部设计已审查，未应用DDL）
 
-本节与TECHNICAL_DESIGN的B8-D1共同描述目标；后文原表名仍为当前SQL事实。下列35表一对一映射，不合并receipt/outbox，不创建第二可编辑Schema。
-每表资源主键改`id UUID`、应用生成；同仓资源引用改对应`*_id UUID`，跨仓opaque身份保持原语义。所有`currency`列目标为`currency_code`。
+本节为当前35表的迁移盘点，后文原表名仍为当前SQL事实；目标以B8-R2更新为准，不再要求一对一保留。
+acquisition/fulfillment按R2合并；receipt/outbox目标名暂作盘点标签，物理布局尚待评审。不创建第二可编辑Schema。
+每表资源主键改`id UUID`、应用生成；同仓资源引用改对应`*_id UUID`，跨仓opaque身份保持原语义。现金`currency`列目标为`currency_code`；非现金积分单位另按R2建模，不能机械改名。
 表/约束/索引采用billing owner命名且UTF-8名称不超过PostgreSQL63字节；新的精确SQL生成后必须全catalog复验，不手工维护第二份字段快照。
 
 | 当前canonical表 | 目标表 | 唯一写入组件的归属 |
@@ -50,7 +114,7 @@ default、CHECK 与索引的最终事实仍以 Schema 为准。
 | `payment_provider_event` | `billing_provider_event` | payment |
 | `payment_settlement` | `billing_payment_settlement` | payment |
 | `payment_reversal` | `billing_payment_reversal` | refund |
-| `entitlement_acquisition` | `billing_credit_acquisition` | credit |
+| `entitlement_acquisition` | 合入 `billing_credit_fulfillment`，删除独立表 | credit / R2永久授权 |
 | `entitlement_fulfillment` | `billing_credit_fulfillment` | credit |
 | `payment_outbox` | `billing_payment_outbox` | database/OutboxRepository payment |
 | `entitlement_fulfillment_reversal` | `billing_credit_fulfillment_reversal` | credit |
@@ -122,7 +186,9 @@ Root选择在`billing_usage_event`增加可空`credit_hold_id UUID`，非空建�
 - 数据库时间为 `TIMESTAMPTZ(3)`；money/credit 为 integer minor unit/micros + currency。
 - V1 不使用 `FOREIGN KEY` / `REFERENCES`，也没有 migration 链。
 
-## 2. 表 owner inventory
+## 2. 当前 canonical 表 owner inventory
+
+本节及随后关系/约束盘点描述当前SQL与原实现；目标物理模型以B8-R2及后续目标章节为准。
 
 ### Credit、usage 与 admission
 
@@ -352,7 +418,7 @@ worker带tenant/fence作条件更新，SKIP LOCKED与确定排序；外部查询
 
 ## B8-D2c退款观察与冲正数据目标（内部设计R2已审查，SQL未应用）
 
-与TECHNICAL_DESIGN的D2c两阶段一致；仍扩展既有35表，不新建平行退款/ledger事实源。
+与TECHNICAL_DESIGN的D2c两阶段一致；沿用既有退款事实边界，履约结构按R2合并，不新建平行退款/ledger事实源。
 
 | 现有→目标表 / writer | 字段与约束增量目标 |
 |---|---|
@@ -384,7 +450,7 @@ delta=0需既定身份/绑定/累计/策略检查，本退款链先前冲正耗�
 
 ## B8-D2d订阅数据承接目标（机制R2已审查，商业资格/SQL未放行）
 
-维持35表及Subscription/Credit分工；不把三张订阅表变成第二套Payment invoice/payment ledger。原始渠道Invoice/InvoicePayment观察保存在Payment拥有的inbox；Subscription保存本周期资格所需的不可变证据快照与来源引用，而非任意账单CRUD真源。
+保持Subscription/Credit分工，履约两表按R2合并；不把三张订阅表变成第二套Payment invoice/payment ledger。原始渠道Invoice/InvoicePayment观察保存在Payment拥有的inbox；Subscription保存本周期资格所需的不可变证据快照与来源引用，而非任意账单CRUD真源。
 
 | 现有→目标表 / writer | 承接字段与约束目标 |
 |---|---|
@@ -394,7 +460,7 @@ delta=0需既定身份/绑定/累计/策略检查，本退款链先前冲正耗�
 | 同上 / Subscription | invoice_status/settlement_evidence_kind、source_event_id、独立证据摘要与具名JSON object快照；资金证据为受账户scope校验的InvoicePayment ID、其分配给本Invoice的amount_paid/currency及Payment settlement引用（若确有），不以PI总额冒充分配额。零额/站外等分类允许无Payment settlement，不能造正数支付。快照只保留资格所需Invoice/line标识、已校验金额/币种/数量/父关联与结清方式，不存秘密/完整客户payload；JSON version/schema受运行时验证。Invoice paid不强制附一条虚构Payment settlement，实际资金事实另经Payment能力确认 |
 | 同上 / Subscription | grant_status=waiting_evidence/waiting_period_start/pending/applied/review_required，grant_error_code、grant_completed_at可空；applied要求成功Credit结果引用及授权digest，不能因provider当前状态/旧事件覆盖。waiting_period_start任务的next_attempt_at在现payment outbox，period不再复制一套lease/attempt |
 | entitlement_subscription_term→billing_subscription_term / Subscription | UUID id，source_period_id唯一且同tenant；subject/program/start/end/grant_micros来自该period冻结授权。生命周期/显示状态与Credit applied分开表达，不以subscription状态覆盖历史grant额度；grant_micros非负，实际可授予数量由已批准policy决定 |
-| Credit acquisition/fulfillment/grant/journal / Credit | 来源统一subscription_period+period.id，基于固定授权digest重放；不读provider DTO/Subscription repository。原始source唯一性与journal去重保留，成功result校验先于当前expires/offer/订阅状态；amount/subject/account/program/window漂移冲突 |
+| Credit fulfillment/grant/journal / Credit（R2合并授权） | 来源统一subscription_period+period.id，基于固定授权digest重放；不读provider DTO/Subscription repository。当前profile每个source仅一个program/一次发放，按R2收紧fulfillment来源唯一性并保留journal去重；成功result校验先于当前expires/offer/订阅状态；amount/subject/account/program/window漂移冲突 |
 | payment outbox / OutboxRepository | SubscriptionCreditGrantRequested(v1)按period identity唯一，payload为tenant/period/schemaVersion。只有具备批准policy与完整证据的T1可enqueue，future start通过next_attempt_at表达等待；ack丢失读成功结果恢复，不补第二份grant |
 
 字段缺失到不能建立完整period身份时不创建占位id/window=now的周期；证据仍在inbox，沿D1记录明确缺失关联错误并有界重试/最终dead-letter，不能标ignored假装处理完毕。
@@ -428,7 +494,7 @@ Reconciliation经owner一致只读快照比对period→term→Credit授权/金�
 | Admission 1表 | entitlement_billing_admission | accepted provider证据及状态有界更新；identity/授权金额/主体受保护 |
 | 无当前生产writer 2表 | payment_provider_account、payment_customer_binding | 不因表存在授运行时写权；目标Payment受控配置/绑定用例批准后才授所需能力 |
 
-初期preserve profile不改变35表，不增加TTL/归档/删除表。特别保留receipt、inbox identity、payment outbox唯一身份、journal/acquisition/fulfillment/reversal/usage settlement/redeem永久结果与历史报价，避免重复授信/扣款/冲正；无FK不替运维阻止orphan。未来维护计划必须检查双向引用、未决状态、replay范围与恢复证据，未批准不执行删除。
+初期preserve profile不清理历史账务事实、不增加TTL/归档表；R2结构合并另经数据演进门，不用retention操作代替迁移。特别保留receipt、inbox identity、payment outbox唯一身份、journal、迁移后CreditFulfillment（含原acquisition/fulfillment来源与结果）、reversal/usage settlement/redeem永久结果与历史报价；迁移前原行须完整映射，不因删表丢失，避免重复授信/扣款/冲正；无FK不替运维阻止orphan。未来维护计划必须检查双向引用、未决状态、replay范围与恢复证据，未批准不执行删除。
 
 Reconciliation不新建第二套账本/权威投影。结果是有限一次性观察，不能拿报告重算值直接UPDATE。owner页需能查孤儿子记录、tenant不匹配、零delta无journal等目标合法关系；T1/T2待处理必须结合owner任务/截止证据，不按当前四查询把全部pending判错。
 

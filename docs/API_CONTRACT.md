@@ -24,9 +24,24 @@ Canonical machine-readable source：[`../contract/openapi/v1/openapi.yaml`](../c
 owner、身份、幂等、错误与 consumer 规则，不复制字段级 Schema。Contract 的 version/generation/breaking/provenance 见
 [`../contract/README.md`](../contract/README.md)。
 
+## B8-R2 模型收敛与幂等约定（目标，机器契约未变）
+
+- Prisma事务、SQL-first结构管理和Redis辅助去重是内部工程选择，不新增HTTP事务参数、Redis锁token或ORM类型。
+  客户端仍使用明确的幂等身份；同identity同digest读原持久结果，改变参数为冲突，不能因Redis TTL过期获得再次发放资格。
+- 目标把acquisition/fulfillment合成永久CreditFulfillment，业务结果保留fulfillmentId/grantId/journalId语义；
+  当前机器契约未定义独立acquisition资源，本轮不新增其endpoint或对外暴露acquisition_id。
+  这不证明仓外没有历史事件/数据引用；真实ID迁移和breaking仍经D2门，不原位改变stable v1。
+- 当前一次性付款/单item订阅profile每个来源只发一次、一份grant、一个program。program是不可变授权的一部分，
+  同source换program等授权参数为冲突；换幂等key但identity/digest相同仍重放原结果，不再次发放。
+  未来多program/multi-item需独立profile与契约设计，不能静默扩大journal来源语义。
+- 退款保留独立credit_fulfillment_id/credit_grant_id与每笔冲正结果；零delta已应用可没有journal。
+  订阅资格/等待/term与Credit已发放结果分别展示，T1 accepted不等于T2 applied。
+
+本节不修改现有17条operation或生成artifact；核验命令只证明当前契约仍有效，不证明新模型或major已实施。
+
 ## B8-D1事务目标与B8-D2契约边界（2026-09-10）
 
-B8-D1只冻结内部模块/事务/数据映射设计，SQL/OpenAPI仍是当前v1字节；它不批准任何HTTP breaking实施。
+B8-D1提供内部模块/事务设计，数据映射由B8-R2继续修订；SQL/OpenAPI仍是当前v1字节；它不批准任何HTTP breaking实施。
 所有带幂等的业务变更继续遵守trusted tenant/actor、key+identity+versioned digest、成功durable result同提交；
 内部Prisma UUID/BigInt/JSON/错误不得泄漏为未经定义的wire形状，本文下方v1既有字段与行为仍有效。
 

@@ -24,13 +24,13 @@
 |---|---|---|
 | checkout | offer/revision、checkout与provider session状态 | Catalog查询、checkout命令；只读依赖Payment核心账户查询（B8-D2a）；provider client在事务外调用 |
 | payment | provider account/customer mapping、verified inbox、settlement；receipt/outbox经唯一数据库支持写入 | 核心不依赖其他feature；事件编排子模块显式导入其他owner，详见B8-D1；不写credit表 |
-| credit | account/grant/hold/allocation/journal、acquisition/fulfillment/reversal、redeem；audit/outbox经共享支持写入 | grant/reserve/capture/release/reverse/fulfill及账本查询；在调用方同一事务scope内执行 |
+| credit | account/grant/hold/allocation/journal、fulfillment/reversal（R2合并授权）、redeem；audit/outbox经共享支持写入 | grant/reserve/capture/release/reverse/fulfill及账本查询；在调用方同一事务scope内执行 |
 | metering | pricing revision/rate、admission/execution/usage事实及对应receipt | 调用credit的事务内能力，不独立写余额/journal；保留未知执行结果 |
 | refund | payment reversal与退款receipt | 退款编排调用credit reverseFulfillment，累计金额检查同事务锁定settlement；Payment查询/锁是具名内部能力，不循环注入整个PaymentProcessor |
 | subscription | provider subscription/period与entitlement term | period/term查询与写入，调用credit发放；不复制订阅到账本算法 |
 | reconciliation | 只读差异检测与受控调度，不自动修账 | 各owner具名检查；修复只能经owner可审计命令 |
 
-此表是目标，不是当前 writer 已收敛的声明。35表精确命名、跨模块数据访问及无循环provider图由B6/B8切片补齐后才放行业务重写。
+此表是目标，不是当前 writer 已收敛的声明。全部当前表的保留/合并/删除映射、跨模块数据访问及无循环provider图由B6/B8切片补齐后才放行业务重写。
 当前API实际装配能力见bootstrap；catalog-admin、pricing-admin、grant/redeem主要为seed/test消费，reconciliation尚无运行入口。
 不因存在class就扩增HTTP surface。worker的payment/execution/expiry生命周期同属目标范围。
 
@@ -125,6 +125,36 @@ raw白名单仅限fixture中明确的set_config预算、backend/tx身份断言�
 [db pull](https://www.prisma.io/docs/cli/v7/db/pull)、[transactions](https://www.prisma.io/docs/orm/v7/prisma-client/queries/transactions)。
 npm精确7.10.0三个包存在、Apache-2.0，Node ^20.19/22.12/>=24与TS>=5.4满足当前工具链；维护/退出取舍沿ADR-0003，实际安装/供应链扫描待本切片记录。
 
+## B8-R2 核心事实与框架事务边界（目标设计）
+
+跨仓实现约定只维护在Root [TypeScript手册§12.1/12.2](../../docs/kokoro-handbook/standards/08-typescript-backend-engineering.md#121-事务)。
+Billing固定Prisma 7.10.0的`$transaction(async (tx) => …)`负责提交/回滚；下文TransactionService只是同一client与trusted scope的薄上下文provider，
+不是手写BEGIN/COMMIT的事务引擎。Redis仅辅助协调/缓存，唯一约束及持久receipt/业务结果是最终幂等依据。
+
+| 设计项 | 放置与裁决 |
+|---|---|
+| Owner / 当前事实 | Billing / Credit唯一发放writer；现有两张acquisition/fulfillment表由payment与subscription两个pg类同事务创建，application主要转发 |
+| 目标职责 / API | 一个永久CreditFulfillment保存授权和成功grant/journal引用；Credit公开fulfill能力返回业务身份，其他模块不写Credit表 |
+| 位置 / 粒度 | 选既定src/modules/credit内具名履约Service与复杂查询Repository；淘汰payment/subscription各保留发放实现及shared通用授信框架。不是新一级模块，不逐表生成Service |
+| 依赖 / 生命周期 | 来源owner验证资格并冻结授权→Credit；Credit不反向查Payment/Subscription Repository。所有effect加入最外层Prisma事务，无渠道网络调用 |
+| 数据 / 删除 | DATA_MODEL R2定义两表合并及source唯一性；删除旧acquisition模型/写入/模糊JOIN和同名application转发，Prisma从唯一SQL再生；不保留读新写旧 |
+| 验证 | 完整canonical/catalog/Prisma生成、同source改program冲突、深层回滚、并发发放、成功跨过期重放、退款含零delta、订阅T1/T2及orphan；当前仅文档裁决，尚未执行新模型测试 |
+
+Credit内部按余额/账本、预留/结算、履约/冲正、兑换的实际职责拆具名能力，不用一个万能CreditService承接全部规则。
+保留account/grant/hold/allocation/journal；永久发放依据与可消耗批次分开。两张履约表合并是生命周期裁决，不是单纯少一张表。
+
+| 用例 | 同一个Prisma事务内 | 事务外 / 独立阶段 |
+|---|---|---|
+| 已验证付款发放 | 来源结果/幂等校验→CreditFulfillment + grant + grant journal + account + 必要outbox/成功result | 支付平台验签/查询/网络调用；不从付款金额猜Credit额度 |
+| 预留 | 固定价格/授权→admission + hold/allocation + account投影 + receipt/result | 执行服务调用；included模式不建虚假hold |
+| 确认或释放 | 先校验identity/digest→hold/allocation/grant/account效果 + 必要journal + usage/admission终态 + receipt/outbox | 重复事件可重投，但同一业务效果只生效一次；unknown不盲扣/盲释放 |
+| 退款冲正 | 锁定原付款/退款及Credit范围→独立reversal结果 + 精确grant/account效果 + 正delta对应负额journal + effect状态/result | 渠道观察是独立事实；零delta保留结果但不写零流水 |
+| 订阅周期发放 | T2：period/term + 固定授权下的fulfillment/grant/journal/account + effect状态/outbox | T1先保存资格/证据/待发任务；等待状态属于Subscription，不预创建pending fulfillment |
+
+同提交范围仍按D1确定锁顺序/namespace、D2处理外部恢复。付款/订阅当前profile每source一个program/一次履约，
+不扩未请求的多program发放。HTTP接受事实与Credit效果分开，不把Redis命中或202当成扣款已完成。
+原D1目录及事务原则保留；表形状由DATA_MODEL R2更新，三receipt/两outbox的合并另审，未固定新总表数。
+
 ## B8-D1 业务模块与事务目标（2026-09-10，内部设计已审查）
 
 基线`ce5b6285e14e61f97dc16d1dd9d7dbc553358e66`，生产仍Fastify/pg。以下替代前文粗粒度目标表中尚未决定的共享writer与循环编排描述，
@@ -139,7 +169,7 @@ npm精确7.10.0三个包存在、Apache-2.0，Node ^20.19/22.12/>=24与TS>=5.4�
 |---|---|---|
 | checkout | payment核心（仅账户只读能力；B8-D2a修正） | Offer/Revision、Checkout；catalog查询、发布、checkout claim/finalize；provider session client是本模块内部网络适配器 |
 | payment（核心） | 无 | ProviderAccount/CustomerBinding、ProviderInbox、Settlement；映射查询、接受支付事实、settlement锁定快照、受控inbox重试 |
-| credit | 无 | account/grant/hold/allocation/journal/acquisition/fulfillment/reversal/redeem；预留、扣除、释放、发放、冲正、到期及账户/账本查询 |
+| credit | 无 | account/grant/hold/allocation/journal/fulfillment/reversal/redeem（履约见R2）；预留、扣除、释放、发放、冲正、到期及账户/账本查询 |
 | metering | credit | price revision/rate、usage event/settlement、admission、execution inbox；定价与执行计量，绝不直接写Credit表 |
 | refund | payment、credit | reversal接受与累计退款额度；调用Payment公开的锁定settlement快照，再调用Credit冲正，不取得Payment Repository |
 | subscription | payment、checkout、credit | provider subscription/period/term；解析受信provider/报价关联并通过Credit发放 |
@@ -210,7 +240,7 @@ UTC和public/pg_catalog search_path由每事务固定配置，不靠角色默认
 | authorize | admission receipt、invocation/admission；Credit account/grants/hold/allocation；admission/outbox/result | 定价快照属于Metering；included模式不虚构Credit hold |
 | capture/release | receipt、admission；usage绑定；Credit account/grants/hold/allocation/journal；usage settlement、admission/outbox/result | 终态短路前先验证identity/digest；默认UUID成功与重放是必验，不用短ID代替 |
 | expiry | batch receipt；按账户排序再重查eligible holds；Credit投影/allocations/outbox与精确expired IDs结果 | Redis仅协调；一次命令预算内处理有界batch，重放不扫描新对象 |
-| settlement/退款效果 | 根settlement/reversal；Credit acquisition/fulfillment/grant/journal/reversal；audit/outbox/result | HTTP是否只接受事实、何时执行Credit由B8-D2冻结，禁止临时靠webhook补效果 |
+| settlement/退款效果 | 根settlement/reversal；Credit fulfillment/grant/journal/reversal；audit/outbox/result | HTTP是否只接受事实、何时执行Credit由B8-D2冻结，禁止临时靠webhook补效果 |
 | provider event | 独立claim后锁inbox并验证attempt token；owner业务组与inbox terminal一起提交 | attempt/error在独立生命周期，见下节；business回滚不吞掉失败记录 |
 | execution event | 独立claim后锁execution inbox、admission与Credit组；terminal同提交 | unknown执行结果保持hold，禁止盲扣/盲释放；lease/retry单独事务 |
 | reconciliation | READ ONLY REPEATABLE READ，所有owner查询加入同一快照 | 检测结果不是自动调账；受控修复另起owner命令，携带观测版本并重新验证 |
@@ -455,7 +485,7 @@ Prisma timeout不是任意JavaScript callback取消器：Root双事务probe中25
 因此测试并发使用可拒绝arrival、finally释放、allSettled回收，且成功路径显式await holder；不能依赖事务超时消除JS死等。
 正常与早期故障反例的PID集合分开，避免依赖pool复用。此处是本版本承接证据，不是生产异常归一或重试策略的安装。
 
-尚待B8真实业务切换：单一Credit/Ledger writer、跨模块同事务context、完整35表CRUD覆盖、deadlock/serialization恢复、
+尚待B8真实业务切换：单一Credit/Ledger writer、跨模块同事务context、完整目标表/全部业务用例覆盖、deadlock/serialization恢复、
 提交结果未知、外部provider副作用与worker生命周期。原始API/schema未变，不将fixture公开给业务Service或消费者。
 
 
@@ -544,7 +574,7 @@ Owner为Billing Payment的Stripe事件归一化；只修改既有stripe-webhook-
 两者语义不同。目标不把5分钟值发送给Stripe：其可指定会话过期时间为创建后30分钟至24小时；默认24小时。
 
 比较继续长事务（占用连接/锁且回滚不能撤销provider副作用）、仅把await移出事务（崩溃/重试参数/重复创建仍不闭合）、
-持久claim→事务外调用→条件finalize（采用）。35表内扩展billing_checkout，不另建通用支付任务表/新业务模块/新队列。
+持久claim→事务外调用→条件finalize（采用）。扩展既有billing_checkout事实，不另建通用支付任务表/新业务模块/新队列。
 本节只确定内部状态和实现边界，新增HTTP结果/查询与major、全量SQL及数据演进仍由B8-D2其余门处理。
 
 ### Owner、依赖与文件职责
@@ -756,7 +786,7 @@ delta=0仍校验tenant/identity/付款和履约绑定/固定G/S/policy/累计额
 
 ### Owner与放置
 
-Subscription拥有provider subscription、period、term；Credit拥有acquisition/fulfillment/grant/journal，Payment拥有provider account/inbox与真实支付settlement。
+Subscription拥有provider subscription、period、term；Credit拥有fulfillment/grant/journal（R2合并授权），Payment拥有provider account/inbox与真实支付settlement。
 PaymentEvents作为上层编排调用Subscription transaction-required观察能力，不直接查offer/Credit或写三张订阅表。Subscription仅经Checkout取得固定报价与绑定，经Payment核账户，经Credit执行具名发放；沿D1无环DAG。
 具名subscription.service/repository/schema与invoice归一化适配放目标src/modules/subscription内；Stripe SDK类型不穿透内部业务对象。比较PaymentEvents直接SQL与Subscription编排Credit，采用后者；不为SDK的Invoice对象创建第八业务模块。
 
@@ -804,7 +834,7 @@ next_evidence_check_at提前持久化，崩溃可到时再查；每次接受新�
 预算耗尽置review_required及evidence_refresh_exhausted，清next check并告警；不无限waiting，不删除事实或标invoice付款失败。后续完整可信provider事件仍可重新评估同period；只有等待预算类review可由该证据关闭，身份/政策冲突仍需具名审查。
 Reconciliation通过Subscription公开只读快照检查等待超期/死信，再由具名owner命令重试；不直接写period/账本或另造invoice。此机制复用现payment worker进程，不新增第四个进程。
 
-T2由原payment worker明确handler调用Subscription.applyPeriodGrant：period/term锁→Credit account→其他Credit资源锁（D1顺序），一个最外层事务完成Credit acquisition/fulfillment/grant/journal/account/outbox及period/term效果状态。
+T2由原payment worker明确handler调用Subscription.applyPeriodGrant：period/term锁→Credit account→其他Credit资源锁（D1顺序），一个最外层事务完成Credit fulfillment/grant/journal/account/outbox及period/term效果状态。
 Credit只读可信Subscription授权input，不自行SELECT Subscription表或接收任意HTTP amount；Subscription也不取得Credit Repository。预检结果与SQL异常分开，后者整组rollback-only，不吞错后提交“已发放”。
 原grant函数在查已成功结果前检查expiresAt>Date.now，会让过期后的同命令重放失败；目标先校验不可变输入digest并重放成功结果，再对首次应用检查数据库时钟和资格。
 服务期未开始时不提前增加可用余额，waiting_period_start任务不进入claim且不消耗失败重试预算；到期handler在T2同事务以当前状态/授权digest CAS为pending后执行发放，lease取得或失败本身不把waiting改pending。若T2失败回滚，状态不虚报进行中；首次应用已越period_end则review，是否补偿另有商业规则，不自行把期限延到now+一个月。
@@ -847,7 +877,7 @@ Reconciliation module只编排六owner导出的reconciliation-read能力，业�
 
 | Owner read能力 | 必须覆盖的事实/关系 |
 |---|---|
-| Credit | account/grant/journal/hold/allocation金额与tenant lineage、无父account的事实、source/sequence唯一性；acquisition/fulfillment/reversal/redeem永久结果及引用 |
+| Credit | account/grant/journal/hold/allocation金额与tenant lineage、无父account的事实、source/sequence唯一性；fulfillment/reversal/redeem永久结果及引用（历史acquisition在迁移时核验） |
 | Payment | settlement金额/currency/identity及预期效果、provider inbox/outbox/receipt等待/重试/死信；只返回状态与安全引用，不输出原始provider payload |
 | Refund | 已观察退款与Credit effect分别核对、累计退款/累计冲正及零delta结果，不能因无journal就把合法零效果当缺失 |
 | Subscription | trusted checkout/period/term/授权快照/credit关联、waiting期与eligibility状态；不按active/trialing推断已收款 |
