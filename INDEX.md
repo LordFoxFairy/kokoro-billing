@@ -90,3 +90,11 @@ DDL失败、backend终止和客户端deadline；仅该fixture的管理连接需�
 - `scripts/prisma-artifacts.ts`：全文件比较、独占发布与回滚；`prisma-check.ts`/`prisma-refresh.ts`为安全CLI边界。
 - `database/generated/`：只读生成schema/provenance；`src/generated/prisma/`为Git忽略的Client。
 - `test/{unit,integration,architecture}/prisma-generation.test.ts`：生成一致性、隔离真实Client、故障与边界。
+
+
+## TypeScript依赖治理入口（B7c）
+
+- test/architecture/typescript-dependency-project.ts：真实tsconfig与手写src扫描。
+- test/architecture/typescript-dependency-graph.ts / typescript-dependency.types.ts：TS6 AST、模块解析、值/类型图和静态导出来源。
+- test/architecture/billing-dependency-policy.ts：feature/public/Controller边界及B8精确过渡债；不是业务运行模块。
+- test/architecture/typescript-dependency-graph.test.ts：同分析管线的正反例；ownership.test.ts与prisma-generation.test.ts在真实项目执行。

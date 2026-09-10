@@ -7,10 +7,14 @@
 
 ## 当前规范化工作
 
+- B7c实现已提交8fbf8e0：真实TS AST/resolver依赖门取代禁modules/强制ports，含80正反例和静态export来源追踪；双独立审查/Root冻结代码全验433全套、157集成、0跳过，catalog/Prisma无差异、源码/dist smoke和audit0。文档更新后的干净HEAD复验另记任务板。
+- B8新增实证P1：不同key并发pricing发布争用revision（23505）；outbox持久payload解码失败在try外，maxAttempts=1后仍可第二次claim而不死信。独占PG复现已记录，尚未修复。
+- UUID数据库切换涉及现有v1接受的非UUID资源ID，B9契约设计必须前置B8业务重写；线上数据/仓外消费者状态已询问，未据空GitHub发布记录作假设。
+
 - B7b已验收，交付3fd97f56bee0c4aff8f0a095b9c9af164fc3e7fb；双独立审查及Root干净HEAD复验354全套/157integration、0跳过，Schema/Prisma无差异，源码/dist smoke通过，audit0：TS6.0.3、typescript-eslint8.69.0、ESLint10.10.0，全手写typed规则；原8.70候选因安装时发布冷却期失败而未采用，无豁免。见唯一任务板。
 - **P0待修（B8）**：默认UUID hold生成hold:${UUID}共41字符usage event ID，超过canonical VARCHAR(36)，真实扣款路径报SQLSTATE22001并回滚；B7b短ID边界fixture不是完整capture成功证据。
 
-- B7a已实现Node24.20.0统一、Vitest5/Vite8、精确依赖及engineStrict，CI/release补齐catalog与Prisma门；审计0漏洞。交付058bdf3，Root干净HEAD318项全套与137项integration通过，源码/dist HTTP smoke通过；精确证据见任务板。生产仍Fastify/pg，typed全仓lint/AST/格式归B7后续。
+- B7a已实现Node24.20.0统一、Vitest5/Vite8、精确依赖及engineStrict，CI/release补齐catalog与Prisma门；审计0漏洞。交付058bdf3，Root干净HEAD318项全套与137项integration通过，源码/dist HTTP smoke通过；精确证据见任务板。生产仍Fastify/pg；typed lint与AST已有后续切片证据，格式仍待B7d。
 - 唯一任务板：[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)；最新目标：[ADR-0003](ADR/0003-nestjs-prisma-sql-first-alignment.md)。
 - 当前仍为Fastify + pg + Zod3，全局四层不是新代码模板。已撤销子仓AGENTS中的强制四层规则；Nest/Prisma尚未切换。
 - B6a固定安装Prisma/client/adapter-pg 7.10.0用于生成链与隔离验证；npm latest实际指向8.0.0-rc.13，未采用预发布。选择SQL-first唯一canonical + generated Prisma；

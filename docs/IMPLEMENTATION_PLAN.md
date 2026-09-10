@@ -27,7 +27,7 @@
 | B4 / P1 / 空库安装保护 | Billing / billing_owner（gpt-5.6-sol）/ B1+B2+Root | worker仅3个代码/测试文件；Root交接后更新database README、INDEX、CURRENT、ACCEPTANCE | 独占DB、TDD、非空/custom schema/并发/回滚/锁与JS超时/backend终止；主控提交/复验 | 已验收：93c06dfa33d38601e51534972890bfda50ea614d |
 | B5 / P0 / 全量catalog drift | Billing / billing_owner / 数据+TS+Root | 精确文件集见B5执行卡；Root交接后文档与提交 | 比较canonical参照库的35表全部列/约束/索引/predicate；缺CHECK与错predicate反例 | 已验收：9663db58bd85eb810b94df6120de050530c79d2f |
 | B6 / P0 / Prisma承接验证 | Billing / 后续续派billing_owner / Root | 固定依赖/生成链/模型/数据生命周期/独立验证；派前冻结文件集 | stable版本、无第二schema、typedCRUD+同tx锁/receipt/outbox+BigInt+错误+生成drift；不切生产writer | 已验收：B6a c7ef9fa；B6b 2793882；生产迁移仍归B8 |
-| B7 / P1 / 工具链与架构门 | Billing / billing_toolchain_hardening / 独立reviewer | package/lock/TS/ESLint/format/CI/architecture精确集派前批准 | Node24、版本固定、完整typed gate；AST有效/违规样本替代禁modules/强制ports；单独格式切片 | B7a已验收058bdf3；B7b已验收3fd97f5；B7c七文件已冻结待审查及Root全验；B7d待实施，不放宽门禁 |
+| B7 / P1 / 工具链与架构门 | Billing / billing_toolchain_hardening / 独立reviewer | package/lock/TS/ESLint/format/CI/architecture精确集派前批准 | Node24、版本固定、完整typed gate；AST有效/违规样本替代禁modules/强制ports；单独格式切片 | B7a已验收058bdf3；B7b已验收3fd97f5；B7c已提交8fbf8e0、双审/冻结树全验通过，待干净HEAD复验；B7d待实施，不放宽门禁 |
 | B8 / P0 / Nest+Prisma闭合业务切换 | Billing / 后续续派billing_owner / Root+独立reviewer | 先完整35表映射/provider图/事务组卡，再授权src/SQL/contract/test/worker集 | 先稳定查询范式，后整个共享Credit事务组；同一事务不混pg/Prisma，旧实现随闭合切片删除；中间未闭合commit不发布 | 待设计门；依赖B5/B6/B7 |
 | B9 / P1 / 契约与外部副作用 | Billing / 后续续派billing_owner / Root | owner contract先行；消费者另开owner任务，无本仓写入权 | envelope/request-id/UTC/error/202语义；checkout claim→网络→finalize及unknown恢复；实际消费者固定artifact | 待契约裁决/依赖B8 |
 | B10 / P1 / 运行可靠性验收 | Billing / 后续续派billing_owner / Root | worker/reconciliation/retention/smoke与文档；派前批准文件集 | execution并发lease、orphan检测、append-only角色、预算取消、provider sandbox、CI PG16/镜像/DR分层证据 | 待派工 |
@@ -801,3 +801,54 @@ Root独立用同一analyzeDependencies/checkBillingDependencies实跑：orders.r
 orders.public再导出Store，跨feature导入Store；所有边可解析而diagnostics=[]。因此首轮不放行，不先做完整验收来掩盖规格缺口。
 修复限静态具名export lineage（含别名/中间barrel及import后local export）；不追任意JS数据流，不以所有可达依赖均禁用误伤
 合法public Service内部使用Repository。实现负责人续派同一七文件集，Root停写直到再冻结；规格复审后再质量审查。
+
+
+## B7d 格式治理设计卡（2026-09-10；B7c验收后执行）
+
+Owner：Billing，Root负责设计/Git/最终验收；billing_toolchain_hardening优先续任唯一writer，独立规格/质量审查。
+基线：当前62c2bfb+冻结B7c代码；实施前填写B7c已验收commit与实际clean状态，不在变化中的B7c上开始格式化。
+现状：缺少format:check/Prettier直接依赖/仓内配置；手写文件存在单双引号及紧凑布局混用；SQL和OpenAPI字节已有独立authority。
+
+| 放置项 | 裁决 |
+|---|---|
+| 目标职责 | 统一可重复的手写源码/测试/工程配置格式，CI强制检查；不承担语义lint或业务重构 |
+| 位置比较 | 仓根Prettier配置 vs 全局/editor隐式配置：采用仓根配置及精确本地依赖，开发与CI一致；不引入新业务目录/脚手架 |
+| 文件粒度 | 新.prettierrc.json与.prettierignore；package.json/lock增加本地formatter及format/format:check；既有verify前置format:check；test/architecture/formatting.test.ts证明配置范围/正反例 |
+| 依赖 | devDependency prettier=3.9.6；Node24/pnpm11/TS6及生产包保持，禁止浮动npx/dlx/全局formatter；现eslint无格式规则，不为凑配置引入额外lint插件 |
+| 覆盖 | src、test、scripts支持的源码及仓根TS/MJS/JSON/YAML、.github工作流；明确正向glob，SQL/机器OpenAPI/Markdown不夹带重排 |
+| 排除 | 精确src/generated/prisma、database/generated只读产物，node_modules/dist/coverage和pnpm-lock.yaml由各自工具治理；不以通用generated目录名忽略其他手写源码 |
+| 数据/API | canonical SQL/OpenAPI/生成schema/provenance字节保持；不更改API资源、错误、事务、配置语义和模块边界 |
+| 删除 | 不保留第二formatter或临时prettier-ignore来隐藏手写失败；不引入空目录/alias |
+| 验证 | 固定版本/config解析、实际合法格式正例/未格式化反例、精确ignore对照；格式后重复运行幂等；Root对每个纯格式文件验证new==prettier.format(old,config)，完整lint/typecheck/test/build/SQL/contract/catalog/Prisma/源码dist smoke |
+
+2026-09-10实际npm view核验：prettier latest=3.9.6（2026-07-21T05:51:53.987Z，MIT，Node>=14）；next=4.0.0-alpha.13不采用。
+System/IAM当前也固定3.9.6，仅作仓内一致性参考，不将它们旧验收替代Billing实际门。
+工具语义：[本地精确安装与check](https://prettier.io/docs/install)、[ignore范围](https://prettier.io/docs/ignore)。
+.prettierrc.json采用空对象固定Prettier标准默认值，避免额外样式争论；默认双引号/分号与近期已格式化治理文件一致。
+
+写入范围：上述新配置/测试、package/lock，以及格式化覆盖内已跟踪文件的机械变更；不动其他仓、SQL、contract、生成物、文档或Git。
+Root交接后更新文档。若格式化暴露旧文本型测试脆弱断言，先报告具体规则和单因素反例，单独批准等价修复；不得改生产语义或降低门禁。
+不得一边改文件一边让reviewer声称最终验收；全部冻结后提交hash/文件集/实际命令，Root接管并逐文件审查后按明确路径提交。
+
+
+## B7c 双审与Root冻结树完整验收（2026-09-10）
+
+实现commit：8fbf8e0d6894a8067ab28021bb6242e1aec0315a；七文件由Root明确路径暂存/提交，依赖、SQL、OpenAPI、src无变更。
+首轮P2已修：8项lineage反例真实RED后最终80定向全通过。Root独立重复原两段Repository转导出反例命中public-persistence，
+仅选择同barrel的Service导出且其内部使用Repository仍返回0诊断。数据reviewer R2实际80项通过并放行，Sol质量审查3文件92项通过/476ms、无P1/P2。
+各方绑定/tmp/billing-b7c-lineage-delivery-sha256.txt；Root提交前再次核对7文件全一致，不以读审报告替代运行。
+
+Root连续验收session50298正常exit0，日志/tmp/billing-b7c-root.EseBig：
+- Node24.20.0/pnpm11.25.0，pnpm install --frozen-lockfile exit0；本机PG18.4/Redis既有实例，自建template0独占billing_accept_b7c_972834163b02496a91c6。
+- pnpm db:apply-schema exit0；DATABASE_URL/SCHEMA_ADMIN_URL/REDIS_URL/REDIS_TEST_URL均显式设置。
+- pnpm verify exit0，59文件433项通过、0失败0跳过，36.70s；包括全typed lint、TS6 typecheck/build、SQL及17route contract。
+- pnpm test:integration exit0，32文件157项通过、0失败0跳过，28.95s（全套子集，不相加）。
+- pnpm db:verify-schema exit0：35表368列127约束83索引，0差异；pnpm prisma:check exit0，无生成漂移。
+- 源码与当次dist分别实际启动：health200、ready200、anonymous credit-account401、trusted-BFF catalog200、offers数组及request-id一致、SIGTERM exit0。
+- pnpm audit --json exit0，五级漏洞皆0；git diff --check exit0；SQL/OpenAPI SHA256保持57b6ff.../58fbe4...原完整基线。
+- 所有子进程終态后正常drop本轮独占database；无FORCE/drop他人库/清共享Redis/重启共享服务。PG16 CI、Docker/provider sandbox/消费者未执行，不扩大放行。
+
+图事实保持84手写src、215唯一内部依赖、304分kind/语法边、value SCC0、type/all各7组、39条有界旧type边；export来源绑定单独存储，不制造假运行边。
+433相较B7b354净增79：80图/策略正反例，删除1条机械ports存在断言；其余有效门保留。
+本切片仍保留B8精确HTTPcontext与type债，不声称Nest、Credit唯一writer或业务Prisma已经切换；B7d/B8/B9/B10及UUID capture等P0仍未完成。
+当前冻结代码全门通过，相关文档更新后还会在干净HEAD复验；下方/后续记录该结果，不把本段提前称作干净HEAD验收。

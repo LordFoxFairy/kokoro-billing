@@ -392,3 +392,11 @@ SQL/tenant/权限/契约/生成门不因旧目录形状门退出而放宽；三�
 无新依赖。扫描.ts/.mts/.cts/.tsx，只有精确src/generated/prisma生成目录可跳过；已解析但未入图的本地依赖显式失败，
 不把外部wrapper自动当安全外包。静态template及import options纳入语法正反例，database/cache与角色边界覆盖相同源扩展。
 当前冻结交付待Root验收，不将writer无基础设施测试结果当整仓验收。
+
+
+### B7d 格式治理（待B7c验收后实施）
+
+采用仓内精确Prettier3.9.6与仓根空配置，正向覆盖手写源码/测试/脚本和工程配置，format:check进入verify。
+仅格式化，不改变业务架构或数据/API事实；SQL、OpenAPI、只读Prisma产物和lock由各自authority治理。
+文件放置、精确排除及可执行正反例见唯一任务板B7d卡；纯格式文件须逐一匹配固定formatter对基线源码的输出，
+并在当前冻结树重新通过全门。此设计不授权在B7c验收前格式化其变化中代码。
