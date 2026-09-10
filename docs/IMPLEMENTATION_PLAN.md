@@ -1242,3 +1242,58 @@ Root主工作树实际16签名解析反例及49140条设计公式模型通过，
 本轮未重跑完整format/lint/typecheck/test/build/integration/catalog/Prisma/smoke/audit，原因是仅五文档内部设计与本地只读解析调查；最近完整665/158仍绑定8b55a57，不转算为本提交验收。
 未完成：已发现退款parser/冲正源码缺陷尚未修复；订阅/外部退款创建/行分配/补偿政策、完整机器major/真实数据/消费者决策、canonical Schema、Nest与Prisma生产writer切换，以及全套当前提交验收。
 Root负责本五文档提交；下一阶段继续收敛Subscription实际invoice/payment/period身份与发放规则及必要业务决策，再完成总文档门实施，Goal保持完整active，不把本节放行当B8完成。
+
+## B8-D2d订阅身份、周期与发放设计卡
+
+上一轮分类：进展。9bab7da438524e82ca1608c942db6dcb4120c6c8提交退款内部R2设计，双审及干净HEAD SQL/17route通过；生产writer尚未迁移。
+
+| 项目 | 本轮设计门 |
+|---|---|
+| 目标/优先级 | P0：订阅生命周期、账单结清证据、周期身份与Credit发放分离；确认现有商业规则来源，不凭active/trialing自行发放 |
+| Owner/角色 | Subscription拥有订阅/period/term，Credit唯一写账；Root整体设计/文档/Git，billing_toolchain_hardening/Astra只读Stripe字段/事件调查，随后数据/TS审查 |
+| 基线 | /Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing，codex/billing-ts-prisma-alignment，9bab7da，起始干净 |
+| 范围 | Root仅五既有文档TECHNICAL_DESIGN/DATA_MODEL/API_CONTRACT/CURRENT/本任务板；调查员仅源码/官方文档与/tmp本地签名探针，不碰PG/Redis/Stripe真实API/Git |
+| 放置/粒度 | 比较Subscription模块编排Credit与PaymentEvents直接SQL发放，采用前者；既有三张subscription/period/term表按业务身份承接，不建invoice SDK类型业务层或空新模块 |
+| 依赖/数据/API | 遵循D1/D2a/D2c账户namespace、事务、无环能力、不可变报价；核35表承接范围。暂不改canonical SQL/机器major，部署真实数据及商业新策略另确认 |
+| 删除/验收 | 实施时移除metadata自报subject/最新offer重解释旧周期、subscription active直接触发Credit的无证据路径；具体删除依设计与合同测试。当前只通过官方语义/实际parser/源码和双审冻结，不冒称生产通过 |
+
+### B8-D2d现状实证与候选设计
+
+billing_toolchain_hardening/Astra在基线9bab7da用实际registry/provider+Stripe22.6.1 SDK签名执行12场景（chunk1e3800正常exit0），
+冻结/tmp/billing-b8d2d-subscription/{probe.mjs,run.log,results.json,sha256.txt}；probe SHA256
+ e2aed5bf78941697f28936fdff33fb1e69e87e38892b296ad624d2493b1b0108。
+Root三hash校验通过，复制原脚本仅改结果输出路径，执行`node --import tsx /tmp/billing-b8d2d-root-probe.mjs`（chunkcf3795 exit0），
+结果/tmp/billing-b8d2d-root-results.json、日志/tmp/billing-b8d2d-root-run.log：12场景/12正确签名/12错误secret拒绝。
+
+metadata键由TS AST读取真实creator对象，结果checkoutId/tenantId/subjectId；没有实际调用或mock createSession，不能称完整Checkout创建链测试。
+旧metadata与旧顶层周期active/trialing得到grantCredits=true（只是解析标志，没有执行积分写入）；creator metadata形状旧/现代都subscription=null；
+现代single/multi items周期都null，混合旧顶层+multi items取旧顶层；invoice.paid/payment_succeeded/invoice_payment.paid及零额/站外结清样本全部原事件名+空effect。
+processor静态为subscription_event_invalid、subscription_period_missing或ignored；没有PG/Redis/provider网络/HTTP server，不把本地签名样本称Stripe sandbox或实际到账。
+Root初次定位用了错误stripe-checkout子目录/provider-event glob（探索命令exit1/2），随后按实际文件树定位；不是产品RED，不据此宣称缺实现。
+
+Root核实旧processor按metadata.planId OR offer_key查latest published、以teamId覆盖subject、窗口key生成period并允许更新term.grant_micros；
+旧SubscriptionGrant在重放查询前判断expiresAt>Date.now，GET subscription_id实际取term.id。这些是源码事实，不是本轮数据库复现。
+三设计面候选分离生命周期/Invoice结清证据/period授权，沿单item单line现有Checkout profile，不查最新offer；现代line.period及InvoicePayment分配事实已官方核验。
+新增商业政策问题已异步询问用户：是否统一账单结清后发放，试用/零额/手工结清单独明确。未获回复，不擅自用paid名称等同渠道实收或批准免费赠送；仅身份与执行机制可先内部审查。
+
+
+### B8-D2d首轮审查与R2修正
+
+数据Astra内部结构放行并提醒摘要不得含观察时间/Event ID、future等待不消耗重试；TS Sol提出2P2：future waiting/pending冲突及waiting_evidence缺无webhook恢复。
+Root统一三设计面：T1明确waiting_period_start/pending/首次过期，waiting→pending CAS与T2同事务；临时分页网络失败不terminal inbox，有界重试；完整但未结清period由既有payment worker持久due扫描补查。
+补查用period next_check/attempt/deadline短事务CAS、事务外GET及attempt/digest fence；候选每批20并发2、5分钟/12次/1小时，耗尽review/告警，新完整证据可解除预算类review；policy未批准不轮询/发放。
+还冻结授权digest与变化证据digest分开，以及InvoicePayment账户scope身份/分配额而非PI总额。以上仍为实现前设计，不声称候选预算或新period列已验证。
+Root执行当前sql:check、contract:check17routes、diff通过（chunk397e7e），src/test/database/contract/package/lock与9bab7da零差异。
+
+
+### B8-D2d-R2局部内部放行与交付边界
+
+数据Astra与TS Sol均核/tmp/billing-b8d2d-design-r2-sha256.txt五hash通过，无剩余内部结构阻断P1/P2；Root仅改标题/当前态及追加本验收说明，不新增未审设计。
+三设计面：/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/TECHNICAL_DESIGN.md、
+/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/DATA_MODEL.md、
+/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/API_CONTRACT.md。
+本轮主工作树12实际parser/SDK签名场景退出0、当前SQL/17route/diff通过（chunk6a9e1e），没有运行数据库或provider网络、没有基础设施资源待清理。
+冻结实现仍为9bab7da源码/Schema/机器contract；全部修改只有五文档，Root唯一writer与提交负责人。
+未运行完整format/lint/typecheck/test/build/integration/catalog/Prisma/smoke/audit，因本轮无生产源码/测试/依赖/机器源变化；最新完整665/158仍绑定8b55a57，不迁移其验收到本轮设计。
+未完成：商业发放资格未确认，当前metadata/现代周期/active-trialing发放问题未修；真实数据及仓外v1消费者/major切换、外部退款创建、订阅退款/补偿与完整canonical/生产Nest-Prisma仍待闭环。
+下一步Root核剩余总设计门和数据/契约决策，避免继续以单点设计代替生产切换；Goal保持原完整范围active。本轮有提交与改变行动依据的解析证据，不属于无进展或已完成。

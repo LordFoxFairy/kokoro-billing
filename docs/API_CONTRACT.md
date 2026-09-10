@@ -258,3 +258,22 @@ Stripe JSON number金额先Number.isSafeInteger且>0后转BigInt；unsafe/fracti
 
 实施前必须补齐两个refund的机器request/response/error shape、账户/tenant权限、幂等与状态查询、消费者artifact更新；切换时删除被替代旧v1入口与reason前缀含义，不提供长期双协议。
 尚未获得真实数据/仓外消费者事实确认，本节不改变当前17operation或API版本，不把缺失的终态查询写成当前可调用功能。
+
+## B8-D2d订阅契约目标（机制R2已审查，商业发放规则待确认）
+
+当前Subscription parser输出的grantCredits是实现中的猜测，不作为目标provider contract；目标区分生命周期观察、Invoice/line结清证据和Credit资格/应用结果。
+Invoice.paid不能被描述成新增银行卡实收；实际Payment资金来源与结清方式分别保留。普通付费周期发放、试用/零额/余额抵扣/手工结清等资格尚待业务确认，当前v1不静默改变这些含义。
+
+Subscription绑定必须来自受信Checkout和执行账户关联；删除以metadata.teamId/planId选择subject/最新offer的目标路径，不增加teamId/subjectId旧新双读。
+现代items周期与Invoice服务line身份必须完整，分页/多item歧义显式待复核；period.id、invoice/line ID、subscription.id和event delivery ID不可混用。
+当前GET /v1/billing/me/subscriptions返回的subscription_id实为term.id；新major需明确资源身份及生命周期/账单/发放三维状态，owner contract与BFF消费者同切片更新，不原位变义。
+金额JSON number先safe-integer校验、时间戳转换后须有效UTC；不同金额字段的零/负数规则按Invoice实际语义，不用Refund正数规则一刀切。
+
+record观察接受不表示Credit已经可用，query显式区分waiting_evidence/waiting_period_start/pending/applied/review与队列失败；未开始的服务期不得提前承诺available。
+同period相同授权成功后，过期/取消/下架不破坏历史结果重放；query展示当前状态，不能反过来重写receipt或再发一次额度。
+同一invoice服务行与同一订阅item周期有两道唯一性，避免事件重发或另开invoice重新发放；变更计划/补差价/宽限/试用赠送/退款关联需明确业务契约，不用active状态代替。
+完整机器request/response/error、分页、状态转换与对外授权只在major门统一落地。本轮机器17operation/版本未改，待批准policy不得当默认配置启用生产发放。
+
+D2d状态澄清：合格但DB now<start时明确waiting_period_start，窗口内pending，首次过期review；到期同事务转pending并应用，失败不虚报余额可用。
+分页/网络暂态尚未取得完整观察时inbox继续有界重试，耗尽dead-letter；已完整但未结清的waiting_evidence由后续Invoice事件或现payment worker持久due扫描补查，不依赖一定有下一条webhook。
+自动补查耗尽展示review与原因，不伪造invoice failed；政策未批准不轮询或发放。资金证据区分InvoicePayment分配额/账户scope稳定引用与可空Payment settlement，不以PI总额或纯事件名证明结清方式。

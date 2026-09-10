@@ -748,3 +748,75 @@ delta=0仍校验tenant/identity/付款和履约绑定/固定G/S/policy/累计额
 
 官方语义核验2026-09-10：[Refund对象](https://docs.stripe.com/api/refunds/object)、[Event类型](https://docs.stripe.com/api/events/types)、[退款失败](https://docs.stripe.com/refunds#failed-refunds)。
 官方说明渠道对象与异步失败语义；两阶段事务、唯一writer、比例算法承接和review策略是本仓设计选择，不称Stripe推荐账本架构。
+
+## B8-D2d Subscription身份、账单证据与Credit发放（机制R2已审查；商业发放规则待确认）
+
+基线9bab7da，生产仍Fastify/pg。当前creator只输出checkoutId/tenantId/subjectId，旧parser却要求teamId/planId；旧processor依metadata选择最新published offer并覆盖subject，active/trialing直接发放。
+本节修正结构性设计，不把尚未确认的试用/零元/手工结清商业规则写成已批准功能。用户已获询问“是否账单结清后发放”；未答复前仅冻结身份/证据/事务机制。
+
+### Owner与放置
+
+Subscription拥有provider subscription、period、term；Credit拥有acquisition/fulfillment/grant/journal，Payment拥有provider account/inbox与真实支付settlement。
+PaymentEvents作为上层编排调用Subscription transaction-required观察能力，不直接查offer/Credit或写三张订阅表。Subscription仅经Checkout取得固定报价与绑定，经Payment核账户，经Credit执行具名发放；沿D1无环DAG。
+具名subscription.service/repository/schema与invoice归一化适配放目标src/modules/subscription内；Stripe SDK类型不穿透内部业务对象。比较PaymentEvents直接SQL与Subscription编排Credit，采用后者；不为SDK的Invoice对象创建第八业务模块。
+
+### 三种事实与三个身份分离
+
+- Subscription.id：执行账户scope下的渠道订阅生命周期身份；active/trialing/past_due/canceled等描述订阅，不直接决定Credit grant。
+- Invoice.id与Invoice line.id：账单及其服务行证据；invoice.paid描述结清，不自动等同一笔新的银行卡实收。实际资金来源/InvoicePayment/PaymentIntent/Charge证据归Payment，不能为零额或手工结清虚构正数settlement。
+- 本仓period.id/term.id：周期授权与Credit来源身份；事件delivery ID不是周期身份，当前月份/最新Subscription周期也不是旧账单的授权依据。
+
+本仓现有Checkout只创建quantity=1的单一价格、month/year recurring。首个可自动处理profile承接这个已存在范围：单一已绑定subscription item、一个完整非proration recurring服务行、完整分页证据、固定报价revision及program。
+多item/混合周期/补差价/多个服务行/非订阅invoice仍保存inbox并显式review，不任取items[0]/lines[0]、平均周期或给每条行发全额积分；这些扩展需独立商业/数据设计，不假称当前已支持。
+
+### 从Checkout建立可信绑定，报价不漂移
+
+Stripe的checkoutId metadata仅作查找线索：经已验签账户、test/live、session/subscription/customer关联及本仓Checkout快照逐项验证后，绑定本仓tenant、subject、offerRevisionId、program、creditMicros、currency、billingInterval及候选发放policyVersion。
+不把provider metadata中的tenant/subject/team/plan当新授权，也不为兼容旧键而长期双读。后续重复事件若改变绑定/报价则review，不UPDATE subject或按latest published revision重解释已付款周期。
+provider item/price引用在可信Session/Subscription读取结果与报价价格/数量/interval核验后持久绑定；不要求动态创建的Price ID在首次prepare前已知。补查在事务外、有总预算/取消/账户校验，返回后在短事务条件绑定；配置变更或晚到响应不能替换已有身份。
+续期继续绑定原revision快照；真正plan change必须由显式变更命令或经审批的渠道变更同步建立新revision与生效边界，不能把外部price变化当隐式升级授权。
+
+现代Stripe Subscription周期在items.data中的每个item，不把旧顶层字段fallback成当前方案；固定已批准API版本及严格运行时schema。旧版本事件若实际部署仍在投递，处理/排空策略由major与数据切换门决定，不用静默丢弃冒充clean-slate。
+Invoice关联按其当前版本parent.subscription_details及line的subscription-item父信息验证；时间窗口用对应服务line.period，不用invoice总体period/current Subscription窗口覆盖历史服务期。
+两类引用皆存在时必须一致；账户、subscription、item、price、currency、数量和period逐项核对。分页has_more或字段不完整先有界补查，缺信息不是zero/paid/default now。
+时间戳必须安全整数秒、转换后为有效UTC瞬时点且end>start；金额number须safe-integer及各字段允许的正/零/负范围（invoice合计不能照退款正数schema），不共享major-unit转换器。
+
+### 周期去重、证据与商业资格
+
+同一Invoice line的不同Event只更新同一观察；本仓自动profile的周期唯一性同时约束subscription+item+服务start/end+program，避免另开invoice同周期重发。
+Invoice/line唯一键防同一账单行绑定到两个period；同周期出现另一个invoice/line视作重开/修订歧义，保留新inbox证据并review，不先覆盖已有绑定或再给grant。
+已绑定授权窗口/报价/额度不可变，已applied结果可永久重放；provider状态或新版catalog不会改变历史grant结果。
+授权digest只含稳定tenant/subject/account/period/item/服务窗口/program/quote revision/额度/policy，不含会变化的observed_at、Event delivery ID或最新查询时钟；渠道证据使用独立digest，合法新观察不破坏历史授权重放。
+
+发放资格函数返回eligible/waiting_evidence/review_required，并记录使用的policyVersion与证据摘要；不得接收parser的grantCredits布尔值直接执行。
+普通成功付费完整周期是拟支持的主路径，但“invoice结清即可”还是“必须特定渠道实收”由用户商业确认。试用赠送、零额/折扣/余额抵扣/低于最小扣款、out-of-band手工结清、宽限期和补差价分别需要明确规则；没有规则则review，不默认为赠送或永久禁止。
+policyVersion必须是本仓已批准且随offer revision冻结的具名规则，不是任意JSON flags配置平台；未批准policy不得enqueue发放。当前代码trialing默认发放不是商业已确认的证据。
+invoice.payment_failed只是一轮支付失败，不能倒退已经结清的同invoice或移除已发放的旧周期；同样invoice.paid不能掩盖后续退款/争议，后者通过Refund/Payment具名事实处理，不删journal或自动补偿。
+
+### 两个持久阶段与重放
+
+T1由ProviderEvents在其outer事务调用Subscription观察effect：不另claim第二command receipt，绑定/更新Subscription和period证据，处理结果与inbox terminal原子提交；只有完整且已批准policy判eligible才入唯一SubscriptionCreditGrantRequested(v1) payment outbox：T1数据库now<start时period为waiting_period_start、next_attempt_at=start；start<=now<end时为pending、任务立即可领；首次now>=end则review而不发放。
+生命周期事件即使active也只更新生命周期，不独立enqueue；invoice先到可以据完整受信关联建立绑定，若关联不齐则waiting_evidence/review且保留inbox，之后具名owner重评同period，不换身份。
+事实T1与Credit T2分离，不能因余额/时钟/进程异常抹掉已收到的结清证据。补查网络/分页暂态失败时不把该inbox标processed，沿D1 provider-event有界重试，耗尽进入dead-letter；网络补查在beginAttempt后、T1业务锁前，绝不在事务内。
+已完整观察但业务尚未结清的period可waiting_evidence且inbox processed，此时不建Grant任务。新的具名Invoice/InvoicePayment事件可重评；无新事件时由既有payment worker tick调用Subscription.refreshDuePeriodEvidence，扫描period上持久next_evidence_check_at。不是依赖内存setTimeout或尚不存在的消费者。
+自动补查仅用于身份已完整且发放policy已批准的period；policy缺失/不支持profile直接review而非网络轮询。首次waiting写next_evidence_check_at及一次性deadline，claim用短事务条件更新到下一检查时刻并递增evidence_check_attempts，然后事务外读取该账户的确切Invoice/必要分页，最后短事务通过period+attempt+claim时的evidence_generation+授权digest检查合并证据、判资格并唯一enqueue。
+next_evidence_check_at提前持久化，崩溃可到时再查；每次接受新渠道证据都递增evidence_generation，旧attempt或旧generation返回不覆盖新观察；不依赖Event.created比较新旧。若新的provider事件已使period合格/applied则补查只读已有结果。GET允许重试但不产生外部退款/扣费副作用。候选预算为每批20、并发2、间隔5分钟、每period最多12次/首个等待起1小时，不因重启或失败重置；网络预算沿Checkout受控client方案，落地前以故障测试核值。
+预算耗尽置review_required及evidence_refresh_exhausted，清next check并告警；不无限waiting，不删除事实或标invoice付款失败。后续完整可信provider事件仍可重新评估同period；只有等待预算类review可由该证据关闭，身份/政策冲突仍需具名审查。
+Reconciliation通过Subscription公开只读快照检查等待超期/死信，再由具名owner命令重试；不直接写period/账本或另造invoice。此机制复用现payment worker进程，不新增第四个进程。
+
+T2由原payment worker明确handler调用Subscription.applyPeriodGrant：period/term锁→Credit account→其他Credit资源锁（D1顺序），一个最外层事务完成Credit acquisition/fulfillment/grant/journal/account/outbox及period/term效果状态。
+Credit只读可信Subscription授权input，不自行SELECT Subscription表或接收任意HTTP amount；Subscription也不取得Credit Repository。预检结果与SQL异常分开，后者整组rollback-only，不吞错后提交“已发放”。
+原grant函数在查已成功结果前检查expiresAt>Date.now，会让过期后的同命令重放失败；目标先校验不可变输入digest并重放成功结果，再对首次应用检查数据库时钟和资格。
+服务期未开始时不提前增加可用余额，waiting_period_start任务不进入claim且不消耗失败重试预算；到期handler在T2同事务以当前状态/授权digest CAS为pending后执行发放，lease取得或失败本身不把waiting改pending。若T2失败回滚，状态不虚报进行中；首次应用已越period_end则review，是否补偿另有商业规则，不自行把期限延到now+一个月。
+成功重放即使当前周期已过期/订阅已取消/报价已下架，也只返回原grant/result，不第二次入账；语义漂移仍冲突。
+ack丢失/lease超时/预算耗尽先确认既有Credit结果再ack，显式waiting/review/dead-letter在查询可见；不无限重试或把outbox lease当去重唯一性。
+
+### 对外与实施门
+
+当前GET /v1/billing/me/subscriptions实际把term_id映射为subscriptionId，不是真正provider subscription identity；新major必须显式区分subscription_id、period_id、term_id和grant状态，不原位悄改字段含义。
+保留受信subject/tenant分页与查询边界；查询同时展示生命周期、账单证据状态与Credit结果，不能用一个active覆盖所有含义。不会新增Subscription替IAM授权或把UI开通提示当账本事实。
+实施验收：creator→现代Subscription→Invoice的真实关联链，paid前后/试用政策/零额政策/手工结清、重复乱序、修改metadata/price/offer、items与lines分页、多item歧义、两连接同周期/同invoice重开、future start/late expiry、已成功过期重放、T1/T2故障与ack丢失。
+本轮未改canonical/机器contract/源码。商业资格仍待确认，完整新major/既有数据/外部消费者/退款订阅映射及生产Nest+Prisma实施未放行。
+
+2026-09-10官方语义核验：[SubscriptionItem周期变更](https://docs.stripe.com/changelog/basil/2025-03-31/deprecate-subscription-current-period-start-and-end)、[Invoice](https://docs.stripe.com/api/invoices/object)、[Invoice Line](https://docs.stripe.com/api/invoice-line-item/object)、[InvoicePayment](https://docs.stripe.com/api/invoice-payment/object)、[事件类型](https://docs.stripe.com/api/events/types)、[站外结清](https://docs.stripe.com/api/invoices/pay)。
+以上是字段与渠道语义，不证明本仓已接入；两阶段、period去重及商业policy是项目设计，不冒称Stripe统一规定积分政策。

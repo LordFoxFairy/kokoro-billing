@@ -381,3 +381,32 @@ delta=0需既定身份/绑定/累计/策略检查，本退款链先前冲正耗�
 无FK关系由owner受信绑定与同事务检查保证：退款→账户/付款、效果→退款/fulfillment/grant/journal，后台Reconciliation只能经owner只读快照核orphan/金额/效果状态。
 有渠道成功、pending任务、applied、review或未知事实的Refund及其inbox/receipt/履约证据不能按普通缓存TTL删除；完整retention权限策略仍待单独收敛。
 本表是待编入唯一canonical SQL的目标，不声称现有VARCHAR、状态CHECK、amount>0或生成Prisma已经支持这些状态；fresh install/catalog/Prisma/真实数据演进与完整事务验证仍待实施。
+
+## B8-D2d订阅数据承接目标（机制R2已审查，商业资格/SQL未放行）
+
+维持35表及Subscription/Credit分工；不把三张订阅表变成第二套Payment invoice/payment ledger。原始渠道Invoice/InvoicePayment观察保存在Payment拥有的inbox；Subscription保存本周期资格所需的不可变证据快照与来源引用，而非任意账单CRUD真源。
+
+| 现有→目标表 / writer | 承接字段与约束目标 |
+|---|---|
+| payment_provider_subscription→billing_provider_subscription / Subscription | UUID id，非NULL provider_account_id，UNIQUE(provider_account_id,external_subscription_ref)。tenant/subject/checkout_id与固定offer_revision_id在可信绑定后不可因metadata事件覆盖；保存program/credit额度/币种/interval及policyVersion的报价快照与digest。subscription_item_ref、provider_price_ref初次可信校验后绑定，后续变化review |
+| 同上 / Subscription | provider_status分别表达incomplete/incomplete_expired/trialing/active/past_due/canceled/unpaid/paused与unknown；last_observation_event_id、observed_at及review_reason_code用于证据。周期不在这里压成唯一current_start/end；event时间不是严格资源版本 |
+| payment_subscription_period→billing_subscription_period / Subscription | UUID id，provider_subscription_id、provider_account_id、subscription_item_ref、external_invoice_ref、external_invoice_line_ref、program_key、period_start/end及固定quote/policy digest。完整身份后建行；UNIQUE(provider_account_id,external_invoice_ref,external_invoice_line_ref)和UNIQUE(provider_subscription_id,subscription_item_ref,period_start,period_end,program_key)，end>start |
+| 同上 / Subscription | invoice_status/settlement_evidence_kind、source_event_id、独立证据摘要与具名JSON object快照；资金证据为受账户scope校验的InvoicePayment ID、其分配给本Invoice的amount_paid/currency及Payment settlement引用（若确有），不以PI总额冒充分配额。零额/站外等分类允许无Payment settlement，不能造正数支付。快照只保留资格所需Invoice/line标识、已校验金额/币种/数量/父关联与结清方式，不存秘密/完整客户payload；JSON version/schema受运行时验证。Invoice paid不强制附一条虚构Payment settlement，实际资金事实另经Payment能力确认 |
+| 同上 / Subscription | grant_status=waiting_evidence/waiting_period_start/pending/applied/review_required，grant_error_code、grant_completed_at可空；applied要求成功Credit结果引用及授权digest，不能因provider当前状态/旧事件覆盖。waiting_period_start任务的next_attempt_at在现payment outbox，period不再复制一套lease/attempt |
+| entitlement_subscription_term→billing_subscription_term / Subscription | UUID id，source_period_id唯一且同tenant；subject/program/start/end/grant_micros来自该period冻结授权。生命周期/显示状态与Credit applied分开表达，不以subscription状态覆盖历史grant额度；grant_micros非负，实际可授予数量由已批准policy决定 |
+| Credit acquisition/fulfillment/grant/journal / Credit | 来源统一subscription_period+period.id，基于固定授权digest重放；不读provider DTO/Subscription repository。原始source唯一性与journal去重保留，成功result校验先于当前expires/offer/订阅状态；amount/subject/account/program/window漂移冲突 |
+| payment outbox / OutboxRepository | SubscriptionCreditGrantRequested(v1)按period identity唯一，payload为tenant/period/schemaVersion。只有具备批准policy与完整证据的T1可enqueue，future start通过next_attempt_at表达等待；ack丢失读成功结果恢复，不补第二份grant |
+
+字段缺失到不能建立完整period身份时不创建占位id/window=now的周期；证据仍在inbox，沿D1记录明确缺失关联错误并有界重试/最终dead-letter，不能标ignored假装处理完毕。
+同一完整period尚待付款/资格时可以waiting_evidence存在而不enqueue；新证据到达经owner重新评估同period，不换external invoice/line或Credit source identity。重开invoice与同周期不同line先review，不覆盖已applied结果。
+T1复用ProviderEvents outer transaction，不新claim Subscription command receipt；Subscription事实/period+inbox终态+合格任务同提交。T2锁period/term→account→grant等，Credit全组+period/term成功结果同提交。
+如果期初任务首次执行时窗口已过期，保留证据并review；成功重放跨过期仍返回同结果，数据库时钟只影响首次可发放资格，不污染永久幂等。
+T1合格时now<start明确waiting_period_start+outbox next_attempt_at=start，窗口内pending，首次now>=end则review；到期handler的waiting→pending CAS与T2同事务，失败回滚不虚报pending。future等待不消费失败预算。
+waiting_evidence自动补查增加next_evidence_check_at、evidence_check_attempts（非负）、evidence_check_started_at/deadline_at、evidence_generation（非负，每个接受的新证据递增）与last_evidence_check_error_code；不加第二套lease，短事务CAS推进next check/attempt后事务外GET，用attempt+claim时evidence_generation+授权digest防旧响应覆盖，provider事件使已合格/applied时不再重写。
+扫描索引对已批准policy、waiting_evidence、next_evidence_check_at到期状态建立具名partial索引（实现时验证计划）；首等待deadline不被失败/重启重置。既有payment worker tick负责有界补查，12次/1小时预算耗尽显式review，清next check；新可信证据可解除仅因等待预算的review，不解除身份/政策冲突。
+授权digest与证据digest分离，前者不含observed_at/Event ID等变化字段，重放输入仍保持原授权。
+
+无FK完整性通过Checkout/Payment/Subscription/Credit公开能力验证tenant/account/subject/price/item/window/来源；账户或报价下架不是删除历史关联的授权。
+查询索引对应tenant+subject+period_end/id keyset、账户scope订阅/Invoice line唯一查找、period.id应用查找；future-start调度复用outbox next_attempt索引，不新建共享Redis事实源。
+Reconciliation经owner一致只读快照比对period→term→Credit授权/金额/窗口/结果，缺少invoice资金来源不靠造settlement修补。retention保留未决/已发放来源证据，保留期尚待完整设计。
+本方案使用已有三表表达当前单item单服务行profile，不宣称能容纳全部通用Invoice编辑/多种资金分摊；新增商业profile如需要新事实owner/表，须独立ADR，不受“35表”数量驱动强塞字段或丢事实。

@@ -7,6 +7,8 @@
 
 ## 当前规范化工作
 
+- B8-D2d订阅身份/账单证据/两阶段Credit发放机制已获数据Astra/TS Sol R2局部放行，首轮2P2（未来周期状态、无webhook补查）闭环。商业资格已向用户询问，未按active/trialing默认当收款；12个本地真实解析签名场景由Root复验，生产metadata/周期/发放代码仍未修，三表与query变化仍是目标。
+
 - B8-D2c退款内部设计已获数据Astra/TS Sol R2审查放行（首轮1P1/2P2闭环），并非实现放行：渠道观察与Credit效果分阶段、Refund.id去重、账户/付款精确关联、比例零delta和held保护。当前parser真实本地签名16场景复现非成功状态被归成功、累计金额/身份fallback及字符串金额放大；Root重跑通过。生产代码未修，详情见任务板；不是Stripe sandbox。
 
 - B8-D2b已完成当前付款/退款HTTP终态核查，未修复链路：真实runtime/认证/PG及原支付worker CLI中，3入口首次和两种重放共9次202，只落付款/退款事实和成功receipt；3条Recorded事件两次worker均未领取。显式owner fulfillment作为fixture建立1000000 micros余额后，300+200 minor退款仍未扣回Credit。接口接受、provider退款完成与Credit效果不可混称，详细证据见任务板。
