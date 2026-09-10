@@ -7,6 +7,8 @@
 
 ## 当前规范化工作
 
+- B8-R按用户最新重点复审Billing本体SQL/model/结构：确认原“35表一对一迁移”不足以证明目标模型合理，暂作旧盘点，物理表数重新评估。保留account/grant/hold/allocation/journal各自事实；优先比较acquisition/fulfillment与三receipt/两outbox物理组织，明确单积分钱包/现金金额/计量单位及按次价格与token旧路径，删除反向分层而不只搬目录。两位只读审查与Root源码复核结论见任务板B8-R；尚未形成最终新ER/Schema，不冒称已重构或用S3测试覆盖该方案。
+
 - B8-S3已修复对账四次autocommit混合快照false-ok：独立ALS/client、只读REPEATABLE READ、仅收紧2s语句/5s事务idle局部预算，原四查询/报告/可选tenant保持。连接FATAL不再触发未处理error退出；坏client销毁、嵌套失败关闭、原始错误及listener/release生命周期有真实子进程回归。数据Astra/TS Sol双审无阻断，Root冻结树全套712/集成205通过、0失败0跳过，Schema/Prisma/源码与dist smoke/audit通过，资源已清理；精确hash/命令见任务板。池等待/完整事务deadline、普通SQL错误被业务吞掉后的rollback-only仍待B8，未冒称通用事务完整性已闭环。
 
 - B8-D3数据保护/对账内部方案已获数据Astra/TS Sol独立审查放行，完整ACL/CLI尚未实施，一致快照子集由S3承接。Root自建PG15项ACL反例证明只读事实的旧FOR UPDATE会被42501拒绝；真实reconciler双连接探针复现混合snapshot返回虚假ok，成为S3回归基线。目标采用完整事务锁承接后启用低权限、tenant必填有界CLI、owner只读页；详细证据/资源清理见任务板。

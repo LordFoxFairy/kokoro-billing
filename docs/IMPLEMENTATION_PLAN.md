@@ -1,6 +1,6 @@
 # Billing TypeScript / Prisma 规范化任务板
 
-更新：2026-09-10（B8-D3数据保护/对账设计）。唯一任务板；总范围是 Billing 工程收敛，不把第一轮审计视为整仓完成。
+更新：2026-09-10（Billing核心模型与结构复审）。唯一任务板；总范围是 Billing 工程收敛，不把第一轮审计视为整仓完成。
 
 **Goal:** 按 Root TypeScript / SQL / API 手册明确 Billing 的模块、Prisma 数据访问、事务与契约方案，逐切片替换并验证。
 
@@ -33,6 +33,44 @@
 | B10 / P1 / 运行可靠性验收 | Billing / 后续续派billing_owner / Root | worker/reconciliation/retention/smoke与文档；派前批准文件集 | execution并发lease、orphan检测、append-only角色、预算取消、provider sandbox、CI PG16/镜像/DR分层证据 | 待派工 |
 
 ## 阶段门
+
+### B8-R 核心模型与结构复审卡
+
+用户最新指示：支付对接不是当前重点；重新检查Billing本体SQL、model和整体结构，而非只升级框架/ORM。基线bf128f508d7489da6598bfb8df962f927945dec8，分支codex/billing-ts-prisma-alignment，Billing起始干净。此前S3局部可靠性修复不证明核心模型成熟。
+
+| 项 | 本轮范围 |
+|---|---|
+| Owner / writer | Billing；Root唯一文档writer/Git，既有业务owner无变动。工作目录/手册/CODEBASE_MAP沿本任务板基线 |
+| 数据审查 | billing_data_review / Astra / 只读：canonical35表、实际writer/query、DATA_MODEL与目标映射；区分有用业务事实、冗余投影、错误约束、身份/单位/状态问题，不默认35表必须一对一保留 |
+| 结构审查 | billing_ts_review / Sol / 只读：当前分层与目标Nest模块/provider边界；评估只改目录/集中万能writer/通用框架过重风险，给出用例与文件证据 |
+| Root工作 | 核心业务链、成熟模型原始资料与当前设计差异；综合保留/重做/删除建议，区分实施缺陷和目标设计缺陷 |
+| 写入集 / 位置 | Root仅既有IMPLEMENTATION_PLAN与CURRENT，记录评审结果；比较新建报告中心与复用任务板，选后者。无源码/Schema/API/依赖/其他仓修改，不创建新模块/进程 |
+| 前置与验收 | 先实查源码和当前标准，再审目标，不拿历史品牌引用作正确性证明；两审查员提交带绝对路径/行号的精简问题与建议，Root核证据。此轮只读审查不需访问数据库/外部支付或真实数据 |
+| 交付/边界 | Root提交现有文档审查摘要；不据本次质疑直接清库/原位换stable v1/改变商业政策，不把旧目标一对一表改名当既定最终设计 |
+
+#### B8-R审查结论与后续设计入口
+
+Root、数据Astra、结构Sol分别读取当前源码/Schema，结论绑定bf128f5（本轮仅两文档修改）。此前“35表一对一映射”仅保留为旧迁移盘点，目标物理表数重新评估；B8-D1局部通过不再被解释为该表数与文件形状已最终合理。原七业务能力/单Billing owner目标保持，不先换栈再补模型。
+
+| 结论 | 当前证据 / 分类 | 下一模型设计必须回答 |
+|---|---|---|
+| 保留account/grant/hold/allocation/journal五种职责 | schema.sql:5–87；usage-settlement-service.ts:254–274、442–520实际按批次占用/扣除/释放。不是仅因表多而冗余 | account是余额投影/并发锁锚点；grant是来源与有效期批次；hold是预留；allocation解释消费来源；journal是不可变积分增减。明确重建公式/唯一writer，勿把它称现金复式总账 |
+| 重审acquisition/fulfillment两表 | payment/billing-settlement-service.ts:294–334、credit/subscription-grant-service.ts:53–95均同事务创建acquisition并直接committed fulfillment；当前无独立acquisition受理到异步fulfillment的writer证据 | 比较一个履约事实保存source/program/授权量/结果与保留独立授权、履约生命周期。合并是候选而非本轮批准；grant仍是可消耗批次，永久履约/退款/重放事实不能随之删掉 |
+| 明确单位与账户维度 | account只有tenant+subject唯一键，grant.program不参与钱包隔离；Payment是amount_minor+currency，Credit是micros。quota字段仅发现读取，未发现生产配置/周期推进writer | 默认审查现有单可互换积分钱包，不擅加多币/分账功能。把Money、CreditAmount、UsageQuantity语义分开，比例与取整显式；确认quota究竟是有效需求还是历史壳 |
+| 重做计费模型命名与唯一价格事实 | metering/billing-admission-service.ts:152–173把reservation_micros作为按次正式价格；usage-pricing-service.ts:129–153仍按token计算；两条真实源码路径不可被一次rename抹平 | 区分产品按次计费、用量计量、provider成本；逐一列当前消费者，决定有效profile并删除被替代模型。保留历史API行为不是最终双轨方案 |
+| 三receipt/两outbox重新比较物理组织 | Schema中general/payment receipt近同形、admission多api_surface；payment outbox另有source-event UNIQUE。现目标已固定scope并由共享存储writer承接 | 分表与显式namespace统一表都可行；用去重域/状态/保留/查询负载比较，不把字段并集作为设计。维持成功result、旧独立命名空间及不同event唯一性；receipt和outbox仍是不同生命周期 |
+| 删除反向分层，细化Credit内部职责 | application/credit/services/admin-grant-service.ts:19–26仅transaction转发；PG同名类负责规则/receipt/SQL。Payment、Refund、Metering当前直接写Credit。TS审查核同名port/factory镜像路径 | Service拥有编排/事务，复杂规则独立model/policy或纯函数，Repository做具名数据访问。Credit内部按余额/账本、预留、履约/冲正、兑换等真实用例组织，不生成新的四层模板或万能CreditService |
+
+以上源码定位均相对本仓src/infrastructure/postgres/repositories（标application者除外）与database/schema.sql，行号绑定bf128f5。Root已独立读取两条履约创建链、钱包批次选择、定价路径和application转发复核；没有把静态发现写成运行复现。
+
+结构审查的两个风险不升级为已证实缺陷：目标已经要求固定receipt/outbox scope，是否演化成万能框架取决于实现，不能预先制造三套/两套adapter或强制DI token；单实现直接注入具名class仍遵TS手册。`.public.ts`可合理导出Module/Provider，真正门禁应区分装配文件与业务调用者的具体symbol访问，不因barrel文件存在判违规。物理表数未定前也不固定对应capability数量。
+
+成熟模型核验（2026-09-10）：[Lago traceability](https://docs.getlago.com/guide/wallet-and-prepaid-credits/traceability)提供充值来源与消费去向双向追溯；[Kill Bill subscription/entitlement](https://docs.killbill.io/latest/userguide_subscription#_subscription_and_entitlement)区分服务权益与计费生命周期。采用这些可核验的语义来评估Kokoro，不照搬完整发票/税务/现金总账或宣称安装了这些引擎；官方产品能力也不是本仓实现证据。
+
+后续设计按“购买发放→按次预留/确认/释放→退款冲正→订阅周期/到期”列业务事实、状态机和同提交不变量，再形成ER模型、每表保留/合并/删除理由、具名能力/唯一writer矩阵，最后更新三设计与唯一canonical/Prisma生成。SQL-first和Prisma都不替代这一步。先比较仅搬目录（不采用）、按业务模型重构当前模块化单体（原Goal方向）、完整引擎承接（需另证能力覆盖/成本/唯一账务owner，非本轮已选）；不因外部引擎语言不同就直接排除，也不并排增加第二账本。
+
+此轮未新建model/目录、改表/接口/依赖或执行任何数据库/支付操作。验证为只读源码/文档交叉审查、两文档diff和Git范围检查；未重跑业务测试，不借S3的712/205证明新模型已实现。实际数据/major/订阅政策在实施前仍需确认，但不作为停止本次纯模型审查的理由。
+
 
 - [x] B0：当前门禁与真实依赖基线已记录。
 - [x] B1/B2：独立审查已接收并由Root复核。
