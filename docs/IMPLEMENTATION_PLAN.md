@@ -1496,3 +1496,59 @@ Root实际一致快照探针：
 数据Astra/TS Sol核/tmp/billing-d3-design-sha256.txt六hash及实际probe，R1均无阻断P1/P2。Root补明确ON CONFLICT DO NOTHING非异常读取与23505/P2002整事务回滚，以及outer RR readonly设置必须在任何数据查询前、首个快照查询记录as_of；不扩大授权或宣称实现。
 Root `env -u DATABASE_URL -u SCHEMA_ADMIN_URL -u REDIS_URL -u REDIS_TEST_URL pnpm verify` session53919 exit0（chunk21bfbc），/tmp/billing-d3-local-verify.log：format/lint/typecheck/build/SQL/17route/offline Prisma生成通过；29文件507测试通过、33文件188跳过、0失败。跳过为刻意无基础设施，不能算本轮全量integration通过；实际PG证据仅上述两个独占探针，最新完整695/188仍绑定948034d。
 本轮src/test/database/contract/scripts/package/lock相对948034d零差异；仅六文档提交。未执行目标report schema验证（文件尚未创建）、生产ACL/CLI/全关系对账、Prisma生产迁移、provider sandbox/CI16/镜像/部署周期Job；全部保留为待实施/待验，完整三设计门仍未通过。资源清理已由Root验证，无遗留自建库/角色；Root其他用户/Agent改动未触及。
+
+
+## B8-S3 当前对账一致快照修复卡
+
+前一Goal轮为progress：a012f2d设计提交与两个真实PG探针改变实施判断。当前基线a012f2d89e17883b261bc35fd7aca877050e072b，本仓干净。归属既有Reconciliation查询服务；在原文件修复四次autocommit导致的false-ok，不新增模块/接口/Schema或自动repair。
+
+| 项目 | 本切片边界 |
+|---|---|
+| 目标/优先级 | P1：四类检查读取同一只读RR快照，原四组判定与报告形状保持；Root上一轮真实before/during/after反例进入集成回归 |
+| 执行/审查 | Root先定事务边界、数据Astra只读复核；billing_toolchain_hardening/Astra单一writer，Root派发后停止本仓写入；数据/TS只读最终审查，Git由Root |
+| 文件集 | src/infrastructure/postgres/repositories/reconcile/reconciliation-service.ts、test/integration/reconciliation.test.ts；不改connection公共框架/port/factory/API/schema/deps，Root交接后更新CURRENT/任务板 |
+| 事务选择 | 比较复用caller事务后SET隔离级别与独立snapshot operation context；选runWithBillingContext建立独立上下文，再以同一SqlConnection的withTransaction创建新事务，首先SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY。不修改caller已建立的隔离级别/写权限，报告只针对已提交事实，不把caller未提交写入当权威；同一connection pool借第二client且结束后归还 |
+| 预算/错误 | snapshot内单statement上限2s、idle-in-transaction上限5s；保留report实际借到client已有更严格预算（不继承caller SET LOCAL），均transaction-local，不改role/database/session默认；错误直接rollback并释放连接，不返回ok。预算仅限制DB语句/idle，借连接仍受既有10s connectionTimeout，非完整CLI总deadline/分页/内存上限，不冒称D3全部实现 |
+| 实现粒度 | 原四query/映射可提为私有readReport，public run只建立独立snapshot；禁止复制第二套查询、query fake、放宽类型或机械新增框架层 |
+| TDD/验收 | 先真实autocommit false-ok RED（两状态始终drift的原子切换），再GREEN只见一个snapshot；保留原4测试；验证只读阻止注入写入、SQL/解析失败rollback后可复用、重复run新snapshot、pool size=2下caller/report backend PID不同，caller外层写事务成功/失败后均可继续读写/rollback且未提交写入不泄漏；report client更严格预算不放宽/caller local设置不变 |
+| 资源 | Root自建template0独占随机库、安装canonical、复用PG实例；只改自有tenant/ID，不reset/shared Redis/provider；所有paused gate与SQL promise终态后Root正常drop |
+| 范围外 | tenant必填CLI、新机器报告/coverage/incomplete、全owner orphan、pending效果分类、Prisma生产承接/部署Job均待D3/B8；本切片不恢复旧HTTP404或改变可选tenant旧方法签名 |
+| 交付 | Worker RED/GREEN+format/lint/tsc后冻结两文件hash；Root定向与完整真实PG/Schema/Prisma/source-dist smoke/audit复验、双审后显式4路径提交 |
+
+S3派前数据Astra只读放行：新ALS上下文隔离成立；pool>=2只保证单caller+report，并发caller占满pool仍可能等待到10s失败，保留为完整生命周期阶段风险；不可把caller SET LOCAL误称跨连接继承。
+
+
+### S3必要前置扩大：连接FATAL事件生命周期
+
+实施前实证发现：当前checked-out pg client没有error listener；给新snapshot设置idle预算可能把可回滚失败变成整个进程退出。Root使用/tmp/billing-s3-idle-probe.mjs导入真实connection.ts、自建空库，idle-in-tx50ms后等待200ms，得到Unhandled error / 25P03，子进程exit1（chunk472a04）；自建billing_s3_idle_03633d765f3c4ebca4bd无剩余连接并已正常drop。TS Sol核pg8.23源码：checkout移除Pool idle listener，Client在无active query时emit error；只给Pool监听或只catch Promise都不足。
+
+不通过取消可靠性预算掩盖该缺陷。Writer已在RED12项（7失败5通过，/tmp/billing-s3-red.log）后停写，生产未改。Root授予下列附加范围后再续派：
+
+| 项 | 扩大裁决 |
+|---|---|
+| Owner/职责 | 同一PostgresConnection资源生命周期；不是新业务owner/事务框架/协议 |
+| 位置比较 | 把子进程事件测试塞入reconciliation.test.ts与独立connection测试；采用test/integration/postgres-connection.test.ts及postgres-connection.fixture.ts，使真实进程error事件/隔离资源负责一组变化原因，不让对账测试承载全部驱动诊断 |
+| 写入集 | 原service+reconciliation.test.ts，增加src/infrastructure/postgres/connection.ts及上述两个测试文件，共5代码/测试文件；不改公共SqlConnection接口、依赖、Schema、其他业务writer；Root文档仍交接后维护 |
+| 活跃client | checkout后BEGIN前安装自有非throw error listener，记录首个连接failure；后续query/execute/begin/commit对失效事务明确失败，不能回落到pool自动执行/误提交。listener清理精确移除本实例安装者，不removeAllListeners |
+| 池与释放 | idle Pool也有非throw安全error listener；fatal或BEGIN/COMMIT/ROLLBACK连接失败的client销毁/带error release，不回收为健康client；正常路径release一次，context状态与监听在最终清理后释放 |
+| 嵌套与错误 | fatal的外层事务在内层失败后仍失效，不能因savepoint cleanup删map而让后续SQL落入autocommit；嵌套finally逐层收敛，最外层释放。withTransaction保留原业务/SQL错误，rollback/release次级错误不得覆盖primary；不自动重试COMMIT或猜测提交结果 |
+| 可观测 | 连接故障仅稳定service/operation/result/error_code结构化诊断，不输出SQL、URI、用户payload或完整驱动错误对象；非throw监听不等于吞掉业务失败，调用必须reject |
+| 新TDD | 实际子进程先RED unhandled退出，再GREEN正常进程终态且run rejects；覆盖checked-out idle FATAL、Pool idle error、自有backend终止/替换、nested fatal后外层失败关闭、后续新client可用、JS原错保留及begin/commit/rollback清理。原对账与全仓事务用例不得删弱 |
+| 资源 | 只终止本测试自己创建并记录PID的连接，验证datname为本独占库；子进程超时后只结束自己的process，await终态并关闭客户端；不动共享PG服务/其他PID/role/database默认 |
+
+增加两个测试文件的门以本表为准；同仓仍由原writer独占，Root不抢写。新增子进程failure fixture是测试资源，不是新的运行时进程或常驻服务。完整Prisma/Nest替换及业务rollback-only收敛仍归B8，不用这次驱动加固冒称所有事务问题已解决。
+
+### B8-S3冻结交付、双审与Root验收
+
+状态：原writer五文件交付并停写 → 数据Astra/TS Sol分别核hash只读审查、无阻断P1/P2 → Root主工作树定向与完整门通过。Root负责两文档与七路径显式提交；本切片不是完整B8放行。
+
+- 对账新增22行wrapper：新ALS上下文内withTransaction，先READ ONLY REPEATABLE READ，再transaction-local仅收紧2s statement/5s idle预算，原四条query/mapping移入private readReport而无复制。caller已提交事实才进入报告，caller写事务/SET LOCAL不受影响。
+- 连接checkout在BEGIN前安装自身error listener并记录首failure，idle Pool也有非throw诊断；query/execute/control对poison失败关闭，嵌套rollback逐层减depth而不提前删外层map。最外层release一次，坏client销毁，交回驱动后精确off自身listener；withTransaction保留unknown/falsey primary，cleanup只安全诊断，不重试COMMIT。
+- 对账RED /tmp/billing-s3-red.log：12项7失败5通过，真实原子状态切换中旧报告false-ok；连接RED /tmp/billing-s3-connection-red-final.log，chunk203359 exit1，3子进程真实25P03/57P01未处理error退出1。短等待首轮未观察到FATAL，不作为故障证据；500ms后真实FATAL确认。
+- Writer冻结session20817 exit0，/tmp/billing-s3-frozen-gates.log：format/lint/typecheck、unit/architecture472、定向PG30（对账12/连接9/S2回归9）通过；独立9child session24123 exit0，/tmp/billing-s3-child-final.log。初轮readonly数组类型错误已修正，未放宽门禁。
+- 冻结SHA256：connection.ts dac0b29a37d9309f741a9ccd599e79c874eb8f382d124bee8c4b712d5013b24d；reconciliation-service.ts 24fcfe4519b4e282f8d4034618bdc89c3e77abe64122e4be519e63b6dab53ab2；reconciliation.test.ts 4b8b2a69054d8b92a03d5e4cc78e408d5e908ac1bc2e8c424645f19923bd723d；postgres-connection.test.ts 059b82a06b0053a7f0e405e868f6b15293498a834978498f721202c5cc51ceb1；postgres-connection.fixture.ts 9e8aabc812b71e81d5b1ae63d954bca262b8ceca47154860ce421efcfe4b230c。两审查员与Root实查一致。
+- Root定向`pnpm exec vitest run test/integration/reconciliation.test.ts test/integration/postgres-connection.test.ts test/integration/usage-pricing-admin.test.ts --no-file-parallelism`：session55593 exit0，30通过0跳过，/tmp/billing-s3-root-target.log。随后完整`/tmp/billing-b8s3-root-verify.sh`：session96340 exit0（chunkca4505），/tmp/billing-b8s3-root.zpIWXq。
+- 完整门实际执行：frozen install、db:apply-schema、pnpm verify（format/lint/typecheck/build/sql:check/contract:check/test）、test:integration、db:verify-schema、prisma:check、源码/dist真实HTTP smoke、pnpm audit --json、git diff --check，均exit0。全套63文件712通过，独立integration34文件205通过，0失败0跳过；catalog35表368列127约束83索引、differences=[]；Prisma同源无漂移，audit五级漏洞均0；两种HTTP均health200/ready200/匿名401/可信BFF catalog200且request ID匹配/SIGTERM退出0。
+- Worker自有库billing_s3_08982b93c6f74de29001全部child/Root定向命令终态后连接实查0，Root正常drop；全门自有库billing_accept_b8s3_65aa9594a8894f2b89aa正常drop。Root查询确认两库均不存在（chunk44e1c1）。没有FORCE、共享Redis清理、role/database默认修改、其他backend终止或真实provider操作。
+- SQL SHA仍57b6ff2cd09de0835b2c608575dea74644163ab591e21fa477855476661920bd，OpenAPI仍58fbe4fea083ba12e0db23f49e995b96500d01af0013febf40eba3093510ef63；依赖/lock/generated provenance未改。官方语义核验：[pg Pool错误与释放](https://node-postgres.com/apis/pool)、[PG客户端超时](https://www.postgresql.org/docs/current/runtime-config-client.html)，2026-09-10；实际本地pg8.23源码与PG18.4实证才是本切片执行依据。
+- 边界：BEGIN/COMMIT/ROLLBACK测试在命令发送前终止自有backend，未证明COMMIT已发送后ACK丢失；JS scan错误是明确故障注入，不声称canonical bigint能保存非法文本。2s/5s不覆盖10s pool acquisition或完整事务/CLI deadline；普通非FATAL SQL被业务callback吞掉后COMMIT实际ROLLBACK的识别仍待完整rollback-only。D3全owner关系/tenant必填CLI/分页/incomplete、Nest/Prisma生产迁移、CI16/镜像/provider sandbox/真实消费者均未完成或未运行。后续owner为Billing原负责人，Root把关major与真实数据政策。

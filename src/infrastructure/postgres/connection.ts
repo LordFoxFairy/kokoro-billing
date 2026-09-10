@@ -8,7 +8,13 @@ export type {
   SqlConnection,
 } from "./database.js";
 
-type TransactionState = { readonly client: PoolClient; depth: number };
+type TransactionState = {
+  readonly client: PoolClient;
+  readonly onError: (error: Error) => void;
+  depth: number;
+  failure?: { readonly error: unknown };
+  released: boolean;
+};
 type BillingContext = {
   transactions: Map<PostgresConnection, TransactionState>;
 };
@@ -46,11 +52,81 @@ class PostgresConnection implements SqlConnection {
       idleTimeoutMillis: 30_000,
       options: `-c search_path=${postgresSearchPath(uri)}`,
     });
+    // pg-pool removes failed idle clients itself; never release them again here.
+    this.pool.on("error", (error: Error) => this.diagnose("pool_idle", error));
+  }
+
+  private diagnose(operation: string, error: unknown): void {
+    const code =
+      error instanceof Error &&
+      "code" in error &&
+      typeof error.code === "string" &&
+      /^[A-Z0-9]{5}$/.test(error.code)
+        ? error.code
+        : "connection_error";
+    try {
+      console.error(
+        JSON.stringify({
+          service: "billing",
+          operation,
+          result: "failed",
+          error_code: code,
+        }),
+      );
+    } catch {
+      // Diagnostics must never throw from a driver's EventEmitter error listener.
+    }
+  }
+
+  private poison(transaction: TransactionState, error: unknown): void {
+    if (transaction.failure !== undefined) return;
+    transaction.failure = { error };
+    this.diagnose("postgres_transaction", error);
+  }
+
+  private assertHealthy(transaction: TransactionState): void {
+    if (transaction.failure !== undefined) throw transaction.failure.error;
+  }
+
+  private release(
+    context: BillingContext,
+    transaction: TransactionState,
+  ): void {
+    if (transaction.released) return;
+    transaction.released = true;
+    try {
+      transaction.client.release(
+        transaction.failure !== undefined ? true : undefined,
+      );
+    } catch (error) {
+      if (transaction.failure === undefined) throw error;
+      this.diagnose("postgres_release", error);
+    } finally {
+      // release installs pg-pool's listener; remove only this checkout's listener.
+      transaction.client.off("error", transaction.onError);
+      context.transactions.delete(this);
+    }
+  }
+
+  private async control(
+    transaction: TransactionState,
+    sql: string,
+  ): Promise<void> {
+    this.assertHealthy(transaction);
+    try {
+      await transaction.client.query(sql);
+    } catch (error) {
+      this.poison(transaction, error);
+      throw error;
+    }
   }
 
   private async client(): Promise<Pool | PoolClient> {
     const transaction = billingContext.getStore()?.transactions.get(this);
-    if (transaction) return Promise.resolve(transaction.client);
+    if (transaction) {
+      this.assertHealthy(transaction);
+      return transaction.client;
+    }
     return Promise.resolve(this.pool);
   }
 
@@ -58,9 +134,21 @@ class PostgresConnection implements SqlConnection {
     sql: string,
     values: unknown[] | undefined,
   ): Promise<[T, unknown[]]> {
-    const result = await (
-      await this.client()
-    ).query<QueryResultRow>(sql, values);
+    const client = await this.client();
+    const result = await client
+      .query<QueryResultRow>(sql, values)
+      .catch((error: unknown) => {
+        const transaction = billingContext.getStore()?.transactions.get(this);
+        if (
+          transaction &&
+          error instanceof Error &&
+          "severity" in error &&
+          (error.severity === "FATAL" || error.severity === "PANIC")
+        ) {
+          this.poison(transaction, error);
+        }
+        throw error;
+      });
     const isMutation = !/^\s*(SELECT|WITH\b[\s\S]*\bSELECT)\b/iu.test(sql);
     const payload = (
       isMutation ? { affectedRows: result.rowCount ?? 0 } : result.rows
@@ -92,16 +180,23 @@ class PostgresConnection implements SqlConnection {
     const active = context.transactions.get(this);
     if (active) {
       const nextDepth = active.depth + 1;
-      await active.client.query(`SAVEPOINT billing_sp_${nextDepth}`);
+      await this.control(active, `SAVEPOINT billing_sp_${nextDepth}`);
       active.depth = nextDepth;
       return;
     }
     const client = await this.pool.connect();
+    const transaction: TransactionState = {
+      client,
+      depth: 1,
+      released: false,
+      onError: (error) => this.poison(transaction, error),
+    };
+    client.on("error", transaction.onError);
     try {
-      await client.query("BEGIN");
-      context.transactions.set(this, { client, depth: 1 });
+      await this.control(transaction, "BEGIN");
+      context.transactions.set(this, transaction);
     } catch (error) {
-      client.release();
+      this.release(context, transaction);
       throw error;
     }
   }
@@ -112,17 +207,17 @@ class PostgresConnection implements SqlConnection {
     const transaction = context.transactions.get(this);
     if (!transaction) throw new Error("billing transaction is not active");
     if (transaction.depth > 1) {
-      await transaction.client.query(
+      await this.control(
+        transaction,
         `RELEASE SAVEPOINT billing_sp_${transaction.depth}`,
       );
       transaction.depth -= 1;
       return;
     }
     try {
-      await transaction.client.query("COMMIT");
+      await this.control(transaction, "COMMIT");
     } finally {
-      context.transactions.delete(this);
-      transaction.client.release();
+      this.release(context, transaction);
     }
   }
 
@@ -133,16 +228,19 @@ class PostgresConnection implements SqlConnection {
     if (!transaction) return;
     if (transaction.depth > 1) {
       const savepoint = `billing_sp_${transaction.depth}`;
-      await transaction.client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
-      await transaction.client.query(`RELEASE SAVEPOINT ${savepoint}`);
-      transaction.depth -= 1;
+      try {
+        await this.control(transaction, `ROLLBACK TO SAVEPOINT ${savepoint}`);
+        await this.control(transaction, `RELEASE SAVEPOINT ${savepoint}`);
+      } finally {
+        // Even a dead connection must unwind one level, keeping the outer scope poisoned.
+        transaction.depth -= 1;
+      }
       return;
     }
     try {
-      await transaction.client.query("ROLLBACK");
+      await this.control(transaction, "ROLLBACK");
     } finally {
-      context.transactions.delete(this);
-      transaction.client.release();
+      this.release(context, transaction);
     }
   }
 
@@ -153,7 +251,11 @@ class PostgresConnection implements SqlConnection {
       await this.commit();
       return result;
     } catch (error) {
-      await this.rollback();
+      try {
+        await this.rollback();
+      } catch (cleanupError) {
+        this.diagnose("postgres_rollback", cleanupError);
+      }
       throw error;
     }
   }

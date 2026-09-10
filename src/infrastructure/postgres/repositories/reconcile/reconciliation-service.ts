@@ -1,4 +1,5 @@
 import type { SqlConnection, RowDataPacket } from "../../database.js";
+import { runWithBillingContext } from "../../connection.js";
 
 export type ReconciliationReport = {
   readonly status: "ok" | "drift";
@@ -12,6 +13,27 @@ export class ReconciliationService {
   public constructor(private readonly connection: SqlConnection) {}
 
   public async run(tenantId?: string): Promise<ReconciliationReport> {
+    return runWithBillingContext(() =>
+      this.connection.withTransaction(async () => {
+        await this.connection.query(
+          "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
+        );
+        // These local caps apply to the report client, not the caller's transaction.
+        await this.connection.query(`SELECT
+        pg_catalog.set_config('statement_timeout',
+          CASE WHEN pg_catalog.current_setting('statement_timeout')::interval = INTERVAL '0 seconds'
+                 OR pg_catalog.current_setting('statement_timeout')::interval > INTERVAL '2 seconds'
+               THEN '2s' ELSE pg_catalog.current_setting('statement_timeout') END, true),
+        pg_catalog.set_config('idle_in_transaction_session_timeout',
+          CASE WHEN pg_catalog.current_setting('idle_in_transaction_session_timeout')::interval = INTERVAL '0 seconds'
+                 OR pg_catalog.current_setting('idle_in_transaction_session_timeout')::interval > INTERVAL '5 seconds'
+               THEN '5s' ELSE pg_catalog.current_setting('idle_in_transaction_session_timeout') END, true)`);
+        return this.readReport(tenantId);
+      }),
+    );
+  }
+
+  private async readReport(tenantId?: string): Promise<ReconciliationReport> {
     const sitePredicate =
       tenantId === undefined ? "" : "WHERE a.tenant_id = $1";
     const siteArgs = tenantId === undefined ? [] : [tenantId];
