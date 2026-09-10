@@ -7,7 +7,7 @@
 
 ## 当前规范化工作
 
-- B7c实现已提交8fbf8e0：真实TS AST/resolver依赖门取代禁modules/强制ports，含80正反例和静态export来源追踪；双独立审查/Root冻结代码全验433全套、157集成、0跳过，catalog/Prisma无差异、源码/dist smoke和audit0。文档更新后的干净HEAD复验另记任务板。
+- B7c已验收8fbf8e0：真实TS AST/resolver依赖门取代禁modules/强制ports，含80正反例和静态export来源追踪；双独立审查/Root冻结代码全验433全套、157集成、0跳过，catalog/Prisma无差异、源码/dist smoke和audit0。干净HEAD46dc851再次完整433/157、0跳过；精确命令/清理见任务板。
 - B8新增实证P1：不同key并发pricing发布争用revision（23505）；outbox持久payload解码失败在try外，maxAttempts=1后仍可第二次claim而不死信。独占PG复现已记录，尚未修复。
 - UUID数据库切换涉及现有v1接受的非UUID资源ID，B9契约设计必须前置B8业务重写；线上数据/仓外消费者状态已询问，未据空GitHub发布记录作假设。
 
