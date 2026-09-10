@@ -24,6 +24,39 @@ Canonical machine-readable source：[`../contract/openapi/v1/openapi.yaml`](../c
 owner、身份、幂等、错误与 consumer 规则，不复制字段级 Schema。Contract 的 version/generation/breaking/provenance 见
 [`../contract/README.md`](../contract/README.md)。
 
+## B8-D1事务目标与B8-D2契约边界（2026-09-10）
+
+B8-D1只冻结内部模块/事务/数据映射设计，SQL/OpenAPI仍是当前v1字节；它不批准任何HTTP breaking实施。
+所有带幂等的业务变更继续遵守trusted tenant/actor、key+identity+versioned digest、成功durable result同提交；
+内部Prisma UUID/BigInt/JSON/错误不得泄漏为未经定义的wire形状，本文下方v1既有字段与行为仍有效。
+
+| 身份类别 | 目标数据库语义 | 当前契约影响 |
+|---|---|---|
+| Billing自己产生的checkout/account/grant/hold/admission/usage/receipt等资源 | 应用UUID主键与本地引用 | 部分v1 schema未声明UUID；客户端accepted input先逐项审核，不原位收窄 |
+| caller settlement_id | 当前既是PK也是command identity/result/refund定位 | 必须决定生成权、外部业务identity命名、digest版本与major切换；未决定前不改字段 |
+| provider_event_id（内部）与event_id（外部） | 前者UUID、后者opaque；execution同理新增内部UUID | 不能让外部provider/Agent为了内部PK格式更改其事件ID |
+| tenant/subject/operator/invocation/execution/provider reference/batch_id | 外部opaque或命令identity | 保留定义与长度，不加通用UUID管道；batch/command identity不是资源PK |
+| cursor | opaque、绑定tenant/resource及稳定排序 | 不复用数据库ID当无签名跨scope cursor |
+
+B8-D2必须从以下两个完整方案作一次决定，不实现长期双轨：
+1. 推荐新major owner contract，一次切换全部真实消费者与配置，移除v1入口/旧header/envelope；Billing拥有内部资源UUID，
+   调用者提供独立业务identity，receipt/digest与refund lookup均明确。先证明当前部署/真实数据状态，再决定仅fresh install还是独立数据演进ADR。
+2. 保持已发布v1资源identity，仅进行无wire变化的内部模型映射，同时另列真正major发布目标；如果采用此方案必须明确为何仍满足既定最终规范，
+   不能把它当隐藏alias/fallback或以“兼容”为由取消目标中的request-id/UTC等收敛。当前未采用此方案。
+
+已询问线上账务数据/仓外调用方状态，尚未收到事实回答；空GitHub release/tag列表不能证明未部署。Root不擅自选择清库、原位改stable v1或造假消费者不存在。
+这里的major切换决定必须单独确认；内部目录、writer、事务失败策略由Root按既定规范裁决，无需把普通命名问题交给用户。
+
+### HTTP接受事实与Credit效果：必须闭环的契约项
+
+当前settlement accept、internal refund、admin refund三入口只返回202接受事实；Recorded outbox没有仓内生产消费者，独立webhook的处理不能充当该HTTP链保证。
+B8-D2须明确每入口到底承诺fact-only还是durable后续effect，以及消费者能如何知道结果；不能仅改202文案制造实现已完成的印象。
+设计优先采用同一owner幂等effect能力：已具备可信checkout/program/subject快照时可在同事务完成，确需异步则注册具名handler、bounded retry/dead-letter与真实终态查询。
+缺失关联不能按payment金额猜测Credit，也不增加向provider主动退款的未请求功能。若fact-only确是业务需求，则移除“待处理”的虚假承诺，
+对应通知事件需明确真实接收者或随切片删除无人消费的路径；不设置空handler直接ack。
+
+本轮机器契约/Schema验证仍证明当前v1，不证明上述目标已生成或已兼容。完整重写门未通过，不能以B8-D1内部审查替代B8-D2。
+
 ## Visibility 与版本
 
 - Owner：`kokoro-billing`。

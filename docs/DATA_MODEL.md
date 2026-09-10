@@ -30,6 +30,90 @@ Payment/Refund/Metering/Subscription仅编排调用。具体模块表见TECHNICA
 Canonical source：[`../database/schema.sql`](../database/schema.sql)。本文说明 owner、关系和不变量；列类型、nullable、
 default、CHECK 与索引的最终事实仍以 Schema 为准。
 
+## B8-D1 目标映射与一致性不变量（内部设计已审查，未应用DDL）
+
+本节与TECHNICAL_DESIGN的B8-D1共同描述目标；后文原表名仍为当前SQL事实。下列35表一对一映射，不合并receipt/outbox，不创建第二可编辑Schema。
+每表资源主键改`id UUID`、应用生成；同仓资源引用改对应`*_id UUID`，跨仓opaque身份保持原语义。所有`currency`列目标为`currency_code`。
+表/约束/索引采用billing owner命名且UTF-8名称不超过PostgreSQL63字节；新的精确SQL生成后必须全catalog复验，不手工维护第二份字段快照。
+
+| 当前canonical表 | 目标表 | 唯一写入组件的归属 |
+|---|---|---|
+| `entitlement_credit_account` | `billing_credit_account` | credit |
+| `entitlement_credit_grant` | `billing_credit_grant` | credit |
+| `entitlement_credit_hold` | `billing_credit_hold` | credit |
+| `entitlement_credit_hold_allocation` | `billing_credit_hold_allocation` | credit |
+| `entitlement_credit_journal` | `billing_credit_journal` | credit |
+| `entitlement_usage_event` | `billing_usage_event` | metering |
+| `entitlement_usage_settlement` | `billing_usage_settlement` | metering |
+| `entitlement_command_receipt` | `billing_command_receipt` | database/CommandReceiptRepository general |
+| `entitlement_outbox` | `billing_outbox` | database/OutboxRepository credit |
+| `payment_provider_event` | `billing_provider_event` | payment |
+| `payment_settlement` | `billing_payment_settlement` | payment |
+| `payment_reversal` | `billing_payment_reversal` | refund |
+| `entitlement_acquisition` | `billing_credit_acquisition` | credit |
+| `entitlement_fulfillment` | `billing_credit_fulfillment` | credit |
+| `payment_outbox` | `billing_payment_outbox` | database/OutboxRepository payment |
+| `entitlement_fulfillment_reversal` | `billing_credit_fulfillment_reversal` | credit |
+| `payment_checkout` | `billing_checkout` | checkout |
+| `entitlement_audit_event` | `billing_audit_event` | database/AuditAppender |
+| `entitlement_offer` | `billing_offer` | checkout |
+| `entitlement_offer_revision` | `billing_offer_revision` | checkout |
+| `entitlement_usage_price_revision` | `billing_usage_price_revision` | metering |
+| `entitlement_usage_price_rate` | `billing_usage_price_rate` | metering |
+| `payment_provider_account` | `billing_provider_account` | payment |
+| `payment_customer_binding` | `billing_customer_binding` | payment |
+| `payment_provider_subscription` | `billing_provider_subscription` | subscription |
+| `payment_subscription_period` | `billing_subscription_period` | subscription |
+| `entitlement_subscription_term` | `billing_subscription_term` | subscription |
+| `payment_command_receipt` | `billing_payment_command_receipt` | database/CommandReceiptRepository payment |
+| `entitlement_redeem_campaign` | `billing_redeem_campaign` | credit |
+| `entitlement_redeem_code_batch` | `billing_redeem_code_batch` | credit |
+| `entitlement_redeem_code` | `billing_redeem_code` | credit |
+| `entitlement_redeem` | `billing_redeem` | credit |
+| `entitlement_billing_command_receipt` | `billing_admission_command_receipt` | database/CommandReceiptRepository admission |
+| `entitlement_billing_admission` | `billing_admission` | metering |
+| `entitlement_execution_event` | `billing_execution_event` | metering |
+
+Credit表只被Credit具名Repository更新；Payment/Refund/Metering/Subscription取得公开业务结果而非数据库model。Audit/receipt/outbox三种支持能力仅负责存储不变量，
+不取得独立业务owner。payment outbox原有aggregate_type+aggregate_id+event_type唯一性原样保留；credit outbox不因此被暗加同一唯一性。
+
+### ID、字段与无外键关系
+
+- Allocation由复合主键改应用UUID `id`，原hold/grant组合仍为UNIQUE；Execution新增内部UUID `id`，原tenant+外部event_id保留UNIQUE。
+- 同仓外键式引用不创建FK/REFERENCES；每次写入在同一事务内校验tenant、存在性、state与owner引用，reconciliation检测漏项。
+- tenant_id、subject_id、actor、invocation/execution/source/provider外部identity、command identity与cursor不能仅因名字含id就改UUID。
+  polymorphic source_ref保持opaque并由source_kind解释；不得把外部业务identity与新内部资源PK混用。
+- 默认TEXT；具有明确线上合同长度、定长hash/currency或范围语义的列保留明确长度/CHECK，不能不经字段契约审核扩大输入。
+  所有金额/credit BIGINT及CHECK、唯一性、nullable语义、timestamp精度、partial predicate随迁移保留；JSON不承载可查询状态机真源。
+- v1当前允许caller自选非UUID settlement_id、offer revision/admission输入；这些与UUID PK的切换受API_CONTRACT的B8-D2约束。
+  本节不批准原地ALTER有数据环境或给v1偷偷加UUID验证。fresh install只对本任务独占空库进行。
+
+### usage–hold：内部UUID与稳定绑定分开
+
+Root选择在`billing_usage_event`增加可空`credit_hold_id UUID`，非空建立UNIQUE（credit_hold_id globally唯一，所有访问仍限定tenant）。
+独立外部usage event可以为NULL；由hold派生的event必须在第一次创建时保存该引用，ID由应用随机UUID产生，不再拼接hold:UUID作为资源ID。
+`ensureUsageEventForHold`在同一tenant/hold下返回已存event UUID，输入subject/feature/quantity/dimensions/source漂移报conflict；
+它必须经Credit公开hold快照校验subject/feature与当前状态，不能只信caller source字符串。
+从独立event首次绑定hold时，必须在事务内校验两方scope和业务字段，条件更新NULL→该hold；已非NULL只允许同值重放。
+一个hold换另一个event或一个event换另一个hold均冲突；创建settlement必须同时确认usage_event.credit_hold_id等于本次hold；NULL首次绑定也在该事务完成。
+原settlement UNIQUE(credit_hold_id)与UNIQUE(usage_event_id)继续保留，不能以两项各自UNIQUE替代event上绑定一致性检查。
+不删除原UNIQUE(tenant_id,source_event_id)，来源身份不复用内部随机ID；source字段是稳定业务身份而非可换key避重的工具。
+
+### Inbox与lease增量（唯一状态owner）
+
+- `billing_provider_event`新增可空processing_token UUID（attempt fence），processing_attempts仍非负。其lease由唯一payment outbox拥有，不增加重复inbox lease。
+  beginAttempt提交attempt/token；终态processed/ignored不可被旧失败覆盖；provider状态仍用received/processed/ignored/failed，token本身不暗示已完成。
+  inbox payload/hash/tenant/provider/external event identity入库后不可变；retry只更新受控处理状态，不重解释已验证的provider身份。
+- `billing_execution_event`自己是队列：增加lease_token UUID、lease_until TIMESTAMPTZ(3)、attempts INTEGER、next_attempt_at TIMESTAMPTZ(3)、
+  dead_lettered_at TIMESTAMPTZ(3)与受控last_error_code；保留received/processed/failed状态，dead-letter是failed且dead_lettered_at非空。
+  claim谓词为未processed、未dead-letter、next_attempt到期且lease空/过期；建立与此谓词对应的dispatch索引。
+- 两outbox保留现有lease/attempt/dead-letter字段；增加attempt>=0、token/until成对为空或非空、published与dead_letter互斥等合法状态CHECK，
+  具体CHECK与真实状态迁移一起复核。claim达到预算后不再执行handler；payload decode失败也经过fenced retry/dead-letter。
+- 永久成功receipt/result与业务effect同提交；失败attempt日志是独立事实，不把已回滚的成功审计/业务receipt重新提交。
+
+尚未放行：HTTP settlement/refund后续终态、Checkout durable网络恢复、全量retention/append-only数据库角色，以及breaking资源输入切换。
+上述目标不声称全部数据设计已完成；下一文档/契约门须把这些关闭后才授权整体业务切换。
+
 ## 1. 存储边界
 
 - Billing 使用 PostgreSQL 16 持久化全部账务事实；Redis 不保存余额、账本、payment status 或 durable receipt。

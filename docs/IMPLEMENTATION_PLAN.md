@@ -27,7 +27,7 @@
 | B4 / P1 / 空库安装保护 | Billing / billing_owner（gpt-5.6-sol）/ B1+B2+Root | worker仅3个代码/测试文件；Root交接后更新database README、INDEX、CURRENT、ACCEPTANCE | 独占DB、TDD、非空/custom schema/并发/回滚/锁与JS超时/backend终止；主控提交/复验 | 已验收：93c06dfa33d38601e51534972890bfda50ea614d |
 | B5 / P0 / 全量catalog drift | Billing / billing_owner / 数据+TS+Root | 精确文件集见B5执行卡；Root交接后文档与提交 | 比较canonical参照库的35表全部列/约束/索引/predicate；缺CHECK与错predicate反例 | 已验收：9663db58bd85eb810b94df6120de050530c79d2f |
 | B6 / P0 / Prisma承接验证 | Billing / 后续续派billing_owner / Root | 固定依赖/生成链/模型/数据生命周期/独立验证；派前冻结文件集 | stable版本、无第二schema、typedCRUD+同tx锁/receipt/outbox+BigInt+错误+生成drift；不切生产writer | 已验收：B6a c7ef9fa；B6b 2793882；生产迁移仍归B8 |
-| B7 / P1 / 工具链与架构门 | Billing / billing_toolchain_hardening / 独立reviewer | package/lock/TS/ESLint/format/CI/architecture精确集派前批准 | Node24、版本固定、完整typed gate；AST有效/违规样本替代禁modules/强制ports；单独格式切片 | B7a已验收058bdf3；B7b已验收3fd97f5；B7c已验收8fbf8e0（干净46dc851复验）；B7d交付0f0e764，双审/冻结树443全套与157集成通过；待本轮文档提交后干净HEAD复验 |
+| B7 / P1 / 工具链与架构门 | Billing / billing_toolchain_hardening / 独立reviewer | package/lock/TS/ESLint/format/CI/architecture精确集派前批准 | Node24、版本固定、完整typed gate；AST有效/违规样本替代禁modules/强制ports；单独格式切片 | B7a已验收058bdf3；B7b已验收3fd97f5；B7c已验收8fbf8e0（干净46dc851复验）；B7d已验收0f0e764；干净ce5b628复验443全套/157集成、0失败0跳过 |
 | B8 / P0 / Nest+Prisma闭合业务切换 | Billing / 后续续派billing_owner / Root+独立reviewer | 先完整35表映射/provider图/事务组卡，再授权src/SQL/contract/test/worker集 | 先稳定查询范式，后整个共享Credit事务组；同一事务不混pg/Prisma，旧实现随闭合切片删除；中间未闭合commit不发布 | 待设计门；依赖B5/B6/B7 |
 | B9 / P1 / 契约与外部副作用 | Billing / 后续续派billing_owner / Root | owner contract先行；消费者另开owner任务，无本仓写入权 | envelope/request-id/UTC/error/202语义；checkout claim→网络→finalize及unknown恢复；实际消费者固定artifact | 待契约裁决/依赖B8 |
 | B10 / P1 / 运行可靠性验收 | Billing / 后续续派billing_owner / Root | worker/reconciliation/retention/smoke与文档；派前批准文件集 | execution并发lease、orphan检测、append-only角色、预算取消、provider sandbox、CI PG16/镜像/DR分层证据 | 待派工 |
@@ -921,3 +921,70 @@ B8-RF审查（billing_data_review，基线8198fd8+机械格式树）静态证实
 当前技术文档和API部分表述为fact-only，但通用202写accepted for processing，终态语义尚缺。B8/B9必须明确接受事实与后续效果：
 信息齐全时经同一owner幂等能力完成，或具名durable handler/失败恢复/查询；不得仅删worker过滤、从金额猜credit、依赖未来webhook补齐。
 此结论为静态缺口而非运行复现，不新增外部provider退款功能；部署数据/仓外调用方及v1非UUID输入的breaking裁决仍待用户事实。
+
+
+## B7d干净HEAD终验与B8-D1设计卡
+
+前轮分类：进展；实现0f0e764与文档ce5b628已提交。Root在干净`ce5b6285e14e61f97dc16d1dd9d7dbc553358e66`完整复验，
+session88972正常exit0，日志`/tmp/billing-b7d-root.2XTtur`：frozen/apply/verify（60文件443通过，35.91s）/integration（32文件157通过，27.77s）、
+format/lint/type/build/SQL/17route、catalog35/368/127/83零差异、Prisma零漂移、源码/dist HTTP+SIGTERM、audit五级0、diff全部通过；0失败0跳过。
+自己的`billing_accept_b7d_f8a5eb73a9354127a68d`正常清理且查询无残留；结束工作树干净。B7已验收，整体Goal仍active，生产仍Fastify/pg。
+
+| 项目 | B8-D1任务卡 |
+|---|---|
+| 任务/完成条件 | P0内部模块/共享writer/事务失败策略与35表映射；独立数据和TS审查后冻结这些内部决定，不冒称B8全部门通过 |
+| 归属 | Billing；Root唯一文档writer/Git；billing_data_review只读数据/事务审查，billing_ts_review只读模块/公开API审查；沿用Astra/Sol |
+| 基线 | /Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing，codex/billing-ts-prisma-alignment，ce5b628，起始干净 |
+| 文件范围 | 仅现有docs/TECHNICAL_DESIGN.md、docs/DATA_MODEL.md、docs/API_CONTRACT.md、docs/IMPLEMENTATION_PLAN.md、docs/CURRENT.md；无新目录、源码、SQL、机器contract或其他仓写入 |
+| 放置比较/粒度 | 复用三设计面与唯一任务板，拒绝另起design/task中心；模块/事务规则在TECHNICAL_DESIGN，映射/约束在DATA_MODEL，breaking边界在API_CONTRACT，互相链接不复制机器字段 |
+| 依赖/删除 | 已验B5/B6/B7；B8-D2待真实部署事实/major决定、HTTP后续终态、Checkout恢复与retention；业务切换时删除旧pg writer/port/factory与全局机械层，不现在误删有效保障 |
+| 验证 | 文档35映射与当前SQL表集合一一对应、目标名字唯一；候选模块图静态无环；当前pnpm sql:check/contract:check；review仅放行内部方案，不替代未来Nest provider图/真实PG事务测试 |
+| 交付 | Root文档commit，两个reviewer绑定冻结hash；审查问题回到同一文件闭环；下一可写slice须单独列源码文件/RED-GREEN矩阵并通过实际相应设计门 |
+
+B8-D1三项内部裁决：usage event以应用UUID作为资源ID并在event持久化可空hold引用/唯一绑定；Payment inbox独立attempt token writer而不复制outbox lease；
+嵌套失败rollback-only，最外层回滚后有界重试，不引入savepoint。Module DAG区分Payment core与事件编排子模块，避免Refund反向环。
+验收矩阵对应TECHNICAL_DESIGN事务表：backend/txid及外连接可见性、深层故障全回滚、catch嵌套错误仍拒绝提交、tenant/生命周期隔离、
+key/identity/digest冲突、unique失败后整命令恢复、默认UUID capture/hold-event配对、pricing双成功、旧lease不能ack、poison decode死信、旧失败不覆盖成功。
+B8-D2/API和完整Schema仍有明确未决项，禁止用本轮只读设计门作为整体生产重写授权。
+
+
+用户补充（2026-09-10）：Billing是关键服务，要求建立在成熟基础上，支付平台对接要完整、方便。框架/ORM/支付SDK优先采用稳定官方能力，
+不自造支付协议、签名算法或第二套账务基础框架；依赖成熟不等于本仓可靠性自动成立，仍需并发、重放、退款、未知结果、恢复与沙箱证据。
+用户提到“staapi”，已询问是否指Stripe API或其他平台，未确认前不擅自选择新provider。当前已有Stripe实现可先审计，
+接入配置、凭据校验、测试模式、Webhook注册说明、错误诊断及runbook纳入后续provider验收，而不是仅验证HTTP连通。
+
+
+### B8-D1首轮独立审查与修订
+
+数据Astra核5hash后内部方向放行，要求实现卡明确event-hold匹配、最后一次commit后ack丢失的只读结果恢复、provider编排不嵌套claim root receipt。
+TS Sol发现P1嵌套scope漂移、P2首个rollback原因丢失、P2跨模块锁/快照查询可能错用root client；Root接受并补入TECHNICAL_DESIGN。
+当前修订明确callback前tenant/actor匹配与rollback-only、hasRollbackCause保存falsey首因、transaction-required read/lock与同一readonly快照、
+root/effect入口区分；DATA_MODEL补settlement与event.hold绑定相等。未改源码/SQL/机器contract，修订后重新冻结五文档并复审。
+
+
+### B8-D1-R2放行与当前Stripe适配器证据
+
+数据Astra首轮与TS Sol R2均放行内部决定；R2五文档hash为`/tmp/billing-b8-d1-r2-sha256.txt`。
+首轮1P1/2P2已按实际建议修订，剩余B8-D2与整体业务切换未放行。Root本轮仅修改原有五文档；当前SQL/OpenAPI字节不变，
+`pnpm sql:check`与`pnpm contract:check`（17routes）实际exit0；35目标映射与当前表集合精确一致且目标名唯一，候选模块声明DAG无环。
+这些命令验证当前机器源及文档内部一致性，不证明尚未生成的目标Schema或未来Nest provider图。运行代码未变，全量运行证据仍绑定ce5b628。
+
+用户要求成熟基础/方便对接后，Root针对当前已有Stripe作本地实跑探针（未把“staapi”未经确认改称Stripe）：
+脚本`/tmp/billing-b8-stripe-probe.mjs`，结果`/tmp/billing-b8-stripe-probe.json`；命令`node --import tsx /tmp/billing-b8-stripe-probe.mjs`退出0，
+基线ce5b628。使用实际StripeCheckoutProvider与StripeWebhookProvider，仅截获SDK sessions.create以记录真实输入，未请求Stripe/数据库，没有支付或账户改动。
+
+| 缺口 | 实际观察 | 目标验收 |
+|---|---|---|
+| 未支付状态归一化 | checkout.session.completed+payment_status=unpaid被parseEvent返回payment_succeeded；不是实际扣款/发放实证 | completed不等于已收款；显式校验payment_status与可信订单/金额/币种，异步成功/失败、重复/乱序不提前或重复发放 |
+| 创建与回调metadata不一致 | 实际createSession发送checkoutId/tenantId/subjectId；以该subscription_data.metadata构造回调，实际parser返回subscription=null，因为当前要求teamId/planId | 按持久checkout/报价映射解析subject与plan，不强迫消费者补旧字段alias；真实创建输出→回调→owner效果在同一回归链验证 |
+| 当前API周期结构 | 带items.data.current_period_start/end的事件，隔离补齐旧metadata后仍解析两周期为NULL；processor对active+grant进一步抛period_missing（此后半段是源码静态证据） | 固定并验证SDK请求/事件destination API版本、使用对应官方对象结构；多item周期与账单支付/试用发放规则显式建模 |
+
+2026-09-10官方语义核验：
+- [Stripe Checkout fulfillment](https://docs.stripe.com/checkout/fulfillment)：需要检查payment_status，延迟支付可能在completed后才成功；必须防重复/并发fulfillment。
+- [Stripe Webhooks](https://docs.stripe.com/webhooks)：raw body验签、快速持久接收、重复及乱序、event destination版本需明确；不依赖事件到达顺序。
+- [Subscription item-level periods](https://docs.stripe.com/changelog/basil/2025-03-31/deprecate-subscription-current-period-start-and-end)：Basil起周期在subscription item，旧subscription顶层字段移除。
+- [Subscription webhooks](https://docs.stripe.com/billing/subscriptions/webhooks)：invoice支付与订阅状态为不同事实；trial/access及计费发放政策需显式裁决，不能仅凭active推断所有账单已付。
+
+本地已装stripe22.6.1的esm/apiVersion.js实际默认`2026-08-26.dahlia`；当前constructor未显式设置API版本，而webhook parser还取旧顶层周期。
+官方文档证明provider语义，本地探针证明本仓适配缺口，两者均不冒充provider sandbox。下一provider切片须把官方SDK/事件合同、
+稳定付款/退款identity、schema/runtime语义、配置自检、沙箱正反例与接入runbook一起闭环；不以SDK安装或mock happy-path称“接入完成”。

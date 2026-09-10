@@ -23,8 +23,8 @@
 | 模块 | 唯一写入职责 | 允许依赖 / 公开能力 |
 |---|---|---|
 | checkout | offer/revision、checkout与provider session状态 | Catalog查询、checkout命令；provider client在事务外调用 |
-| payment | provider account/customer mapping、verified inbox、settlement、payment receipt/outbox | 分派调用refund/subscription/credit公开Service；不写credit表 |
-| credit | account/grant/hold/allocation/journal、acquisition/fulfillment、redeem与entitlement audit/outbox | grant/reserve/capture/release/reverse/fulfill及账本查询；在调用方同一事务scope内执行 |
+| payment | provider account/customer mapping、verified inbox、settlement；receipt/outbox经唯一数据库支持写入 | 核心不依赖其他feature；事件编排子模块显式导入其他owner，详见B8-D1；不写credit表 |
+| credit | account/grant/hold/allocation/journal、acquisition/fulfillment/reversal、redeem；audit/outbox经共享支持写入 | grant/reserve/capture/release/reverse/fulfill及账本查询；在调用方同一事务scope内执行 |
 | metering | pricing revision/rate、admission/execution/usage事实及对应receipt | 调用credit的事务内能力，不独立写余额/journal；保留未知执行结果 |
 | refund | payment reversal与退款receipt | 退款编排调用credit reverseFulfillment，累计金额检查同事务锁定settlement；Payment查询/锁是具名内部能力，不循环注入整个PaymentProcessor |
 | subscription | provider subscription/period与entitlement term | period/term查询与写入，调用credit发放；不复制订阅到账本算法 |
@@ -124,6 +124,124 @@ raw白名单仅限fixture中明确的set_config预算、backend/tx身份断言�
 官方证据重新核验（2026-09-08）：[Prisma generator](https://www.prisma.io/docs/orm/v7/prisma-schema/overview/generators)、
 [db pull](https://www.prisma.io/docs/cli/v7/db/pull)、[transactions](https://www.prisma.io/docs/orm/v7/prisma-client/queries/transactions)。
 npm精确7.10.0三个包存在、Apache-2.0，Node ^20.19/22.12/>=24与TS>=5.4满足当前工具链；维护/退出取舍沿ADR-0003，实际安装/供应链扫描待本切片记录。
+
+## B8-D1 业务模块与事务目标（2026-09-10，内部设计已审查）
+
+基线`ce5b6285e14e61f97dc16d1dd9d7dbc553358e66`，生产仍Fastify/pg。以下替代前文粗粒度目标表中尚未决定的共享writer与循环编排描述，
+不改变下文标明的当前实现。整体业务重写仍须B8-D2契约/切换决定与机器Schema闭环；本节不是生产实施授权。
+
+### 模块公开面与无环装配
+
+唯一业务根为`src/modules/`下七个feature。公开入口为各`<feature>.public.ts`，显式导出业务Service、纯业务input/result与Nest module；
+不公开Repository/ORM类型，不使用export-star、forwardRef、动态ModuleRef查找或全局业务provider绕过依赖方向。
+
+| Feature | 可导入的其他feature公开面 | 唯一writer / 公开职责 |
+|---|---|---|
+| checkout | 无 | Offer/Revision、Checkout；catalog查询、发布、checkout claim/finalize；provider session client是本模块内部网络适配器 |
+| payment（核心） | 无 | ProviderAccount/CustomerBinding、ProviderInbox、Settlement；映射查询、接受支付事实、settlement锁定快照、受控inbox重试 |
+| credit | 无 | account/grant/hold/allocation/journal/acquisition/fulfillment/reversal/redeem；预留、扣除、释放、发放、冲正、到期及账户/账本查询 |
+| metering | credit | price revision/rate、usage event/settlement、admission、execution inbox；定价与执行计量，绝不直接写Credit表 |
+| refund | payment、credit | reversal接受与累计退款额度；调用Payment公开的锁定settlement快照，再调用Credit冲正，不取得Payment Repository |
+| subscription | payment、checkout、credit | provider subscription/period/term；解析受信provider/报价关联并通过Credit发放 |
+| reconciliation | 上述六owner | 一致只读快照中的差异检查；仅经具名owner命令申请重试，不自动修改账本或猜测缺失数据 |
+
+Payment provider-event编排置于`src/modules/payment/provider-events/`，这是Payment内确有processor/handler/worker装配的子能力，不是第8业务模块。
+其`PaymentEventsModule`导入Payment核心、Checkout、Refund、Subscription、Credit；HTTP/worker组合根按需要导入它。
+Payment核心与`payment.public.ts`均不反向导出/导入此编排子模块，Refund/Subscription只依赖Payment核心，避免通过barrel重新闭环。
+`reconciliation`仅调用Payment核心受控requeue而不导入事件processor。
+
+框架支持按真实职责放`src/config/`、`src/database/`、`src/http/`、`src/health/`；auth/logging/cache/worker在对应切片给出具体文件集，
+不预建空目录。对比全局四层与feature容器，选后者是为了让每个业务用例和其测试/持久化归同owner；不是简单批量搬目录。
+HTTP和三个既有worker最终都用Nest显式生命周期与同一owner能力，schema/生成治理脚本不进入运行时依赖图。
+
+### 共享一致性支持：唯一物理写入者
+
+`src/database/`拥有Prisma连接/事务生命周期以及以下具名一致性存储组件；它不是另一个业务owner，也没有通用BaseRepository或任意execute。
+业务模块只提供operation、身份、digest、审计语义和事件语义；存储层不解释折扣、信用额度、退款或订阅规则。
+
+| 组件 | 固定数据scope与能力 | 约束 |
+|---|---|---|
+| CommandReceiptRepository | `general`、`payment`、`admission`固定映射三张receipt；claim/replay/complete | tenant+command+key与非空identity两套唯一性；admission另含apiSurface；成功result不可覆盖，损坏报内部不变量 |
+| AuditAppender | 唯一audit表的append | trusted actor、operation、resource ref；成功审计与业务同一提交，不在回滚后伪造成功 |
+| OutboxRepository | `credit`、`payment`固定映射两表；enqueue、claim、renew、ack、retry/dead-letter | 保留两表不同去重约束；payload/identity不可变；状态写比较scope+tenant+ID+token+非终态 |
+
+public业务API不接收以上Repository或Prisma TransactionClient。它们由各模块内部Service注入，所有业务写显式从当前事务上下文取client。
+每表唯一写入者用真实Prisma model访问/调用图和Nest provider图检查，不以类名、目录或interface数量作为证明。
+seed最终通过各owner同一写入Service执行，不保留seed脚本中的第二套业务INSERT；不会因此扩展HTTP入口。
+
+### 一个最外层事务，嵌套失败必须整组回滚
+
+`TransactionService.run(scope, callback)`只在最外层开启Prisma交互事务，嵌套调用加入同一client；Service决定边界，Repository没有提交权。
+scope包含受信tenant/actor与operation，不从body覆盖；ALS上下文记录transaction state（active/rollback-only/closed）。
+嵌套调用必须在callback前比较tenantId与outer完全相同；不一致先标rollback-only再抛context-mismatch，callback零调用、两个tenant都不得写入。
+root actor与command identity在整个事务不可变；子能力只追加child operation观测信息，不覆盖root scope。若嵌套传入actor则必须与root一致，否则同样拒绝。
+嵌套run抛错时先将上下文设rollback-only再传播，外层即使catch也不得提交；本方案不引入SAVEPOINT，不将Prisma nested transaction当savepoint。
+上下文用独立hasRollbackCause标志保存firstRollbackCause（unknown），不是按truthy判断；false/0/null/undefined等throw也保留。
+outer callback正常返回但已rollback-only时重新抛首个cause触发回滚；后续错误、rollback或cleanup失败不得覆盖首因，使用带primary/cause的聚合错误附加清理故障。
+测试必须覆盖outer吞掉内层错误、falsey throw、多个错误顺序和cleanup再失败，而不是只检查某个泛化rollback-only字符串。
+所有跨模块公开mutation都经此run边界，禁止嵌套开启新的root command/receipt。Credit内部事务能力只产生账务effect，不重复声明外层command receipt。
+各owner明确分开root command入口与transaction-bound effect入口；Provider事件编排调用Refund/Subscription/Credit的effect入口，不间接claim第二个root receipt。
+公共查询分普通root read与transaction-required read/lock；所有在active上下文内执行的查询都使用当前transaction client并核对tenant，不能悄悄落回root PrismaClient。
+锁定settlement/hold等能力必须requireActiveTransaction(expectedTenant, write)，外部无事务、closed或tenant不匹配均在SQL前失败。
+reconciliation的owner snapshot查询必须requireActiveTransaction(expectedTenant, readOnlySnapshot)，只能加入同一READ ONLY REPEATABLE READ上下文，不各开事务。
+普通root read只有在没有事务上下文时才允许root client；这些模式检查与client选择同属TransactionService，不在各Repository复制fallback分支。
+生命周期结束后立即关闭上下文；后续异步任务使用旧client报上下文错误。typed lint拒绝floating promises，测试补脱离await/跨tenant/已关闭client反例。
+
+外层确认回滚后，才可对明确可重放且无外部副作用的完整命令做有限重试。P2034、serialization/deadlock按实际错误形状分类；
+P2002不通用重试，只有已登记的并发claim竞态才允许整个命令回滚后重试/读取已提交receipt。禁止在aborted transaction中继续查询。
+成功receipt解码失败、业务冲突、提交结果未知不重跑扣款；transient失败不永久写failed receipt占死原key。
+
+配置目标：maxWait=1000ms、单次交互事务=10000ms、statement=8000ms、lock=1000ms、idle-in-transaction=10000ms，
+整个可重试命令预算20000ms、最多3次、指数退避起点25ms/上限250ms并带jitter。它们是待实测默认，不是SLO实绩；
+每次尝试与sleep受剩余总预算/取消信号约束，连接/lock/statement/事务deadline分别归类；HTTP/worker外层预算必须容纳该命令预算并在config校验。
+UTC和public/pg_catalog search_path由每事务固定配置，不靠角色默认值。网络调用禁止发生在账务事务中。
+
+### 事务组与锁顺序
+
+先取得当前命令的去重namespace锁（key/identity同时存在时按确定排序），再claim/replay receipt；这些锁只协调本用例，不替代UNIQUE。
+同一事务中资源的顺序固定为：根业务资源 → Credit account → Credit grants（ID升序）→ holds/allocations（ID升序）→ append-only结果。
+需要根据hold定位account时先无锁tenant限定查询，再锁account、重新读取并校验hold；expiry不得先锁hold再倒拿account。
+多账户按account ID排序；grant消费优先级决定分配算法，不改变锁获取顺序。跨feature禁止从Credit反向获取Metering/Payment/Refund锁。
+
+| 事务组 | 根资源与同提交写入 | 分离生命周期 |
+|---|---|---|
+| catalog/pricing发布 | receipt；offer或tenant pricing namespace锁；revision/rate、audit、result | pricing在tenant advisory锁后才分配MAX+1，保留UNIQUE；不同合法key必须都成功 |
+| grant/redeem/subscription发放 | receipt或inbox；campaign/code或subscription/period；Credit全组、term、audit/outbox/result | 无provider网络；来源唯一性防同一period/payment/redeem重复发放 |
+| authorize | admission receipt、invocation/admission；Credit account/grants/hold/allocation；admission/outbox/result | 定价快照属于Metering；included模式不虚构Credit hold |
+| capture/release | receipt、admission；usage绑定；Credit account/grants/hold/allocation/journal；usage settlement、admission/outbox/result | 终态短路前先验证identity/digest；默认UUID成功与重放是必验，不用短ID代替 |
+| expiry | batch receipt；按账户排序再重查eligible holds；Credit投影/allocations/outbox与精确expired IDs结果 | Redis仅协调；一次命令预算内处理有界batch，重放不扫描新对象 |
+| settlement/退款效果 | 根settlement/reversal；Credit acquisition/fulfillment/grant/journal/reversal；audit/outbox/result | HTTP是否只接受事实、何时执行Credit由B8-D2冻结，禁止临时靠webhook补效果 |
+| provider event | 独立claim后锁inbox并验证attempt token；owner业务组与inbox terminal一起提交 | attempt/error在独立生命周期，见下节；business回滚不吞掉失败记录 |
+| execution event | 独立claim后锁execution inbox、admission与Credit组；terminal同提交 | unknown执行结果保持hold，禁止盲扣/盲释放；lease/retry单独事务 |
+| reconciliation | READ ONLY REPEATABLE READ，所有owner查询加入同一快照 | 检测结果不是自动调账；受控修复另起owner命令，携带观测版本并重新验证 |
+
+原子组以测试中的backend/txid、提交前外连接不可见及深层故障全回滚证明。迁移必须按以上共享Credit事务组整体替换；
+中间构建commit不是发布候选，最后删除旧application/domain/infrastructure/interfaces机械层、重复port/factory与pg业务查询。
+
+### Inbox、outbox失败及fencing
+
+Payment的唯一队列/lease authority仍是payment outbox，不再给provider inbox增加第二套lease。ProviderInboxRepository拥有其状态写入；
+独立`beginAttempt`事务验证当前outbox scope+ID+token+未过期且非终态，再给对应inbox写入新的processing_token并增加attempt，提交后才执行业务。
+业务事务先锁inbox并核对token/非终态；最终inbox success/ignored与业务effects一起提交。失败后另起独立事务，只有相同inbox token且非成功终态才写安全错误码；
+较新beginAttempt或并发成功使旧失败更新0行，视作stale而不是重试覆盖。beginAttempt始终按outbox→inbox顺序锁定；business不反向锁outbox。
+账务事务持inbox锁时其他attempt等待受预算约束，不能无界卡住claim；outbox handler在成功提交后才ack。
+
+Outbox claim/renew/ack/retry/dead-letter由独立生命周期调用Prisma root client，明确不继承调用方失败ALS上下文；仍复用同一个PrismaClient/adapter pool，
+不是创建第二套pg连接栈。lease有效性比较数据库实际时钟`clock_timestamp()`，不是长事务开始时间；过期token不续租/ack/retry。
+持久payload decode纳入handler同一try/finally与attempt预算，合法JSONB数组等poison最终死信，handler零调用；不得把parser放宽为任意JSON。
+续租停止时await在途renew，防ack后后台写入；claim attempt>=max不再执行有副作用handler，先用具名owner只读幂等结果查询恢复。
+最后一次业务已提交但ack前崩溃时，已成功结果应fenced ack而不是直接死信；确认未执行/失败才进入死信，结果未知保留显式待核查，不盲重放effect。
+
+Execution没有独立outbox队列，其inbox自己维护lease_token/lease_until、attempts/next_attempt_at与terminal/error；Metering ExecutionInboxRepository为唯一状态writer。
+claim用SKIP LOCKED，业务事务锁行验证token，success与Credit effects同提交；回滚后fenced失败写，有限重试与死信/人工检查，不能多个worker顺序SELECT同一received行。
+失败记账自身失败必须有安全结构化日志/指标，并由可重领的过期lease恢复，不能输出处理成功。未配置事件接收者不得把outbox标published来清空积压。
+
+### Prisma raw SQL窄清单
+
+普通CRUD、聚合和投影用typed Prisma；所有raw都用当前Prisma事务、固定结构、绑定值及显式结果边界校验。
+允许用途限：事务set_config预算/UTC/search_path；按固定业务namespace的advisory锁；具名行锁；队列SKIP LOCKED claim；真实时钟fence；
+reconciliation只读快照设置。每个实现切片列出实际文件/SQL/返回schema/反例，再授权，不允许把原pg SQL整体塞入raw wrapper。
+identity partial UNIQUE用已有生成能力+事务互斥和完整重试维护；不删约束、不新增通用unsafe API。
 
 ## 1. Owner 与边界
 

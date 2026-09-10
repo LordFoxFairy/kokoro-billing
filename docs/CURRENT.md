@@ -7,7 +7,11 @@
 
 ## 当前规范化工作
 
-- B7d实现`0f0e7647d4531e94b2a1d7d8858e970850000c6e`：固定Prettier3.9.6，format:check为verify首门；142文件一遍、4文件两遍机械收敛，两个旧文本检查器补格式前后反例。双审及Root冻结树完整443全套/157集成、0失败0跳过，Schema/Prisma零漂移，源码/dist smoke与audit0；干净提交复验另绑定实际HEAD，不继承旧记录。
+- 当前Stripe适配器新增本地实证缺口：unpaid Checkout completed被归类payment_succeeded；创建Subscription的metadata与本仓回调所需teamId/planId不匹配；现代item-level周期被解析为NULL。仅本地真实适配器探针（SDK调用被截获、无网络/数据库），不是已发生错误账务或Stripe沙箱结果；后续provider设计/回归须覆盖这些场景。用户“staapi”平台名称仍待澄清。
+
+- B8-D1七模块DAG、共享writer、35表映射、usage-hold绑定、inbox fence与rollback-only事务已通过数据/TS独立设计审查；仅文档交付，不授权生产重写。B8-D2的major/消费者、202终态和Checkout恢复仍有未决项。
+
+- B7d实现`0f0e7647d4531e94b2a1d7d8858e970850000c6e`：固定Prettier3.9.6，format:check为verify首门；142文件一遍、4文件两遍机械收敛，两个旧文本检查器补格式前后反例。双审及Root冻结树完整443全套/157集成、0失败0跳过，Schema/Prisma零漂移，源码/dist smoke与audit0；干净ce5b628再次完整443/157、0失败0跳过，见任务板。
 
 - B7c已验收8fbf8e0：真实TS AST/resolver依赖门取代禁modules/强制ports，含80正反例和静态export来源追踪；双独立审查/Root冻结代码全验433全套、157集成、0跳过，catalog/Prisma无差异、源码/dist smoke和audit0。干净HEAD46dc851再次完整433/157、0跳过；精确命令/清理见任务板。
 - B8新增实证P1：不同key并发pricing发布争用revision（23505）；outbox持久payload解码失败在try外，maxAttempts=1后仍可第二次claim而不死信。独占PG复现已记录，尚未修复。
