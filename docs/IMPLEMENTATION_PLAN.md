@@ -1182,3 +1182,63 @@ Root解析当前canonical OpenAPI的实际ref，输出`/tmp/billing-b8d2b-contra
 Root在主工作树实际执行sql:check通过、contract:check 17routes通过、diff --check退出0（chunka7438d）；真实runtime探针12HTTP/15快照/2原worker断言通过，非测试套件计数。
 本轮仅两份事实文档，未重跑format/lint/typecheck/build/全套unit与integration/catalog/Prisma/smoke/audit，原因是生产代码和机器源未变化；最近完整证据仍绑定8b55a57的665/158，不能移算为本轮完整验收。
 Root负责本两文件提交，Goal继续active，后续owner仍Billing负责人/Root：完成尚余退款/订阅/终态设计、真实数据及major消费者决策，再推进生产Nest/Prisma切换。
+
+## B8-D2c退款身份与账务边界设计卡
+
+上一轮分类：进展。c160bfe6d4721a74d0420ce567e0d967aa0b2370提交付款/退款终态实证，干净HEAD SQL/17route验证退出0；B8仍未切换生产writer。
+
+| 项目 | 本轮设计门 |
+|---|---|
+| 目标/优先级 | P0：收敛Refund渠道事实身份、状态与Credit冲正边界；不新增隐含退款/赠送积分商业政策 |
+| 归属 | Refund唯一退款writer，Credit唯一积分writer；Root整体设计/文档/Git，billing_toolchain_hardening只读Stripe退款解析调查，冻结后数据/TS审查 |
+| 基线 | /Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing，codex/billing-ts-prisma-alignment，c160bfe，起始干净 |
+| 文件集 | Root仅TECHNICAL_DESIGN、DATA_MODEL、API_CONTRACT、CURRENT和本唯一任务板；调查员仅读源码/官方文档，/tmp自有探针如确有必要；不访问PG/Redis/真实Stripe、不改Git |
+| 目录/粒度 | 比较Refund内具名service/repository与PaymentEvents直接写退款/Credit；采用已有七模块Refund与Credit公开能力，不新增通用Saga模块或目录。本轮扩展原三设计文档，不建平行规范 |
+| 数据/API | 现有35表映射为设计约束；先区分渠道refund ID与event ID、金额/状态、冲正执行结果和业务策略。机器v1/SQL保持原样，major/真实数据仍需确认 |
+| 依赖/删除 | 依赖B8-D1/D2a事务和账户身份及D2b实证；实施时删除累计charge金额冒充单笔refund、latest退款推断、reason前缀冒充分配和退款直接写Credit。具体删除须实际源码证据 |
+| 验证/交付 | 官方Refund/Event对象语义与当前实际SDK schema、现有账务冲正源码交叉核验；冻结设计双审，Root重跑SQL/contract/diff；未实施项不作通过声明 |
+
+
+### B8-D2c实际解析证据与设计选择
+
+billing_toolchain_hardening/Astra实际registry/provider+Stripe22.6.1 SDK签名探针16场景exit0（chunk87b498）；冻结/tmp/billing-b8d2c-refund/probe.mjs，SHA256
+53ff21b35b0b8f2d0be8ba1c8cdca45a275cc720c02eca9753e910ee0832dd2e，同目录run.log/results.json/sha256.txt。
+Root验证三hash通过，复制原脚本仅改结果输出绝对路径，执行`node --import tsx /tmp/billing-b8d2c-root-probe.mjs`（chunkd5dcba exit0）：
+16场景、16正确签名、16错误secret拒绝，0网络请求。结果/tmp/billing-b8d2c-root-results.json，日志/tmp/billing-b8d2c-root-run.log。
+
+实际当前parser把charge.refunded嵌套pending/requires_action/failed/canceled全部归refund_succeeded；refund.created/updated/failed原样无效果字段；
+缺集合取charge.id+累计300，缺身份用unknown常量，非法金额回退累计，缺全部金额返回null，字符串minor“100”被转换10000；两条含has_more只输出首笔，关联/币种不匹配仍成功，缺metadata返回null Checkout。
+这些是本地人工签名边界样本，不断言Stripe实际会生成异常shape。processor最新settlement选择/null全额/直接Credit查询为源码证据，本轮未连接数据库执行它。
+Root核现有reverseCredits源码：先grant/后account、序号在account锁前、忽略target grant在途hold、delta<=0报错、历史效果依赖JOIN journal和当前渠道succeeded；这些静态事实纳入替代设计。
+原比例integration标题带concurrent-safe但实际两个reverse调用为顺序，不移算并发通过。首次探索rg用了不存在credit文件/glob返回2，随后定位真实metering usage-settlement源；不是产品失败。
+
+Root已将当前已批准单grant比例规则承接、严格渠道对象身份、T1 durable事实/T2原子Credit效果、零delta持久结果、held保护和失败回流review写入同三设计面。
+不自行新增商户退款商业政策或删掉外部退款创建/订阅/行分配待办；major/真实数据依旧待确认。Refund.id/Stripe状态语义已2026-09-10通过官方Refund/Event/refunds文档核验，链接见TECHNICAL_DESIGN。
+本轮未修改源码、测试、canonical SQL、机器contract、generated或依赖，Root唯一writer，审查只针对内部候选设计及冻结证据。
+
+
+### B8-D2c首轮审查修正与数学核查
+
+数据Astra提出1P2：zero delta与无条件exhausted review冲突；TS Sol提出1P1/2P2（包含同一zero项）：T1 root/effect混写、安全整数准入缺失。
+Root接受并修改三设计面：ProviderEvents外层事务内observeProviderRefundEffect不再claim第二receipt，可信succeeded才可enqueue；record root无渠道证据则unknown/waiting_provider/零任务。
+Stripe number先安全正整数校验，拒绝string/unsafe/fraction等，不在舍入后BigInt；delta>0才余额/可扣状态检查，本链冲正exhausted允许zero applied，expired/revoked保持review。
+这些是明确内部契约与现有比例行为的修正，不授权当前v1/DDL切换。R2冻结后双审。
+
+Root临时设计数学模型`python3 /tmp/billing-b8d2c-rounding-model.py`实际通过49140条小整数完整退款分拆序列、3个MAX_SAFE极值例、1/0/0以及其他grant有余额但source grant held不足的算术反例（chunkfcf382 exit0）。
+模型SHA256 4863b2033effc61097c47d8f15cab55dc23f8466ba2adf28f55b693e75d97caf，结果/tmp/billing-b8d2c-rounding-model.json；它不是生产实现/PG并发测试，仅验证设计公式，不能宣称已修复运行时。
+当前sql:check与contract:check17routes通过（chunkd9dccf）；SQL/OpenAPI仍与c160bfe字节一致。5文档之外无Billing修改，无基础设施清理需求。
+
+
+### B8-D2c-R2内部放行与未完成项
+
+数据Astra与TS Sol均复核/tmp/billing-b8d2c-design-r2-sha256.txt五hash，内部设计无剩余阻断P1/P2；Root仅追加本状态与标题/当前态，不改已审决策。
+放行的三设计面绝对路径：
+- /Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/TECHNICAL_DESIGN.md
+- /Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/DATA_MODEL.md
+- /Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/API_CONTRACT.md
+
+Root主工作树实际16签名解析反例及49140条设计公式模型通过，SQL/17route/diff检查通过；生产源码/SQL/机器OpenAPI与起始c160bfe字节不变。
+没有新数据库/Redis命名空间或网络server，调查员与Root均终态exit0；临时探针不触及真实provider或基础设施，无共享清理操作。
+本轮未重跑完整format/lint/typecheck/test/build/integration/catalog/Prisma/smoke/audit，原因是仅五文档内部设计与本地只读解析调查；最近完整665/158仍绑定8b55a57，不转算为本提交验收。
+未完成：已发现退款parser/冲正源码缺陷尚未修复；订阅/外部退款创建/行分配/补偿政策、完整机器major/真实数据/消费者决策、canonical Schema、Nest与Prisma生产writer切换，以及全套当前提交验收。
+Root负责本五文档提交；下一阶段继续收敛Subscription实际invoice/payment/period身份与发放规则及必要业务决策，再完成总文档门实施，Goal保持完整active，不把本节放行当B8完成。

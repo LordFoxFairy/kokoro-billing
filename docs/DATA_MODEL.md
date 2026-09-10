@@ -349,3 +349,35 @@ worker带tenant/fence作条件更新，SKIP LOCKED与确定排序；外部查询
 有财务效果或unknown/review/未完成session的Checkout不得物理删除，也不能清provider key/digest使旧请求重新创建。
 完整保留期/法域与敏感URL清理归统一retention门，不在本轮硬编码法定年限；日志不记payload/token，清URL不清session identity和付款事实。
 请求body/secret配置不入contract；quote字段与provider截止的wire改名/新增遵守API major门。此处内部字段未成为当前SQL事实。
+
+## B8-D2c退款观察与冲正数据目标（内部设计R2已审查，SQL未应用）
+
+与TECHNICAL_DESIGN的D2c两阶段一致；仍扩展既有35表，不新建平行退款/ledger事实源。
+
+| 现有→目标表 / writer | 字段与约束增量目标 |
+|---|---|
+| payment_settlement→billing_payment_settlement / Payment | provider_account_id非NULL UUID；external_charge_ref/external_payment_intent_ref可空TEXT，仅经受信付款证据写入。账户scope下非NULL charge ref唯一，PI按账户scope索引但不先假定一PI永远只一charge；仅PI的关联需查询结果唯一且其他身份/金额一致，否则review |
+| payment_reversal→billing_payment_reversal / Refund | provider_account_id非NULL UUID，external_reversal_ref非空TEXT为真正Refund.id；UNIQUE(provider_account_id,external_reversal_ref)，tenant必须与Payment账户owner一致；settlement_id引用准确付款，无FK。amount_minor正BIGINT，currency_code与付款一致；身份/金额/币种/付款关联一旦接受不可改 |
+| 同上 / Refund | status区分无可信渠道证据的unknown与已接受渠道观察pending/requires_action/succeeded/failed/canceled；新事件证据仍在ProviderInbox。observed_provider_event_id/observed_at记录来源，不能用observed_at或Event.created假装资源版本；不支持的对象/状态留inbox复核，不伪造succeeded |
+| 同上 / Refund | credit_effect_status=waiting_provider/pending/applied/review_required/not_applicable；credit_effect_completed_at可空TIMESTAMPTZ(3)，credit_effect_error_code可空TEXT；review_required另有review_reason_code可空TEXT以允许applied后出现渠道失败仍保留已应用状态并标review；refund级待复核由该标记表达 |
+| 同上 / Refund | credit_fulfillment_id/credit_grant_id可空UUID，仅从Credit返回的精确同tenant/付款来源绑定，首次应用后不变；allocation_policy_version可空TEXT，未绑定/策略不支持不得自动apply；reason改为业务说明TEXT，不拼allocation_mode伪装结构化字段，审计actor来自受信上下文 |
+| entitlement_fulfillment_reversal→billing_credit_fulfillment_reversal / Credit | 保留同一payment_reversal_id唯一；成功结果记录policy_version、input_digest、refund_amount_minor、prior_refund_amount_minor、prior_credit_micros及原G/S快照（类型/非负与正数按各自语义），让每笔delta及处理顺序可重建。amount_micros允许0；journal_id可空UUID，committed正delta必须非NULL且对应同tenant/source/负delta journal，零delta必须NULL |
+| payment_outbox→billing_payment_outbox / OutboxRepository | 既有列承接RefundCreditEffectRequested(v1)，aggregate identity为Refund；去重不靠event delivery ID。与Refund pending在T1同提交，T2成功结果独立于ack，重放读取Credit结果；既有Recorded不再被误称可驱动执行 |
+
+状态约束：applied必须有completed_at及绑定的fulfillment/grant/policy；applied后原成功Credit结果不可覆盖或删除，后续渠道失败只更新观察和review标记。
+not_applicable只允许有明确“该商品无Credit效果”的可信报价/履约政策证据；缺grant、映射未到、订阅策略未定义一律不能据absence设置not_applicable。
+waiting_provider是渠道未成功且无历史已应用结果；pending是已确认succeeded且具备执行输入；review_required可用于成功观察尚无可应用映射/余额不足等零Credit效果情形。
+已有applied后即使渠道状态failed也不能改waiting_provider；原冲正账目在累计计算中继续参与。存在未解决review的settlement暂停新增自动效果。
+源事件重放沿inbox key，记录命令重放沿receipt key；refund identity相同的不同事件不是命令payload冲突本身，状态观察可更新，金额/关联漂移另报review。
+
+T1 ProviderEvents effect复用其外层inbox事务，不claim第二份Refund command receipt；可信succeeded观察才可同提交观察/inbox终态/唯一任务outbox。独立record root只claim自己的receipt，无可信观察时unknown+waiting_provider、零任务；已存在provider结果不被record重放降级。T2原子提交Credit全组+Refund效果状态。信用不足不回滚已提交T1；SQL异常不在同tx吞掉后补写状态。
+金额额度检查在settlement锁内；失败回流后曾applied金额不从Credit累计中扣除。新外部退款请求的额度预占/取消恢复另属创建命令设计，不能复用SUM(status=succeeded)假装已覆盖在途外部退款。
+
+退款应用查询通过tenant+id和account scope+external_ref；累计Credit已应用金额通过settlement对应Refund集合JOIN fulfillment reversal的成功结果，不能过滤渠道当前status；明确同tenant/no-orphan关系。
+与Grant相关的在途hold占用为SUM(held_micros-captured_micros-released_micros)，由Credit在account/grant锁内查询；query索引按现有allocation的grant scope检查执行计划后决定，不凭字段机械加索引。
+delta=0需既定身份/绑定/累计/策略检查，本退款链先前冲正耗尽的grant允许保存成功结果；不要求free余额。expired/revoked即使零delta仍review，不自动恢复权益。正delta才检查可扣状态/freeMicros/account.available及执行余额变更。
+正delta同事务journal.source_kind=payment_reversal/source_ref=refund.id，序号受account锁保护；zero delta只写成功结果，禁止通过JOIN journal来判断所有退款是否已应用。
+
+无FK关系由owner受信绑定与同事务检查保证：退款→账户/付款、效果→退款/fulfillment/grant/journal，后台Reconciliation只能经owner只读快照核orphan/金额/效果状态。
+有渠道成功、pending任务、applied、review或未知事实的Refund及其inbox/receipt/履约证据不能按普通缓存TTL删除；完整retention权限策略仍待单独收敛。
+本表是待编入唯一canonical SQL的目标，不声称现有VARCHAR、状态CHECK、amount>0或生成Prisma已经支持这些状态；fresh install/catalog/Prisma/真实数据演进与完整事务验证仍待实施。

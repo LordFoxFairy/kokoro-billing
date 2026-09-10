@@ -669,3 +669,82 @@ S0只是付款状态门；完整provider事件仍需明确金额/币种/session�
 [创建会话/过期](https://docs.stripe.com/api/checkout/sessions/create)、[已知ID查询](https://docs.stripe.com/api/checkout/sessions/retrieve)、
 [列表能力](https://docs.stripe.com/api/checkout/sessions/list)、
 [Undici连接预算](https://github.com/nodejs/undici/blob/main/docs/docs/api/Client.md)、[Agent生命周期](https://github.com/nodejs/undici/blob/main/docs/docs/api/Agent.md)。SDK22.6.1本地请求/取消证据另记任务板。
+
+## B8-D2c Refund身份与Credit冲正（内部设计R2已审查，生产/major未放行）
+
+基线c160bfe。D2b证明三HTTP入口仅record事实、Recorded未被现有worker消费；下文是替代目标，不描述已上线功能。
+沿用七模块DAG：Refund调用Payment核心锁定付款快照和Credit公开冲正能力；PaymentEvents只做渠道事件编排，不再查询/写入Credit表。
+Refund业务文件放既有目标`src/modules/refund/`下具名service/repository/schema；Credit分配与写账放`src/modules/credit/`。
+对比把反向账务放PaymentEvents、Refund自写Credit、Refund编排Credit三种方案，采用第三种以保持唯一writer；不新增通用Saga/退款任务模块。
+
+### 三个操作分开，既有业务范围不偷换
+
+1. 渠道观察：接收已验证的退款对象，保存身份/金额/币种/状态及来源证据；不意味着本服务调用过退款API。
+2. 发起外部退款：是独立的商户命令，涉及权限、可退款额度预占、稳定provider key、短事务claim/事务外调用/unknown恢复。当前没有该实现；不能把accept入口或admin审计改名就称支持。完整发起策略及机器major在后续门交付，本节不删除该待办。
+3. Credit冲正：仅处理已确认的退款与已绑定的履约快照，使用本仓现有单一grant比例退款规则；不把渠道minor units直接当micros，不从caller传来的任意amountMicros推导合法性。
+
+当前单grant比例规则是已有reverseCredits行为的承接，不外推到多行价格、税费、订阅期、赠送积分或额外收费。
+当前line_specific只拼reason，尚无行模型/行选择器/执行算法；进入新major时应形成真正可校验的行分配契约或明确拒绝，不能继续接受后伪称已执行。
+该商业面、欠额恢复与退款失败后的补偿政策仍待独立决定；本轮不凭空建立负余额、自动补发、释放用户hold或自动再次退款。
+
+### 渠道退款身份与可信关联
+
+内部RefundObservation保存providerAccountId（含固定provider/environment）、externalRefundRef、externalChargeRef与externalPaymentIntentRef、amountMinor、currencyCode、providerStatus及sourceEventId。
+Refund业务去重为账户scope+Refund.id；Event.id只用于inbox投递去重。同一Refund的不同事件可以改变观察状态，不能生成第二笔退款。
+金额/币种/付款绑定一旦接受后不可按新事件覆盖；冲突保留durable inbox证据并进入review，不用不同event key避重。
+
+Stripe使用已验签Refund对象的id/amount/currency/status与charge/payment_intent关联；展开对象仅取经schema校验的id。
+Stripe amount必须先验证typeof number、Number.isSafeInteger且>0及适用provider金额上限，再转BigInt/十进制字符串；拒绝fraction、NaN/Infinity、unsafe integer、string/object/null，禁止先Number(string)或共享major-decimal转换。JSON已舍入的2^53+1无法通过转换恢复；未来provider decimal-string输入须独立digits schema直接BigInt。
+校验执行账户/test-live、对象类型、非空身份、正整金额、币种与确切付款映射。二者同时有值时必须指向同一settlement；不使用Checkout下最新付款或metadata自报tenant猜关联。
+Settlement必须保存经验证的provider charge/PaymentIntent引用（字段见DATA_MODEL）；尚缺映射时是待关联/复核，不取最新settlement代替。
+charge.refunded只是Charge变化信号；其amount_refunded是累计值，refunds.data[0]不代表完整退款集合或本次事件唯一退款。
+禁止charge.id、Event.id、常量unknown充当Refund.id，禁止缺amount回退整单金额。退款对象缺失/未知状态保留待复核，不转换成功。
+
+订阅退款仍可记录渠道事实，但其Credit映射必须由Subscription有效付款/period契约提供，不对它直接套一次性grant算法。
+退款状态pending/requires_action没有成功扣积分资格。succeeded只表示当前渠道观察；后续failed/canceled或矛盾终态必须保留新证据并进入review，不能把succeeded写成永不接受新事实的吸收态。
+Event.created不提供同一资源严格版本；迟到pending不倒退已确认结果，矛盾终态须重新查询确切Refund对象或人工核对。查询在事务外且有预算/账户校验；查询返回再经同一观察能力落库，不在锁内访问Stripe。
+已冲正后遇到渠道失败保留原journal/fulfillment reversal与applied状态，另设review标记，不删除原账、负负得正补发或重新占用退款额度；补偿另走明确受审计的Credit命令。
+
+### 两个持久阶段，账务效果仍为一个原子事务
+
+**T1明确两种入口，不混用root与effect**：
+- ProviderEvents root已完成验签、执行账户/tenant映射与D1 beginAttempt，在其现有最外层事务调用transaction-required的`Refund.observeProviderRefundEffect`。Refund加入当前事务，不能另claim Refund command receipt或自主commit。锁确切settlement并验证Refund identity/金额/币种/绑定；只有可信且规范化succeeded观察有资格把waiting_provider转pending（映射齐全、无review）并enqueue唯一RefundCreditEffectRequested(v1)。Refund观察、inbox processed终态及effect outbox同提交；异常沿D1整组rollback-only，不在失效tx补成功receipt。
+- HTTP/内部`Refund.recordRefund`是独立root command，claim/replay本命令receipt，只保存契约允许的record事实。受信调用者身份不等于渠道已成功证据：无可信provider观察时status=unknown、credit_effect_status=waiting_provider且不enqueue T2；body自报succeeded不提升为渠道验证。已有provider事实先到时record命令只校验/重放自身结果，不降级或重建效果。新观察API/商户create的证据与权限由major另定，不暗改现v1。
+- command先到再provider成功、provider先到再command、二者并发均汇合账户scope+Refund.id；交易内校验财务绑定冲突并保留review，只有一个Credit effect outbox。等待渠道的record不会永远假称processing Credit，查询明确waiting_provider。
+来自已验签渠道的退款若暂时缺settlement/映射或出现累计矛盾，其原事件已在durable inbox，标待复核/受控重试而不丢证据、不猜账。
+退款事实与Credit效果不再强行处于同一个外层事务：Credit余额不足或进程崩溃不能把已确认渠道事实抹掉。这是对B8-D1粗表中refund整组事务的明确细化；receipt成功仅对应record这个命令。
+
+**T2账务应用**：唯一payment worker按outbox lease调Refund.applyCreditEffect → B8-D1最外层事务 → 锁settlement/reversal → Credit锁account、grant、相关allocation（确定顺序）→ 计算/验证delta → journal+grant+account+fulfillment reversal+Refund的credit效果状态+Credit outbox同提交。
+T2没有provider网络；Credit业务预检返回applied/review_required具名结果，先验证后写账。SQL/解析/不变量异常标rollback-only整组回滚，不能catch后用同一个失效tx写review。
+业务不足/映射歧义可以在零Credit写入下提交Refund review状态和审计；非业务异常的最终dead-letter/诊断沿D1独立fenced失败写入，refund查询必须同时反映队列故障，不能永远显示普通pending。
+
+`RefundCreditEffectRequested(v1)`是本仓内部执行事件，payload只有tenant/refund identity及schemaVersion，策略/财务输入从已绑定持久快照读取；以refund identity去重，不把原Recorded两类全部接到任意handler。
+已有payment worker进程加入该明确handler，公平有界处理provider事件与Refund效果，指标按事件类型区分积压/死信；不加第四个进程。
+应用已提交但ack丢失时重放读取既有结果并ack，不第二次冲正；outbox达到attempt预算同样先确认既有成功结果。超时/lease丢失的handler不得覆盖新token结果。
+Refund业务和Credit事务使用账户/业务锁防重复，outbox lease不是账务唯一性来源。review结果不无限重试；具名owner重试须受审计且使用同一Refund身份，不new key开新账。
+
+### 承接比例算法并修正离散单位边界
+
+限定同一settlement对应一个确定的Credit fulfillment/grant；G=该grant原始micros、S=对应付款minor，二者来自不可变履约/付款快照。
+R=已成功应用Credit效果的退款minor累计（含零delta结果），C=这些效果的micros累计，a=本次已确认退款minor。
+在settlement锁内计算：`target = ceil(G * (R + a) / S)`，`delta = target - C`；全程BigInt，结果落库/wire使用十进制字符串与受测范围映射。
+约束G>0、S>0、0<a、R+a<=S、0<=delta<=G-C；冲正已存在先校验固定输入摘要/绑定再重放，不能像旧实现一样忽略改account/amount的重放参数。
+zero delta是合法离散结果：例如G=1、S=3、连续退款1/1/1，delta为1/0/0，最后累计恰为1；旧delta<=0抛错会卡住后两笔。
+因此每笔退款都保存applied结果及参与累计的minor；delta=0仍保存fulfillment reversal与策略/计算结果，但不写零值journal、不修改account generation/grant，不把它当失败或丢掉累计R。
+同一settlement不同refund的处理顺序可以不同，最终累计一致；每笔实际delta与计算前R/C持久可审计，已提交结果不会因后续事件重新分配。
+累计只使用已applied效果，不能按渠道当前status过滤历史已扣账行，否则succeeded→failed会把已扣金额从基数中抹掉。未解决渠道矛盾对该settlement暂停新增自动Credit应用，交review。
+
+仅delta>0才要求grant处于可扣状态，且目标grant扣除未捕获未释放hold占用后的freeMicros>=delta、account.available>=delta；不能只看全账户余额与grant.remaining。
+其他grant的可用余额不能掩盖目标grant已占用；不动held、hold/allocation承诺或借用其他grant来“退款成功”。正delta的已消耗或不足交review，不做负余额。
+delta=0仍校验tenant/identity/付款和履约绑定/固定G/S/policy/累计额度及无未解决渠道矛盾；本退款链先前冲正造成的exhausted不阻止applied零结果，不要求余额、journal或generation变化。过期/撤销grant即使delta=0仍保守review，不能自动恢复权益；不把有未知原因的exhausted当已验证退款链。
+所有Credit mutation均先锁account再grant/allocations，journal sequence在account锁内分配；删除旧Refund先锁grant、先读MAX序号后锁account的实现。
+
+### 验证与本轮尚未交付项
+
+实施须实跑真实PG：两连接同Refund与不同partial、不同事件同Refund、支付/退款乱序、丢ack与重启、inbox/T1/T2逐点故障、zero delta、G/S极值、已用/已held且其他grant有余额、状态失败回流、输入漂移、跨tenant/账户/币种/charge冲突。
+额外覆盖command→provider、provider→command及两者并发的唯一effect outbox和inbox原子终态，安全整数上界/越界/JSON舍入反例，以及首笔后grant exhausted仍完成后两笔zero delta、expired/revoked零效果review。
+合同测试需分别覆盖record结果与当前查询结果，退款创建则另覆盖SDK超时/unknown/稳定key和provider sandbox。原名为concurrent-safe的比例测试当前顺序调用，不构成并发证据。
+尚未交付canonical字段/约束、Nest/Prisma实现、精确新major HTTP/API query、外部退款创建、行分配/订阅退款政策、补偿流程；完整B8设计/部署门仍未通过。
+
+官方语义核验2026-09-10：[Refund对象](https://docs.stripe.com/api/refunds/object)、[Event类型](https://docs.stripe.com/api/events/types)、[退款失败](https://docs.stripe.com/refunds#failed-refunds)。
+官方说明渠道对象与异步失败语义；两阶段事务、唯一writer、比例算法承接和review策略是本仓设计选择，不称Stripe推荐账本架构。

@@ -239,3 +239,22 @@ Checkout只读导入Payment核心账户公开能力，所有tenant/actor从受�
 Provider verified事件是独立确认通道，但仍需本仓snapshot金额/币种/身份一致和幂等Credit效果；不能把create ready或subscription active等同已收款。
 
 尚待用户事实/major确认的范围仍如B8-D2段：现有账务数据、仓外v1调用者、数据演进方式与整体breaking契约。当前17operation/SQL原样验证不证明未来状态机/Schema通过。
+
+## B8-D2c退款语义与终态边界（内部设计R2已审查，机器v1不变）
+
+D2b所测三个accept入口的成功receipt仅表示记录命令完成，不证明Stripe创建退款、渠道成功或Credit冲正成功。
+新major必须分别描述“发起商户退款命令”“接受受信退款观察”“查询退款及Credit效果”，不把同一202同时解释为三种完成。
+内部query结果包含refund identity、准确provider观察状态、独立credit_effect_status与review标记；发生渠道失败回流时可同时显示provider failed和credit applied/review，不掩盖已有账务。
+命令receipt重放仍返回原record接受结果，当前状态从受信owner query获得；不要通过每次重放改写receipt来假装它是最新状态查询。
+RefundRecord/RefundQuery为内部业务input/result，不在contract另存可编辑Application DTO；机器schema与新HTTP status/Location/分页/错误在major切片统一发布和验证。
+
+Stripe退款身份是执行账户scope下Refund.id；Event.id只表示观察投递，不能当退款身份。charge/PI/币种须与已持久付款关联，tenant/actor/账户授权来自受信上下文。
+metadata.checkout不是授权与唯一付款选择条件。missing identity/amount、累计charge amount、未知status不得归一化成功；金额只接受该provider定义的integer minor单位，不使用共享decimal major转换器。
+当前line_specific缺选择器/算法，不保留“接受后忽略”的目标；其确切行模型、订阅退款与商户发起退款策略仍需业务/major门。
+record root与provider observation effect分离：无已验证渠道证据的record返回接受结果，但查询明确provider unknown、credit waiting_provider，不enqueue扣账；provider观察加入ProviderEvents同事务，不claim第二record receipt。
+Stripe JSON number金额先Number.isSafeInteger且>0后转BigInt；unsafe/fraction/string/object/null不以隐式转换或累计金额补齐。
+单grant比例冲正沿既有规则，结果允许0 micros（如1 credit拆3次退款），零delta在身份/策略检查通过且无review时为已应用结果；此前本链冲正造成exhausted不阻断，expired/revoked仍review。查询可无journal ID，不能宣称账本漏写。
+用户跳转/管理员点击/返回accepted均非渠道成功证据；provider succeeded之后也可能failed，查询与告警应展示需复核而不是自动补发或隐藏历史冲正。
+
+实施前必须补齐两个refund的机器request/response/error shape、账户/tenant权限、幂等与状态查询、消费者artifact更新；切换时删除被替代旧v1入口与reason前缀含义，不提供长期双协议。
+尚未获得真实数据/仓外消费者事实确认，本节不改变当前17operation或API版本，不把缺失的终态查询写成当前可调用功能。
