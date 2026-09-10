@@ -381,9 +381,14 @@ B8的ID/事务设计必须闭环此问题；B7b短opaque ID fixture只隔离rece
 
 ### B7c 工程依赖图门（2026-09-10）
 
-采用既有test/architecture内的图类型、AST/resolver核心、Billing策略、virtual反例测试四文件；与scripts或production相比，
+采用既有test/architecture内的图类型、AST/resolver核心、真实project读取器、Billing策略、virtual反例测试五文件；与scripts或production相比，
 这是测试门而非业务运行能力，不增加CLI或生产依赖。精确文件/行为/验证范围见唯一任务板B7c卡。
 当前旧application/domain方向由AST全值/类型边验证；目标modules跨feature通过显式<feature>.public.ts，不强制四层或ports。
 当前HTTP仅runWithBillingContext的具名导入和七组精确type-only循环是明确B8过渡债，不允许增加symbol/边或目录级豁免；
 B8必须消除并删除例外，当前不宣称所有类型依赖无环或Credit writer已唯一。value循环、未解析/动态加载和越界必须失败。
 SQL/tenant/权限/契约/生成门不因旧目录形状门退出而放宽；三设计面无业务变更，此门只放行工程测试改动。
+
+执行中追加批准typescript-dependency-project.ts承载真实tsconfig/文件扫描I/O，图引擎保留纯分析与可替换host；共七个改动文件，
+无新依赖。扫描.ts/.mts/.cts/.tsx，只有精确src/generated/prisma生成目录可跳过；已解析但未入图的本地依赖显式失败，
+不把外部wrapper自动当安全外包。静态template及import options纳入语法正反例，database/cache与角色边界覆盖相同源扩展。
+当前冻结交付待Root验收，不将writer无基础设施测试结果当整仓验收。

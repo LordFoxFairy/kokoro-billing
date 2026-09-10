@@ -27,7 +27,7 @@
 | B4 / P1 / 空库安装保护 | Billing / billing_owner（gpt-5.6-sol）/ B1+B2+Root | worker仅3个代码/测试文件；Root交接后更新database README、INDEX、CURRENT、ACCEPTANCE | 独占DB、TDD、非空/custom schema/并发/回滚/锁与JS超时/backend终止；主控提交/复验 | 已验收：93c06dfa33d38601e51534972890bfda50ea614d |
 | B5 / P0 / 全量catalog drift | Billing / billing_owner / 数据+TS+Root | 精确文件集见B5执行卡；Root交接后文档与提交 | 比较canonical参照库的35表全部列/约束/索引/predicate；缺CHECK与错predicate反例 | 已验收：9663db58bd85eb810b94df6120de050530c79d2f |
 | B6 / P0 / Prisma承接验证 | Billing / 后续续派billing_owner / Root | 固定依赖/生成链/模型/数据生命周期/独立验证；派前冻结文件集 | stable版本、无第二schema、typedCRUD+同tx锁/receipt/outbox+BigInt+错误+生成drift；不切生产writer | 已验收：B6a c7ef9fa；B6b 2793882；生产迁移仍归B8 |
-| B7 / P1 / 工具链与架构门 | Billing / 后续续派billing_owner / 独立reviewer | package/lock/TS/ESLint/format/CI/architecture精确集派前批准 | Node24、版本固定、完整typed gate；AST有效/违规样本替代禁modules/强制ports；单独格式切片 | B7a已验收058bdf3；B7b已验收3fd97f5；B7c设计已冻结待派工；B7d待实施，不放宽门禁 |
+| B7 / P1 / 工具链与架构门 | Billing / billing_toolchain_hardening / 独立reviewer | package/lock/TS/ESLint/format/CI/architecture精确集派前批准 | Node24、版本固定、完整typed gate；AST有效/违规样本替代禁modules/强制ports；单独格式切片 | B7a已验收058bdf3；B7b已验收3fd97f5；B7c七文件已冻结待审查及Root全验；B7d待实施，不放宽门禁 |
 | B8 / P0 / Nest+Prisma闭合业务切换 | Billing / 后续续派billing_owner / Root+独立reviewer | 先完整35表映射/provider图/事务组卡，再授权src/SQL/contract/test/worker集 | 先稳定查询范式，后整个共享Credit事务组；同一事务不混pg/Prisma，旧实现随闭合切片删除；中间未闭合commit不发布 | 待设计门；依赖B5/B6/B7 |
 | B9 / P1 / 契约与外部副作用 | Billing / 后续续派billing_owner / Root | owner contract先行；消费者另开owner任务，无本仓写入权 | envelope/request-id/UTC/error/202语义；checkout claim→网络→finalize及unknown恢复；实际消费者固定artifact | 待契约裁决/依赖B8 |
 | B10 / P1 / 运行可靠性验收 | Billing / 后续续派billing_owner / Root | worker/reconciliation/retention/smoke与文档；派前批准文件集 | execution并发lease、orphan检测、append-only角色、预算取消、provider sandbox、CI PG16/镜像/DR分层证据 | 待派工 |
@@ -780,3 +780,24 @@ Node24 PATH=/opt/homebrew/bin:$PATH、bash login=false；默认先无infra门，
 交付文件hash/实际RED与GREEN/命令/未完成风险，冻结后先规格、再质量审查，Root明确路径提交、干净HEAD重跑。
 官方语义：[TypeScript Compiler API](https://github.com/microsoft/TypeScript/wiki/Using-the-Compiler-API)（页面明确适用TS6及以前），
 实际API以本地固定6.0.3声明和正反例为准，不更新编译器来迁就检查器。
+
+
+## B8 前置复核与 B7c 执行中授权（2026-09-10）
+Root 当前基线 00a5ad589ca1609ba14a16f238a540cfe2eef169。B7c唯一writer保持billing_toolchain_hardening；Root只读调查/自建PG探针，未并发改本仓。
+已批准B7c第7文件 test/architecture/typescript-dependency-project.ts：真实tsconfig与src遍历I/O；纯图分析留原核心。补resolved但未扫描内部目标诊断、精确Prisma生成例外、TS源扩展扫描、静态template及dynamic import options正反例；无新依赖/生产修改。
+
+Root 两个新的真实缺陷证据（SQL/src均为基线，独占template0临时库安装当前canonical，命令终态后正常删除，查询无billing_probe_b8_*残留）：
+- pricing P1：/tmp/billing-b8-pricing.2S2ZlZ。通过真实createPostgresUsagePricingAdminService和两个真实connection运行同tenant不同idempotency key发布，仅在各自实际MAX查询返回后设置调度barrier。两者都读revision0，1个提交revision1、另一个SQLSTATE23505/uq_entitlement_usage_price_revision_site_number；失败者pricing/receipt全部回滚。不是mock数据库结果，也不是并发功能通过。B8必须在同tenant命名空间锁内分配修订号，最终验收两个合法发布均成功且不同revision，保留UNIQUE，不把冲突包装成功。
+- outbox P1：/tmp/billing-b8-outbox.gVLehA，exec47603 exit0。真实payment_outbox JSONB数组[]，worker maxAttempts=1/leaseSeconds=1；parsePersistedJson在try外直接抛billing.outbox_payload_invalid。等实际lease到期后再取，attempts从1升2，dead_lettered_at/published_at保持NULL，handler未执行，lease仍持有。当前poison测试只覆盖handler抛错。B8/B10必须把decode失败纳入同一有限重试/死信状态机，不能放宽parser；该结果只证明缺陷，不是可靠性验收。
+
+B9发布/消费者复核：远端origin=https://github.com/LordFoxFairy/kokoro-billing.git；gh api实际返回releases=[]、tags=[]、actions/artifacts.total_count=0。仅证明该GitHub仓当次可见发布记录，不能推出不存在仓外部署。BFF src/http/routes/owner.ts实际手写调用catalog与checkout；Web走BFF；当前Agent src仅billing注释、Scheduler billing.reconcile仅测试样例，不能把这些当活跃Billing客户端。UUID资源输入及breaking门由只读B2复核后Root裁决，尚未原位改v1。
+
+B2只读复核另证实：当前HTTP测试接受offer-revision-1、adm-1、settlement-1；settlement_id同时作为caller选定主键、receipt identity与响应。将这些输入直接改UUID会破坏现有v1，不是纯数据库重命名。B9-design的ID分类、生成权、digest/replay、refund定位和版本/消费者策略必须前置于B8生产SQL/业务重写；B9消费者实施仍在owner新契约交付后。已向用户异步询问线上数据/仓外调用方状态；B7c/B7d等独立工作继续，不据GitHub空发布推断答案。
+
+### B7c 首轮规格审查（冻结未提交源码）
+
+billing_data_review核对七文件hash一致、实际70项通过，但发现P2：public转导出经bridge别名暴露Repository会漏报。
+Root独立用同一analyzeDependencies/checkBillingDependencies实跑：orders.repository导出OrdersRepository，bridge转为Store，
+orders.public再导出Store，跨feature导入Store；所有边可解析而diagnostics=[]。因此首轮不放行，不先做完整验收来掩盖规格缺口。
+修复限静态具名export lineage（含别名/中间barrel及import后local export）；不追任意JS数据流，不以所有可达依赖均禁用误伤
+合法public Service内部使用Repository。实现负责人续派同一七文件集，Root停写直到再冻结；规格复审后再质量审查。
