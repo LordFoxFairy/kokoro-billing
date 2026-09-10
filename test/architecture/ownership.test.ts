@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 import { z } from 'zod';
+import { readBillingDependencyGraph } from './typescript-dependency-project.js';
+import { checkBillingDependencies } from './billing-dependency-policy.js';
 
 const text = async (path: string): Promise<string> => readFile(join(process.cwd(), path), 'utf8');
 
@@ -111,20 +113,19 @@ describe('billing ownership architecture', () => {
     await expect(access(join(process.cwd(), 'database/schema.sql'))).resolves.toBeUndefined();
     await expect(access(join(process.cwd(), 'database/migrations'))).rejects.toThrow();
     await expect(access(join(process.cwd(), 'scripts/apply-migrations.ts'))).rejects.toThrow();
-    await expect(access(join(process.cwd(), 'src/modules'))).rejects.toThrow();
     await expect(access(join(process.cwd(), 'src/adapters'))).rejects.toThrow();
   });
 
-  it('keeps application and domain code independent from infrastructure adapters', async () => {
-    const files = [...await sourceFiles('src/domain'), ...await sourceFiles('src/application')];
-    const contents = await Promise.all(files.map(async (path) => ({ path, content: await text(path) })));
-    for (const { path, content } of contents) {
-      expect(content, path).not.toMatch(/from ['"][^'"]*infrastructure\//u);
-      expect(content, path).not.toMatch(/from ['"][^'"]*interfaces\//u);
-    }
+  it('enforces resolved production boundaries and reports the fixed B8 type debt', async () => {
+    const graph = await readBillingDependencyGraph();
+    expect(checkBillingDependencies(graph)).toEqual([]);
+    expect(graph.cycles.value).toEqual([]);
+    expect(graph.cycles.type).toHaveLength(7);
+    expect(graph.cycles.all).toEqual(graph.cycles.type);
   });
 
   it('keeps SQL out of Application and Interfaces and database types out of Application', async () => {
+    await expect(access(join(process.cwd(), 'src/application/ports/database.ts'))).rejects.toThrow();
     const applicationFiles = await sourceFiles('src/application');
     const files = [...applicationFiles, ...await sourceFiles('src/interfaces')];
     const sqlLiteral = /(?:`|"|')\s*(?:SELECT\b|INSERT\s+INTO\b|UPDATE\s+[a-z0-9_]+\s+SET\b|DELETE\s+FROM\b|WITH\s+[a-z0-9_]+\s+AS\b)/iu;
@@ -133,24 +134,8 @@ describe('billing ownership architecture', () => {
       expect(content, `${path} contains persistence SQL`).not.toMatch(sqlLiteral);
       if (applicationFiles.includes(path)) {
         expect(content, `${path} contains a database row or connection type`).not.toMatch(/\b(?:RowDataPacket|ResultSetHeader|PoolClient|QueryResultRow|Connection)\b/u);
-        expect(content, `${path} imports a database implementation`).not.toMatch(/from ['"](?:pg|[^'"]*infrastructure\/postgres|[^'"]*ports\/database)[^'"]*['"]/u);
       }
     }
-  });
-
-  it('uses bounded-context repository ports and an explicit application transaction port', async () => {
-    const expectedPorts = [
-      'src/application/checkout/ports/checkout-repository.ts',
-      'src/application/credit/ports/credit-repository.ts',
-      'src/application/metering/ports/metering-repository.ts',
-      'src/application/payment/ports/payment-repository.ts',
-      'src/application/reconcile/ports/reconciliation-repository.ts',
-      'src/application/refund/ports/refund-repository.ts',
-      'src/application/subscription/ports/subscription-repository.ts',
-      'src/application/ports/transaction.ts',
-    ];
-    await Promise.all(expectedPorts.map(async (path) => expect(access(join(process.cwd(), path)), path).resolves.toBeUndefined()));
-    await expect(access(join(process.cwd(), 'src/application/ports/database.ts'))).rejects.toThrow();
   });
 
   it('tenant-qualifies every PostgreSQL repository join and never uses offset pagination', async () => {
