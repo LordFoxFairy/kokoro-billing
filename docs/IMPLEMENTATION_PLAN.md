@@ -988,3 +988,34 @@ root/effect入口区分；DATA_MODEL补settlement与event.hold绑定相等。未
 本地已装stripe22.6.1的esm/apiVersion.js实际默认`2026-08-26.dahlia`；当前constructor未显式设置API版本，而webhook parser还取旧顶层周期。
 官方文档证明provider语义，本地探针证明本仓适配缺口，两者均不冒充provider sandbox。下一provider切片须把官方SDK/事件合同、
 稳定付款/退款identity、schema/runtime语义、配置自检、沙箱正反例与接入runbook一起闭环；不以SDK安装或mock happy-path称“接入完成”。
+
+
+## B8-S0付款准入修复卡（局部设计，整体B8-D2仍未通过）
+
+前轮为进展：45fec83冻结内部设计并实证Stripe适配缺口。当前起始45fec83199e08f83fdf9db42ae955f387b8c662c，工作树起始干净。
+用户强调关键服务成熟性，优先关闭已复现的未付款事件被归一化为成功，而非等待大重构后再修；不借此宣称完整Stripe接入完成。
+
+| 项目 | 决定 |
+|---|---|
+| 任务/目标 | B8-S0 / P0风险收敛：一次性Stripe付款严格paid-only准入，未支付零账务效果、后续支付恰一次发放 |
+| Owner/角色 | Billing Payment；billing_toolchain_hardening（沿用Astra）唯一writer；数据Astra局部设计/测试证据审查，TS Sol代码审查；Root设计/Git/完整验收 |
+| 三文档局部门 | TECHNICAL_DESIGN B8-S0确定分支与文件；API_CONTRACT B8-S0说明缺省/非法输入收窄但wire机器源不变；DATA_MODEL B8-S0明确无DDL/事务边界变化。审查通过仅放行本4文件修复 |
+| 文件集 | src/infrastructure/providers/payment/adapters/stripe/stripe-webhook-provider.ts；test/unit/provider-registry.test.ts；新增test/unit/stripe-payment-gating.test.ts与test/integration/stripe-payment-gating.test.ts |
+| 目录/粒度 | 生产复用原owner文件；比较扩充混合provider测试vs独立付款准入测试，选择现有unit/integration目录各一个专项文件，无新目录或公共测试框架 |
+| 输入规则 | completed/async_payment_succeeded + mode=payment + payment_status=paid + subscription为缺省/NULL才成功；非paid/非payment/缺省/畸形mode-status/非NULL subscription保持原event type并不携带effect字段 |
+| 保留/排除 | raw body与官方SDK验签、provider account→tenant、inbox去重、PG业务事务不变；不改SQL/OpenAPI/其他provider、订阅解析/SDK版本、Nest/Prisma切换或任何其他仓 |
+| TDD | 先矩阵RED及真实PG未支付却创建账务的RED，后最小provider分支修复；合法fixture补真实Stripe mode/payment_status；不mock被测parser/inbox/processor/SQL |
+| 独占资源 | 测试文件每例随机tenant/业务ID，复用Root指定本轮独占database；worker不创建/删除共享服务/库、不清共享Redis；Root按需分配一次PG窗口 |
+| 验证 | 单元矩阵（两事件类型×paid/unpaid/no_payment_required/缺省/异常值×payment/subscription/setup/缺省；subscription交叉）；真实runtime注入HTTP、SDK签名、inbox→OutboxWorker→processor→PG表断言、重复/迟到事件与坏签名；冻结后Root完整verify/integration/catalog/Prisma/源码dist smoke/audit |
+| 交付 | worker不Git/不文档；Root明确路径commit，先规格再代码review与独占全验。完整provider沙箱/API版本/订阅metadata/周期与B8-D2仍待后续，不以局部通过缩小Goal |
+
+no_payment_required在当前正金额且无免费发放设计的profile不进入paid-only效果。未来支持免费权益必须独立定义，不把未知或不支持模式自动当支付成功。
+生产代码只需紧凑纯分支，不引入通用event规则引擎或支付框架；所有新增测试只服务本局部付款准入。
+
+
+B8-S0数据设计审查已放行（billing_data_review/Astra，4文档hash均匹配/tmp/billing-b8-s0-design-sha256.txt，无P1/P2）。
+补验收要求：只门控两种Checkout事件，不关闭既有退款/订阅分支；同Checkout的unpaid→不同event ID的paid async→同成功event重放→迟到unpaid，
+每步检查settlement/grant/journal/余额；未付款事件inbox ignored/outbox完成而Checkout未取消；坏签名零inbox。
+Root会分配独占数据库供writer跑真实RED/GREEN，writer只执行卡内测试并关闭自身连接，不创建/drop库、不改共享服务；全部测试session终态后Root清理。
+实际HTTP优先使用createBillingRuntime的jwks模式以启用真实provider account→tenant查询；本测试不请求用户JWT，JWKS无需网络，Stripe API密钥不配置，
+官方SDK仅构造本地测试签名。Redis只复用既有实例，资源均随机tenant/ID；不把application方法手动调用冒称HTTP入口验证。

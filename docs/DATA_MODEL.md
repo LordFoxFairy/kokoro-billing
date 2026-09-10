@@ -303,3 +303,10 @@ PK/UNIQUE 自带索引，不重复声明。索引用途变化必须同时更新�
 receipt/account/journal/outbox单事务提交/回滚/外连接不可见；key UNIQUE与partial identity UNIQUE独立反例，跨tenant正例。
 行锁与SKIP LOCKED带tenant条件，真实pg_stat_activity锁等待后释放；具体预算错误语义见TECHNICAL_DESIGN末尾。
 这证明当前映射可承接所测能力，不代表35表所有用例已重写；生产pg writer、共享receipt/audit/outbox公开面及B8命名切换仍待实施。
+
+## B8-S0局部数据门
+
+Schema、字段和当前writer不变。付款准入仅阻止尚未付款或非一次性payment事件进入既有settlement/fulfillment事务；
+被忽略事件仍可持久化inbox并由outbox正常完成，但不得写payment_settlement、credit_account、credit_grant或credit_journal。
+同Checkout后续paid async事件才使用原payment外部identity/inbox去重与现有账务事务；真实PG断言零提前发放和单次后续发放。
+这不声称B8目标35表已经应用，也不修复其他已知事务/订阅问题。局部schema命令验证当前SQL无变化即可，不创建新migration/DDL。

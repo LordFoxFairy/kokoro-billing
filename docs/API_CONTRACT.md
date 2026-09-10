@@ -214,3 +214,10 @@ execution receipt的provider_operation_ref若存在且非null，须为string，�
 null/缺省保持event fallback。webhook先使用provider解析结果，仅对缺省结果的raw ID/type fallback做string校验；
 非法对象/数组/布尔/数字fallback返回既有400 billing.provider_payload_invalid，null/缺省保持既有空ID/unknown。
 这是显式记录的输入收窄，不宣称错误输入行为完全不变；完整机器契约/消费者切换仍归B9。
+
+## B8-S0当前Stripe回调的paid-only准入修复
+
+只改变既有Stripe Checkout事件的内部归一化：明确payment模式且payment_status=paid、无subscription引用才进入一次性付款效果；
+其他事件保持原type交当前processor ignored，不以完成Checkout页面推断资金到账。缺省mode/status的旧合成fixture此前被错误放行，现收窄，不冒称非法输入行为完全不变。
+HTTP路径/身份/raw body SDK验签/inbox去重/响应状态与schema不改；迟到的async成功事件仍可处理。当前金额严格正数的profile不自动给no_payment_required发放Credit。
+该局部修复沿用当前机器契约，并不批准stable v1的UUID/header/envelope/版本切换；订阅及免费权益政策仍有未决项。

@@ -518,3 +518,18 @@ SQL/tenant/权限/契约/生成门不因旧目录形状门退出而放宽；三�
 仅格式化，不改变业务架构或数据/API事实；SQL、OpenAPI、只读Prisma产物和lock由各自authority治理。
 文件放置、精确排除及可执行正反例见唯一任务板B7d卡；纯格式文件须逐一匹配固定formatter对基线源码的输出，
 并在当前冻结树重新通过全门。此设计不授权在B7c验收前格式化其变化中代码。
+
+## B8-S0 Stripe一次性付款准入局部设计（2026-09-10）
+
+这是当前实现上已复现的支付状态错误的局部修复，不搬模块、不改表、不引入Prisma生产writer，也不绕过B8-D2整体重写门。
+Owner为Billing Payment的Stripe事件归一化；只修改既有stripe-webhook-provider.ts中的一次性付款分支，复用官方SDK验签与当前inbox/processor事务。
+仅checkout.session.completed或checkout.session.async_payment_succeeded且object.mode严格为payment、payment_status严格为paid、subscription缺省或NULL，
+才归一化为payment_succeeded。mode/payment_status缺失、不支持或非paid，以及任何非NULL subscription引用均不得进入一次性Credit发放。
+未满足条件的合法事件保持原event type、空order/payment/refund/订阅效果字段，由现有processor ignored并ack该事件；不取消Checkout、不关闭未来async成功事件。
+当前SQL报价amount_minor>0、当前Checkout创建不配置免费/折扣发放；no_payment_required不在本切片paid-only发放profile内，不能当作已付金额。
+订阅权益、免费试用/折扣政策和现代周期处理仍归B8-D2/provider完整方案，不伪装成本次已修复。
+
+局部放置：生产原文件保持现有owner；新test/unit/stripe-payment-gating.test.ts专测分支矩阵，新test/integration/stripe-payment-gating.test.ts专测付款准入→真实账本，
+优于继续向混合provider-registry或mock-checkout-payment测试堆场景；复用既有test目录，不建新目录。provider-registry.test.ts只修合法paid fixture及加强成功eventType断言。
+验证先RED再GREEN；真实runtime HTTP+官方SDK测试签名+PG inbox/outbox/processor证明unpaid不产生settlement/account/grant/journal，后续paid async一次发放、同event重复和迟到unpaid不重复发放。
+失败签名不落inbox；外部Stripe API不得调用，不能称Stripe sandbox。Root用独占PG全门/Prisma/schema/源码dist smoke验收，canonical SQL/OpenAPI保持原字节。
