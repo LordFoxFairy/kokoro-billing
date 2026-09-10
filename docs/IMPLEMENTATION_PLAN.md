@@ -27,7 +27,7 @@
 | B4 / P1 / 空库安装保护 | Billing / billing_owner（gpt-5.6-sol）/ B1+B2+Root | worker仅3个代码/测试文件；Root交接后更新database README、INDEX、CURRENT、ACCEPTANCE | 独占DB、TDD、非空/custom schema/并发/回滚/锁与JS超时/backend终止；主控提交/复验 | 已验收：93c06dfa33d38601e51534972890bfda50ea614d |
 | B5 / P0 / 全量catalog drift | Billing / billing_owner / 数据+TS+Root | 精确文件集见B5执行卡；Root交接后文档与提交 | 比较canonical参照库的35表全部列/约束/索引/predicate；缺CHECK与错predicate反例 | 已验收：9663db58bd85eb810b94df6120de050530c79d2f |
 | B6 / P0 / Prisma承接验证 | Billing / 后续续派billing_owner / Root | 固定依赖/生成链/模型/数据生命周期/独立验证；派前冻结文件集 | stable版本、无第二schema、typedCRUD+同tx锁/receipt/outbox+BigInt+错误+生成drift；不切生产writer | 已验收：B6a c7ef9fa；B6b 2793882；生产迁移仍归B8 |
-| B7 / P1 / 工具链与架构门 | Billing / 后续续派billing_owner / 独立reviewer | package/lock/TS/ESLint/format/CI/architecture精确集派前批准 | Node24、版本固定、完整typed gate；AST有效/违规样本替代禁modules/强制ports；单独格式切片 | B7a已验收058bdf3；B7b已验收3fd97f5；B7c/d待实施，不放宽门禁 |
+| B7 / P1 / 工具链与架构门 | Billing / 后续续派billing_owner / 独立reviewer | package/lock/TS/ESLint/format/CI/architecture精确集派前批准 | Node24、版本固定、完整typed gate；AST有效/违规样本替代禁modules/强制ports；单独格式切片 | B7a已验收058bdf3；B7b已验收3fd97f5；B7c设计已冻结待派工；B7d待实施，不放宽门禁 |
 | B8 / P0 / Nest+Prisma闭合业务切换 | Billing / 后续续派billing_owner / Root+独立reviewer | 先完整35表映射/provider图/事务组卡，再授权src/SQL/contract/test/worker集 | 先稳定查询范式，后整个共享Credit事务组；同一事务不混pg/Prisma，旧实现随闭合切片删除；中间未闭合commit不发布 | 待设计门；依赖B5/B6/B7 |
 | B9 / P1 / 契约与外部副作用 | Billing / 后续续派billing_owner / Root | owner contract先行；消费者另开owner任务，无本仓写入权 | envelope/request-id/UTC/error/202语义；checkout claim→网络→finalize及unknown恢复；实际消费者固定artifact | 待契约裁决/依赖B8 |
 | B10 / P1 / 运行可靠性验收 | Billing / 后续续派billing_owner / Root | worker/reconciliation/retention/smoke与文档；派前批准文件集 | execution并发lease、orphan检测、append-only角色、预算取消、provider sandbox、CI PG16/镜像/DR分层证据 | 待派工 |
@@ -723,3 +723,60 @@ Root在该干净HEAD重新全跑，日志`/tmp/billing-b7b-final.7UxmBh`，exec9
 
 B7b仅此切片已验收；B7c/d、B8–B10及默认UUID capture P0仍未完成，Goal保持active。下一关键路径为B7c架构门设计与实施，
 Root继续统一writer/provider/事务方案；不把typed lint通过等同于已迁移Nest/Prisma或已完成计费业务。
+
+
+## B7c AST依赖门执行卡（2026-09-10）
+
+基线541f373（实现3fd97f5已验354全套/157集成、0跳过），工作树干净。
+工作目录/分支：/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing / codex/billing-ts-prisma-alignment。
+前轮分类进展，B7b已验收；B7c只做真实工程边界门，不搬业务，不提前放行Nest/Prisma。
+
+| 项 | 结论 |
+|---|---|
+| Owner/执行 | Billing，优先续派billing_toolchain_hardening（Astra）唯一writer；若实际仍因quota终止，Root明确交接给billing_ts_review（Sol），不得两个writer；Root管Git/文档/集成，billing_data_review只读规格审查 |
+| 当前事实 | 84手写src、215唯一内部边，7组旧application纯type SCC；HTTP仅runWithBillingContext符号从PG connection导入，不能粗暴禁止后假装当前无该依赖；production Prisma尚禁用 |
+| 目标职责 | TS AST+实际module resolver建立value/type/all三图，规则有稳定diagnostic（code/source/target/kind/location），真实项目与virtual fixtures共用核心；不按字符串禁词冒充依赖检查 |
+| 目录比较 | 既有test/architecture vs scripts运行工具：采用test/architecture，只有测试门消费者，无新增运行CLI，不把编译器放production |
+| 粒度/文件 | 新typescript-dependency.types.ts（共享图/诊断结构）、typescript-dependency-graph.ts（解析/解析路径/建图/SCC）、billing-dependency-policy.ts（唯一Billing边界与过渡债策略）、typescript-dependency-graph.test.ts（正反例）；修改ownership.test.ts和prisma-generation.test.ts接入同一核心。若真实project读取与纯图分析需分离，先报具体文件，不塞无关helper |
+| 依赖 | 使用已安装TypeScript6.0.3及Node fs/path/module；package/lock不动，不建新包/CLI/空层；生产不得导入test；不改generated |
+| 数据/API | canonical SQL/OpenAPI/业务源码/入口均不变；只替换机械目录规则，tenant JOIN/OFFSET、SQL、权限、契约、工具链和生成一致性门完整保留 |
+| 删除 | 删除src/modules不存在与固定七repository ports存在断言；旧application/domain import regex以AST同等或更强检查替代；Prisma import regex改为同一AST解析。禁止migrations/db push等有效约束保留 |
+| 验证 | TDD先各语法与规则真实RED/GREEN，原architecture及typed lint、lint/typecheck/build/unit/http；冻结后Root全套PG+Redis/Schema/Prisma/源码dist smoke；不靠虚拟目标正例声称真实生产已迁移 |
+
+### 解析与图边界
+
+使用TS6公共Compiler API与当前tsconfig真实options；内部`.js`导入解析到`.ts`，正反例与真实项目使用同一resolver管线（virtual host可替换filesystem）。
+识别ImportDeclaration（type clause、specifier type、default、namespace、side-effect/空named import）、ExportDeclaration（export type/mixed/re-export）、
+ImportEqualsDeclaration、ImportTypeNode/typeof import、字面量dynamic import/require。mixed语句分别记录type/value边，空named import不被every([])误判为type。
+相对路径未解析、越出仓根、源语法错误、非字面量动态加载必须诊断；bare外部包与Node builtin明确分类，不能把internal alias误归external而放行。
+真实项目扫描所有手写src，仅精确跳过src/generated/prisma/（生成物仍由原生成/类型/build门覆盖）；不按名称generic generated跳过任意业务目录。
+非生产虚拟文件可直接在memory host，无需新fixtures树。保留路径大小写/realpath和仓界，禁止简单contains('infrastructure')判断路径。
+只做静态可解析依赖约束，不宣称完整JS安全沙箱。生产当前无createRequire；明确拒绝node:module的createRequire（含别名），避免require别名变成不受控加载后门。
+对普通被局部变量遮蔽的require不误判为真实loader，或明确受限语法策略并测试，不默默忽略疑似加载。
+
+### 项目规则（当前态与目标态分开）
+
+1. domain/application的值与类型边均不得指向infrastructure/interfaces；application不得直接依赖pg、@prisma/*或generated Prisma。
+2. 旧interfaces不得导入PG数据库实现，**唯一有界当前例外**为server.ts从connection.ts具名import runWithBillingContext（允许local alias，但不得混入其他symbol/namespace/re-export/dynamic）。
+   该例外不允许SQL能力；原SQL门保留。B8移动request/transaction context后删除此例外，不扩展目录级豁免。
+3. Feature root为已选src/modules及当前src/application（排除明确shared ports）；跨feature值/类型只能走目标owner公开入口`<feature>.public.ts`。
+   目标public entry用显式export，不机械export*；禁止公开re-export Repository/数据库实现。当前application无跨feature业务import；shared transaction/idempotency/safe-integer是精确既有能力，不泛放行ports。
+4. 目标*.controller.ts不得直接依赖database/Prisma/Redis；Service→Controller拒绝。简单Service→同feature具名Repository允许；不强制有Repository/ports目录。
+5. 全src value graph循环（含self-loop）全部拒绝；all/type图分别报告真实SCC。现有7组type-only循环允许的仅是541f373实际闭合边，作为具名B8债。
+   在policy中按精确source-target type边登记，不给整个目录/节点任意循环豁免；新增/扩张边、变成value边、其他type循环均拒绝。
+   不从当前受测源码自动生成expected来伪造门；有固定期望正反例。B8必须归零并删除过渡债，B7c只证明未新增和被识别，不冒称全type依赖无环。
+6. production Prisma禁用仍保持至B8，检查真正的external @prisma及resolved generated路径；注释/普通字符串不算import，非字面量动态加载不能逃逸。
+
+必须有单因素反例：value/type越层、alias/re-export/namespace绕行、跨feature deep import、controller→DB、service→controller、cycle/self-loop、
+mixed type/value与空named import、合法type环识别但新增type环被拒、旧type债增边变值被拒、unresolved/path escape、syntax error、dynamic variable、
+createRequire alias、`.js`→`.ts`正例；评论/普通字符串含Prisma/infra字样不误报；合法feature/public入口与本feature调用应通过同一checker。
+Root会独立测试语法覆盖，不以测试数量或文件名称推断完整性。B8 Nest provider DAG/唯一writer/真实API消费者不在此门中假装验证。
+
+### 交付与权限
+
+writer允许上述6个文件，无其他写入。Root在handoff后停止写Billing；worker不能操作Git index/commit/branch、文档、SQL、contract、src、其他仓或共享服务。
+可以只读git diff/show；多步骤测试必须保存完整exec session并持续poll到终态，观察超时不重启/清理。
+Node24 PATH=/opt/homebrew/bin:$PATH、bash login=false；默认先无infra门，完整PG/Redis窗口由Root独占验收。
+交付文件hash/实际RED与GREEN/命令/未完成风险，冻结后先规格、再质量审查，Root明确路径提交、干净HEAD重跑。
+官方语义：[TypeScript Compiler API](https://github.com/microsoft/TypeScript/wiki/Using-the-Compiler-API)（页面明确适用TS6及以前），
+实际API以本地固定6.0.3声明和正反例为准，不更新编译器来迁就检查器。

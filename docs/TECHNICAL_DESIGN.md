@@ -377,3 +377,13 @@ installer新增单元异常注入，保证falsey主异常不被资源关闭异�
 
 独立已知P0：默认UUID hold加hold:前缀生成41字符usage ID，超过canonical VARCHAR(36)，真实capture报22001并回滚。
 B8的ID/事务设计必须闭环此问题；B7b短opaque ID fixture只隔离receipt类型校验，明确不代表默认生产capture路径可用。
+
+
+### B7c 工程依赖图门（2026-09-10）
+
+采用既有test/architecture内的图类型、AST/resolver核心、Billing策略、virtual反例测试四文件；与scripts或production相比，
+这是测试门而非业务运行能力，不增加CLI或生产依赖。精确文件/行为/验证范围见唯一任务板B7c卡。
+当前旧application/domain方向由AST全值/类型边验证；目标modules跨feature通过显式<feature>.public.ts，不强制四层或ports。
+当前HTTP仅runWithBillingContext的具名导入和七组精确type-only循环是明确B8过渡债，不允许增加symbol/边或目录级豁免；
+B8必须消除并删除例外，当前不宣称所有类型依赖无环或Credit writer已唯一。value循环、未解析/动态加载和越界必须失败。
+SQL/tenant/权限/契约/生成门不因旧目录形状门退出而放宽；三设计面无业务变更，此门只放行工程测试改动。
