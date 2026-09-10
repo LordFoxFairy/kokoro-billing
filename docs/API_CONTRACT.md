@@ -277,3 +277,14 @@ record观察接受不表示Credit已经可用，query显式区分waiting_evidenc
 D2d状态澄清：合格但DB now<start时明确waiting_period_start，窗口内pending，首次过期review；到期同事务转pending并应用，失败不虚报余额可用。
 分页/网络暂态尚未取得完整观察时inbox继续有界重试，耗尽dead-letter；已完整但未结清的waiting_evidence由后续Invoice事件或现payment worker持久due扫描补查，不依赖一定有下一条webhook。
 自动补查耗尽展示review与原因，不伪造invoice failed；政策未批准不轮询或发放。资金证据区分InvoicePayment分配额/账户scope稳定引用与可空Payment settlement，不以PI总额或纯事件名证明结清方式。
+
+
+## B8-D3 对账运维报告目标（非现行HTTP接口）
+
+保持当前v1 OpenAPI17操作和旧reconcile HTTP404；目标为tenant必填的一次性owner CLI，schema-first机器报告另放本仓contract/reconciliation/report.schema.json（本轮尚未创建），不向BFF/Web发布新的网络入口或假设已有Scheduler client。
+
+目标JSON：schema_version、run_id、tenant_id、as_of、finished_at、status（ok/drift/incomplete/failed）、complete、limits、checks、error_codes。checks逐项含code、owner、category、status、examined、finding_count、pending_count、items、items_truncated、scan_complete；item包含tenant与具名resource refs和适用generation/digest，不包含provider payload/URL/token/自由异常。数值溢出风险字段按十进制字符串、时间UTC，与现有wire约定一致。
+
+required checks全部完成且无异常才ok；扫描未覆盖完即incomplete，即使已有drift也不宣称完整。完整但有差异为drift；权限/Schema/解析等运行错误failed。样本展示截断不等于扫描截断；不接受跨run cursor续接成一致snapshot。退出码0=完整ok、2=完整drift、3=incomplete、1=failed。正常pending只在owner有效恢复证据/期限内计数，不宣称付款或发放已经完成。
+
+报告只观察、不重试、不repair。受控重试仍属于各owner已有/目标的审计命令，须检查tenant/权限/原命令identity/当前generation与状态；本CLI不新增通用force/retry-all入口。Schema/CLI/周期触发/角色与contract测试均仍待实施。

@@ -1,6 +1,6 @@
 # Billing TypeScript / Prisma 规范化任务板
 
-更新：2026-09-10（B8-S2并发发布修复）。唯一任务板；总范围是 Billing 工程收敛，不把第一轮审计视为整仓完成。
+更新：2026-09-10（B8-D3数据保护/对账设计）。唯一任务板；总范围是 Billing 工程收敛，不把第一轮审计视为整仓完成。
 
 **Goal:** 按 Root TypeScript / SQL / API 手册明确 Billing 的模块、Prisma 数据访问、事务与契约方案，逐切片替换并验证。
 
@@ -1453,3 +1453,46 @@ SQL依据核验日期2026-09-10：[PostgreSQL18事务advisory锁](https://www.po
 - 独占Root库billing_accept_b8s2_2a38729af8d549b2a7b7在全部命令终态后正常drop；不清共享Redis、不修改role/database默认设置、不触真实支付。两表SQL/OpenAPI hash仍57b6ff…/58fbe4…，依赖锁与生成provenance未变。
 - 保留风险：1000ms只约束新增advisory等待，不是整个命令deadline；READ COMMITTED同tenant串行，hash碰撞可能额外等待；外层RR既有snapshot仍可23505，错误回滚而不假称自动成功。完整Nest/Prisma事务/worker生命周期、Checkout未知结果、退款/订阅实施和major消费者仍待B8/B9；CI16/镜像/真实provider sandbox未运行。
 - S1提交c0ce201曾由Root干净HEAD完整复验：session7728 exit0，/tmp/billing-b8s1-root.uaeEB0，687全套/180集成及全门通过，库billing_accept_b8s1_c42ef1db5a864c068ae4已正常drop。本次S2证据不借历史结果替代。
+
+
+## B8-D3 数据保护与Reconciliation设计门卡
+
+前一Goal轮分类：progress，948034d已提交并经干净HEAD695/188及完整门验证。当前HEAD948034d8f75e4df77e814950cc33cbfe88cba515，本仓干净；完整Nest/Prisma未实现，不据局部绿灯结题。
+
+| 项目 | 本轮范围 |
+|---|---|
+| Owner | Billing Root唯一文档writer与整体裁决；既有七业务owner保持，Reconciliation只调用具名owner能力，不取得账本writer |
+| 当前事实 | 35表canonical无ACL/retention执行策略；reconciliation四类query/转发Service存在但无生产入口/一致快照/全关系orphan检查。实际代码与新目标分开记录 |
+| 目标职责 | 在既有三设计面中补齐部署/运行时角色边界、不可变事实与删除保护、只读一致对账/有限扫描/显式重试路径；不新增收费/退款产品政策，不按猜测保留期删除数据 |
+| 放置/粒度 | 比较新独立设计中心与扩展既有TECHNICAL_DESIGN/DATA_MODEL/SECURITY/API_CONTRACT；采用既有文档并由IMPLEMENTATION_PLAN/CURRENT索引，避免重复事实源。本轮不新增目录/Schema/HTTP入口 |
+| 并行只读 | billing_data_review/Astra：35表写入与不可变事实/ACL/retention风险清单；billing_ts_review/Sol：实际reconciliation查询、调用与覆盖缺口/目标入口约束；Root：跨面方案、官方语义核验及自建PG权限能力探针 |
+| 文件与权限 | 两审查员只读本仓src/test/database/docs及Root手册/CODEBASE_MAP，不写文件/Git/DB/服务；Root只改上述既有文档与任务板/CURRENT，脚本探针仅/tmp、自建临时库/NOLOGIN角色，完整所有权台账与清理 |
+| 数据/API边界 | 不施加DDL/ACL到现有业务库、不请求provider、不读取真实账务，不改v1。真实数据/major/订阅商业资格仍待用户；内部权限/只读检查规则可先收敛。不自动repair、不新建通用配置中心 |
+| 验证交付 | 用当前源码查询/写入/测试及官方PG语义核查设计；Root隔离角色探针验证权限可行性而非宣称生产实施。冻结文档双审，源码/schema/contract/deps零差异，执行适用门并显式提交文档 |
+
+
+### B8-D3 当前证据与目标裁决
+
+- 数据Astra按实际源码归类当前35表：12仅发现INSERT、21有状态/投影UPDATE、2无生产writer；未找到生产DELETE/TRUNCATE不是实际credential已禁止。目标D2退款/订阅状态变化单列，不把旧分类误作目标ACL。
+- ACL实证改变实施顺序：PostgreSQL行锁需UPDATE，当前journal/settlement/acquisition/fulfillment等的FOR UPDATE与简单SELECT/INSERT授权冲突。因此选择完整事务迁移时承接并发保护，再施加ACL；不直接删锁，也不授无关列UPDATE冒称不可变。触发器方案暂不采用。
+- TS Sol定位当前reconciler只有四顺序query，无outer snapshot、tenant可空、无界扫描；factory仅测试引用，package无运行入口，旧HTTP404有固定测试。漏双向orphan/多个owner关系，并把正常T1→T2等待粗判drift。目标改tenant必填、一致只读快照、各owner具名read能力、有界一次性CLI与显式周期Job，而不是恢复旧HTTP或新增万能服务。
+
+Root实际权限探针：
+- /tmp/billing-d3-acl/probe.mjs，SHA256 96a400d3b2c7faad293eaeb86e9f30266ab593cdead90047ba2b4b5fe55e8e28；run.log/results.json保留完整15项，chunkb33a49 exit0，7项允许/确认、8项预期42501均符合断言。
+- 使用真实canonical安装后的独占库与3个本轮NOLOGIN角色，通过SET LOCAL ROLE测试对象权限；不是生产登录/membership或完整应用role兼容测试。当前nako只为自建资源管理员，不拿其权限模拟runtime。
+- 自建库/角色准确台账在/tmp/billing-d3-acl/resources.json，连接全部关闭且观察为0后正常dropdb、逐个DROP ROLE，余项为空；cleanup.json及chunkf463d0。未执行FORCE、DROP OWNED、共享ACL修改或清Redis。
+
+Root实际一致快照探针：
+- /tmp/billing-d3-snapshot/probe.mjs，SHA256 8258b43cf3a7c2bf1a2a864ee6b7ff10b55b6ab18c62664d7e158c18e9faffa3；chunk9df1e4 exit0，results.json含两模式各before/during/after，共6份真实报告。
+- 导入当前实际ReconciliationService与真实连接；wrapper只在首条真实account查询返回后插入独占fixture事务，不替换查询结果。故障fixture原本仅settlement缺fulfillment，原子切换后仅account余额错误，两侧始终有drift；当前autocommit组合返回ok。加外层READ ONLY REPEATABLE READ的候选调用返回旧snapshot的settlement drift，正确保持一致。
+- 这是构造损坏状态的诊断反例，不声称正常收费命令制造了这两种状态；生产实现尚未修复。证明snapshot机制可行，不证明全orphan覆盖/分页/CLI/Prisma已完成。
+- 自建库billing_d3_snap_ad503eaff73849b19898在两连接退出后正常drop，检查不存在；/tmp/billing-d3-snapshot/cleanup.log及chunk2eb6da。
+
+设计放置：TECHNICAL_DESIGN负责角色/锁/owner/进程/预算；DATA_MODEL列当前35表与目标差异；SECURITY解释ACL事实及边界；API_CONTRACT定义未创建的CLI机器报告目标。首期preserve profile不新增自动删除/归档产品或法定年限；真实数据/新major/订阅资格仍待用户，内部设计不能替代批准。
+
+
+### B8-D3内部审查与当前门禁
+
+数据Astra/TS Sol核/tmp/billing-d3-design-sha256.txt六hash及实际probe，R1均无阻断P1/P2。Root补明确ON CONFLICT DO NOTHING非异常读取与23505/P2002整事务回滚，以及outer RR readonly设置必须在任何数据查询前、首个快照查询记录as_of；不扩大授权或宣称实现。
+Root `env -u DATABASE_URL -u SCHEMA_ADMIN_URL -u REDIS_URL -u REDIS_TEST_URL pnpm verify` session53919 exit0（chunk21bfbc），/tmp/billing-d3-local-verify.log：format/lint/typecheck/build/SQL/17route/offline Prisma生成通过；29文件507测试通过、33文件188跳过、0失败。跳过为刻意无基础设施，不能算本轮全量integration通过；实际PG证据仅上述两个独占探针，最新完整695/188仍绑定948034d。
+本轮src/test/database/contract/scripts/package/lock相对948034d零差异；仅六文档提交。未执行目标report schema验证（文件尚未创建）、生产ACL/CLI/全关系对账、Prisma生产迁移、provider sandbox/CI16/镜像/部署周期Job；全部保留为待实施/待验，完整三设计门仍未通过。资源清理已由Root验证，无遗留自建库/角色；Root其他用户/Agent改动未触及。

@@ -410,3 +410,26 @@ waiting_evidence自动补查增加next_evidence_check_at、evidence_check_attemp
 查询索引对应tenant+subject+period_end/id keyset、账户scope订阅/Invoice line唯一查找、period.id应用查找；future-start调度复用outbox next_attempt索引，不新建共享Redis事实源。
 Reconciliation经owner一致只读快照比对period→term→Credit授权/金额/窗口/结果，缺少invoice资金来源不靠造settlement修补。retention保留未决/已发放来源证据，保留期尚待完整设计。
 本方案使用已有三表表达当前单item单服务行profile，不宣称能容纳全部通用Invoice编辑/多种资金分摊；新增商业profile如需要新事实owner/表，须独立ADR，不受“35表”数量驱动强塞字段或丢事实。
+
+
+## B8-D3 权限与保留分类（目标待实施）
+
+角色/锁/只读snapshot权威机制见TECHNICAL_DESIGN B8-D3。当前canonical没有ACL；以下当前35表清单不是已应用GRANT，也不把旧字段语义直接复制到目标。完整目标每张表与可更新列必须按D1/D2的变更重新枚举并覆盖权限门。
+
+| 当前分类 | 表（当前物理名） | 目标注意 |
+|---|---|---|
+| 只发现INSERT的12表 | entitlement_credit_journal、entitlement_usage_settlement、payment_settlement、payment_reversal、entitlement_acquisition、entitlement_fulfillment、entitlement_fulfillment_reversal、entitlement_audit_event、entitlement_offer_revision、entitlement_usage_price_revision、entitlement_usage_price_rate、entitlement_redeem | 不是12表都永久无UPDATE：D2 Refund观察/status及effect需要增量状态；不可变identity/金额/结果与允许状态列分开。现有FOR UPDATE需先迁移并证明，不直接撤权限 |
+| Credit可变4表 | entitlement_credit_account、entitlement_credit_grant、entitlement_credit_hold、entitlement_credit_hold_allocation | 余额/generation、remaining/status、capture/release及allocation更新；tenant/id/source/original amount受保护 |
+| 回执3表 | entitlement_command_receipt、payment_command_receipt、entitlement_billing_command_receipt | 状态/result允许更新；identity/digest及永久终态回放保护，禁止因时间久清除去重 |
+| 消费5表 | entitlement_outbox、payment_outbox、payment_provider_event、entitlement_execution_event、entitlement_usage_event | attempt/lease/due/处理状态允许更新，事件identity/payload与租户不可随重试重写；未决/死信不是垃圾 |
+| Checkout/catalog 2表 | payment_checkout、entitlement_offer | session结果/生命周期与immutable quote/account/subject分开；配置owner决定可变字段 |
+| 订阅3表 | payment_provider_subscription、payment_subscription_period、entitlement_subscription_term | 当前upsert还改subject/account/grant amount，目标D2d改不可变授权/绑定与状态分离；不能先施加不兼容ACL |
+| Redeem 3表 | entitlement_redeem_campaign、entitlement_redeem_code_batch、entitlement_redeem_code | counter/status更新真实存在，不能把batch按名字当append-only |
+| Admission 1表 | entitlement_billing_admission | accepted provider证据及状态有界更新；identity/授权金额/主体受保护 |
+| 无当前生产writer 2表 | payment_provider_account、payment_customer_binding | 不因表存在授运行时写权；目标Payment受控配置/绑定用例批准后才授所需能力 |
+
+初期preserve profile不改变35表，不增加TTL/归档/删除表。特别保留receipt、inbox identity、payment outbox唯一身份、journal/acquisition/fulfillment/reversal/usage settlement/redeem永久结果与历史报价，避免重复授信/扣款/冲正；无FK不替运维阻止orphan。未来维护计划必须检查双向引用、未决状态、replay范围与恢复证据，未批准不执行删除。
+
+Reconciliation不新建第二套账本/权威投影。结果是有限一次性观察，不能拿报告重算值直接UPDATE。owner页需能查孤儿子记录、tenant不匹配、零delta无journal等目标合法关系；T1/T2待处理必须结合owner任务/截止证据，不按当前四查询把全部pending判错。
+
+权限验收独立于35表catalog与Prisma生成：实际低权限身份读/写/行锁/事务正反例、owner成员关系/额外PUBLIC或列GRANT漂移、新表默认拒绝、生产事务在目标role下完整通过。允许UPDATE某列仍不证明状态机或tenant访问正确。

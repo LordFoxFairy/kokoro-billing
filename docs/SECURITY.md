@@ -127,3 +127,14 @@ surface 决策删除或接入 secret validation。
 8. Retention、数据主体删除、backup encryption 与 restore access policy 尚未落地。
 
 处置和 secret 泄漏步骤见 [`RUNBOOK.md`](RUNBOOK.md)。
+
+
+## B8-D3 目标数据库保护（待实施）
+
+采用TECHNICAL_DESIGN B8-D3分离deployer、runtime、reconciliation reader。对象owner即使撤销自己的普通权限仍可重新GRANT，因此生产runtime/reader不得为owner或能继承/切换至owner；单用REVOKE不是owner隔离。应用不给DELETE/TRUNCATE/DDL，reader只有具名SELECT；权限清单默认拒绝未分类的新表/列，不用宽泛ALL/default GRANT掩盖差异。
+
+Root在自建PG18.4库的15项权限探针已实证：独立NOLOGIN runtime以SET LOCAL ROLE测试可读/追加journal，UPDATE/DELETE/TRUNCATE/DDL均42501；单表和无OF的JOIN FOR UPDATE同样42501；只锁获有限UPDATE权限的account可行；tenant字段UPDATE被拒；reader INSERT被拒；独立owner可重授UPDATE。所有变更用例回滚。探针验证对象ACL语义，不证明真实登录认证、生产membership或全业务兼容；旧事实行锁必须先在完整事务迁移中承接，再启用目标ACL。
+
+保留profile首期preserve，无自动业务表删除；不把长期留存声明成地区合规。日志/report避免敏感payload和checkout能力URL，原始证据裁剪须另证签名/恢复/幂等不受破坏。运行时只有业务DB凭据，不向CLI/worker注入DDL管理连接；reader扫描失败输出稳定诊断，不泄露SQL连接串/自由错误。
+
+官方语义核验2026-09-10：[PostgreSQL privileges](https://www.postgresql.org/docs/18/ddl-priv.html)、[GRANT](https://www.postgresql.org/docs/18/sql-grant.html)、[default privileges](https://www.postgresql.org/docs/18/sql-alterdefaultprivileges.html)、[read-only transactions](https://www.postgresql.org/docs/18/sql-set-transaction.html)。具体授权清单与运行时约束属于本项目取舍，真实生产执行仍待验。

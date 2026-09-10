@@ -820,3 +820,50 @@ ack丢失/lease超时/预算耗尽先确认既有Credit结果再ack，显式wait
 
 2026-09-10官方语义核验：[SubscriptionItem周期变更](https://docs.stripe.com/changelog/basil/2025-03-31/deprecate-subscription-current-period-start-and-end)、[Invoice](https://docs.stripe.com/api/invoices/object)、[Invoice Line](https://docs.stripe.com/api/invoice-line-item/object)、[InvoicePayment](https://docs.stripe.com/api/invoice-payment/object)、[事件类型](https://docs.stripe.com/api/events/types)、[站外结清](https://docs.stripe.com/api/invoices/pay)。
 以上是字段与渠道语义，不证明本仓已接入；两阶段、period去重及商业policy是项目设计，不冒称Stripe统一规定积分政策。
+
+
+## B8-D3 数据保护与Reconciliation目标（2026-09-10，内部设计已审查，未实施）
+
+当前仍Fastify/pg；本节补齐完整迁移的内部机制，不应用ACL、不新增现行v1操作。字段/商业资格/真实数据及新major决定仍按B8-D1/D2/B9，不能由本节代替。当前实现差异与Root真实探针见IMPLEMENTATION_PLAN B8-D3。
+
+### 角色、不可变事实与锁
+
+部署能力分为DDL owner/deployer、Billing runtime、reconciliation reader与受控配置维护身份；不是四个业务owner，也不为七feature机械创建七个数据库连接。应用/reader不得拥有表、schema、database，不继承或可SET ROLE至owner，不持SUPERUSER/CREATEROLE/CREATEDB/BYPASSRLS/GRANT OPTION/DDL权限。应用无DELETE/TRUNCATE；reader只授予具名检查所需SELECT及schema USAGE。密钥只由部署环境提供，runtime不接收管理连接。
+
+比较三种保护：①继续用对象owner连接（淘汰，owner可重新授权）；②为行锁授一列UPDATE并以不可变trigger拦截（可行但增加canonical函数/触发器与专门ADR、暂不采用）；③在完整事务迁移时把并发保护归入已确定的可变aggregate/receipt与owner事务锁，使不可变事实只需INSERT/SELECT（采用）。**不是直接删旧FOR UPDATE**：现有settlement、journal、acquisition/fulfillment、usage settlement与redeem replay确有行锁；未完成两连接并发/回滚/重放证据之前不施加目标ACL。
+
+- Credit账户/hold/grant等可变aggregate保持既定锁序与条件更新；journal序号和扣款由Credit账户锁/唯一性控制。已存在的永久事实只读重放；首次事实仅在明确ON CONFLICT DO NOTHING的非异常分支后独立语句读取；23505/P2002异常必须整命令rollback/retry，禁止在aborted transaction继续SQL，不把未知状态猜成成功。
+- Payment提供tenant+settlement identity作用域的事务锁定快照能力供Refund额度串行使用；可采用受控事务advisory锁，范围/预算/锁序由Payment内部固定，外部不能传任意SQL/锁namespace。Refund继续经Payment公开能力，不直接取得Payment Repository。
+- Acquisition/fulfillment/redeem/usage settlement去掉事实行锁必须逐用例证明其receipt、Credit aggregate、source identity UNIQUE覆盖相同并发，不能因名称“immutable”就省略检查。JOIN行锁须显式OF仅锁需更新的aggregate，不让无OF意外锁所有只读事实。
+- 应用可变表按列授予UPDATE，不授tenant/主键/命令identity/digest/原始金额/报价正文通用修改权；状态转换仍由owner事务验证。ACL是防误写边界，不是tenant过滤、合法状态机或防篡改账务授权的替代物。
+
+结构唯一源仍database/schema.sql；环境角色/secret/membership由部署provisioning管理，后续显式ACL步骤只引用canonical对象和固定权限清单，不复制CREATE TABLE、不让HTTP/worker启动时DDL。比较把环境角色硬编码进schema.sql与独立部署步骤，采用后者以保持空库安装与Prisma introspection可移植；权限清单另验精确表/列覆盖与实际allow/deny，不用现有catalog零差异冒称ACL已验。新增表/列默认不自动获写权，禁止ALL TABLES/default UPDATE/继承owner兜底。
+
+### 一致只读对账与owner公开面
+
+采用一次性、tenant必填的CLI application context；不恢复旧HTTP reconcile路由，不把扫描塞入支付处理transaction，也不建设第四个常驻业务worker。与只做测试内Service、增加独立网络服务相比，一次性CLI可直接验收、使用独立reader凭据并由部署Job/cron受控周期触发。三个现有业务worker保持职责；CLI是明确新增的一次性运维进程入口，技术依据为本节。周期触发按受控tenant清单逐tenant启动、限制并发/禁止无界全库枚举，不假设Scheduler已有Billing client；最终B10须实跑周期触发与失败告警，手工跑一次不是周期验收。
+
+Reconciliation module只编排六owner导出的reconciliation-read能力，业务SQL留在各owner；配置根仅装配只读能力，不能因导入Checkout/Payment就要求provider密钥、构造网络provider、注册业务消费者或连接Redis。HTTP写入模块复用同一owner读能力，不复制六份查询。公开输入/结果为具名纯业务类型，不暴露Prisma/pg row或任意Record；数据库snapshot上下文内部校验活跃transaction及tenant，由同一个Prisma interactive transaction client承接全部页面，不在各owner另开事务。
+
+| Owner read能力 | 必须覆盖的事实/关系 |
+|---|---|
+| Credit | account/grant/journal/hold/allocation金额与tenant lineage、无父account的事实、source/sequence唯一性；acquisition/fulfillment/reversal/redeem永久结果及引用 |
+| Payment | settlement金额/currency/identity及预期效果、provider inbox/outbox/receipt等待/重试/死信；只返回状态与安全引用，不输出原始provider payload |
+| Refund | 已观察退款与Credit effect分别核对、累计退款/累计冲正及零delta结果，不能因无journal就把合法零效果当缺失 |
+| Subscription | trusted checkout/period/term/授权快照/credit关联、waiting期与eligibility状态；不按active/trialing推断已收款 |
+| Checkout | offer revision/subject/account/provider/session绑定与unknown恢复deadline，过期URL不等于支付失败 |
+| Metering | price revision、usage/admission/execution/hold/settlement关联与终态、unknown/lease/retry；外部事件identity与内部usage identity分别检查 |
+
+必须在outer事务任何数据查询前设置READ ONLY REPEATABLE READ，配置局部预算后以首个快照建立查询取得as_of，再在该同一snapshot内执行检查；实现须有语句顺序测试。不使用SERIALIZABLE写锁，不导入或调用repair命令。固定as_of时间来自该事务，所有年龄/截止比较使用同一个时间基准。每个owner需双向orphan检查，不能只从父表出发；同仓跨owner关联通过具名引用页比较，SQL不跨owner模块。
+
+分页为同一事务内稳定主键/复合键keyset，普通CRUD走Prisma类型API；聚合/反连接确需raw时另列最小白名单及解释计划，不用$unsafe。候选预算为page_size=200、单check最多10000个扫描root、单run最多50000 root、总deadline=30s、单statement上限2s、最多100条finding样本/check；均是工程上限不是实测SLO。root数不保证子表聚合成本有界，必须同时使用SQL预算/执行计划；每页重算剩余总预算、失败中止真实查询/rollback/drain，不能只Promise.race后留下查询。
+
+扫描上限/期限耗尽、数据源超时或无法完成所有required checks时为incomplete，不把未扫描部分计ok；意外SQL/权限/Schema/解析错误为failed。finding样本截断与扫描不完整分开：完整扫描可报告准确总数并截断展示样本，只有扫描coverage完整才允许ok或完整drift。不得跨事务拼cursor续跑冒充同一snapshot；后续运行使用新的run_id/as_of并重新评价覆盖。
+
+效果T1已接受但T2仍在owner合法等待窗口且具备有效任务/下一次检查时，计pending而非账务drift；超预算/死信/丢失任务按具名恢复code报告。future period、review_required、zero delta按D2规则分类，不统一拿一段任意grace掩盖错误。区分integrity/recovery/review类finding；unknown仍unknown，不自动补收款/发积分/冲账/重放。
+
+### 保留与运维执行边界
+
+首期显式采用preserve账务与幂等事实的保留profile：不自动清理业务表、不默设TTL或法定年限；runtime/reader均无删除能力。这不是已满足地区法规/备份恢复的声明。表/字段分类、引用及永久结果回放必须在迁移代码中验证；账务留存与敏感payload最小化分别处理，尚未证明裁剪后签名/重放/恢复正确的字段保持原样。
+
+后续如需删除/脱敏，是单独批准的运维变更：先只读dry-run列出引用、未决任务、replay evidence、hold理由；没有完整保留policy/恢复证据/授权即不执行。不能通过清receipt或payment outbox腾空间，不能仅按published/expired判断可删；外部事件identity、digest、原始结果和source永久事实仍有回放作用时必须保留。此设计不强加新归档产品、legal-hold数据库表或通用maintenance服务作为本Goal新增功能。容量/旧任务告警与备份恢复证据仍需B10验收。

@@ -7,6 +7,8 @@
 
 ## 当前规范化工作
 
+- B8-D3数据保护/对账内部方案已获数据Astra/TS Sol独立审查放行，尚未实施。Root自建PG15项ACL反例证明只读事实的旧FOR UPDATE会被42501拒绝；真实reconciler双连接探针还复现混合snapshot返回虚假ok，候选外层只读RR消除该反例。目标采用完整事务锁承接后启用低权限、tenant必填有界CLI、owner只读页；详细证据/资源清理见任务板。
+
 - B8-S2已修复READ COMMITTED下同tenant不同key价格发布revision竞争：tenant事务锁、独立MAX快照、1秒局部等待上限且保留更严格预算/立即恢复。双审无阻断，Root冻结树全套695/集成188通过，0失败0跳过，Schema/Prisma/源码与dist smoke/audit通过。RR冲突与整命令预算仍非本切片解决范围，精确证据见任务板。
 
 - B8-S1已修复Outbox持久载荷解码绕过重试/死信：复用原fenced失败路径，输入类型保持unknown直到校验，双审首轮P2已闭环。Root最终冻结树实跑687全套/180集成零失败零跳过，Schema/Prisma/源码与dist smoke/audit通过；未改变双编码字符串对象的原解析语义。精确hash/命令/隔离清理见任务板；续租drain和未知业务效果恢复仍待D1。
