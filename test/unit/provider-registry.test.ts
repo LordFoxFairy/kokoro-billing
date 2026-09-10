@@ -50,6 +50,8 @@ describe("payment provider registry", () => {
       data: {
         object: {
           id: "cs-1",
+          mode: "payment",
+          payment_status: "paid",
           payment_intent: "pi-1",
           metadata: { checkoutId: "checkout-stripe-1", tenantId: "tenant-1" },
         },
@@ -57,6 +59,7 @@ describe("payment provider registry", () => {
     });
     expect(event).toMatchObject({
       eventId: "evt-checkout-1",
+      eventType: "payment_succeeded",
       orderId: "checkout-stripe-1",
       payloadTenantId: "tenant-1",
       externalPaymentRef: "pi-1",

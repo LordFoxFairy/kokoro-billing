@@ -1019,3 +1019,31 @@ B8-S0数据设计审查已放行（billing_data_review/Astra，4文档hash均匹
 Root会分配独占数据库供writer跑真实RED/GREEN，writer只执行卡内测试并关闭自身连接，不创建/drop库、不改共享服务；全部测试session终态后Root清理。
 实际HTTP优先使用createBillingRuntime的jwks模式以启用真实provider account→tenant查询；本测试不请求用户JWT，JWKS无需网络，Stripe API密钥不配置，
 官方SDK仅构造本地测试签名。Redis只复用既有实例，资源均随机tenant/ID；不把application方法手动调用冒称HTTP入口验证。
+
+### B8-S0冻结交付与Root完整验收
+
+实现基线8860e7e3004f7df0ebd0fc9143d4fd33886bc0dc；billing_toolchain_hardening已停止写入，Root接管提交及这两份状态文档。
+代码仅任务卡4文件，冻结清单`/tmp/billing-s0-delivery-sha256.txt`，Root及两个reviewer全部复核一致；SQL/OpenAPI/依赖未变。
+生产变化只有两种Checkout的paid-only门及保留非Checkout subscription字段原校验的局部refine；未知/非NULL引用在Checkout忽略，不向退款/订阅扩散。
+新测试按once报价配置，仅本地持久化hosted-session绑定，未调用Stripe创建接口，未伪装成真实provider sandbox。
+
+TDD：单元初次211失败/10通过；Root发现第一版integration误用month报价后，writer改once并撤下自身生产补丁重跑同一测试，
+真实RED仍在unpaid后产生settlement/account/grant/journal各1、余额1000000处失败，日志`/tmp/billing-s0-integration-once-red.log`。
+恢复补丁后定向3文件230通过；全部session正常终态，最后96780退出0。纯非infra28文件504通过不作为真实集成证据。
+测试实际使用runtime HTTP注入、JWKS配置模式下provider account→tenant查询、官方SDK本地签名、inbox/outbox/processor与SQL；没有JWKS请求或Stripe网络。
+同Checkout unpaid→不同ID async paid→同成功事件重放→迟到unpaid，逐步检查账务、inbox状态与outbox完成；坏签名零inbox。
+
+独立规格billing_data_review/Astra放行无P1/P2，自跑2文件229 unit通过；质量billing_ts_review/Sol放行无P1/P2，自跑unit/architecture/contract 9文件426通过，2.61s。
+两者没有操作数据库或改写文件。Root检查最终diff、scope和hash后独立完整运行：
+`/bin/bash /var/folders/gn/wbk8wfbd047_wvwkwtyn331r0000gn/T/billing-b8s0-root-orhw700a/verify.sh`，session14291正常exit0，日志`/tmp/billing-b8s0-root.bRJp6k`。
+
+- Node24.20.0/pnpm11.25.0；`pnpm install --frozen-lockfile`、template0独占空库`pnpm db:apply-schema`退出0。
+- `pnpm verify`包含format/lint/typecheck/build/SQL/contract/test：62文件665通过，0失败0跳过，38.11s；新增221 unit和1 integration，原443回归保留。
+- `pnpm test:integration`：33文件158通过，0失败0跳过，29.42s；是全套子集，不与665相加。
+- `pnpm db:verify-schema`：35表368列127约束83索引零差异；`pnpm prisma:check`零漂移；SQL/OpenAPI SHA与卡前相同。
+- 源码与当次dist均实际启动：health200/ready200/匿名401/受信BFF catalog200，request-id一致，SIGTERM退出0。
+- `pnpm audit --json`五级0、`git diff --check`退出0；显式设置DATABASE_URL/SCHEMA_ADMIN_URL/REDIS_URL/REDIS_TEST_URL。
+- writer库billing_s0_writer_fce6253a56fc43dba89a在writer终态及零连接后正常删除；Root验收库billing_accept_b8s0_af7f4a7aefc942a5bbb5在全部命令终态后正常删除，再查询二者均不存在。未FORCE、清共享Redis或重启既有实例。
+
+本次仅付款准入切片。PG16 CI、镜像、Stripe sandbox/完整订阅与退款、消费者cutover、生产SLO/DR未执行；Nest/Prisma生产writer、UUID capture、pricing并发、失败状态与poison outbox等已知缺口仍待B8–B10。
+Root按明确路径提交这4个代码/测试文件及CURRENT/本任务板，随后在干净提交重跑同一完整脚本；文档不自动继承为干净HEAD的验收结果。

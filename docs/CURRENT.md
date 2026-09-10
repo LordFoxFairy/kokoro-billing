@@ -7,7 +7,8 @@
 
 ## 当前规范化工作
 
-- 当前Stripe适配器新增本地实证缺口：unpaid Checkout completed被归类payment_succeeded；创建Subscription的metadata与本仓回调所需teamId/planId不匹配；现代item-level周期被解析为NULL。仅本地真实适配器探针（SDK调用被截获、无网络/数据库），不是已发生错误账务或Stripe沙箱结果；后续provider设计/回归须覆盖这些场景。用户“staapi”平台名称仍待澄清。
+- B8-S0已实现Stripe一次性付款paid-only门：两种Checkout事件只有payment/paid且subscription缺省或NULL才允许发放。旧源码在独占PG真实回调链中复现unpaid提前创建settlement/account/grant/journal各1；修复后的完整665测试/158集成零失败零跳过，双审通过，精确冻结hash与Root命令见任务板。提交后仍须干净HEAD复验；不是Stripe sandbox或生产流量证据。
+- Stripe完整接入仍有缺口：创建Subscription的metadata与本仓回调所需teamId/planId不匹配，现代item-level周期被解析为NULL；这些为本地适配器探针证据，尚未修复。Checkout事务外调用/未知结果恢复、API版本和provider sandbox仍待后续。用户“staapi”平台名称仍待澄清。
 
 - B8-D1七模块DAG、共享writer、35表映射、usage-hold绑定、inbox fence与rollback-only事务已通过数据/TS独立设计审查；仅文档交付，不授权生产重写。B8-D2的major/消费者、202终态和Checkout恢复仍有未决项。
 

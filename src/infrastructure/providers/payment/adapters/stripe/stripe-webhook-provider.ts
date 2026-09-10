@@ -22,6 +22,10 @@ export const STRIPE_SIGNATURE_HEADER = "stripe-signature";
 // Stripe 默认容差 5 分钟（防重放）。
 const DEFAULT_TOLERANCE_SECONDS = 300;
 
+const isCheckoutPaymentEvent = (type: string): boolean =>
+  type === "checkout.session.completed" ||
+  type === "checkout.session.async_payment_succeeded";
+
 // Stripe webhook 事件信封：只取归一化所需字段，其余 passthrough。
 const stripeEventSchema = z
   .object({
@@ -36,7 +40,7 @@ const stripeEventSchema = z
             status: z.string().optional(),
             current_period_start: z.union([z.number(), z.string()]).optional(),
             current_period_end: z.union([z.number(), z.string()]).optional(),
-            subscription: z.string().nullable().optional(),
+            subscription: z.unknown().optional(),
             invoice: z.string().nullable().optional(),
             metadata: webhookMetadataSchema.optional(),
           })
@@ -46,7 +50,16 @@ const stripeEventSchema = z
       .passthrough()
       .optional(),
   })
-  .passthrough();
+  .passthrough()
+  .refine(
+    (event) =>
+      isCheckoutPaymentEvent(event.type) ||
+      z
+        .string()
+        .nullable()
+        .optional()
+        .safeParse(event.data?.object?.subscription).success,
+  );
 const stripeRefundCollectionSchema = z
   .object({ data: z.array(z.record(z.string(), z.unknown())) })
   .passthrough();
@@ -157,10 +170,15 @@ export class StripeWebhookProvider implements PaymentWebhookProvider {
     const object = parsed.data.data?.object;
     const metadata = webhookMetadataSchema.parse(object?.metadata ?? {});
 
-    // Subscription Checkout is fulfilled by customer.subscription.* events. The
-    // session/payment-intent callbacks must not be mistaken for one-time credit grants.
+    // Only paid, one-time Checkout events may create credit. Other Checkout
+    // states are acknowledged without effects; a later async success remains eligible.
+    // Non-Checkout events retain their existing subscription-field validation.
     if (
-      (type === "checkout.session.completed" && object?.subscription) ||
+      (isCheckoutPaymentEvent(type) &&
+        (object?.mode !== "payment" ||
+          object.payment_status !== "paid" ||
+          (object.subscription !== undefined &&
+            object.subscription !== null))) ||
       (type === "payment_intent.succeeded" && object?.invoice)
     ) {
       return {
@@ -176,10 +194,7 @@ export class StripeWebhookProvider implements PaymentWebhookProvider {
       };
     }
 
-    if (
-      type === "checkout.session.completed" ||
-      type === "checkout.session.async_payment_succeeded"
-    ) {
+    if (isCheckoutPaymentEvent(type)) {
       return {
         eventId: id,
         eventType: PAYMENT_WEBHOOK_EVENT.paymentSucceeded,
