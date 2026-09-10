@@ -22,7 +22,7 @@
 
 | 模块 | 唯一写入职责 | 允许依赖 / 公开能力 |
 |---|---|---|
-| checkout | offer/revision、checkout与provider session状态 | Catalog查询、checkout命令；provider client在事务外调用 |
+| checkout | offer/revision、checkout与provider session状态 | Catalog查询、checkout命令；只读依赖Payment核心账户查询（B8-D2a）；provider client在事务外调用 |
 | payment | provider account/customer mapping、verified inbox、settlement；receipt/outbox经唯一数据库支持写入 | 核心不依赖其他feature；事件编排子模块显式导入其他owner，详见B8-D1；不写credit表 |
 | credit | account/grant/hold/allocation/journal、acquisition/fulfillment/reversal、redeem；audit/outbox经共享支持写入 | grant/reserve/capture/release/reverse/fulfill及账本查询；在调用方同一事务scope内执行 |
 | metering | pricing revision/rate、admission/execution/usage事实及对应receipt | 调用credit的事务内能力，不独立写余额/journal；保留未知执行结果 |
@@ -137,7 +137,7 @@ npm精确7.10.0三个包存在、Apache-2.0，Node ^20.19/22.12/>=24与TS>=5.4�
 
 | Feature | 可导入的其他feature公开面 | 唯一writer / 公开职责 |
 |---|---|---|
-| checkout | 无 | Offer/Revision、Checkout；catalog查询、发布、checkout claim/finalize；provider session client是本模块内部网络适配器 |
+| checkout | payment核心（仅账户只读能力；B8-D2a修正） | Offer/Revision、Checkout；catalog查询、发布、checkout claim/finalize；provider session client是本模块内部网络适配器 |
 | payment（核心） | 无 | ProviderAccount/CustomerBinding、ProviderInbox、Settlement；映射查询、接受支付事实、settlement锁定快照、受控inbox重试 |
 | credit | 无 | account/grant/hold/allocation/journal/acquisition/fulfillment/reversal/redeem；预留、扣除、释放、发放、冲正、到期及账户/账本查询 |
 | metering | credit | price revision/rate、usage event/settlement、admission、execution inbox；定价与执行计量，绝不直接写Credit表 |
@@ -533,3 +533,139 @@ Owner为Billing Payment的Stripe事件归一化；只修改既有stripe-webhook-
 优于继续向混合provider-registry或mock-checkout-payment测试堆场景；复用既有test目录，不建新目录。provider-registry.test.ts只修合法paid fixture及加强成功eventType断言。
 验证先RED再GREEN；真实runtime HTTP+官方SDK测试签名+PG inbox/outbox/processor证明unpaid不产生settlement/account/grant/journal，后续paid async一次发放、同event重复和迟到unpaid不重复发放。
 失败签名不落inbox；外部Stripe API不得调用，不能称Stripe sandbox。Root用独占PG全门/Prisma/schema/源码dist smoke验收，canonical SQL/OpenAPI保持原字节。
+
+
+## B8-D2a Checkout持久恢复（内部设计已审查；不授权当前v1/DDL切换）
+
+### 当前事实与方案
+
+8b55a57仅修正S0付款准入。当前application CheckoutService以withTransaction包createHostedSession，pg类在FOR UPDATE后调用Stripe；
+12秒Promise.race不等于取消，尚未收到session ID的超时没有持久恢复身份。HTTP报价expiresAt为5分钟，Stripe创建请求没有expires_at，
+两者语义不同。目标不把5分钟值发送给Stripe：其可指定会话过期时间为创建后30分钟至24小时；默认24小时。
+
+比较继续长事务（占用连接/锁且回滚不能撤销provider副作用）、仅把await移出事务（崩溃/重试参数/重复创建仍不闭合）、
+持久claim→事务外调用→条件finalize（采用）。35表内扩展billing_checkout，不另建通用支付任务表/新业务模块/新队列。
+本节只确定内部状态和实现边界，新增HTTP结果/查询与major、全量SQL及数据演进仍由B8-D2其余门处理。
+
+### Owner、依赖与文件职责
+
+Checkout唯一写checkout/session过程。Payment拥有provider account事实与可信账户解析；Credit仍唯一写账本。
+因此对B8-D1作一个具名DAG修正：CheckoutModule只读导入Payment核心公开PaymentAccountReader，不导入PaymentEventsModule。
+prepare时在同一短事务内requireActiveCheckoutAccount(tenantId, providerAccountId)，返回所属tenant、provider、外部账户与provider_environment（test/live）的只读投影；
+凭据来自config中的受控绑定，不来自请求体或metadata。目标Payment账户补test/live环境事实（见DATA_MODEL）；现有配置尚未验证这些条件，不能假造已验证值。
+Payment核心不反向依赖Checkout；PaymentEvents子模块继续导入二者，Subscription/Refund只通过核心公开面，无forwardRef或全局provider。
+每次claim查询账户启用状态并校验配置身份；已停用/指向别的账户时拒绝该claim的网络调用，未知会话转review_required。
+claim获准后与并发停用仍有竞态，不能承诺停用撤销已发请求；结果继续核验和留账，历史到账mapping保留与验签规则由Payment接收链另验。
+目标Checkout prepare要求有效provider账户配置；catalog查询可在未启用支付时工作，但不再把没有provider的Checkout当可付款会话。该收窄属于待决major API门。
+
+未来切片的具名位置（只在相应实施卡批准后创建）：src/modules/checkout/checkout-session.service.ts承接状态机/短事务编排；
+checkout-session.repository.ts承接typed Prisma查询与fenced更新；checkout-session.schema.ts承接版本化内部请求快照/结果解析；
+stripe-checkout.client.ts只封装官方SDK边界与provider响应校验；checkout.module.ts显式装配。已有Catalog组件保持同feature，
+不创建services/repositories/ports子目录或BaseRepository。相比放进src/database，网络会话是Checkout业务职责；相比全局providers，当前只服务Checkout。
+跨模块公开能力只使用内部业务对象，不暴露Prisma/Stripe类型。运行时恢复tick装配进既有payment worker进程，不创建第四个常驻业务进程；
+tick只调用Checkout公开恢复能力，支付事件与session恢复各有有限批次/并发预算，不能让一个队列长期饿死另一个。
+
+### 不可变请求与两个生命周期
+
+首次prepare接受quote时生成checkout UUID，验证tenant/subject、offer revision、金额/币种、credit/周期、配置账户，
+以现有tenant/key+versioned digest判冲突并持久化quote事实。查到既有Checkout时先核caller业务输入digest并返回其当前结果，
+不因当前报价/配置变化重新prepare或换资源ID；只有首次接受才校验新quote/配置。后续每次claim仍检查账户/凭据身份。锁后不得读取新报价替换已接受snapshot。
+会话请求快照固定：provider/account/provider_environment/API版本、checkout_session_mode、checkout/tenant/subject身份、报价/line items、所有metadata与success/cancel URL、
+创建策略版本。API key/token不入snapshot。记录canonical digest，重放逐字义相同参数；配置URL/API版本/商品名称变化不能改旧请求。
+Stripe idempotency key固定为billing-checkout:<checkout UUID>:session:v1，与attempt token、HTTP request ID和worker身份无关；同checkout永不另换key重建。
+provider_environment只表示test/live；checkout_session_mode由固定报价billing_interval决定（once→payment，month/year→subscription），两者分字段/独立校验。
+本仓没有setup业务，因此不创建setup会话；S0的payment-only付款发放规则不应误裁剪本恢复设计所承接的订阅会话创建。
+凭据可轮换但必须仍对应同provider账户与provider_environment；旧API版本不可用/账户身份漂移走review_required，不静默重新渲染请求。
+
+quote_expires_at只控制首次prepare准入。prepare成功后即接受固定报价，恢复不重新判断当前offer启用/报价截止；
+provider_session_expires_at是Stripe实际返回的支付会话截止，未获响应时为NULL，绝不把quote截止冒充会话失效。
+本profile继续不发送expires_at而采用Stripe默认会话TTL，完整请求固定；这避免重试时为满足相对时间限制而改参数。
+该策略是项目选择，不宣称5分钟的现有wire expires_at已具有新含义，API变更需major门。
+Checkout业务status与session_creation_status正交：前者记录付款生命周期，后者记录一次外部创建命令，不能用一个pending布尔同时代表二者。
+session_creation_status限定not_started / in_flight / unknown / ready / failed / review_required；next_attempt_at只控制unknown重试时机。
+ready表示provider session身份已持久确认，不等于已支付、不保证URL永久可用；只有provider状态open、非空URL且实际截止未过时才向受信付款者返回URL。
+complete+unpaid仍等待异步付款，expired不生成新session。付款仍需Payment验证后的事实与Credit事务效果；迟到已付证据可将本地expired/cancelled纠正为paid并留审计，不因旧本地终态吞掉真实付款。
+
+### Claim → 网络 → finalize
+
+1. prepare短事务写完整immutable snapshot、stable provider key与not_started，或返回同key的同一Checkout。外部网络零调用。
+2. claim短事务锁Checkout行；not_started或到期unknown可领取，未过期in_flight返回pending。新UUID attempt_token、attempts+1、
+   lease_until/first_attempt_at及retry_deadline_at在调用前提交；时钟用数据库clock_timestamp。commit未确认时不得发provider请求。
+3. 无active/closed ALS事务上下文地调用provider；明确assertNoActiveTransaction，不通过清空上下文绕开调用方仍持锁的错误。
+   输入只来自已提交snapshot，调用者不拿Prisma client/行锁过网络等待。worker重启扫描同一持久行，Redis不作领取authority。
+4. finalize新短事务比较tenant+checkout+attempt_token+in_flight及lease有效；分别校验provider/account/provider_environment/checkout_session_mode/session关联、金额/币种与snapshot一致，
+   然后写session ID/URL/实际过期时间并ready。付款业务status不从paid/expired/cancelled回退到pending_payment。
+   已知ID但响应缺URL（已完成/过期）仍保存ID及provider状态，不把它当创建失败再POST；amount/身份不符保留安全错误并review_required，零Credit效果。
+5. 超时/断连/5xx/响应不能验证为成功或确定未执行：在新事务按同fence写unknown、next_attempt_at/安全错误与provider request ID。
+   不猜测失败，不生成新Checkout/key，不用failed receipt永久吃掉可恢复命令。确定输入/配置失败且无先前未知尝试才可failed。
+   session_had_unknown是持久单调历史事实，不能从当前status或attempts猜测；unknown记账、过期in_flight被接管时均在短事务置true且永不清零。
+   同一SDK调用内部若先断连/超时再重试，transport记录attempt-local uncertainty；finalize同时合并此标志与持久flag，即使最终4xx也不得failed。
+   进程在标记前崩溃由过期in_flight接管保守置true；旧token无权标记新attempt，但接管事务已先保留其未知可能。
+6. 旧attempt的成功/错误都不能覆盖新token或已ready/paid。fenced写零行时重新只读当前状态；不把零行更新作为本attempt成功。
+   本地迟到结果不能越过fence直接落库；后续由当前claim按同key恢复，或Payment可信事件的独立owner能力确认结果。
+
+create结果提交确认丢失时，只读查本Checkout持久状态；未知DB commit不重跑provider或扣款。任何provider步骤均不属于可自动重试的Prisma业务事务。
+claim/token持久化与首次sent意图之间的崩溃按unknown恢复：即使实际上未发送，也保守使用同一key/snapshot；不能证明没发送就不重置first_attempt_at。
+lease过期只能授予下一attempt的写入权，不能证明前一个请求已撤销。新的provider请求仍用相同key，Stripe冲突/限流按错误分类处理。
+
+### 恢复范围、预算与停止条件
+
+恢复只扫描本owner not_started和到期unknown/过期in_flight，使用FOR UPDATE SKIP LOCKED和确定排序；每批最多20、并发2为待实测目标。
+扫描与claim同一短事务，SKIP LOCKED不保证公平，next_attempt_at+id排序和SLO必须测久等；query/index见DATA_MODEL。
+create目标每attempt总体12秒、单I/O最多10秒、connect至多3秒、lease30秒；create恢复最多12次且首次attempt后60分钟截止，
+并额外限制在Stripe幂等安全窗口内（first_attempt_at+23小时保守界限）；未知结果不能因进程重启刷新这些预算。
+退避目标1秒起、指数上限300秒、jitter；下一attempt在elapsed/次数/lease边界内才可领取，不为准时重试放宽幂等窗口。
+达到次数/时间上限后先查本地已确认结果，ready则结束；否则review_required，禁止换key、重新POST或把列表空结果当不存在证明。
+provider返回5xx包括cached500时仍unknown；缓存的失败可一直重放，不承诺retry最终总能恢复成功。409/idempotency参数冲突区分“正在处理”与“参数漂移”；后者必须review。
+如果session_had_unknown或本SDK调用内uncertainty为true，即使随后4xx也不能证明从未创建，应保留review而非确定failed；同key修参数不是允许路径。
+failed仅允许没有上述不确定性且能确认未执行的错误：本地发送前校验/配置失败，或实施时有官方语义及真实回归证明的具名provider错误；
+不能按全部4xx推断未执行，也不能从错误文本或tries=1猜测SDK从未重试。
+已知session ID用官方retrieve只读核验；未知ID不伪造按metadata查询。官方list没有client_reference_id/metadata过滤，分页找到候选仅作正向核对，未找到不足以断言不存在。
+人工处理只能通过未来具名owner命令绑定经过校验的已有session/确认provider终态，携带actor/reason/audit；本轮不增加空admin接口或直接SQL修账。
+review_required不会自动取消checkout、删除账务或阻挡后来真实付款证据；迟到已付金额仍进入可审计Payment/Credit流程。
+
+### 真正的取消与关闭
+
+目标使用官方Stripe SDK + 官方可注入FetchHttpClient，将本attempt AbortSignal与SDK传入signal组合交给Undici官方fetch；不重写Stripe签名/HTTP协议。
+具体传输选择：官方undici 8.10.2作为候选直接依赖，通过进程拥有的有界Agent/dispatcher配置connect timeout，
+而不是把FetchHttpClient整体timeout冒充connect阶段。每请求显式传dispatcher，不调用setGlobalDispatcher；fetch与Request/Response/Headers类型保持同一Undici实现。
+同进程Stripe网络共享这个受控dispatcher，attempt只持自己的signal/轻量SDK实例；连接池与请求并发都有上限（初始并发2），不每attempt建新Agent。
+关闭顺序是停claim→abort/await各SDK任务→await自有dispatcher.close→Prisma关闭；close超预算只能destroy本进程自有dispatcher并非零退出，禁止影响其他模块/进程的全局dispatcher。
+官方connect timeout配置须以DNS/TCP/TLS stall及已建连后慢headers/body分离测试证明，连接后慢响应不得被错误计入connect失败。
+配置maxNetworkRetries=0以让durable恢复拥有主要重试预算，但SDK对部分closed-connection仍可能自身重试，必须验证实际次数和退出时限；
+不把0当“底层绝无重试”的保证。attempt-scoped SDK/transport可持有该signal，不能将一个attempt的abort污染其他请求；不建无界client/Agent池。
+总deadline和shutdown会abort该请求并await SDK任务及清理终态；单纯Promise.race返回后留下背景副作用不算实现。
+本地abort最多证明不再等待/发送本地数据，不证明Stripe未执行，所以结果仍为unknown。恢复worker先停领取、取消/等待自身任务，
+再关闭Prisma/进程资源，bounded drain失败显式非零退出并让lease恢复；不强制清他人数据库/共享Redis。
+供应链预核2026-09-10：npm view undici version/dist-tags/engines/license显示稳定8.10.2、Node>=22.19.0、MIT，最新修改9月4日；兼容本仓Node24但尚未安装/锁定/审计。
+比较保留自定义HttpsAgent并另写取消层、只用global fetch而缺独立connect控制、官方Undici Agent+SDK FetchHttpClient，采用第三项减少自造网络逻辑。
+Undici由Node.js组织维护；性能/连接复用/SDK类型和故障语义由实际压测/门禁决定，未宣称更快。失败退出是不发布中间切片，保留上一个已验commit而非运行双transport fallback。
+安装前再核精确版本、冷却期、Node/Stripe类型兼容和audit，并在同切片完成TLS/body/abort/drain验证；本候选不是安装放行证据。
+具体官方FetchHttpClient接口、AbortSignal合成及SDK retry-drain行为在安装/实现时实测后才放行；这是待验目标，不凭名称宣称已具备取消能力。
+
+### Payment观察与账务安全
+
+PaymentEvents完成raw-body验签、账户/tenant映射后，可调用Checkout的transaction-bound确认能力；
+它基于可信session ID、checkout关联、provider/account/provider_environment/checkout_session_mode/金额/币种与已存snapshot分别核验，不需要当前create attempt token，也不从浏览器success URL推断已付。
+只接受一致身份或首次NULL→可信session ID绑定；不同ID/账户/报价冲突转可审计异常，不覆盖既有绑定。只填会话事实，不自行发Credit。
+该独立证据可在创建响应前到达并确认session；旧create finalize随后只能读取结果，不能退回付款status。
+S0只是付款状态门；完整provider事件仍需明确金额/币种/session匹配、invoice/订阅/部分退款的稳定identity，不能把本设计当这些已全部实现。
+
+### 实施验收矩阵
+
+- 真实PG两个独立worker同Checkout并发只一有效claim，外连接在provider故意阻塞时可读已提交claim并更新无关Checkout；
+  provider入口断言不存在active transaction，不能只mock withTransaction调用次数。
+- 故障点覆盖prepare前/后commit、claim commit确认丢失、发送前、响应丢失、provider已创建后进程退出、finalize commit确认丢失；
+  重启沿原key/snapshot恢复，不新增会话或Credit；实际本地SDK HTTP故障server与真实PG联测，Stripe sandbox另验。
+- 同key同内容并发/replay、不同digest冲突、账户/subject/tenant漂移、配置/API版本/URL变更不改旧请求；quote截止与会话截止分别测试。
+- 超时必须abort并完成自身任务清理；late success/error、旧lease、deactivated account、cached500、409、429、错误响应、缺URL和错误金额分别断言。
+- unknown→claim→4xx、进程重启/过期in_flight接管、SDK内部先断连再4xx均保留session_had_unknown并进入review；旧token不能清零或覆盖，新旧环境/会话mode交叉错配拒绝。
+- first_attempt_at/deadline/attempts跨重启不刷新；超次数/60分钟/23小时边界停止POST，known session只GET，unknown转review；零结果不伪装不存在。
+- verified webhook先于create响应、重复/乱序/迟到付款、已paid不回退，session identity冲突零额外账务；S0所有原回归保留。
+- shutdown拒新任务、abort/drain/Prisma关闭顺序、Redis丢失、owner query与worker DAG；目标Schema fresh/catalog/Prisma、全unit/integration/contract/build/smoke。
+
+官方语义核验2026-09-10（官方工具语义而非本仓实现证据）：
+[幂等](https://docs.stripe.com/api/idempotent_requests)、[错误与unknown](https://docs.stripe.com/error-low-level)、
+[创建会话/过期](https://docs.stripe.com/api/checkout/sessions/create)、[已知ID查询](https://docs.stripe.com/api/checkout/sessions/retrieve)、
+[列表能力](https://docs.stripe.com/api/checkout/sessions/list)、
+[Undici连接预算](https://github.com/nodejs/undici/blob/main/docs/docs/api/Client.md)、[Agent生命周期](https://github.com/nodejs/undici/blob/main/docs/docs/api/Agent.md)。SDK22.6.1本地请求/取消证据另记任务板。

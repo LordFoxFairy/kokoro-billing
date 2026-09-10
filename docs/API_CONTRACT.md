@@ -221,3 +221,21 @@ null/缺省保持event fallback。webhook先使用provider解析结果，仅对�
 其他事件保持原type交当前processor ignored，不以完成Checkout页面推断资金到账。缺省mode/status的旧合成fixture此前被错误放行，现收窄，不冒称非法输入行为完全不变。
 HTTP路径/身份/raw body SDK验签/inbox去重/响应状态与schema不改；迟到的async成功事件仍可处理。当前金额严格正数的profile不自动给no_payment_required发放Credit。
 该局部修复沿用当前机器契约，并不批准stable v1的UUID/header/envelope/版本切换；订阅及免费权益政策仍有未决项。
+
+
+## B8-D2a Checkout内部结果与待决wire边界
+
+本轮不改stable v1机器源。目标内部Checkout结果为具名联合：pending（持久已接受/等待恢复）、ready（已有session identity；URL可能因provider终态为空）、
+failed（明确且持久session_had_unknown及本SDK调用uncertainty均为false的未执行错误）、review_required（未知结果超预算或身份冲突）。这是owner内部业务结果，不是另写一份wire DTO/schema。
+同tenant/subject/key只能指向一个固定Checkout；重试同请求可查询当前状态，不能生成第二session/provider key；不同digest依旧conflict。
+prepare准入截止quote_expires_at与provider_session_expires_at必须在最终机器contract分别说明，不将当前expires_at原位改义。
+
+目标调用者应能够取得已持久接受的Checkout identity并查询后续状态，不能以无ID的通用500或201+缺URL假装可用付款页；
+exact status code、Location、查询operation、稳定错误码与重放语义在同一新major owner contract一次裁决，消费者随后更新并移除旧入口。
+本设计不预建新HTTP路径/双协议，不把尚不存在的查询或管理员修复接口写成当前能力。提供这些能力是B8/B9待交付项而不是删除目标。
+UI取消跳转/付款成功跳转仅是导航，不能作为支付、退款或取消平台会话的权威事实。
+
+Checkout只读导入Payment核心账户公开能力，所有tenant/actor从受信上下文取得；任何account/provider_environment/checkout_session_mode/session绑定字段均不从用户body自报后直接采信；环境test/live和会话payment/subscription是两个独立维度。
+Provider verified事件是独立确认通道，但仍需本仓snapshot金额/币种/身份一致和幂等Credit效果；不能把create ready或subscription active等同已收款。
+
+尚待用户事实/major确认的范围仍如B8-D2段：现有账务数据、仓外v1调用者、数据演进方式与整体breaking契约。当前17operation/SQL原样验证不证明未来状态机/Schema通过。

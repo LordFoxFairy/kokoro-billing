@@ -7,6 +7,8 @@
 
 ## 当前规范化工作
 
+- B8-D2a Checkout持久claim/事务外调用/fenced finalize、历史unknown、恢复预算与账户/会话维度已通过数据/TS独立设计审查；首轮1P1/2P2闭环。Root用合法配置的真实SDK+本地HTTP故障服务器复现总deadline后继续请求/迟到成功，精确证据见任务板；不是Stripe sandbox。Undici8.10.2仅传输候选，未安装；原持锁调用与背景请求仍待生产替换，完整API/Schema/数据演进未放行。
+
 - B8-S0已实现Stripe一次性付款paid-only门：两种Checkout事件只有payment/paid且subscription缺省或NULL才允许发放。旧源码在独占PG真实回调链中复现unpaid提前创建settlement/account/grant/journal各1；修复后的完整665测试/158集成零失败零跳过，双审通过，精确冻结hash与Root命令见任务板。提交后仍须干净HEAD复验；不是Stripe sandbox或生产流量证据。
 - Stripe完整接入仍有缺口：创建Subscription的metadata与本仓回调所需teamId/planId不匹配，现代item-level周期被解析为NULL；这些为本地适配器探针证据，尚未修复。Checkout事务外调用/未知结果恢复、API版本和provider sandbox仍待后续。用户“staapi”平台名称仍待澄清。
 

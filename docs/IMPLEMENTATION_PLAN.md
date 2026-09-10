@@ -28,7 +28,7 @@
 | B5 / P0 / 全量catalog drift | Billing / billing_owner / 数据+TS+Root | 精确文件集见B5执行卡；Root交接后文档与提交 | 比较canonical参照库的35表全部列/约束/索引/predicate；缺CHECK与错predicate反例 | 已验收：9663db58bd85eb810b94df6120de050530c79d2f |
 | B6 / P0 / Prisma承接验证 | Billing / 后续续派billing_owner / Root | 固定依赖/生成链/模型/数据生命周期/独立验证；派前冻结文件集 | stable版本、无第二schema、typedCRUD+同tx锁/receipt/outbox+BigInt+错误+生成drift；不切生产writer | 已验收：B6a c7ef9fa；B6b 2793882；生产迁移仍归B8 |
 | B7 / P1 / 工具链与架构门 | Billing / billing_toolchain_hardening / 独立reviewer | package/lock/TS/ESLint/format/CI/architecture精确集派前批准 | Node24、版本固定、完整typed gate；AST有效/违规样本替代禁modules/强制ports；单独格式切片 | B7a已验收058bdf3；B7b已验收3fd97f5；B7c已验收8fbf8e0（干净46dc851复验）；B7d已验收0f0e764；干净ce5b628复验443全套/157集成、0失败0跳过 |
-| B8 / P0 / Nest+Prisma闭合业务切换 | Billing / 后续续派billing_owner / Root+独立reviewer | 先完整35表映射/provider图/事务组卡，再授权src/SQL/contract/test/worker集 | 先稳定查询范式，后整个共享Credit事务组；同一事务不混pg/Prisma，旧实现随闭合切片删除；中间未闭合commit不发布 | 待设计门；依赖B5/B6/B7 |
+| B8 / P0 / Nest+Prisma闭合业务切换 | Billing / 后续续派billing_owner / Root+独立reviewer | 先完整35表映射/provider图/事务组卡，再授权src/SQL/contract/test/worker集 | 先稳定查询范式，后整个共享Credit事务组；同一事务不混pg/Prisma，旧实现随闭合切片删除；中间未闭合commit不发布 | B8-D1/D2a内部设计已审查；其余B8-D2、major消费者与完整Schema门仍待；依赖B5/B6/B7已验 |
 | B9 / P1 / 契约与外部副作用 | Billing / 后续续派billing_owner / Root | owner contract先行；消费者另开owner任务，无本仓写入权 | envelope/request-id/UTC/error/202语义；checkout claim→网络→finalize及unknown恢复；实际消费者固定artifact | 待契约裁决/依赖B8 |
 | B10 / P1 / 运行可靠性验收 | Billing / 后续续派billing_owner / Root | worker/reconciliation/retention/smoke与文档；派前批准文件集 | execution并发lease、orphan检测、append-only角色、预算取消、provider sandbox、CI PG16/镜像/DR分层证据 | 待派工 |
 
@@ -37,7 +37,7 @@
 - [x] B0：当前门禁与真实依赖基线已记录。
 - [x] B1/B2：独立审查已接收并由Root复核。
 - [x] B3：明确Prisma目标与当前差异，三文档一致；B4局部数据设计经billing_data_review放行。
-- [ ] 完整业务/Prisma重写门：catalog drift、生成链及隔离事务承接已通过；35表目标writer/provider图、真实业务事务组与breaking消费者裁决仍待完成。
+- [ ] 完整业务/Prisma重写门：catalog drift、生成链及隔离事务承接已通过；35表writer/模块DAG及Checkout内部恢复设计已审查；完整Schema、其余业务事务组与breaking消费者裁决仍待完成。
 - [x] B4交付、两阶段review、Root主工作树重跑验证与commit；见93c06df。
 - [x] B5完整catalog drift与B6a/B6b生成/隔离事务承接已验收；下一切片B7，不代表生产Prisma切换。
 
@@ -1047,3 +1047,72 @@ TDD：单元初次211失败/10通过；Root发现第一版integration误用month
 
 本次仅付款准入切片。PG16 CI、镜像、Stripe sandbox/完整订阅与退款、消费者cutover、生产SLO/DR未执行；Nest/Prisma生产writer、UUID capture、pricing并发、失败状态与poison outbox等已知缺口仍待B8–B10。
 Root按明确路径提交这4个代码/测试文件及CURRENT/本任务板，随后在干净提交重跑同一完整脚本；文档不自动继承为干净HEAD的验收结果。
+
+
+## B8-D2a Checkout恢复设计卡
+
+上一轮分类：进展。8b55a578f6323e12af3760527e466d10ac6ba59a已在干净HEAD复验，session34112正常exit0，
+日志`/tmp/billing-b8s0-root.5cbfbz`：62文件665通过38.29s、33文件158集成通过29.31s、0失败0跳过；
+frozen/apply/format/lint/type/build/SQL/17route/catalog35/368/127/83/Prisma/源码dist smoke/audit五级0/diff全部通过。
+自己的billing_accept_b8s0_aae2a0ffbf52418c955b正常删除并查询不存在，Billing工作树干净。B8-S0已验收，不缩减完整Goal。
+
+| 项目 | B8-D2a任务卡 |
+|---|---|
+| 目标/优先级 | P0：冻结Checkout事务外调用、未知结果与恢复的内部状态/数据/依赖设计；不冒称完整B8-D2已通过 |
+| 基线 | /Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing，codex/billing-ts-prisma-alignment，8b55a57，起始干净 |
+| Owner与角色 | Root唯一Billing文档writer/Git；billing_toolchain_hardening沿用Astra只读SDK deadline调查（仅/tmp自有探针/随机loopback HTTP server）；billing_data_review/Astra及billing_ts_review/Sol冻结后独立审查 |
+| 文件集 | Root仅既有TECHNICAL_DESIGN、DATA_MODEL、API_CONTRACT、IMPLEMENTATION_PLAN、CURRENT；调查员不改Billing/Git/PG/Redis，不访问真实Stripe API，只清理自身HTTP server/进程 |
+| 放置/粒度 | 复用三设计面及唯一任务表，不新建文档中心；Checkout owner承接完整session生命周期，不把网络await机械搬到Controller或创建通用支付任务框架 |
+| 依赖/契约 | 基于B8-D1事务规则和S0付款门；核对Payment账户公开查询的无环依赖。新HTTP major/真实部署数据仍待事实确认，本轮只定义内部结果，机器v1原样保留 |
+| 对比/删除 | 拒绝原事务内网络及只移await但无durable恢复；采用短事务claim/外部调用/短事务fenced finalize。实施闭环时删除旧checkout pg实现及仅Promise.race的假取消，不保留双写 |
+| 数据 | 35表owner映射不增业务表；Checkout行保存请求快照、attempt/lease/恢复状态，SQL唯一canonical；本轮不应用DDL、不清真实数据 |
+| 验证/交付 | 官方SDK/HTTP语义证据+本地实际deadline探针（如能实跑）；两位reviewer绑定5文档hash；Root核当前SQL/17route及图无环。实现后另验真实PG并发/崩溃/unknown/window/late response与完整门，不用文档测试代替实现 |
+
+
+### B8-D2a实际SDK deadline证据
+
+调查员沿用Astra。首版session52846/Root23381正常exit0，但前两场constructor直传overall<read，未满足runtime-config约束；
+因此只保留为探索证据（run-first/results-first及root-run/root-results），不据此宣称可配置运行时实证。
+修正后session70575正常exit0；最终探针`/tmp/billing-b8d2a-deadline/probe-final.mjs`，SHA256
+1f2b1e1dff4a970aac59d708377a064ddaba623dee5dfbf2f1defbafa3d47524，全部场景先断言overall>=max(connect,read)。
+Root核验hash后复制相同脚本，仅命令参数指定独立结果路径：
+`node --import tsx /tmp/billing-b8d2a-deadline/root-final-probe.mjs /tmp/billing-b8d2a-deadline/root-final-results.json`，
+session85554正常exit0；实际日志root-final-run.log位于同目录。
+
+使用本仓真实StripeCheckoutProvider和Stripe22.6.1 SDK，只把实例host/port/protocol/httpClient指向自己随机loopback HTTP server；
+sessions.create为透传原方法/原Promise，额外观察原Promise终态，不提供假返回值。未验证TLS connect agent、Stripe服务端幂等或真实sandbox。
+Root四个合法配置场景均实跑断言通过：
+- overall600ms/read400ms，首次收完body断连、SDK重试后响应延迟220ms：调用604.6ms报provider_timeout，原SDK740.4ms成功，证明超时未取消仍活跃请求。
+- overall180ms/read90ms/retry1：调用182.8ms报超时；本地在总deadline后实际收到第二次POST，原SDK695.1ms才以ETIMEDOUT终结。
+- maxNetworkRetries=0，server收到完整body后断连：实际2次POST且最终成功；普通socket timeout则1次。每个场景重试key保持相同。
+- SDK原Promise、server延迟任务均await终态，4场景cleanup均sockets=0/listening=false，未触及PG/Redis/Stripe外网或Billing源码。
+
+这些证据要求目标实现既取消本地I/O又持久保留unknown，且对SDK的特殊重试实测预算；不能把maxNetworkRetries=0或Promise.race称为恰一次执行保证。
+
+
+### B8-D2a首轮审查与R2
+
+数据Astra首轮内部方向放行，指出历史unknown和两种mode命名需在实施卡明确。TS Sol首轮1P1/2P2：
+未知历史未持久、environment与session mode混名、独立3秒connect能力未选定。Root均接受并修改三设计面：
+单调session_had_unknown+同SDK调用uncertainty、过期in_flight接管保守置true、failed CHECK/转换禁止抹去未知；
+provider_environment与checkout_session_mode分别验证，恢复承接payment和subscription创建，setup没有业务不创建；
+选择官方Undici Agent+FetchHttpClient而非自造取消层，给出独立connect预算、每attempt signal、共享受控dispatcher和关闭顺序。
+2026-09-10 npm view undici实际exit0：8.10.2稳定、Node>=22.19.0、MIT、time.modified=2026-09-04；仅候选预核，未改package/lock，完整供应链/安装/故障门留实施。
+R2继续只改原5文档，Schema/contract/源码字节不变；冻结后重审。当前提议的provider新账户环境字段、Checkout生命周期和完整SQL都仍未应用。
+
+
+### B8-D2a-R2内部放行与边界
+
+数据Astra与TS Sol均复核`/tmp/billing-b8-d2a-r2-sha256.txt`五hash并放行内部设计，无剩余P1/P2；Root仅追加本状态记录及文档标题/当前态，不新增设计决定。
+Root执行当前`pnpm sql:check`、`pnpm contract:check`（17routes）、`git diff --check`均exit0；SQL/OpenAPI SHA与8b55a57一致。
+独立文本核验35表映射一一对应且目标名唯一，七feature+PaymentEvents子模块图无环，Checkout新增仅Payment核心读取边。
+Root临时图解析首版用Unicode词边界误漏payment核心，assert退出1；改为ASCII模块名边界后同文档通过，未改真实架构门或降低其规则。
+这些校验证明当前机器源/候选文档一致性，不证明未来DDL已执行或Nest容器已实例化。
+
+本轮未改源码/测试/依赖/机器契约，只在本地临时HTTP server执行4故障场景并终态清理；没有PG/Redis变更，账务完整测试不重复冒充本轮设计实现。
+最近全量运行证据仍绑定8b55a57的665/158及任务板前段；新设计目标全部须在后续实现重新验证。
+本门文件：/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/TECHNICAL_DESIGN.md、
+/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/API_CONTRACT.md、
+/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/DATA_MODEL.md。
+尚未放行：major API与真实部署/数据演进、完整canonical Schema、订阅/退款/202终态、retention/权限，以及依赖安装或生产代码切换。
+下一设计面继续闭合这些剩余项；不能把内部设计审查代替完整B8切换，也不能长期停留Fastify/pg而宣布Goal完成。

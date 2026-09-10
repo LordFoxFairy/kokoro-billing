@@ -310,3 +310,42 @@ Schema、字段和当前writer不变。付款准入仅阻止尚未付款或非�
 被忽略事件仍可持久化inbox并由outbox正常完成，但不得写payment_settlement、credit_account、credit_grant或credit_journal。
 同Checkout后续paid async事件才使用原payment外部identity/inbox去重与现有账务事务；真实PG断言零提前发放和单次后续发放。
 这不声称B8目标35表已经应用，也不修复其他已知事务/订阅问题。局部schema命令验证当前SQL无变化即可，不创建新migration/DDL。
+
+
+## B8-D2a Checkout恢复数据增量（内部设计已审查，未应用DDL）
+
+不增加第36张业务表；现payment_checkout→billing_checkout按B8-D1映射，由Checkout唯一writer。
+以下为已有事实的生命周期所需增量，精确DDL仍只在canonical schema实现；不是第二份可编辑SQL。
+
+| 数据组 | 目标字段/类型与理由 |
+|---|---|
+| 账户引用 | provider_account_id UUID引用Payment owner映射；provider/provider_account_ref与provider_environment（test/live）为已接受请求的不可变快照，不代替Payment账户authority |
+| 请求身份 | provider_idempotency_key TEXT、provider_request_json JSONB、provider_request_digest CHAR(64)；快照含固定策略/API版本、完整params、关联身份与checkout_session_mode（payment/subscription），无密钥；同checkout永不改key |
+| 两个截止 | 原expires_at改quote_expires_at TIMESTAMPTZ(3)；新增provider_session_expires_at可空TIMESTAMPTZ(3)，仅确认provider结果才填，二者语义独立 |
+| 创建状态 | session_creation_status TEXT：not_started/in_flight/unknown/ready/failed/review_required；不替换付款业务status，ready不表示paid |
+| 尝试与恢复 | session_attempts INTEGER非负；session_attempt_token可空UUID；session_lease_until/first_attempt_at/retry_deadline_at/next_attempt_at可空TIMESTAMPTZ(3)；状态机使用数据库clock_timestamp |
+| 历史不确定性 | session_had_unknown BOOLEAN NOT NULL DEFAULT false，unknown记账/过期in_flight接管/同SDK调用内部传输未知时置true，永不清零，不由当前status推断 |
+| 诊断 | session_last_error_code与provider_request_id可空TEXT；仅稳定安全错误/请求定位，不存完整provider错误响应、Authorization或URL查询敏感内容 |
+| 已确认结果 | 既有provider_session_id/checkout_url，新增provider_session_status可空TEXT（open/complete/expired）；URL是敏感session能力，日志不输出，读取限受信owner/subject；ready后session_id不可替换 |
+
+约束目标：provider_request_json须JSON object；digest/key非空；in_flight必须token/lease/first_attempt_at/deadline齐全；
+非in_flight lease清空，attempt token保留最后身份供诊断但不具写入权。not_started要求attempts=0且token/first_attempt_at/deadline均NULL；
+unknown要求attempts>0且first_attempt_at/deadline/next_attempt_at非NULL；ready/failed/review_required不留next_attempt_at。ready必须非空session_id及provider状态，
+URL允许NULL（provider已complete/expired），unknown/review允许缺session ID；lease_until>本attempt领取时钟由应用检查，retry_deadline_at>first_attempt_at由CHECK兜底。
+provider/account/provider_environment/checkout_session_mode/request key/digest在首次prepare后禁止修改；JSON结构按版本校验，生成Prisma不替代CHECK。CHECK要求failed时session_had_unknown=false；
+flag=true后无论当前in_flight或unknown都不得按4xx转failed；合并本地SDK内部uncertainty与持久flag，旧token不能覆盖新状态。
+恢复预算用first_attempt_at及持久attempts，第一次claim前可为NULL；prepare行即持久可领取，不依赖Redis/outbox提醒。
+保留UNIQUE(tenant_id,idempotency_key)，新增provider账户scope下非NULL session_id UNIQUE以及provider账户scope下provider_idempotency_key UNIQUE，
+scope采用非NULL provider_account_id，不用nullable external ref绕过UNIQUE。目标billing_provider_account增加provider_environment（test/live），
+有效执行账户external_account_ref非空，UNIQUE(provider,provider_environment,external_account_ref)确保单一tenant映射；自身UUID供Checkout引用。
+Stripe主账户同样保存实际acct身份；是否传Stripe-Account是请求配置，不用NULL代表未知账户。平台/Connect凭据以实际执行账户核验后绑定，
+Checkout持久provider_account_id、环境与执行账户快照；credential轮换不得改变这些身份。此处是既有Payment表的生命周期增量，不新增第36表。
+
+查询：tenant+id用于请求/query/finalize；跨tenant worker仅在内部固定scope扫描not_started、到期unknown及过期in_flight，
+候选索引按各分支的next_attempt_at或session_lease_until+id建立partial predicate；不是对OR条件盲建单个全表索引。
+worker带tenant/fence作条件更新，SKIP LOCKED与确定排序；外部查询始终tenant+subject。Payment账户关系无FK：prepare经owner同事务查询，
+账户映射不得物理删除被Checkout/settlement/inbox引用的事实，停用与保留分开；reconciliation在同一只读快照通过两个owner比对orphan。
+
+有财务效果或unknown/review/未完成session的Checkout不得物理删除，也不能清provider key/digest使旧请求重新创建。
+完整保留期/法域与敏感URL清理归统一retention门，不在本轮硬编码法定年限；日志不记payload/token，清URL不清session identity和付款事实。
+请求body/secret配置不入contract；quote字段与provider截止的wire改名/新增遵守API major门。此处内部字段未成为当前SQL事实。
