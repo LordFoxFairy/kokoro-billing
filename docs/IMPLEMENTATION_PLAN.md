@@ -950,8 +950,10 @@ B8-D2/API和完整Schema仍有明确未决项，禁止用本轮只读设计门�
 
 用户补充（2026-09-10）：Billing是关键服务，要求建立在成熟基础上，支付平台对接要完整、方便。框架/ORM/支付SDK优先采用稳定官方能力，
 不自造支付协议、签名算法或第二套账务基础框架；依赖成熟不等于本仓可靠性自动成立，仍需并发、重放、退款、未知结果、恢复与沙箱证据。
-用户提到“staapi”，已询问是否指Stripe API或其他平台，未确认前不擅自选择新provider。当前已有Stripe实现可先审计，
+用户已明确“staapi”指Stripe API，并要求国内支付渠道与Billing本体也优先复用成熟能力；现有支付宝/微信adapter纳入评估，不据“等等”自动新增未知provider。当前已有Stripe实现可先审计，
 接入配置、凭据校验、测试模式、Webhook注册说明、错误诊断及runbook纳入后续provider验收，而不是仅验证HTTP连通。
+
+本次澄清的代码/历史证据：当前package固定stripe22.6.1，StripeCheckoutProvider调用官方checkout.sessions.create；支付宝/微信主要为本仓node:crypto回调验签/解密与事件解析，尚无对应完整下单provider，不能称已统一使用官方SDK或已完成国内支付闭环。Root历史32/48号Billing研究文档引用OpenMeter/Lago/Kill Bill/Medusa，记录“借鉴模型、不直接部署整套引擎”的旧选择；这些历史技术栈描述不覆盖当前ADR-0003，也不证明目前已安装计费引擎。后续选型须明确“直接复用SDK/托管能力、引擎承接、仅借鉴模型”的区别，比较真实功能覆盖、账务唯一owner、运维与许可证成本后裁决；本次没有批准新的跨仓owner、第二账本或数据迁移。Stripe名称已确认，真实账务/外部消费者、major切换及订阅商业资格仍独立待决。
 
 
 ### B8-D1首轮独立审查与修订
