@@ -3,6 +3,13 @@
 验收必须在待交付 commit 的干净工作树上重新执行。历史报告、旧 CI、Agent 自报、被 skip 的 integration 和本地 fixture
 均不等于生产证据。
 
+## M2a Prisma事务组件
+
+局部交付与最终Root证据见[任务板M2a](IMPLEMENTATION_PLAN.md)。测试入口为
+`test/unit/transaction.test.ts`、`test/integration/transaction.test.ts`及architecture；真实PG覆盖同client/提交可见性、有效写后回滚、吞SQL错误、falsey首因、scope/延迟client误用、只读快照及超时。
+Root最终完整740/集成223通过、0失败0跳过，SQL/catalog/Prisma/source+dist与独立编译事务组件smoke通过。
+这是未来生产writer使用的基础组件，不是Nest runtime/31表/receipt/outbox/支付/Scheduler整仓验收；初始test-first过程不足与后补mutation反例均在任务板如实记录。
+
 ## B7d 格式治理切片
 
 实现为 `0f0e7647d4531e94b2a1d7d8858e970850000c6e`。固定本地 Prettier3.9.6、空配置、显式正向范围、精确生成排除，

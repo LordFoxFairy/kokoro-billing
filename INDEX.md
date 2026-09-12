@@ -99,3 +99,10 @@ DDL失败、backend终止和客户端deadline；仅该fixture的管理连接需�
 - test/architecture/typescript-dependency-graph.ts / typescript-dependency.types.ts：TS6 AST、模块解析、值/类型图和静态导出来源。
 - test/architecture/billing-dependency-policy.ts：feature/public/Controller边界及B8精确过渡债；不是业务运行模块。
 - test/architecture/typescript-dependency-graph.test.ts：同分析管线的正反例；ownership.test.ts与prisma-generation.test.ts在真实项目执行。
+
+## M2a 目标事务支持组件（未接入当前运行时）
+
+- `src/database/transaction.service.ts`：Prisma callback事务/ALS作用域、嵌套rollback-only与查询生命周期守卫；传入Client的创建/关闭归未来装配owner。
+- `src/database/transaction.types.ts`、`transaction.error.ts`：上下文/预算及事务错误语义，不复制业务DTO。
+- `test/unit/transaction.test.ts`、`test/integration/transaction.test.ts`：错误接线单元与真实PG并发/回滚/只读/超时反例。
+- 原生产pg连接与全部writer仍待完整切换时删除，见唯一任务板M2a；本目录不是第二套正在写账的运行时。

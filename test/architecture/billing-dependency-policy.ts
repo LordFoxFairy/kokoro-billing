@@ -84,6 +84,16 @@ const prisma = (edge: DependencyEdge) =>
   edge.target === "@prisma/client" ||
   edge.target.startsWith("@prisma/") ||
   edge.target.startsWith("src/generated/prisma/");
+const approvedTransactionPrismaEdge = (edge: DependencyEdge) =>
+  edge.target === "src/generated/prisma/client.ts" &&
+  ((edge.source === "src/database/transaction.service.ts" &&
+    edge.kind === "type" &&
+    edge.symbols.length === 1 &&
+    edge.symbols[0] === "PrismaClient") ||
+    (edge.source === "src/database/transaction.types.ts" &&
+      edge.kind === "type" &&
+      edge.symbols.length === 1 &&
+      edge.symbols[0] === "Prisma"));
 const database = (edge: DependencyEdge) =>
   prisma(edge) ||
   /^(?:pg|postgres|redis|ioredis)(?:\/|$)/.test(edge.target) ||
@@ -157,7 +167,8 @@ export function checkBillingDependencies(
         kind: edge.kind,
         location: edge.location,
       });
-    if (prisma(edge)) report("production-prisma");
+    if (prisma(edge) && !approvedTransactionPrismaEdge(edge))
+      report("production-prisma");
     if (
       (edge.target === "node:module" || edge.target === "module") &&
       edge.symbols.some((symbol) =>

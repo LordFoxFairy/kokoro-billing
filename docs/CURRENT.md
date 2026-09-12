@@ -1,5 +1,14 @@
 # kokoro-billing 当前状态
 
+## 2026-09-12 最新交付：M2a Prisma事务组件
+
+- 用户已确认首发无真实账务数据、尚未开放；历史数据/已发布major不再作为假设性阻塞，不授权清共享库。
+- 新增src/database事务组件：Prisma callback + ALS、同client嵌套、rollback-only/首因保留、跨scope与关闭后误用拒绝、只读快照和有界预算。未接入当前Fastify/pg，不声称Nest/七模块生产切换完成。
+- 独立双审闭环后Root最终实跑`pnpm verify`740通过、`pnpm test:integration`223通过，均0失败0跳过；catalog/Prisma无漂移、原源码/dist API smoke及独立编译事务组件真实PG smoke通过。精确冻结hash、命令、资源清理和TDD过程差异见唯一任务板M2a。
+- Schema/OpenAPI/依赖/generated保持原字节；31表目标、receipt/outbox与完整业务writer仍待实施。Prisma跨仓使用原则已在Root TS手册§12.1/12.2，其他子仓引用手册，不跨仓导入本组件。
+- Scheduler已有通用调度，但Billing当前认证与静态batch_id不匹配；接线未完成。IAM execution proof verifier仍是目标，不把有效资源scope或body payer当付款授权。未跑支付sandbox、Scheduler跨仓、Nest或镜像验收。
+
+
 更新时间：2026-09-12。当前规范化分支为 `codex/billing-ts-prisma-alignment`；最终验收必须绑定交付时的 `HEAD`、
 干净工作树和当次命令输出，不能继承历史报告。
 

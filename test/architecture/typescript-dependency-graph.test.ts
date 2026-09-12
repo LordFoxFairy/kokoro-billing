@@ -316,6 +316,51 @@ describe("Billing dependency policy", () => {
     );
   });
 
+  it("allows only the transaction component's exact generated client imports", () => {
+    const generated = "src/generated/prisma/client.ts";
+    expect(
+      checkBillingDependencies(
+        graph({
+          "src/database/transaction.service.ts":
+            "import type { PrismaClient } from '../generated/prisma/client.js';",
+          "src/database/transaction.types.ts":
+            "import type { Prisma } from '../generated/prisma/client.js';",
+          [generated]: "export class PrismaClient {}; export type Prisma = {};",
+        }),
+      ).filter((item) => item.code === "production-prisma"),
+    ).toEqual([]);
+    for (const [source, statement] of [
+      [
+        "src/database/bypass.ts",
+        "import { PrismaClient } from '../generated/prisma/client.js';",
+      ],
+      [
+        "src/database/transaction.error.ts",
+        "import type { Prisma } from '../generated/prisma/client.js';",
+      ],
+      [
+        "src/database/transaction.service.ts",
+        "import type { Prisma } from '../generated/prisma/client.js';",
+      ],
+      [
+        "src/database/transaction.types.ts",
+        "import type { PrismaClient } from '../generated/prisma/client.js';",
+      ],
+      [
+        "src/database/transaction.service.ts",
+        "import { PrismaClient } from '@prisma/client';",
+      ],
+      [
+        "src/database/transaction.types.ts",
+        "import type { PrismaPg } from '@prisma/adapter-pg';",
+      ],
+    ] as const)
+      expectPolicy(
+        { [source]: statement, [generated]: "export class PrismaClient {}" },
+        "production-prisma",
+      );
+  });
+
   it("reports value/type/all SCCs including self loops and mixed cycles", () => {
     const value = graph({
       "src/a.ts": "import './b.js';",

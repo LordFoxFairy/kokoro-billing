@@ -1,5 +1,9 @@
 # kokoro-billing API 契约策略
 
+> **2026-09-12 当前首发裁决**：用户确认尚无真实账务数据、服务未开放；按首发clean-slate目标实施，历史数据/已发布major的待确认不再作为本轮前置。
+> 不重置共享数据库、不构造历史兼容。M2a仅提前实现D1已审定且不依赖表/API的Prisma事务组件（见任务板），本仓SQL/HTTP/生产writer保持当前态；完整目标Schema与付款授权门仍按业务切片闭合。
+
+
 B5/B6 仅新增离线 catalog/Prisma 生成和隔离承接验收命令，不变更 17 个 HTTP operation、wire schema、身份、状态或消费者；OpenAPI 保持不变。
 
 ## 2026-09-08 当前契约与目标差异

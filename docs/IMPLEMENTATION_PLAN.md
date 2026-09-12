@@ -34,6 +34,44 @@
 
 ## 阶段门
 
+### B8-R4 / M2a 首发边界与事务组件实施卡（2026-09-12）
+
+用户明确当前没有真实账务数据、服务尚未开放，要求先实现，配置后可用。首发沿Root API手册采用clean-slate v1目标，
+不再等待历史数据迁移/仓外已发布客户的假设确认，不建设兼容层；这不授权重置任何共享数据库。旧章节的相关待确认文字是历史阶段记录，由本卡更新。
+
+| 项 | 本轮决定 |
+|---|---|
+| 基线 | Billing `/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing`，`codex/billing-ts-prisma-alignment`，`7d1df245a9657a99bc69bfd80809dd1dea102e11`，起始clean；Root既有SQL手册/Agent/.tmp不碰 |
+| R4-A只读 / 模型审查 | billing_model_r2 / Sol，核IAM/Agent已实现与目标：execution proof verifier尚未上线，当前header和authorization/check不证明付款授权。Root不采纳把organization可见scope当付款权限或自动改组织钱包的建议；保留当前用户钱包商业语义，付款授权由对应owner闭合 |
+| R4-B只读 / Scheduler | billing_pricing_r3 / Sol：现Scheduler仅Bearer+occurrence headers，Billing入口认证不匹配；静态batch_id会永久重放首批。目标由Billing接原生occurrence key并维护durable receipt，不新增Scheduler模板或Billing cron；对账和outbox不冒充已接入 |
+| M2a目标 / 顺序 | D1已审定的事务生命周期组件与模型/API无耦合，作为M2独立前置切片先实现；M1表/HTTP与M3/M4生产切换仍按三设计门串行。不是用局部门放行整仓重写 |
+| 唯一writer / 审查 / Git | billing_transaction_m2a / gpt-5.6-sol为实现writer；Root派出后停写Billing至交接；既有两位reviewer只读。Root统一index/commit，writer不提交 |
+| 允许文件 | writer实际7文件：src/database/transaction.service.ts、transaction.types.ts、transaction.error.ts；test/unit/transaction.test.ts、test/integration/transaction.test.ts；追加授权test/architecture/billing-dependency-policy.ts、typescript-dependency-graph.test.ts。Root交接后维护既有三设计、任务板、CURRENT、ACCEPTANCE、INDEX；package/lock/canonical/generated/HTTP/旧pg组件/其他仓只读 |
+| 放置比较 / 公开面 | 采用D1 src/database事务支持；不放Credit或全局旧infrastructure。具名run、requireActiveTransaction及事务外检查；scope/type、error与实现分开，Prisma callback API管理提交回滚，不自写BEGIN/COMMIT/SAVEPOINT |
+| 数据 / 依赖 / 删除 | 复用固定Prisma7.10与Node ALS，无新依赖/Schema/API。组件不接入当前pg runtime，不同时开两套业务writer；完整cutover删除旧connection事务路径。普通CRUD仍typed；原始SQL仅固定set_config/只读事务设置及测试探针 |
+| 红例 / 验收 | 同backend/txid、提交前外连接不可见、嵌套吞异常/falsey首因/SQL异常被吞仍回滚、跨tenant/actor拒绝、closed client、read-only快照、预算与回滚后池复用；普通错误和未知提交不自动重试。真实PG只在fixture自建随机库 |
+| 主控实际命令 | Billing cwd、Node24.20.0/pnpm11.25.0：focused unit+SCHEMA_ADMIN_URL真实integration；随后format:check/lint/typecheck/build/sql:check/contract:check与相关architecture，完整回归按实际证据记录。未运行不冒称通过 |
+| 并行关键路径 | writer实现M2a；Root只读复核Scheduler原生契约、IAM边界及验收反例，收到交付后独立复验。M2的receipt/outbox和完整业务重试仍另切片，不能把本组件标为M2全部完成 |
+
+- [x] M2a组件与真实PG反例验证；初始test-first证据不足，流程差异如下，未冒称全程TDD。
+- [x] Root规格审查、两位独立审查及修订复核；主工作树最终完整门禁通过。
+- [x] 回填冻结源码、实际命令/数量/未运行及后续owner；由Root提交本切片，精确交付commit见本节Git历史与本轮最终报告。
+
+#### M2a交付与实测（2026-09-12）
+
+- 实现为263行具名TransactionService及上下文/错误定义，不新增依赖。Prisma7.10交互事务掌握提交回滚；每root轻量query extension共享传入Client的连接池，绑定自身ALS state，覆盖typed与raw错误。嵌套同client，root身份冻结，跨tenant/actor/mode、已关闭/lazy/foreign client、rollback-only拒绝；没有自动重试、SAVEPOINT、手工COMMIT或production unsafe SQL。
+- 毫秒预算统一限制1..2147483647并核相对关系；数据库语句/锁预算和只读快照在同Prisma事务设置，超时上下文关闭。原始falsey/NaN首因保持，真正secondary用AggregateError附加，不把清理错误或提交未知变成再次扣款许可。
+- 两项明确范围：本组件不创建/关闭外部传入Client，不代替未来PrismaService/Nest生命周期装配；没有开放rootRead或未守卫root client，也未进入当前Fastify/pg生产运行时。普通root查询入口、完整命令重试/取消、receipt/outbox及七模块writer归后续M2/M3/M4。
+- Root首轮规格审查修正read-only测试吞断言、无先写数据的空回滚断言、未实际嵌套同client测试及closed/timeout反例。独立billing_model_r2要求timer上限与真实run-secondary分支；billing_pricing_r3要求并发测试初始化/中间失败始终release并observe后台事务；全部修订后两审查员范围内放行。未把reviewer提出的组织scope推导payer建议采纳为业务授权。
+- Root最终冻结源码SHA256：transaction.service.ts=`80e239f387b6e81ccb534be6537dda2b31f354e443fc6d938ac5d012b4d77255`；integration transaction.test.ts=`cce8150a5dcece52805353f9cd01088d53bb688bb8f27437b033c04210036c02`。全套日志`/tmp/billing-m2a-root.yZu66U`；前轮738/223仅作旧冻结树记录，不替代最终结果。
+- Node24.20.0/pnpm11.25.0、共享PG18.4/Redis实例、自建Billing随机DB：`pnpm db:apply-schema`、`pnpm verify`（format/lint/typecheck/build/sql/contract/test，**65文件740通过，0失败0跳过**）、`pnpm test:integration`（**35文件223通过，0失败0跳过**）、`pnpm db:verify-schema`（catalog differences=[]）、`pnpm prisma:check`均exit0。223是全套内的集成子集，不相加宣称963项不同测试。
+- Root源码/dist API smoke均health200/ready200/anonymous401/trusted BFF catalog200/请求ID匹配/SIGTERM exit0，仅证明原运行时未回归。另以纯Node加载编译后的TransactionService/Prisma Client，在独占空库完成typed BIGINT精确值、嵌套同client提交、吞内层异常后写入全回滚；脚本`/tmp/billing-m2a-compiled-smoke.mjs`，exit0。这不是Nest装配或支付渠道验收。
+- RED证据为复审时受控移除READ ONLY/预算上限的mutation反例，日志`/tmp/kokoro-billing-m2a-red-readonly.log`与`/tmp/kokoro-billing-m2a-red-timer-max.log`，移除后exit1、恢复后GREEN。首次类型/导入失败不是业务RED；这些后补证据不冒充最初test-first执行时序，后续切片必须先行为RED再实现。
+- Root第一次独立超时探针以outer等待callback gate形成循环，Node unsettled top-level await exit13；属探针问题，未作为组件失败。其唯一随机DB经writer确认非其资源后精确清理；改为有界延时的探针返回closed和Prisma expired transaction，并在finally清库。最终全验、compiled smoke自建库/子进程均已清理，PG查询无billing_reference_*或billing_accept_m2a_*遗留，未flush共享Redis/重启服务。
+- canonical/OpenAPI SHA仍分别57b6ff2cd09de0835b2c608575dea74644163ab591e21fa477855476661920bd与58fbe4fea083ba12e0db23f49e995b96500d01af0013febf40eba3093510ef63；package/lock/generated字节未改。没有真实provider配置，未运行Stripe/支付宝/微信sandbox、Scheduler跨仓投递、Nest运行时、镜像/CI PostgreSQL16或生产容量/SLO；Root任务外变更完整保留，总Goal未完成。
+- 后续owner：Billing继续完整canonical与可信付款授权契约、31表目标及七模块生产切换；Scheduler接入同时修Bearer认证与occurrence-derived batch identity，不另建cron。Scheduler现成注册机器源的字段是顶层url/body、misfire_policy/overlap_policy，不是任意target/header模板；IAM/Agent授权扩展按其owner契约串行，平台资源scope不等于钱包扣款权限。
+
+
 ### B8-R3 设计收敛卡（2026-09-12）
 
 用户批准认真打磨技术方案后连续推进；验收标准按事实正确性与真实门禁，不以“顶级”标签或单次大提交证明。
