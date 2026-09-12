@@ -25,7 +25,7 @@
 | checkout | offer/revision、checkout与provider session状态 | Catalog查询、checkout命令；只读依赖Payment核心账户查询（B8-D2a）；provider client在事务外调用 |
 | payment | provider account/customer mapping、verified inbox、settlement；receipt/outbox经唯一数据库支持写入 | 核心不依赖其他feature；事件编排子模块显式导入其他owner，详见B8-D1；不写credit表 |
 | credit | account/grant/hold/allocation/journal、fulfillment/reversal（R2合并授权）、redeem；audit/outbox经共享支持写入 | grant/reserve/capture/release/reverse/fulfill及账本查询；在调用方同一事务scope内执行 |
-| metering | pricing revision/rate、admission/execution/usage事实及对应receipt | 调用credit的事务内能力，不独立写余额/journal；保留未知执行结果 |
+| metering | feature price revision/price、admission/execution/usage事实及对应receipt | 调用credit的事务内能力，不独立写余额/journal；保留未知执行结果 |
 | refund | payment reversal与退款receipt | 退款编排调用credit reverseFulfillment，累计金额检查同事务锁定settlement；Payment查询/锁是具名内部能力，不循环注入整个PaymentProcessor |
 | subscription | provider subscription/period与entitlement term | period/term查询与写入，调用credit发放；不复制订阅到账本算法 |
 | reconciliation | 只读差异检测与受控调度，不自动修账 | 各owner具名检查；修复只能经owner可审计命令 |
@@ -125,6 +125,67 @@ raw白名单仅限fixture中明确的set_config预算、backend/tx身份断言�
 [db pull](https://www.prisma.io/docs/cli/v7/db/pull)、[transactions](https://www.prisma.io/docs/orm/v7/prisma-client/queries/transactions)。
 npm精确7.10.0三个包存在、Apache-2.0，Node ^20.19/22.12/>=24与TS>=5.4满足当前工具链；维护/退出取舍沿ADR-0003，实际安装/供应链扫描待本切片记录。
 
+## B8-R3 一致性支持、销售定价与实施顺序（2026-09-12目标）
+
+R2保留的Credit核心事实不变。本节裁决剩余两处模型分叉；具体字段/约束以DATA_MODEL R3为目标入口，机器SQL尚未切换。
+
+| 放置门 | 决定 |
+|---|---|
+| Owner / 当前事实 | Receipt与outbox由Billing一致性支持唯一存储writer管理，不是新业务owner；当前三receipt/两outbox字段同构，真实差异是去重scope/事件唯一性 |
+| 位置比较 | 继续src/database下具名CommandReceiptRepository/OutboxRepository（采用）；每feature各复制同形实现（淘汰）；新建消息总线/通用command框架（无独立需求，淘汰） |
+| 粒度 / API | 一个receipt model、一个outbox model；具名claim/replay/complete和enqueue/claim/renew/complete/retry方法，不接受任意表名/SQL；业务result验证由已注册命令schema定义 |
+| Metering职责 | FeaturePricingService拥有完整销售价目表的发布/选择及授权快照；BillingAdmissionService拥有准入编排；Credit仍唯一执行预留/扣减/释放；不把所有规则堆进Metering Repository |
+| 目录比较 / 删除 | src/modules/metering内feature-pricing具名service/repository/schema（采用）；继续UsagePricing混合token/按次同名层（淘汰）。删除被替代factory/ports/旧报价路径而非另包wrapper；只在切片时建实际文件 |
+| 依赖 / 数据 | 来源feature决定command/事件语义→一致性支持；Metering→Credit单向。同Prisma tx，SQL-first从完整目标canonical只读生成Client，不改写生成模型补规则 |
+| 验证 | scope交叉碰撞、并发重放/深层回滚、失租晚完成、重复事件载荷漂移、旧pending恢复；价格完整快照/生效边界/零价/缺价/历史结算，消费者删除quota须同切 |
+
+### 存储合并不改变业务身份
+
+Receipt将general/payment/admission从物理表选择改为固定命名空间列，api_surface当前固定internal。两唯一域同时解析，
+同key/identity串错行必冲突，成功result永久且可按原身份回查。module改名不改变已发布命令namespace或digest。
+Outbox将credit/payment从表选择改为namespace，保留payment三元组partial UNIQUE与稳定event_identity；
+原published_at目标称completed_at以表达内部handler完成。重试/死信/lease状态从列推导，不另存重复status/kind/topic。
+受控registry按(namespace,event_type)提供payload decoder、handler/receiver、超时和公平调度预算，不能从payload选择任意函数。
+
+### 事件路由闭合与删除门
+
+| 当前/已设计事件 | 稳定身份 / 目标接收方 | 本轮裁决 |
+|---|---|---|
+| PaymentProviderEventReceived | provider inbox UUID + 事件版本 / PaymentEvents.process | 保留；来自已验证inbox，内部handler再次核tenant与attempt fence，成功重放不重复效果 |
+| RefundCreditEffectRequested | Refund UUID + 事件版本 / Refund.applyCreditEffect | 按D2c在可信渠道成功及精确绑定后enqueue；record accepted本身不触发扣账 |
+| SubscriptionCreditGrantRequested | period UUID + 事件版本 / Subscription.applyPeriodGrant | 按D2d资格/窗口及固定授权调度；商业资格待批准时不凭active/trialing发放 |
+| PaymentSettlementRecorded / PaymentReversalRecorded | 当前纯记录通知，没有现生产handler | 不把它们作为已实现自动履约承诺；major切片须以明确owner effect任务替换或删emit，终态查询与HTTP语义同切，禁止空handler ack |
+| EntitlementFulfilled/Reversed、UsageSettled、UsageHoldReleased/Expired、CreditGrantExpired及其他仅通知事件 | 永久fulfillment/reversal/settlement/hold/grant/redeem结果身份 | 目前没有已确定外部receiver的通知不新建万能dispatcher；实施前完成消费者盘点，无消费者emit随切片删除。若确认外部receiver，先冻结event contract与接收方去重，再保留对应单目的路由 |
+
+删除未来emit不等于丢弃历史投递：切换前暂停并排空旧worker，按namespace/type/identity/digest盘点未完成、租约和死信行，旧事件版本不得原位改成新effect任务。
+有批准receiver的保留原版本处理；确认仅冗余通知且永久owner事实完整的，由具名迁移决定将原行保留为死信、last_error_code=delivery_retired_by_migration，
+清lease并写同事务审计（版本、原因、数量与原状态），completed_at保持NULL，不冒称送达、不进入unknown重试。该原因禁止普通requeue；重新启用须另审receiver/版本与原效果。
+不能证明旧事件用途、owner事实完整性或停止旧worker时，阻断该数据切换并保留待审，不自动删行。不存在真实数据的fresh install不伪造此迁移过程。
+
+现有provider requeue在冲突更新分支**没有修改payload_json**；初始INSERT与缺行重建的载荷构造不同，不能据此声称旧行载荷被覆盖。
+新实现仍须禁止同identity载荷变化，并从永久source恢复缺行时使用唯一canonical事件构造。重启同row、审计generation/CAS，不删除重插绕过去重。
+队列公平性按已注册任务分别限制每tick预算，避免provider事件持续堆积饿死Refund/Subscription；未知任务解码/重试有界，终态和人工恢复可观测。
+
+### 完整设计门剩余的可信付款账户问题
+
+Root额外复核发现当前billing-admission-service.ts:220–223用billingSubject.ref选CreditAccount，payerRef主要进入记录/幂等比较，
+而HTTP允许user/project/organization/service等使用主体。使用主体不等于付款主体；保留这个映射直接换Prisma仍可能选错钱包。
+R4必须冻结：付款主体来自哪种受信身份/委托凭证、哪个owner授权其为该invocation付费、同tenant账户与消费主体怎样绑定，以及拒绝/重放语义。
+禁止以任意body.payer_ref、project/runtime/workspace ID或仅service认证成功直接选择扣款账户；无有效付款授权时不扣款、不猜fallback。
+这是完整机器契约/业务实施门的未闭合项，不影响R3一致性支持/价格结构裁决，但本文件尚未宣布整仓技术方案全部通过。
+
+### 定价决策及消费者边界
+
+保留当前真实按次销售语义，FeaturePrice只按tenant/feature选择；meter_kind/requested_model_tier/model attribution是执行或审计信息，不是隐式定价键。
+发布完整价目表快照，以一次数据库时刻选择最大(effective_from,revision)再找feature；禁止每feature回落旧revision。
+显式零价included、缺价拒绝；Credit金额bigint、wire十进制字符串，历史capture从授权快照结算而不重新报价；Billing对历史price/revision引用及精确金额重算digest，缺行/漂移报不变量错误，不信任caller digest。
+当前无生产消费者的token quote/费率壳删除，不改名冒充provider成本；成本分析将来另以真实owner/profile设计。
+quota只有Web展示无配置/扣减writer；schema/summary删除与Web消费者同major切换，不以“暂无writer”单独删字段破坏现有页面。
+
+成熟依据（2026-09-12）：[AWS transactional outbox](https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/transactional-outbox.html)
+说明本地业务与事件记录原子提交、投递可能重复及接收方幂等；[Debezium outbox](https://debezium.io/documentation/reference/stable/transformations/outbox-event-router.html)
+提供事件身份/aggregate/payload的明确分离。这里只采用可核验语义，不部署其CDC/Kafka栈；统一表数/namespace与当前按次profile是Kokoro裁决，不是品牌保证。
+
 ## B8-R2 核心事实与框架事务边界（目标设计）
 
 跨仓实现约定只维护在Root [TypeScript手册§12.1/12.2](../../docs/kokoro-handbook/standards/08-typescript-backend-engineering.md#121-事务)。
@@ -153,7 +214,7 @@ Credit内部按余额/账本、预留/结算、履约/冲正、兑换的实际�
 
 同提交范围仍按D1确定锁顺序/namespace、D2处理外部恢复。付款/订阅当前profile每source一个program/一次履约，
 不扩未请求的多program发放。HTTP接受事实与Credit效果分开，不把Redis命中或202当成扣款已完成。
-原D1目录及事务原则保留；表形状由DATA_MODEL R2更新，三receipt/两outbox的合并另审，未固定新总表数。
+原D1目录及事务原则保留；表形状由DATA_MODEL R2/R3更新，统一receipt/outbox后目标31表，完整canonical待闭合。
 
 ## B8-D1 业务模块与事务目标（2026-09-10，内部设计已审查）
 
@@ -191,9 +252,9 @@ HTTP和三个既有worker最终都用Nest显式生命周期与同一owner能力�
 
 | 组件 | 固定数据scope与能力 | 约束 |
 |---|---|---|
-| CommandReceiptRepository | `general`、`payment`、`admission`固定映射三张receipt；claim/replay/complete | tenant+command+key与非空identity两套唯一性；admission另含apiSurface；成功result不可覆盖，损坏报内部不变量 |
+| CommandReceiptRepository | 单表，固定general/payment/admission namespace；claim/replay/complete | tenant+namespace+surface+command下key/非空identity双唯一性；成功result不可覆盖，损坏报内部不变量 |
 | AuditAppender | 唯一audit表的append | trusted actor、operation、resource ref；成功审计与业务同一提交，不在回滚后伪造成功 |
-| OutboxRepository | `credit`、`payment`固定映射两表；enqueue、claim、renew、ack、retry/dead-letter | 保留两表不同去重约束；payload/identity不可变；状态写比较scope+tenant+ID+token+非终态 |
+| OutboxRepository | 单表，固定credit/payment namespace；enqueue、claim、renew、complete、retry/dead-letter | R3保留不同去重约束；payload/identity不可变；状态写比较scope+tenant+ID+token+未终态+有效lease |
 
 public业务API不接收以上Repository或Prisma TransactionClient。它们由各模块内部Service注入，所有业务写显式从当前事务上下文取client。
 每表唯一写入者用真实Prisma model访问/调用图和Nest provider图检查，不以类名、目录或interface数量作为证明。
@@ -235,7 +296,7 @@ UTC和public/pg_catalog search_path由每事务固定配置，不靠角色默认
 
 | 事务组 | 根资源与同提交写入 | 分离生命周期 |
 |---|---|---|
-| catalog/pricing发布 | receipt；offer或tenant pricing namespace锁；revision/rate、audit、result | pricing在tenant advisory锁后才分配MAX+1，保留UNIQUE；不同合法key必须都成功 |
+| catalog/pricing发布 | receipt；offer或tenant pricing namespace锁；feature price revision/price、audit、result | FeaturePrice完整发布在tenant advisory锁后才分配MAX+1，保留UNIQUE；不同合法key必须都成功 |
 | grant/redeem/subscription发放 | receipt或inbox；campaign/code或subscription/period；Credit全组、term、audit/outbox/result | 无provider网络；来源唯一性防同一period/payment/redeem重复发放 |
 | authorize | admission receipt、invocation/admission；Credit account/grants/hold/allocation；admission/outbox/result | 定价快照属于Metering；included模式不虚构Credit hold |
 | capture/release | receipt、admission；usage绑定；Credit account/grants/hold/allocation/journal；usage settlement、admission/outbox/result | 终态短路前先验证identity/digest；默认UUID成功与重放是必验，不用短ID代替 |

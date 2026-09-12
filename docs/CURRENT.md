@@ -1,14 +1,17 @@
 # kokoro-billing 当前状态
 
-更新时间：2026-09-10。当前规范化分支为 `codex/billing-ts-prisma-alignment`；最终验收必须绑定交付时的 `HEAD`、
+更新时间：2026-09-12。当前规范化分支为 `codex/billing-ts-prisma-alignment`；最终验收必须绑定交付时的 `HEAD`、
 干净工作树和当次命令输出，不能继承历史报告。
 
 本文中的“已实现”表示可在当前源码、Schema、contract 与测试中定位；不表示已获得生产流量、SLO、容量或灾难恢复证据。
 
 ## 当前规范化工作
 
+- B8-R3目标三设计已进一步收敛：3receipt→1（固定namespace+surface和双唯一域）、2outbox→1（稳定事件身份、payment partial UNIQUE、lease fence和审计重启）；与R2履约合并合计目标31表，当前canonical仍35表。按次FeaturePrice为唯一销售profile，完整不可变价目表、明确生效排序、显式零价/缺价拒绝，历史授权验证digest；无生产调用token报价与quota占位的删除随完整实现/消费者major同切。未部署新表、Nest或业务Prisma。
+- 连续实施次序已固定在任务板R3：R4可信付款人/执行身份及机器契约效果闭环→M1完整canonical/contract→M2一致性支持→M3/M4共享Credit全事务组及其余模块/worker→M5消费者和真实运行验收。还需确认真实账务数据/仓外调用方、major切换与订阅资格；这些不再被写成重复泛审计或单纯工具链升级。具体本轮审查/验证见任务板。
+
 - B8-R2已把Prisma框架事务API及数据库最终幂等依据固化到Root TypeScript手册§12.1/12.2（Root提交4e17f7f3888f45352330f35514dccfad7e15e7fb），04事务补充只链接复用；Redis仅协调/缓存，不凭TTL决定重复账务是否可执行。
-- B8-R2三设计/ADR已收敛首个核心模型决定：payment/subscription的acquisition与fulfillment合并为永久CreditFulfillment，精确引用grant/journal；当前单program profile按tenant/source唯一，换key同identity/digest重放、换授权参数冲突。保留account/grant/hold/allocation/journal、退款零delta永久结果与订阅T1/T2分工；删除旧35表一对一放行要求。当前canonical及生产仍未切换；receipt/outbox物理组织、定价/计量profile、真实数据/major与订阅商业资格仍待后续门。审查及本轮静态验证见任务板B8-R2，不借历史712/205作新模型实现证据。
+- B8-R2三设计/ADR已收敛首个核心模型决定：payment/subscription的acquisition与fulfillment合并为永久CreditFulfillment，精确引用grant/journal；当前单program profile按tenant/source唯一，换key同identity/digest重放、换授权参数冲突。保留account/grant/hold/allocation/journal、退款零delta永久结果与订阅T1/T2分工；删除旧35表一对一放行要求。当前canonical及生产仍未切换；receipt/outbox与销售定价后续由R3收敛；真实数据/major与订阅商业资格仍待后续门。审查及本轮静态验证见任务板B8-R2，不借历史712/205作新模型实现证据。
 
 - B8-R按用户最新重点复审Billing本体SQL/model/结构：确认原“35表一对一迁移”不足以证明目标模型合理，暂作旧盘点，物理表数重新评估。保留account/grant/hold/allocation/journal各自事实；优先比较acquisition/fulfillment与三receipt/两outbox物理组织，明确单积分钱包/现金金额/计量单位及按次价格与token旧路径，删除反向分层而不只搬目录。两位只读审查与Root源码复核结论见任务板B8-R；尚未形成最终新ER/Schema，不冒称已重构或用S3测试覆盖该方案。
 

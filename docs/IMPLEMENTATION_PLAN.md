@@ -1,6 +1,6 @@
 # Billing TypeScript / Prisma 规范化任务板
 
-更新：2026-09-10（Billing核心模型与结构复审）。唯一任务板；总范围是 Billing 工程收敛，不把第一轮审计视为整仓完成。
+更新：2026-09-12（技术方案收敛与连续实施准备）。唯一任务板；总范围是 Billing 工程收敛，不把第一轮审计视为整仓完成。
 
 **Goal:** 按 Root TypeScript / SQL / API 手册明确 Billing 的模块、Prisma 数据访问、事务与契约方案，逐切片替换并验证。
 
@@ -28,11 +28,55 @@
 | B5 / P0 / 全量catalog drift | Billing / billing_owner / 数据+TS+Root | 精确文件集见B5执行卡；Root交接后文档与提交 | 比较canonical参照库的35表全部列/约束/索引/predicate；缺CHECK与错predicate反例 | 已验收：9663db58bd85eb810b94df6120de050530c79d2f |
 | B6 / P0 / Prisma承接验证 | Billing / 后续续派billing_owner / Root | 固定依赖/生成链/模型/数据生命周期/独立验证；派前冻结文件集 | stable版本、无第二schema、typedCRUD+同tx锁/receipt/outbox+BigInt+错误+生成drift；不切生产writer | 已验收：B6a c7ef9fa；B6b 2793882；生产迁移仍归B8 |
 | B7 / P1 / 工具链与架构门 | Billing / billing_toolchain_hardening / 独立reviewer | package/lock/TS/ESLint/format/CI/architecture精确集派前批准 | Node24、版本固定、完整typed gate；AST有效/违规样本替代禁modules/强制ports；单独格式切片 | B7a已验收058bdf3；B7b已验收3fd97f5；B7c已验收8fbf8e0（干净46dc851复验）；B7d已验收0f0e764；干净ce5b628复验443全套/157集成、0失败0跳过 |
-| B8 / P0 / Nest+Prisma闭合业务切换 | Billing / 后续续派billing_owner / Root+独立reviewer | 先完整35表映射/provider图/事务组卡，再授权src/SQL/contract/test/worker集 | 先稳定查询范式，后整个共享Credit事务组；同一事务不混pg/Prisma，旧实现随闭合切片删除；中间未闭合commit不发布 | B8-D1/D2a/D2c及D2d机制已审查；生产未切换，完整Schema/major及订阅商业资格仍待；后续顺序见B8-G，B9a前置而非循环依赖 |
+| B8 / P0 / Nest+Prisma闭合业务切换 | Billing / 后续续派billing_owner / Root+独立reviewer | 先全量当前表到目标的保留/合并/删除映射/provider图/事务组卡，再授权src/SQL/contract/test/worker集 | 先稳定查询范式，后整个共享Credit事务组；同一事务不混pg/Prisma，旧实现随闭合切片删除；中间未闭合commit不发布 | B8-D1/D2a/D2c及D2d机制已审查；生产未切换，完整Schema/major及订阅商业资格仍待；后续顺序见B8-G，B9a前置而非循环依赖 |
 | B9 / P1 / 契约与外部副作用 | Billing / 后续续派billing_owner / Root | owner contract先行；消费者另开owner任务，无本仓写入权 | envelope/request-id/UTC/error/202语义；checkout claim→网络→finalize及unknown恢复；实际消费者固定artifact | B9a契约裁决/机器源前置B8；B9b消费者与外部副作用随owner实现验收，不再笼统依赖B8 |
 | B10 / P1 / 运行可靠性验收 | Billing / 后续续派billing_owner / Root | worker/reconciliation/retention/smoke与文档；派前批准文件集 | execution并发lease、orphan检测、append-only角色、预算取消、provider sandbox、CI PG16/镜像/DR分层证据 | 待派工 |
 
 ## 阶段门
+
+### B8-R3 设计收敛卡（2026-09-12）
+
+用户批准认真打磨技术方案后连续推进；验收标准按事实正确性与真实门禁，不以“顶级”标签或单次大提交证明。
+
+| 项 | 结论 |
+|---|---|
+| 基线 / Owner | Billing `a60db6de8cce48710b80fc9e71e475dbf2cd3a2c`、codex/billing-ts-prisma-alignment、工作树干净；绝对工作目录沿上文。Root `56624233`；SQL手册/Agent/.tmp既有变更排除 |
+| Writer / 范围 | Root唯一Billing文档writer及Git；允许既有三设计、ADR-0003、CURRENT、IMPLEMENTATION_PLAN、必要README/INDEX入口。当前源码、机器契约、canonical、generated、lockfile均只读；本轮先冻结下两设计面，不预建模块 |
+| 独立面A | billing_model_r2 / Sol / 只读：3receipt+2outbox的去重域、状态、消费、保留/故障路径，提出合并或保留的精确字段/约束与反例；基线当前commit |
+| 独立面B | billing_pricing_r3 / Sol / 只读：价格/用量/admission/quota现有用例与本地消费者，区分按次销售价、token用量、provider成本；列字段保留/删除与契约影响，跨仓仅只读 |
+| Root职责 | 保留总体架构决定，独立核查证据、来源与完整事务组；用已加载writing-plans方法细化同一任务板，不创建重复计划中心。汇合两面结果后修三设计冲突、列可执行顺序及真实剩余决策 |
+| 位置 / 删除 | 继续在Credit/Metering及现有一致性支持边界内设计；比较保持分表与带显式namespace统一表、保留双价格路径与单一销售定价入口。删除目标中的过期强制布局，不以新目录/表数作为收益 |
+| 验证 / 交付 | 两审查员只读、不启动基础设施或提交；Root核代码/contract证据后修改文档，独立复审和sql:check/contract:check/diff/链接验证。尚未运行的新模型integration明确待验，提交由Root逐owner切片 |
+
+#### B8-R3 独立审查与主控验证
+
+- 数据一致性审查billing_model_r2 / Sol：合表与scope/双唯一域/稳定event identity/partial UNIQUE/lease fence通过；首轮指出旧未完成事件迁移遗漏，已补保留原行死信+受审退役原因、completed_at=NULL、停旧worker及审计，禁止改义/空ack/普通requeue。复审无阻断。
+- 定价审查billing_pricing_r3 / Sol：本地无有效用例反对完整snapshot与按次收敛；首轮补齐发布整组原子可见、历史price digest生成/验证及术语，复审无阻断。两审查员未改文件/Git/DB。
+- Root独立复核actual receipt双域OR查询、两outbox约束/handler、admission定价/账户选择、publisher和Web quota读取。纠正reviewer将provider requeue INSERT载荷差异误读为冲突UPDATE覆写：实际旧row不改payload。发现付款账户绑定仍须R4闭合，未掩盖为已完成。
+- 主控实跑Node24.20.0、pnpm11.25.0下`pnpm sql:check`通过、`pnpm contract:check`通过（17 routes）；`git diff --check`通过；6份文档代码围栏/本地链接检查通过。目标表盘点脚本证明当前35表各映射一次、31个目标表名；这不是目标DDL已经验证。
+- 初次从Root执行`pnpm --dir kokoro-billing ...`被Corepack选择Root pnpm12.3.4后版本门拒绝；已从Billing工作目录使用锁定11.25.0重跑通过，无依赖升级/门禁放宽。
+- 当前canonical SHA256仍57b6ff2cd09de0835b2c608575dea74644163ab591e21fa477855476661920bd，OpenAPI仍58fbe4fea083ba12e0db23f49e995b96500d01af0013febf40eba3093510ef63；manifest/lock也与起始HEAD字节一致。
+- 本轮仅6份既有文档；业务源码/SQL/机器契约未改，未运行新的业务lint/typecheck/unit/build/integration/Prisma/schema-install/smoke/provider sandbox；不拿历史通过数证明新模型。无新服务/DB/Redis资源、未动Root既有变更。完整实施/数据与major门未通过，原Goal未完成。
+
+#### 连续推进顺序与停止条件（R3之后，非重新开一轮泛审计）
+
+R2/R3已经裁决的履约合并、幂等/事件存储、按次完整价目表不再反复重新选型；下一阶段把设计落实到机器事实源与完整事务组。
+实现负责人在设计门通过后续派既有billing_toolchain_hardening；Root保持跨仓裁决、审查、Git和最终验证责任。同仓仍单一writer。
+
+| 顺序 / 完成条件 | 文件与责任边界 | 验收 / 依赖 |
+|---|---|---|
+| R4 关闭安全/业务机器契约缺口 | Root先裁决三设计中的可信付款人/执行委托身份、付款accept后的效果与查询语义；Billing owner写唯一contract，消费者只读盘点 | 现create admission按billingSubject.ref选账户而payerRef仅存储，必须证明真实付款账户授权；实际数据/仓外调用方、stable major及订阅资格是剩余事实决策，不把非空字段当授权 |
+| M1 形成完整目标机器模型 | Billing唯一writer：database/schema.sql、contract唯一机器源、生成链配置；目标31表全部列/约束/索引与17现operation及真实新增查询逐项对齐 | 先在独占空库验证canonical/catalog及只读Prisma生成；旧历史数据切换另门，禁止在共享DB试错。未闭合实现的中间状态不发布 |
+| M2 完整事务与一致性支持 | 设计通过后允许src/database/prisma.service.ts、transaction.service.ts、command-receipt.repository.ts、outbox.repository.ts及对应具名类型/错误/测试；不建BaseRepository | 先测试红例再实现：同tx、rollback-only、双唯一域冲突/重放、lease失效晚写、ack未知、Redis丢失；`pnpm exec vitest run test/integration/transaction.test.ts test/integration/command-receipt.test.ts test/integration/outbox.test.ts --no-file-parallelism`（目标文件，尚未创建/执行） |
+| M3 闭合Credit与Metering主链 | src/modules/credit的履约/预留/结算/冲正具名能力；src/modules/metering的feature-pricing与admission；相应unit/integration/architecture | 支付/订阅/退款依赖同Credit事务组；不能仅迁一个writer保留其他pg写Credit。完整快照、历史价格、来源追溯、零delta与默认UUID成功用例同时通过 |
+| M4 Checkout/Payment/Refund/Subscription及worker | 既定七模块的公开能力与Nest装配、API/支付与执行worker/expiry入口；移除旧infrastructure pg业务查询、application转发、ports/factory镜像及Fastify入口 | 网络事务外claim→call→finalize、unknown恢复、受信provider/执行证据、失败重试/死信、完整HTTP终态，不以accepted当效果完成 |
+| M5 消费者与运行验收 | Billing先交付固定contract artifact；Root顺序派BFF/Web/Agent对应owner更新本仓client，不跨仓共享ORM/SQL；quota字段与真实UI同切 | owner内unit/integration/contract/architecture/schema/build/source+dist smoke；再运行隔离跨仓消费者验收。provider sandbox/镜像/生产SLO证据分别列，不互相冒充 |
+
+M2–M4作为同一闭合业务迁移的连续实施切片；每个切片可审查提交，但未完成全组前不部署，最终删除旧路径，不保留运行时fallback或双写。
+每步执行前仅补该切片精确文件集/红例/提交权限，不重写整体架构；常规实现决定自主推进，真正的新业务/不可逆决定单独确认。
+
+验收入口继续使用本仓现有`pnpm verify`、`pnpm test:integration`、`pnpm db:apply-schema`、`pnpm db:verify-schema`、`pnpm prisma:check`；
+各运行资源必须由本任务独占命名创建并清理。M2示例文件路径是未来任务授权目标，不作为当前文件存在或测试通过的声明。
 
 ### B8-R2 事务规范固化与核心模型续审卡（2026-09-10）
 

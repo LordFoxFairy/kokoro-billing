@@ -28,6 +28,8 @@ database、health、http、access、worker 等进程支持职责。只在切片�
 2026-09-10补充：业务事务统一复用Root TypeScript手册§12.1的Prisma框架API，不手写SQL提交/回滚；Redis仅辅助幂等，最终结果由本owner数据库保证。
 R2按事实生命周期合并acquisition/fulfillment，保留grant与journal独立性；其余物理布局逐用例审查，不以原35表一对一映射限制目标。
 
+2026-09-12补充：R3将三receipt/两outbox分别合为带固定namespace的一张表，保留双命令唯一域与payment事件partial UNIQUE；按次FeaturePrice成为唯一销售定价profile，移除无生产调用token报价与quota占位的方案见三设计，实际消费者须同切。
+
 ## 数据访问与生成边界
 
 1. `database/schema.sql` 保持唯一可编辑 canonical source；V1 无历史 migration 链。生成路径目标为

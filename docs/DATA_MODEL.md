@@ -30,6 +30,84 @@ Payment/Refund/Metering/Subscription仅编排调用。具体模块表见TECHNICA
 Canonical source：[`../database/schema.sql`](../database/schema.sql)。本文说明 owner、关系和不变量；列类型、nullable、
 default、CHECK 与索引的最终事实仍以 Schema 为准。
 
+## B8-R3 一致性存储与定价模型（2026-09-12目标，未应用DDL）
+
+本节与R2共同更新D1，现有35张canonical表仍未改变。由生命周期与真实用例推导：履约两表合一、receipt三表合一、
+出站投递两表合一，目标物理表数暂为31；不是以31为指标删事实。后文迁移盘点已更新，完整字段/约束仍待唯一canonical切片。
+
+### 单一持久命令记录
+
+采用`billing_command_receipt`统一三张同生命周期的receipt，不合入outbox或账本。比较继续分表（多份同构查询，无不同生命周期证据）
+与显式scope统一表（采用）；业务命令owner仍在各feature，支持层不拥有发放/退款规则。
+
+- 新增非空`command_namespace`，闭合集为general/payment/admission，逐一对应旧三表；非空`api_surface`当前固定internal。
+  这两列由注册命令决定，不从body读取，不随模块移动改名；未来协议域增加须明确去重与切换语义。
+- 唯一键为(tenant, namespace, surface, command_name, idempotency_key)；非空command_identity在相同前缀下建立partial UNIQUE。
+  identity仅对确无独立业务身份的命令允许NULL；settlement/refund/admission/execution/expiry等命令在入库前强制其业务identity。
+- 保留应用UUID id、versioned request digest、created_at/updated_at，以及processing/succeeded/failed/unknown语义。
+  本地成功路径在一个Prisma事务中claim→effect→result；新processing不独立提交，正常失败全部回滚。历史failed/unknown/孤立processing
+  不获得自动重做许可；外部操作等待状态属于Checkout等业务对象，不拿receipt充当长时队列。
+- succeeded要求非空且符合该命令result schema的永久结果；SQL检查非NULL，运行时按版本解码，损坏报不变量事故。
+  identity/scope/digest/成功result不可改。迁移只补scope及必要ID映射，不重算历史digest，不丢弃成功result或更换command版本绕过去重。
+- 同时解析key与identity两个唯一域；分别命中不同记录时冲突，不能任选其一。恰好命中同一成功记录且identity/digest一致才重放，
+  换key不重复执行；参数漂移冲突。并发约束失败后整组回滚，禁止在aborted tx里继续查询，按既定重试预算重查已提交结果。
+
+### 单一出站投递表
+
+采用`billing_outbox`，新增受控namespace=credit/payment；credit只是原entitlement队列的历史协议域，**不是Credit业务owner**，
+Metering等事件仍由其业务owner决定。一份存储/租约实现，不新建消息总线、CDC进程或额外第八业务模块。
+
+- id UUID、tenant、namespace、aggregate_type/id、event_type、稳定event_identity、payload_schema_version、payload_digest及payload_json
+  为不可变投递身份/载荷。事件身份取版本化event_type与永久业务结果/任务ID（必要tenant），不取随机投递ID、attempt、lease或payload hash。
+- UNIQUE(namespace,event_identity)防同一事件重复入队；payment另保留原aggregate_type/id/event_type的partial UNIQUE，predicate为namespace=payment。
+  credit不机械套payment三元组唯一键；若未来同aggregate同type有多次合法occurrence，每次必须有不同稳定结果身份。
+  同identity载荷/版本/aggregate漂移是冲突，不以ON CONFLICT更新payload解决。
+- 沿用lease_token/until、attempts、next_attempt_at、dead_lettered_at与受控last_error_code，原published_at目标改为completed_at。
+  completed只表示已注册handler确认本次投递完成，不表示外部支付成功，也不代表其他owner业务状态。状态由这些列推导，不再存重复status。
+  CHECK要求attempts非负、lease成对、完成/死信互斥、终态无lease；payload版本为正且digest符合固定格式。
+- claim以短Prisma事务和SKIP LOCKED选未完成/未死信且到期、lease空或已过期的行，并原子写入新token/lease及attempt。
+  renew/complete/retry/dead-letter均比较tenant+namespace+id+token+未终态+尚有效lease；失租者不得覆盖新worker，handler结果仍靠owner幂等。
+- 有界指数退避+jitter，解码失败也计入attempt；unknown handler/未注册事件不被空ack。人工重启只允许具名授权/审计命令，
+  以`requeue_generation`（非负）和所观察死信状态CAS，同row同event_identity、同payload；generation递增，attempts作为本次重启周期计数归零，
+  原generation/attempt/error进入同事务audit，不擦除历史。缺少旧outbox行时须从永久源事实恢复同一已注册载荷，不编造新身份。
+- pending/lease/dead-letter迁移保留恢复依据；退役版本按TECHNICAL_DESIGN R3显式处置，不空ack或原位改义；暂不启用TTL删除。完成行/事件去重事实的清理须另有覆盖全部重放窗口的方案，
+  不随Redis TTL删除。迁移检测历史重复/跨scope碰撞，遇不一致需受审处理，不自动选一条覆盖。
+
+持久业务结果与投递分离：handler成功后ack丢失可重复调用，但内部handler先重放owner永久结果；外部投递只对已批准receiver承诺至少一次，
+使用稳定event identity及接收方去重，不声称数据库outbox带来跨服务exactly-once。事件去向/删除清单见TECHNICAL_DESIGN R3。
+
+### 单一按次销售价格，不保留幽灵token计费路径
+
+依据当前admission确实用reservation_micros作为按次最终价格、token quote无生产调用的源码调查，选择当前profile为feature按次收取Credit。
+这也与Root旧商业文档50 §7.5的按次方向一致，但不采用其中过期工程规范、部署结论或所有额外商业能力。
+比较：保留两个混用费率路径（淘汰）、建立通用多profile引擎（当前无消费者，淘汰）、具名FeaturePrice单一销售事实（采用）。
+
+- `billing_feature_price_revision`保存tenant内发布序列、effective_from、published_at及创建/审计引用；一次发布是一份完整且非空价目表快照，
+  不是增量补丁。发布序列由同tenant事务串行分配+UNIQUE兜底；不同key并发发布仍各得不同revision，不用“冲突就当成功”。
+  revision.published_at非空即不可变发布事实；revision及完整feature price集合、receipt/result、必要audit在一个Prisma事务提交。
+  不先提交published revision再逐行补价；任一行校验/插入失败全部回滚，外部读者只见完整旧快照或完整新快照。
+- `billing_feature_price`保存UUID id、tenant/revision引用、feature_key及unit_price_micros BIGINT>=0；UNIQUE(revision_id,feature_key)，
+  同事务核tenant归属。零价必须显式发布，含义为included；缺price拒绝，绝不默认免费。
+- 发布事实与feature price不可变，不保留active/disabled可变价格状态、label/model定价维度、input/output/cached费率及reservation字段。
+  effective_to不再维护；在一次数据库时刻t，先选择已发布且effective_from<=t的最大(effective_from,revision)快照，再只在该快照找feature。
+  revision是发布序列而非时间优先级；同生效时刻高revision胜，未来快照尚未到点不可见。缺feature不回落旧revision，避免混合价目表。
+  调价/撤下单feature通过新的完整快照表达，不原位改已授权价格；本profile不另造撤销后隐式回落的API。
+- Admission固定pricing_revision_id、feature_price_id、授权micros及pricing_snapshot_digest，指向不可变feature price/revision；按次quantity=1，
+  authorized amount即该unit price，无token取整。快照digest含版本、tenant/feature、revision/feature price、单位及精确价格，不含当前时钟或后续状态。
+  admission.created_at明确作为定价时刻，使用该事务的数据库瞬时点；selector与写入使用同一时刻，不受应用机器时钟影响。
+  digest由Billing按版本生成，不接受caller digest；读取历史定价依据时按持久tenant/feature、revision ID/序号/effective_from、price ID、
+  Credit单位及unit price重算，并核授权amount等于price、引用同tenant/feature，缺行或不一致报不变量错误，不回落现价。
+  Capture只使用通过上述校验的原授权金额/引用，不重新查当前价格；hold/usage记录与admission绑定保持同tenant与同一价格依据。
+  已成功命令仍按receipt的identity/digest/result先重放，不因当前price发布或时钟推进而重新执行账务。
+- TS价格和Credit数量使用bigint及具名业务语义，wire使用十进制字符串；不经Number舍入。用于账务对账的按次数量记录1而非伪造token=0。
+  Usage的model/label/meter_kind等执行归因可保留，但不是销售price key；provider成本未来若有真实需求单独明确owner与货币单位，当前不造成本表。
+- 删除无人调用的UsagePricing.quote/listActive/quoteForHold、token费率/缓存token占位及对应旧factory/ports/测试；保留真实admission、
+  hold/capture/release与用量归因。规则测试迁为FeaturePrice完整快照/并发/时间边界/历史授权回放，不通过删除风险断言换绿。
+- account.quota_micros/quota_period没有配置、消费窗口或准入writer；目标从account/summary移除，并在major消费者切片同步Web schema/UI/fixture。
+  这不删除grant赠送/订阅发放能力，不宣称当前存在完整周期quota。不把可用余额改名为quota，也不在本轮新增QuotaPolicy/Window服务。
+
+本地消费者证据只覆盖当前检索到的代码，不能证明仓外无人调用。旧token/配额字段及当前stable v1在正式切换前保持原样；API影响见API_CONTRACT R3。
+
 ## B8-R2 核心模型裁决（目标设计，尚未应用 Schema）
 
 本节基于当前实际writer与B8-R复审更新D1目标，而非保持旧表数的改名工程。采用业务模型驱动的模块化Billing；
@@ -58,7 +136,7 @@ Refund -> CreditFulfillmentReversal -> 精确原fulfillment/grant及可空冲正
 
 Money = 最小货币单位整数 + currency_code；CreditAmount = 整数micros；UsageQuantity另有计量单位。
 默认一个subject一份可互换积分钱包，program是来源/政策而非余额分区；不把CRD当真实现金币种，不引入无需求的多钱包。
-按次产品价格、token用量及provider成本仍须消费者核对后确定各自有效profile，未在本轮删除旧定价路径或quota字段。
+按次销售profile已由R3收敛，token成本不混入销售价；旧定价路径/quota字段的实际删除随实现与消费者同切。
 
 ### acquisition + fulfillment：合并为永久成功事实
 
@@ -90,13 +168,13 @@ Subscription T1把waiting/资格/固定授权保存在period/term及outbox，不
 删除acquisition表/模型/引用、重写refund/reconciliation查询、生成Prisma与对应测试必须同一闭合实施切片完成；
 历史ID/数据/仓外引用处理仍受major与数据演进门约束，不据此次模型裁决直接清库。
 
-三receipt/两outbox的物理合并继续按去重域、状态和保留策略独立评审；不得受旧35表一对一或新表数指标驱动。
+三receipt/两outbox的物理组织由R3裁决为各一张表，显式保留去重域、状态和保留策略；不受表数指标驱动。
 核心同提交矩阵见TECHNICAL_DESIGN B8-R2；API影响见API_CONTRACT B8-R2。
 
 ## B8-D1 目标映射与一致性不变量（内部设计已审查，未应用DDL）
 
 本节为当前35表的迁移盘点，后文原表名仍为当前SQL事实；目标以B8-R2更新为准，不再要求一对一保留。
-acquisition/fulfillment按R2合并；receipt/outbox目标名暂作盘点标签，物理布局尚待评审。不创建第二可编辑Schema。
+acquisition/fulfillment按R2合并；receipt/outbox及价格按R3统一，下表覆盖当前全部表去向，不创建第二可编辑Schema。
 每表资源主键改`id UUID`、应用生成；同仓资源引用改对应`*_id UUID`，跨仓opaque身份保持原语义。现金`currency`列目标为`currency_code`；非现金积分单位另按R2建模，不能机械改名。
 表/约束/索引采用billing owner命名且UTF-8名称不超过PostgreSQL63字节；新的精确SQL生成后必须全catalog复验，不手工维护第二份字段快照。
 
@@ -109,37 +187,37 @@ acquisition/fulfillment按R2合并；receipt/outbox目标名暂作盘点标签�
 | `entitlement_credit_journal` | `billing_credit_journal` | credit |
 | `entitlement_usage_event` | `billing_usage_event` | metering |
 | `entitlement_usage_settlement` | `billing_usage_settlement` | metering |
-| `entitlement_command_receipt` | `billing_command_receipt` | database/CommandReceiptRepository general |
+| `entitlement_command_receipt` | `billing_command_receipt` | database/CommandReceiptRepository namespace=general |
 | `entitlement_outbox` | `billing_outbox` | database/OutboxRepository credit |
 | `payment_provider_event` | `billing_provider_event` | payment |
 | `payment_settlement` | `billing_payment_settlement` | payment |
 | `payment_reversal` | `billing_payment_reversal` | refund |
 | `entitlement_acquisition` | 合入 `billing_credit_fulfillment`，删除独立表 | credit / R2永久授权 |
 | `entitlement_fulfillment` | `billing_credit_fulfillment` | credit |
-| `payment_outbox` | `billing_payment_outbox` | database/OutboxRepository payment |
+| `payment_outbox` | 合入 `billing_outbox` | database/OutboxRepository namespace=payment |
 | `entitlement_fulfillment_reversal` | `billing_credit_fulfillment_reversal` | credit |
 | `payment_checkout` | `billing_checkout` | checkout |
 | `entitlement_audit_event` | `billing_audit_event` | database/AuditAppender |
 | `entitlement_offer` | `billing_offer` | checkout |
 | `entitlement_offer_revision` | `billing_offer_revision` | checkout |
-| `entitlement_usage_price_revision` | `billing_usage_price_revision` | metering |
-| `entitlement_usage_price_rate` | `billing_usage_price_rate` | metering |
+| `entitlement_usage_price_revision` | `billing_feature_price_revision` | metering / R3完整销售快照 |
+| `entitlement_usage_price_rate` | `billing_feature_price` | metering / R3按次价格 |
 | `payment_provider_account` | `billing_provider_account` | payment |
 | `payment_customer_binding` | `billing_customer_binding` | payment |
 | `payment_provider_subscription` | `billing_provider_subscription` | subscription |
 | `payment_subscription_period` | `billing_subscription_period` | subscription |
 | `entitlement_subscription_term` | `billing_subscription_term` | subscription |
-| `payment_command_receipt` | `billing_payment_command_receipt` | database/CommandReceiptRepository payment |
+| `payment_command_receipt` | 合入 `billing_command_receipt` | database/CommandReceiptRepository namespace=payment |
 | `entitlement_redeem_campaign` | `billing_redeem_campaign` | credit |
 | `entitlement_redeem_code_batch` | `billing_redeem_code_batch` | credit |
 | `entitlement_redeem_code` | `billing_redeem_code` | credit |
 | `entitlement_redeem` | `billing_redeem` | credit |
-| `entitlement_billing_command_receipt` | `billing_admission_command_receipt` | database/CommandReceiptRepository admission |
+| `entitlement_billing_command_receipt` | 合入 `billing_command_receipt` | database/CommandReceiptRepository namespace=admission |
 | `entitlement_billing_admission` | `billing_admission` | metering |
 | `entitlement_execution_event` | `billing_execution_event` | metering |
 
 Credit表只被Credit具名Repository更新；Payment/Refund/Metering/Subscription取得公开业务结果而非数据库model。Audit/receipt/outbox三种支持能力仅负责存储不变量，
-不取得独立业务owner。payment outbox原有aggregate_type+aggregate_id+event_type唯一性原样保留；credit outbox不因此被暗加同一唯一性。
+不取得独立业务owner。payment原有aggregate_type+aggregate_id+event_type唯一性以namespace=payment partial UNIQUE保留；credit域不被暗加同一唯一性。
 
 ### ID、字段与无外键关系
 
@@ -171,7 +249,7 @@ Root选择在`billing_usage_event`增加可空`credit_hold_id UUID`，非空建�
 - `billing_execution_event`自己是队列：增加lease_token UUID、lease_until TIMESTAMPTZ(3)、attempts INTEGER、next_attempt_at TIMESTAMPTZ(3)、
   dead_lettered_at TIMESTAMPTZ(3)与受控last_error_code；保留received/processed/failed状态，dead-letter是failed且dead_lettered_at非空。
   claim谓词为未processed、未dead-letter、next_attempt到期且lease空/过期；建立与此谓词对应的dispatch索引。
-- 两outbox保留现有lease/attempt/dead-letter字段；增加attempt>=0、token/until成对为空或非空、published与dead_letter互斥等合法状态CHECK，
+- 合并后的outbox保留现有lease/attempt/dead-letter语义，published_at改completed_at；增加attempt>=0、token/until成对、completed与dead_letter互斥等合法状态CHECK，
   具体CHECK与真实状态迁移一起复核。claim达到预算后不再执行handler；payload decode失败也经过fenced retry/dead-letter。
 - 永久成功receipt/result与业务effect同提交；失败attempt日志是独立事实，不把已回滚的成功审计/业务receipt重新提交。
 

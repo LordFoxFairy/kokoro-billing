@@ -24,6 +24,28 @@ Canonical machine-readable source：[`../contract/openapi/v1/openapi.yaml`](../c
 owner、身份、幂等、错误与 consumer 规则，不复制字段级 Schema。Contract 的 version/generation/breaking/provenance 见
 [`../contract/README.md`](../contract/README.md)。
 
+## B8-R3 定价与一致性支持收敛（2026-09-12目标）
+
+- Receipt/outbox物理合并不让调用方传namespace、表名、lease token或Prisma参数。保持受信tenant、命令identity、双唯一域、
+  同digest重放与异digest冲突；持久结果而非Redis命中决定成功。历史API/digest仅在明确major切片切换，不因内部合表偷偷变化。
+- 目标销售profile固定为feature按次Credit价格；admission请求不接受调用者报售价或token数决定用户扣款。
+  feature来自已验证请求，选择已发布完整价目表；meter_kind/requested_model_tier保留为请求身份/审计而非隐式price key。
+  显式零价返回included，未配置price返回稳定price_unavailable，不默认免费；current payg枚举不是已实现的后付费承诺，目标不保留该空能力。
+- 新major的admission资源应明确pricing_revision_id、feature_price_id、authorized_micros和pricing_snapshot_digest，Credit单位明确为micros，
+  不以currency_code=CRD冒充现金币种；digest由Billing生成和校验，不作为caller可指定字段。capture沿校验后的原授权金额，历史price变更不重报价。具体request/response/error必须写入唯一机器契约，不能继续泛型V1Accepted省略字段。
+- 价格发布是完整非空snapshot，revision为发布序列，以effective_from再revision确定生效优先级；同一时刻高revision胜，缺feature不回落旧版本。
+  不在本轮为了内部seed/admin能力新增公开HTTP操作。需要发布入口时由Metering owner定义权限、幂等和机器契约。
+- 删除未被生产调用的token报价接口仅指本仓内部service/factory，不声称它们曾是HTTP API；无成本计费新能力。
+  quota_micros/quota_period目标从summary及Web schema/UI/fixture删除，BFF透传/映射与固定Billing artifact一起更新；赠送grant与余额查询仍保留。
+- 当前本地尚未发现BFF/Web/Agent/System调用Billing admission HTTP；这是检索证据，不是仓外无人调用或无需契约的证明。
+  Provider inbox任务、Refund/Subscription效果任务与纯通知分开；202、outbox completed及Credit applied含义各自明确，未知receiver不由空handler确认。
+
+付款授权仍是R4强制门：当前body billing_subject/payer_ref不得直接等同受信付款账户。必须定义允许的issuer/委托scope、tenant/付款subject/
+invocation绑定与验证入口，且不能要求调用方上报任意account ID便扣款。使用主体可作归因，但账户选择须来自验证后的授权上下文。
+该契约尚未机器化；不以此次合表/定价设计宣布完整业务门通过。
+
+本节与R2内部模型决定一起进入下一机器契约/完整canonical阶段；当前stable v1、17条操作及真实消费者保持原样。
+
 ## B8-R2 模型收敛与幂等约定（目标，机器契约未变）
 
 - Prisma事务、SQL-first结构管理和Redis辅助去重是内部工程选择，不新增HTTP事务参数、Redis锁token或ORM类型。
