@@ -32,6 +32,44 @@
 | B9 / P1 / 契约与外部副作用 | Billing / 后续续派billing_owner / Root | owner contract先行；消费者另开owner任务，无本仓写入权 | envelope/request-id/UTC/error/202语义；checkout claim→网络→finalize及unknown恢复；实际消费者固定artifact | B9a契约裁决/机器源前置B8；B9b消费者与外部副作用随owner实现验收，不再笼统依赖B8 |
 | B10 / P1 / 运行可靠性验收 | Billing / 后续续派billing_owner / Root | worker/reconciliation/retention/smoke与文档；派前批准文件集 | execution并发lease、orphan检测、append-only角色、预算取消、provider sandbox、CI PG16/镜像/DR分层证据 | 待派工 |
 
+## B8-X3 跨仓授权前置与闭环顺序（2026-09-12）
+
+用户最新授权 Root 自主规划必要跨仓边界，不再逐项询问常规技术决定。总目标仍是整仓 Billing；本卡不是将总 Goal 缩小到授权。
+初始“System/IAM 不在写入范围”在本卡仅对下列 IAM 授权文件集扩展，其他 Root/子仓未提交变更继续排除。
+
+| 项 | 决定 |
+|---|---|
+| ID / 目标 | B8-X3 / P0：IAM 发布 Billing 专用用户消费令牌及当前事实验证，消除配置无法修正的 RS256/EdDSA 与 audience/scope 差异 |
+| Owner / 分工 | Root 总体方案、Git/验收；iam_billing_authorization（Sol）为 IAM 唯一实现 writer；billing_model_r2（Sol）规格审查、billing_pricing_r3（Sol）独立依赖/运行审查，只读 |
+| 基线 | IAM `/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-iam` HEAD `bf160be173ef473bebe8e4a93b74ec52c230f180` clean；Billing HEAD `5140f115f0f0cdacdf0dcff81c9b48ce5397c662` clean；Root SQL手册/Agent/uv.lock/.tmp排除 |
+| 三面设计 | IAM `/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-iam/docs/TECHNICAL_DESIGN.md`、`docs/API_CONTRACT.md`、`docs/DATA_MODEL.md` 均引用 ADR-006；schema不改，机器声明生成后Root审查再接消费者 |
+| 文件集 | IAM `src/modules/auth` 中OAuth constants/claims/provisioning/billing verifier/introspection及必要module和Guard；`src/modules/authorization` 具名Billing controller/schema/service/持久事实读取；config/provisioning、scripts/provision-oauth.ts；对应test/unit/integration/contract/architecture与sdk；由正式命令生成contract和sdk输出；现有docs及ADR-006。不得改其他owner、canonical/lockfile/无关feature |
+| 放置比较 | 采用既有Auth+Authorization功能模块，schema/verifier/编排分责；淘汰Billing复制IAM model、IAM新建支付模块和Agent proof作为个人钱包同步准入前置 |
+| 数据/API/依赖 | ADR-006定义exclusive resource、外层tenant machine/内层user token、独立凭据、当前member与Audit短Prisma事务。IAM永不依赖Billing，SDK仅下游消费；17模型/零FK不改 |
+| 验证 / 资源 | 正式Code+PKCE/refresh/provision+PG/Redis隔离库验证；双token/tenant/resource/scope反例、撤销、配置及故障矩阵；pnpm verify、test:integration、test:consumer、prisma:validate、source process；只复用共享实例，不reset他人资源 |
+| 交付 | owner contract commit先于Billing consumer；Root按路径提交，writer不操作index/branch/commit。待审查→待集成验证→已验收，不能用生成/单测代替跨仓授权成功 |
+
+### 唯一执行顺序与无循环依赖
+
+1. B8-X3 IAM owner → Billing消费方契约：主体来自授权输出，body attribution不改付款钱包；对既有admission的capture/release由持久授权与受信执行证据裁决。
+2. B8-M1/M2/M3/M4：31表canonical与receipt/outbox、整个共享Credit事务组同一Prisma callback事务切换；不让新Prisma Credit与旧pg Payment/Refund/Subscription分开提交。
+3. Scheduler接入紧邻此事务组：专用Bearer只授expiry；一条root command按holds→grants处理并持久同一完整result，occurrence identity派生batch；删除手工batch/自有daemon双轨。
+4. execution claim/retry/drain、reconciliation只读报告、provider unknown outcome和启动配置完善；consumer固定owner artifact后运行真实HTTP及源码/dist smoke。
+5. 冻结commit重跑全门，明确真实支付sandbox/镜像等外部待验与配置步骤；未闭环代码缺口不得列成“配置即可”。
+
+同步运行依赖：Billing→IAM；IAM不回调Billing。Scheduler→Billing投递，部署工具→Scheduler注册；Billing启动不同步调用Scheduler注册自身。
+Billing模块依赖继续以TECHNICAL_DESIGN的Payment core/Credit叶节点及独立PaymentEvents orchestration图为准，禁止通过forwardRef/global provider掩盖环。
+所有跨仓只消费owner HTTP/SDK/event，不共享ORM或数据库；事务局限owner，外部副作用通过持久状态/outbox/有界重试恢复。
+
+### B8-X1/X2只读结论（不是实现验收）
+
+- B8-X3三面文档经billing_model_r2独立规格审查P1=0/P2=0，准许进入owner schema/controller声明与generation；新源码运行与机器契约尚待验证。
+
+- billing_model_r2审查专用Billing audience+IAM在线验证方案无否决项；要求双token隔离、真实resource/refresh、凭据隔离、错误顺序和TOCTOU边界。
+- billing_pricing_r3核实Scheduler不发送schedule UUID，Billing不能重算原digest。认证后以稳定Idempotency-Key为receipt身份；request ID只作诊断，header漂移纳入digest冲突。
+- 当前hold receipt与grant逐行事务分离；仅改Bearer/header仍不闭环。必须随Prisma事务组改为一个holds+grants root command，不再追加旧pg兼容编排。
+- execution/reconciliation需要目标durable claim/read-only snapshot，禁止捎带第二套cron。所有上述实现门仍待实跑，不将本卡标为整仓完成。
+
 ## 阶段门
 
 ### B8-S4 当前扣减链路与 usage–hold 持久绑定（2026-09-12）
