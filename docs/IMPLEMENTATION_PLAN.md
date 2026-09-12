@@ -40,7 +40,7 @@
 | 项 | 决定 |
 |---|---|
 | ID / 目标 | B8-X3 / P0：IAM 发布 Billing 专用用户消费令牌及当前事实验证，消除配置无法修正的 RS256/EdDSA 与 audience/scope 差异 |
-| Owner / 分工 | Root 总体方案、Git/验收；iam_billing_authorization（Sol）为 IAM 唯一实现 writer；billing_model_r2（Sol）规格审查、billing_pricing_r3（Sol）独立依赖/运行审查，只读 |
+| Owner / 分工 | Root 总体方案、Git/验收及当前 IAM 唯一 writer；iam_billing_authorization（Sol）已停写交接；billing_model_r2（Sol）规格审查、billing_transaction_m2a（Sol）最终质量审查，只读；billing_pricing_r3前序只读依赖/运行调查 |
 | 基线 | IAM `/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-iam` HEAD `bf160be173ef473bebe8e4a93b74ec52c230f180` clean；Billing HEAD `5140f115f0f0cdacdf0dcff81c9b48ce5397c662` clean；Root SQL手册/Agent/uv.lock/.tmp排除 |
 | 三面设计 | IAM `/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-iam/docs/TECHNICAL_DESIGN.md`、`docs/API_CONTRACT.md`、`docs/DATA_MODEL.md` 均引用 ADR-006；schema不改，机器声明生成后Root审查再接消费者 |
 | 文件集 | IAM `src/modules/auth` 中OAuth constants/claims/provisioning/billing verifier/introspection及必要module和Guard；`src/modules/authorization` 具名Billing controller/schema/service/持久事实读取；config/provisioning、scripts/provision-oauth.ts；对应test/unit/integration/contract/architecture与sdk；由正式命令生成contract和sdk输出；现有docs及ADR-006。不得改其他owner、canonical/lockfile/无关feature |
@@ -48,6 +48,27 @@
 | 数据/API/依赖 | ADR-006定义exclusive resource、外层tenant machine/内层user token、独立凭据、当前member与Audit短Prisma事务。IAM永不依赖Billing，SDK仅下游消费；17模型/零FK不改 |
 | 验证 / 资源 | 正式Code+PKCE/refresh/provision+PG/Redis隔离库验证；双token/tenant/resource/scope反例、撤销、配置及故障矩阵；pnpm verify、test:integration、test:consumer、prisma:validate、source process；只复用共享实例，不reset他人资源 |
 | 交付 | owner contract commit先于Billing consumer；Root按路径提交，writer不操作index/branch/commit。待审查→待集成验证→已验收，不能用生成/单测代替跨仓授权成功 |
+
+### B8-X3 实施交接与当前验证
+
+- IAM 设计 commit `8f0bf699fc89966df6c0cfa1748c7bc33f8407ef`；主链 worker 已停写，Root 独占接管负例、故障测试、修复、文档与最终验证。共享 index 仍只由 Root 操作。
+- 真实 HTTP 16/16 通过：consent/PKCE、双 token、scope 省略/混合及 GET/form POST 多 resource、refresh 原 aud/scope 与双向跨资源拒绝、logout/client disable、membership/tenant、审计实际 insert 后 throw 的 rollback、提交期间 expiry 与已提交审计快照。日志 `/tmp/iam-billing-x3-root-http-snapshot-green.log`。
+- 两名只读 reviewer 已撤销/关闭阻断：Billing resource 持久 readback、JWK 依赖 503 分类与明确快照时间语义均落实。新增真实 Nest module import DAG AST 门，不用 forwardRef 掩盖环。
+- 首轮 full verify 619 pass/14 fail：2 旧架构断言修正，12 资源/子进程超时及 fail-fast 入口随后在单 worker 与正式入口修复后全部通过；不修改超时预算、不 skip。依赖 audit 8 high/1 moderate/1 low 属已有 lock 基线，单独安全修复后再放行发布，不能夹带进功能 commit。
+- IAM 功能固定提交 `f279508a9a9fcc93e7505a7ec503b62313abfa01` 已验收：Root 干净树 verify 75 文件/636 项、integration 27 文件/146 项、仓外 consumer 2/2、process 1/1、Prisma/diff 全通过，0 失败/0 跳过；日志 `/tmp/iam-billing-x3-root.BIG0gT`。未改 Billing canonical/schema/src/依赖/消费者，不将 IAM owner 切片称为 Billing 完成。B8-X3-S 安全补丁独立进行。
+
+### B8-X3-S：IAM 已有传递依赖安全补丁（独立提交）
+
+| 项 | 决定 |
+|---|---|
+| Owner / writer / 审查 | IAM / Root 唯一 writer与commit / billing_model_r2只读依赖审查 |
+| 基线 / 前置 | B8-X3功能实现完成审查后先独立提交，S不夹带进功能commit；原package/lock/schema hash见IAM验收记录 |
+| 范围 | IAM `pnpm-workspace.yaml`精确parent overrides、pnpm正式生成lock；`docs/SECURITY.md`、CURRENT、ACCEPTANCE及本卡；不改生产源码/机器contract/Schema、不全局强制所有js-yaml到一个major |
+| 决定 | `@hey-api/json-schema-ref-parser@1.4.4>js-yaml`4.3.2；`@prisma/config@7.10.0>deepmerge-ts`8.0.0；`prisma@7.10.0>mysql2`及`better-auth@1.7.3>mysql2`3.23.2；`@nestjs/platform-express@12.0.1>multer`2.3.0。精确parent路径已由pnpm why核实；实际mysql2实体来自Prisma，Better Auth optional peer仅约束安全版本，当前PG安装未materialize该可选边 |
+| 兼容/退出 | 当前使用PG、没有Multer业务上传，不用未触达掩盖依赖告警；deepmerge-ts8仅Prisma配置依赖，完整Prisma generate/validate/schema+build+运行验证，不切换ORM/Auth核心版本。上游解除漏洞后复验移除override；不放宽release-age或peer gate |
+| 验证 / 放行 | install frozen复验、pnpm why、audit五级0、verify/integration/consumer/process与schema/prisma；功能contract/Schema hash保持。失败不降级门禁；整仓Billing仍未完成 |
+
+B8-X3-S 已验收：安全提交 `4280d092419d3cd8dd21c25a46f7de01ae03eece`，Root clean committed 验证 `/tmp/iam-billing-x3-root.zGTPkX`：verify 75 文件/636 项、真实 integration 27 文件/146 项、仓外 consumer 2/2、process 1/1、Prisma validate/diff 全通过，0 失败/0 跳过。全量/prod audit 五级 0；lock SHA256 `3a1a895ed06932367a67ab11fc6811ceb7a16f9071fbab2aae2f01abbb27b506`，schema/contract 与 f279508 不变。只读依赖审查已接收，Better Auth optional peer 精度建议已修复。IAM CURRENT/ACCEPTANCE 的安全切片“待固定提交”对应本条最终证据，不另写自引用 SHA 破坏 SDK clean pack。
 
 ### 唯一执行顺序与无循环依赖
 
@@ -61,9 +82,35 @@
 Billing模块依赖继续以TECHNICAL_DESIGN的Payment core/Credit叶节点及独立PaymentEvents orchestration图为准，禁止通过forwardRef/global provider掩盖环。
 所有跨仓只消费owner HTTP/SDK/event，不共享ORM或数据库；事务局限owner，外部副作用通过持久状态/outbox/有界重试恢复。
 
+### B8-X3-M：新增授权 operation 的治理元数据局部修复
+
+Root 横向检查定位到本轮新增 operation 缺失 metadata，直接修复本轮职责，不把老 IAM 所有 operation 或 Root checker 重写混入。IAM 基线 `4280d092419d3cd8dd21c25a46f7de01ae03eece`，先完成其 clean consumer；Root 唯一 writer，billing_model_r2 只读语义审查。
+文件只限既有 Billing controller、对应 contract test、正式生成 OpenAPI/SDK、API_CONTRACT 与本卡；不新增目录/模块，不改请求响应/Schema/业务算法。Nest 原生 ApiExtension 为唯一声明，生成物不手改。
+精确 metadata：owner=kokoro-iam、visibility=internal-owner、stability=stable、idempotency=none、permission=iam:billing-authorization.verify。每次 verify 新写 Audit/生成 decision_ref，无 receipt/Idempotency-Key/结果重放，因此不是 read-only/required，SDK retryEligible=false 保持。
+验证：新增契约断言先 RED，controller+正式生成后 GREEN；verify、真实授权 HTTP、固定提交 consumer 与 Root 检查该 operation 原违规消失；其余横向失败不隐藏。
+
+B8-X3-M 已验收，最终 IAM consumer 基线为 `0f06f33b7390c27c2a57170d3c8dfb74b6c51908`（包含 f279508 功能与 4280d09 安全补丁）。RED `/tmp/iam-billing-x3-metadata-red.log` 1 失败，正式生成后 GREEN 1 通过；新增元数据不改 SDK 方法/生产响应/数据库，独立只读审查无阻断。
+Root 最终 clean committed 复验 `/tmp/iam-billing-x3-root.ianFr2`：`VITEST_MAX_WORKERS=1 pnpm verify` 75 文件/636 项、`pnpm test:integration --no-file-parallelism` 27 文件/146 项、`pnpm test:consumer` 2/2、`pnpm test:process` 1/1、Prisma validate/diff 通过，全部 0 失败/0 跳过；Node24.20.0/pnpm12.3.4，复验后工作树干净。OpenAPI SHA256 `b76903a274c708910a791b47beefbeb9094a3a38269e07112c084aecce7d2579`；schema/lock 保持安全提交 hash。固定 artifact 由此 SHA 发布，不引用工作树或浮动分支。
+Root 重跑规范检查 `/tmp/billing-x3-root-metadata-standard.log` 为 222 项失败（原 223），新 Billing verify metadata 项已消失，其余失败保留；不将该局部通过写成横向规范已全部通过。Billing 生产代码仍为 S4 `5140f115f0f0cdacdf0dcff81c9b48ce5397c662`，本轮 Billing 只更新任务交接；31 表/完整 Prisma writer 组、consumer、Scheduler 与运行恢复尚未实现闭环。
+
+### B8-M1 下一切片的准确前置（不是再次征求常规决定）
+
+billing_transaction_m2a 以 `b476eb27bda2040648b9e303109bb4d78c02a1fd` 只读复盘；Root 后续先统一三设计与 canonical，不能让 writer 自行发明列名或契约。用户已确认首发无真实数据，后文历史“等待数据/部署回答”不再阻塞；禁止据此重置任何共享库。
+
+1. API 中仍并列 stable-v1 与目标 breaking，须用单一首发 major 决定覆盖历史未决表述；settlement caller identity 与 Billing UUID 分开，17 条 operation 的真实 request/response/envelope、ID 生成权及 settlement/refund 终态逐一机器化。审查建议新 major + 删除旧路径，不发布双轨；这只是待 Root 写入三设计的建议，未修改机器契约。
+2. IAM owner artifact 已可用；Billing 消费方必须明确当前用户授权结果到唯一 CreditAccount subject 的映射，不把 body payer 当付款授权。既有 admission 的 capture/release 继续验证持久授权及受信执行证据，不能简单复用任意当前用户 token。
+3. 35→31 映射已审定，canonical 开写前冻结 command namespace/identity-required/result schema version 登记，以及 outbox event identity/payload version/handler 登记；其余约束从现有 R2/R3 模型落实。Receipt 不能独立提交 processing，Outbox 不能空 handler ack，Fulfillment 要保留永久授权 digest/原 grant/journal 唯一来源。
+4. 不单独部署新 DDL：Credit 全 writer + Metering admission/capture/release/expiry + Payment fulfillment/provider processing + Refund/Subscription Credit 效果及装配须作为完整事务组切换；查询、对账的旧表引用同时替换。整个切片完成后才可称运行闭环，不让新旧 pg/Prisma 两套 writer 共存。
+
+### Root 横向门禁实际结果（2026-09-12）
+
+Root `6b4e82e5eb41a47e5e739b6261a7ea42cf1c06f9`，保留原 SQL 手册/Agent/uv.lock/.tmp 等非本任务变更。`python3 scripts/verify-repository-topology.py` PASS；`python3 scripts/verify-ten-repository-standard.py` FAIL 223 项；`python3 -m pytest scripts/tests` 82 通过/2 失败。
+手册测试失败是抽取样例数量 11≠18 与 TS 手册缺少被断言的“参考依据”标题。规范检查同时包含 ORM canonical/生成代码识别、TS/构建配置、OpenAPI metadata 与其他仓库问题；初次检查中的新 Billing verify operation 元数据缺口已由 B8-X3-M 修复并复验，最终尚余 222 项；不能把全部失败笼统称为无关或已修复。
+日志 `/tmp/billing-x3-root-{repository-standard,topology,tests}.log`。本轮没有放宽 Root 门禁或覆盖其他 owner 文件。Root 负责检查器与正式手册的一致性裁决；真实 owner 不符合项回到对应 owner 切片。IAM 局部功能/安全门通过不代表这些横向门通过。
+
 ### B8-X1/X2只读结论（不是实现验收）
 
-- B8-X3三面文档经billing_model_r2独立规格审查P1=0/P2=0，准许进入owner schema/controller声明与generation；新源码运行与机器契约尚待验证。
+- B8-X3三面文档经billing_model_r2独立规格审查P1=0/P2=0，准许进入owner schema/controller声明与generation；源码运行、机器契约与仓外 SDK 已在上述固定 IAM 提交验证；Billing 消费方仍待实施。
 
 - billing_model_r2审查专用Billing audience+IAM在线验证方案无否决项；要求双token隔离、真实resource/refresh、凭据隔离、错误顺序和TOCTOU边界。
 - billing_pricing_r3核实Scheduler不发送schedule UUID，Billing不能重算原digest。认证后以稳定Idempotency-Key为receipt身份；request ID只作诊断，header漂移纳入digest冲突。
