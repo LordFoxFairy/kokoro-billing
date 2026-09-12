@@ -1,6 +1,6 @@
 {
-  "canonicalSha256": "57b6ff2cd09de0835b2c608575dea74644163ab591e21fa477855476661920bd",
-  "schemaSha256": "d3639ae6ea663cf3702063bf167349491dd3e1926cfa2b37ec7d91b4b1b90096",
+  "canonicalSha256": "4c2e0a53ba6608426ed3ec7d77af8d8138688c4213404d0d06c2d8cfe0e90d79",
+  "schemaSha256": "893ce71962887b6445d1a7c360a0d39ff5a7d1d4299174d623063ca124bf9c3a",
   "prisma": "7.10.0",
   "client": "7.10.0",
   "adapterPg": "7.10.0"

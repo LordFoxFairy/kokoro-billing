@@ -1,5 +1,13 @@
 # kokoro-billing 数据模型
 
+> **B8-S4 局部实施门（2026-09-12，基线 ada75b2）**：当前扣减链路的 usage–hold 绑定先在现有唯一 writer 落地；
+> canonical `entitlement_usage_event.credit_hold_id VARCHAR(36) NULL UNIQUE` 匹配当前 hold 类型，派生 event 使用独立 randomUUID。
+> 同事务验证 scope/state、持久绑定及重放；HTTP 17 操作和内部方法签名不变，无新 API、FK、迁移或兼容分支。
+> 当前 pg 整体事务保持，Prisma 全事务组承接仍待 M3；目标 `billing_usage_event.id/credit_hold_id UUID` 不等于当前类型已切换。
+> 放置/唯一 writer/删除项/测试门详见唯一任务板 B8-S4；仅对该 P0 放行，不代替完整目标三设计门。
+> S4-R2：内部 hold key/capture source/capture 与 release key 使用 Billing admission UUID；255 字符外部 invocation_id 原样保存，原 receipt 身份/digest 仍权威，不收紧 wire 上限或保留拼接 fallback。
+> ensure 仅无锁校验快照和唯一绑定记录，消费权限由 settle 持锁后重验；旧全 Credit 锁图重排仍留整体事务组切换。
+
 > **2026-09-12 当前首发裁决**：用户确认尚无真实账务数据、服务未开放；按首发clean-slate目标实施，历史数据/已发布major的待确认不再作为本轮前置。
 > 不重置共享数据库、不构造历史兼容。M2a仅提前实现D1已审定且不依赖表/API的Prisma事务组件（见任务板），本仓SQL/HTTP/生产writer保持当前态；完整目标Schema与付款授权门仍按业务切片闭合。
 
@@ -281,7 +289,7 @@ Root选择在`billing_usage_event`增加可空`credit_hold_id UUID`，非空建�
 | `entitlement_credit_hold` | idempotent reservation、requested/captured/released、expiry 与状态 |
 | `entitlement_credit_hold_allocation` | 一个 hold 在 grant lot 之间的分配与终态金额 |
 | `entitlement_credit_journal` | account append-only delta 与稳定 sequence |
-| `entitlement_usage_event` | tenant-scoped usage inbox identity 与处理状态 |
+| `entitlement_usage_event` | tenant-scoped usage inbox identity、处理状态及 nullable UNIQUE credit_hold_id；派生 UUID 与来源身份分离 |
 | `entitlement_usage_settlement` | hold 与 usage event 的一对一结算结果 |
 | `entitlement_billing_admission` | invocation 的定价、mode、hold、accepted receipt 引用与状态 |
 | `entitlement_execution_event` | Agent/Model/Studio execution inbox、payload hash 与状态 |
@@ -385,6 +393,7 @@ UPDATE/DELETE，因此生产数据库角色和审计策略仍需补齐该防线�
 | hold allocation composite PK | 一个 hold 对一个 grant 只有一条 allocation |
 | `uq_entitlement_credit_journal_sequence`、`uq_entitlement_credit_journal_source` | account sequence 与来源事实各自唯一 |
 | `uq_entitlement_usage_event_source` | tenant 内 source event 只接收一次 |
+| `uq_entitlement_usage_event_hold` | 非空 credit_hold_id 只绑定一个 usage event；scope/state 在 owner 事务内校验，无 FK |
 | `uq_entitlement_usage_settlement_hold`、`uq_entitlement_usage_settlement_event` | hold 与 usage event 均只能结算一次 |
 | entitlement/payment/Billing receipt key UNIQUE | 每个相应 command surface 的 tenant + command + idempotency key 只保留一个 receipt |
 | `uq_entitlement_command_receipt_identity` | 非空 entitlement command identity 在 tenant + command 内唯一；当前约束 expiry batch |

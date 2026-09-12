@@ -369,6 +369,7 @@ model entitlement_subscription_term {
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model entitlement_usage_event {
   usage_event_id  String   @id @db.VarChar(36)
+  credit_hold_id  String?  @unique(map: "uq_entitlement_usage_event_hold") @db.VarChar(36)
   tenant_id       String   @db.VarChar(191)
   subject_id      String   @db.VarChar(255)
   source_event_id String   @db.VarChar(255)

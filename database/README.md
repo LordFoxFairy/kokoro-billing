@@ -26,7 +26,7 @@ host/port/server). The admin role needs CREATEDB; the application role does not.
 credentials in application configuration. CI provides the management URL separately.
 
 The verifier creates a random `billing_reference_<uuid>` database from template0, installs the canonical SQL, then compares a read-only
-REPEATABLE READ target snapshot. It compares all 35 relations, 368 columns, 127 constraints (NOT NULL is a column property), 83 indexes,
+REPEATABLE READ target snapshot. It compares all 35 relations, 369 columns, 128 constraints (NOT NULL is a column property), 84 indexes,
 plus database locale metadata and unexpected types/routines/triggers/rules/policies. Definitions retain precision, defaults, validation,
 partial predicates, persistence and RLS flags. No data is copied and no target DDL/DML is executed. A differing locale from template0 is
 reported as drift; this tool does not claim database data, owner/ACL, statistics, every extension feature or concurrent DDL equivalence.

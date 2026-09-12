@@ -226,7 +226,7 @@ export class BillingAdmissionService {
       accountId,
       requestedMicros: amountMicros,
       featureKey: input.featureKey,
-      idempotencyKey: `admission:${input.invocationId}`,
+      idempotencyKey: `admission:${admissionId}`,
       pricingRevisionId: rate.usage_price_revision_id,
     });
     await this.connection.execute(
@@ -324,7 +324,7 @@ export class BillingAdmissionService {
       const usageEventId = await this.usage.ensureUsageEventForHold({
         tenantId,
         holdId: admission.hold_id,
-        sourceEventId: `admission:${admission.invocation_id}`,
+        sourceEventId: `admission:${admission.admission_id}`,
       });
       await this.usage.settleUsage({
         tenantId,
@@ -334,7 +334,7 @@ export class BillingAdmissionService {
           admission.amount_micros,
           "admission_amount_micros",
         ),
-        idempotencyKey: `capture:${admission.invocation_id}`,
+        idempotencyKey: `capture:${admission.admission_id}`,
       });
     }
     const result = {
@@ -393,7 +393,7 @@ export class BillingAdmissionService {
       await this.usage.releaseUsage({
         tenantId: input.tenantId,
         holdId: admission.hold_id,
-        idempotencyKey: `release:${admission.invocation_id}`,
+        idempotencyKey: `release:${admission.admission_id}`,
       });
     await this.markAdmission(input.tenantId, input.admissionId, "released");
     const result = this.toResult({ ...admission, status: "released" });

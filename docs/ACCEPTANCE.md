@@ -3,6 +3,14 @@
 验收必须在待交付 commit 的干净工作树上重新执行。历史报告、旧 CI、Agent 自报、被 skip 的 integration 和本地 fixture
 均不等于生产证据。
 
+## B8-S4 usage–hold 与最大长度 invocation
+
+可执行回归入口：`test/integration/usage-hold-binding.test.ts`、`admission-command-receipts.test.ts`、`usage-settlement.test.ts`。
+新增用量绑定唯一约束；默认UUID与255字符外部invocation均走真实持久化路径。覆盖同身份重放、字段漂移、非活跃hold、跨hold错误绑定、等待后重放与尾部故障快照回滚。
+并发barrier与故障DDL使用`usage-hold-binding.fixture.ts`独占canonical库，pin后台连接/PID，不在主测试库留下function/trigger。
+Root还执行源码/dist真实HTTP create→capture→同key及换key重放→drift409→第二次create/release，核事件/settlement/debit各一笔、available90/held0；Root冻结代码全套752/集成235通过、0失败0跳过；精确结果以唯一任务板S4验收记录为准。
+本切片不证明支付sandbox、Scheduler跨仓调度、完整Prisma/Nest切换或生产故障恢复。
+
 ## M2a Prisma事务组件
 
 局部交付与最终Root证据见[任务板M2a](IMPLEMENTATION_PLAN.md)。测试入口为

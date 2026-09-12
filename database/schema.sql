@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS entitlement_credit_journal (
 );
 CREATE TABLE IF NOT EXISTS entitlement_usage_event (
   usage_event_id VARCHAR(36) NOT NULL PRIMARY KEY,
+  credit_hold_id VARCHAR(36) NULL,
   tenant_id VARCHAR(191) NOT NULL,
   subject_id VARCHAR(255) NOT NULL,
   source_event_id VARCHAR(255) NOT NULL,
@@ -98,6 +99,7 @@ CREATE TABLE IF NOT EXISTS entitlement_usage_event (
   status VARCHAR(32) NOT NULL DEFAULT 'recorded',
   created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   CONSTRAINT uq_entitlement_usage_event_source UNIQUE (tenant_id, source_event_id),
+  CONSTRAINT uq_entitlement_usage_event_hold UNIQUE (credit_hold_id),
   CONSTRAINT ck_entitlement_usage_event_status CHECK (status IN ('recorded', 'settled', 'failed')),
   CONSTRAINT ck_entitlement_usage_event_quantity CHECK (quantity_micros >= 0)
 );

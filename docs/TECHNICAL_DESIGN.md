@@ -1,5 +1,13 @@
 # kokoro-billing 技术设计
 
+> **B8-S4 局部实施门（2026-09-12，基线 ada75b2）**：当前扣减链路的 usage–hold 绑定先在现有唯一 writer 落地；
+> canonical `entitlement_usage_event.credit_hold_id VARCHAR(36) NULL UNIQUE` 匹配当前 hold 类型，派生 event 使用独立 randomUUID。
+> 同事务验证 scope/state、持久绑定及重放；HTTP 17 操作和内部方法签名不变，无新 API、FK、迁移或兼容分支。
+> 当前 pg 整体事务保持，Prisma 全事务组承接仍待 M3；目标 `billing_usage_event.id/credit_hold_id UUID` 不等于当前类型已切换。
+> 放置/唯一 writer/删除项/测试门详见唯一任务板 B8-S4；仅对该 P0 放行，不代替完整目标三设计门。
+> S4-R2：内部 hold key/capture source/capture 与 release key 使用 Billing admission UUID；255 字符外部 invocation_id 原样保存，原 receipt 身份/digest 仍权威，不收紧 wire 上限或保留拼接 fallback。
+> ensure 仅无锁校验快照和唯一绑定记录，消费权限由 settle 持锁后重验；旧全 Credit 锁图重排仍留整体事务组切换。
+
 > **2026-09-12 当前首发裁决**：用户确认尚无真实账务数据、服务未开放；按首发clean-slate目标实施，历史数据/已发布major的待确认不再作为本轮前置。
 > 不重置共享数据库、不构造历史兼容。M2a仅提前实现D1已审定且不依赖表/API的Prisma事务组件（见任务板），本仓SQL/HTTP/生产writer保持当前态；完整目标Schema与付款授权门仍按业务切片闭合。
 
@@ -588,7 +596,7 @@ TypeScript6.0.3 + typescript-eslint8.69.0 + ESLint10.10.0为本切片实际冻�
 JSON边界仅收紧非标量quote credit、非string provider reference与缺省parsed结果时的非法webhook ID/type，复用既有错误体系；
 installer新增单元异常注入，保证falsey主异常不被资源关闭异常覆盖。文件归属/范围按任务板新增授权，不扩展生产owner/SQL/API。
 
-独立已知P0：默认UUID hold加hold:前缀生成41字符usage ID，超过canonical VARCHAR(36)，真实capture报22001并回滚。
+历史P0（S4已修复，证据见任务板）：默认UUID hold加hold:前缀曾生成41字符usage ID，超过canonical VARCHAR(36)。当前独立事件UUID与持久hold绑定已替代拼接；内部key/source使用admission UUID，255字符外部invocation保持原样。
 B8的ID/事务设计必须闭环此问题；B7b短opaque ID fixture只隔离receipt类型校验，明确不代表默认生产capture路径可用。
 
 

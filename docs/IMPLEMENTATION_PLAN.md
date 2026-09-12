@@ -34,6 +34,56 @@
 
 ## 阶段门
 
+### B8-S4 当前扣减链路与 usage–hold 持久绑定（2026-09-12）
+
+| 项目 | 本切片决定 |
+|---|---|
+| 目标 / 优先级 | P0：默认 UUID hold 可正常 capture；用量事件与 hold 持久一对一，重放不重复扣减 |
+| 基线 | `/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing`，`codex/billing-ts-prisma-alignment`，`ada75b2bec8a06759655a7238510a20ad5d075ed`，Billing 干净；Root SQL 手册/Agent/uv.lock/.tmp 排除 |
+| Owner / 分工 | Billing Metering 现有唯一 usage writer；Root 先设计与原实现 RED，billing_transaction_m2a（Sol）唯一实现 writer，billing_model_r2 / billing_pricing_r3（Sol）只读审查，Root 串行 Git 与集成验收 |
+| 位置比较 / 粒度 | 采用现有 usage-settlement-service.ts 与既有 integration 测试，修复真实调用链；淘汰新建 modules/metering 第二套服务，因为完整共享 Credit 事务组尚未切换。必要新增 usage-hold-binding.test.ts 独立承载绑定并发反例，不新建目录 |
+| 数据 | canonical entitlement_usage_event 新增 credit_hold_id VARCHAR(36) NULL + UNIQUE，匹配当前 hold PK 类型；派生 event PK randomUUID，删除 hold:UUID 拼接。完整目标改名/UUID 类型仍随 M1/M3 全事务组一次切换，不偷偷收紧当前 v1 opaque ID 合同；无 FK，无迁移/兼容双轨 |
+| 生命周期 / 依赖 | 继续使用现有 application withTransaction 与同一 connection；不接入独立 Prisma client、不新建事务框架。ensure 无锁读取 tenant 限定 hold/account 快照，普通双身份读与 INSERT ON CONFLICT DO NOTHING 后新快照重读；同身份完整字段相同才重放，standalone source 不由 ensure 抢绑。记录不授予消费权限，settle 持锁后最终校验 state；不新增先 event 后 hold 的反序。direct settle 在现有事务内 NULL→hold 首次绑定，异值/另 event 已占 hold 冲突；原 settlement 两项 UNIQUE 保留 |
+| API / 删除项 | 17 条 HTTP contract 保持，内部方法签名不变；删除 synthetic event ID 和 shortHold 测试规避，不增加源 ID fallback。独立 recordUsageEvent 仍保留外部 source 幂等与 payload 校验 |
+| 允许文件 | database/schema.sql；src/infrastructure/postgres/repositories/metering/usage-settlement-service.ts；test/integration/usage-settlement.test.ts、admission-command-receipts.test.ts、usage-hold-binding.test.ts；由 prisma:refresh 产生的已跟踪 Prisma schema/provenance。Root 负责三设计、CURRENT、IMPLEMENTATION_PLAN、ACCEPTANCE；新增 helper 或超出范围先报告 |
+| 验证 | Root 先删短 ID fixture，真实 PG 观察旧默认 capture SQLSTATE22001 RED；writer 后续绑定测试也须先 RED，再实现。覆盖 direct binding、完整重放、tenant/subject/feature/source/payload 漂移、并发 ensure/抢占/同 hold settle 重放、失败原子回滚；完整 pnpm verify、test:integration、db:apply-schema、db:verify-schema、prisma:check、源码/dist smoke、git diff --check |
+| 资源 / 交付 | 复用共享 PG/Redis，仅自建 template0 随机独占数据库；不 reset/flush/启动共享服务。writer 无 commit 权限，交付文件/hash/RED-GREEN；Root 主工作树重跑并显式路径提交 |
+| 边界 | 当前 scoped 三设计通过后实施本 P0；不把此切片当完整 Nest/Prisma/31 表重构或付款授权/Scheduler 接线验收。用户已明确未上线无真实账务数据，不再将历史数据问题列为当前阻塞 |
+
+状态：首轮实现已交接并停写；Root 默认 UUID RED 确认 3 合法 capture 均 SQLSTATE22001。首轮 Root verify 为 744 通过，但独立审查及 HTTP 边界发现以下未闭环项，不据此放行。
+
+#### S4-R2 验收反例与必要范围增补
+
+- 两位只读 Sol 审查要求：确定性数据库等待 barrier（不能仅用 Promise.all 冒称经过等待分支）；逐字段 tenant/subject/feature/quantity/dimensions/source 反例；尾部已有真实账务写入后的整组回滚；同 hold/source 并发返回同一落库 UUID。
+- Root 确認生产边界：HTTP 合法 255 字符 invocation_id 在 authorize 中拼接 admission: 前缀写 VARCHAR(128) hold key，返回500/22001（`/tmp/billing-s4-http-boundary-red.log`）。capture 中同一外部 ID 也被拼入 VARCHAR(255) usage source。不是通过缩短 wire 上限修复。
+- 扩大文件集仅加现有 `src/infrastructure/postgres/repositories/metering/billing-admission-service.ts`：内部 authorize/capture/release key 和 capture source 改用本地 admission UUID，外部 invocation_id 仍完整保存并由 admission receipt 身份/digest 去重；删除四处外部 invocation 拼接，不保留 fallback。当前是未上线 fresh-install，不做历史数据补丁/双读。
+- 测试位置仍优先现有三个 integration 文件；若 barrier/资源 helper 承担独立变化原因，可新增同目录 `usage-hold-binding.fixture.ts`，不新建目录。范围无需新 API/schema/dependency；直接绑定异 hold 先于 event status 判错，prior replay 也校验 event 绑定与 tenant，防损坏关系被当成功重放。
+- Writer 继续唯一写入、Root停写；R2须新增测试先 RED 再补生产。Root先前 HTTP smoke需按当前 wire `accepted_without_charge`/`rejected`语义断言，实际扣款/释放状态以数据库核验；本切片不私改响应词汇。
+
+
+#### S4-R3 最终冻结与审查
+
+Root拒收R2测试证据：固定名DDL遗留在runDB、session advisory lock未pin、尾部outbox断言JOIN已回滚settlement造成假绿。R3改独占canonical fixture、pin PoolClient与随机key/PID确认等待，尾部比较account/grant/allocation/hold/journal/usage/settlement/outbox/admission/receipt前后快照，重试另验只有一次效果。Root补更新database README当前catalog数量，不修改安装器。
+
+- 最终production SHA256：usage service `567f63fd39210a61400478a18b65d5170ac51269f0e9f2d27ae97accd991570e`；admission service `f797a168b9de6354cb3f320c2cc134ce66349299ff4d0281cbb1fdcc0a691a8d`。
+- 测试SHA256：usage binding `bfc7f1c489bc0b219aae9cbe85ee1a23234f01acd7cf38d83a5ffdc5c980571e`；fixture `8bf8b2eb3f050f15af1dd043efe0f5dde2b1691c5020790e768b3f37b624936b`；admission `aa0125aa6ecfd079a74717f753b587bb01e40017d1ad7ff6487851ddec6b1aeb`。
+- canonical `4c2e0a53ba6608426ed3ec7d77af8d8138688c4213404d0d06c2d8cfe0e90d79`；generated Prisma schema `893ce71962887b6445d1a7c360a0d39ff5a7d1d4299174d623063ca124bf9c3a`。OpenAPI/dependencies/lock保持原字节。
+- 数据与并发两位Sol审查员分别核以上冻结hash，最终范围内放行；Root自主检查与当前完整门仍是提交前置，不能拿writer通过代替。
+- RED：Root原capture `/tmp/billing-s4-root-red.log` 3失败/4通过（另3因过滤跳过），真正22001；writer `/tmp/billing-s4-binding-red.log`也是原实现UUID失败；`/tmp/billing-s4-binding-concurrency-red.log`是在原实现仅临时隔离ID问题后两source都成功的绑定反例，不是纯原实现或missing-column证据。Root最大invocation HTTP `/tmp/billing-s4-http-boundary-red.log`先在authorize报500/22001。R3错误优先级 `/tmp/billing-s4-r3-order-red.log`先得到expected mismatch/actual not_recorded，后改生产。其余prior JOIN与绑定细分补测未全部具有独立前置RED，如实保留流程差异，不用上述三个RED冒称全程test-first。
+- Writer最终 `/tmp/billing-s4-r2-final-green.log` 两文件23通过、同runDB catalog differences=[]/routines0/triggers0，lint/typecheck通过；这是交付证据，不是主控验收。
+- Root独立源码HTTP `/tmp/billing-s4-http-source-green.log`：真实最大invocation/default UUID create/capture、同key与identity重放、drift409、release重放；一个event/settlement/debit，available90/held0，health/ready/认证/request ID/SIGTERM通过。不是真实provider或IAM付款授权验收。
+- 官方语义核验（2026-09-12）：[PostgreSQL Read Committed](https://www.postgresql.org/docs/current/transaction-iso.html)说明DO NOTHING后独立语句快照可见已提交winner；[唯一约束](https://www.postgresql.org/docs/current/ddl-constraints.html)说明默认允许多个NULL而非空唯一。实际兼容性以本轮PG18.4和生成工具实测为准。
+
+#### S4 Root 主工作树完整验收（提交前冻结代码）
+
+- `/tmp/billing-s4-root-verify.sh` session4196 exit0，完整日志 `/tmp/billing-s4-root.XbiDgD`。实际执行 `pnpm db:apply-schema`、`pnpm verify`（format/lint/typecheck/build/sql:check/contract:check/test）、`pnpm test:integration`、`pnpm db:verify-schema`、`pnpm prisma:check`、`python3 /tmp/billing-s4-root-smoke.py`、`git diff --check`，全部exit0。
+- 全套66文件752通过；真实integration36文件235通过（属于前者子集，不相加），0失败0跳过。catalog35表369列128约束84索引、routines/triggers/rules/policies全部0、differences=[]；Prisma同源无漂移。最终文档变更另跑 `pnpm format:check` 与 `git diff --check`通过。
+- 源码和dist真实HTTP均通过255字符invocation/default UUID预留→扣款→同key与换key重放→payload drift409→另笔预留/释放/重放，DB各一条event/settlement/debit、available90/held0；health200/ready200/匿名401/可信BFF catalog200/request ID匹配/SIGTERM退出0。没有外部支付请求。
+- 自建 `billing_accept_s4_c60299e8dc8e4033986f` 在所有子进程/命令终态后正常drop；前一失败验收库及独立HTTP RED/GREEN库也由各自trap正常drop。没有FORCE、共享Redis清空、共享实例重启或其他owner数据修改。
+- 本次实际缺陷/流程保留：首轮完整门虽744/227通过仍被新增HTTP边界探针击穿；R2测试环境/断言问题经Root拒收后才修正。没有将原有失败隐藏、改小wire长度或放宽门禁。基础设施断连时测试fixture初始化/清理的所有故障路径未做穷举注入，不把正常清理实测写成完整DR保证。
+- 未运行/未交付：真实provider sandbox、Scheduler跨仓、CI PostgreSQL16、镜像/生产SLO、Nest与全部业务Prisma切换。当前HTTP返回词汇仍为原合同accepted_without_charge/rejected，实际账务状态由DB检查证明；付款授权、31表/receipt/outbox及完整锁图改造仍归Billing后续切片。Root其他SQL手册/Agent/uv.lock/.tmp改动不在本次提交。
+- 状态：实现→双独立审查→Root主树集成验证已通过；Root负责按显式15文件提交，提交后再核干净HEAD与重跑同门。后续owner：Billing原负责人，Root负责整体Prisma与跨仓放行。
+
 ### B8-R4 / M2a 首发边界与事务组件实施卡（2026-09-12）
 
 用户明确当前没有真实账务数据、服务尚未开放，要求先实现，配置后可用。首发沿Root API手册采用clean-slate v1目标，
