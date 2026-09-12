@@ -8,6 +8,45 @@
 
 **Tech Stack:** 当前 Fastify + pg + Zod 3；目标 Nest 12 + Prisma 7.10.0、SQL-first只读生成链，见ADR-0003；B6a已安装Prisma生成链；生产仍Fastify/pg，Nest与业务writer未切换。
 
+## B8-R5 成熟方案对照：身份边界、账本与调度（2026-09-12，只读研究结论）
+
+本轮用户要求重新深思并参考成熟方案。基线 Billing `6ba108f4fbe948fa3944df0754ce3868ae0abd0d`、IAM `0f06f33b7390c27c2a57170d3c8dfb74b6c51908`，均干净。
+Root 调查实际源码与 Billing 参考；billing_model_r2（Sol）独立只读反向审查 IAM 边界；唯一写入仅 Root 本任务板。未修改生产代码、依赖、Schema 或合同，未运行/冒称新实现测试。本节补足决策依据，不另建任务中心，不将外部实现等同本仓已经实现。
+
+### 纠正先前过度简化的说明
+
+“运行时只有 Billing→IAM”属实；“IAM 中只是 Billing 命名”不准确。当前具名 verify 是在线授权决策点（PDP）：它认识 Billing resource/scope，组合当前 Tenant/User/Member/Session 事实并写审计。它有有限的授权语义耦合和同步可用性成本，并非零耦合。
+边界保持：IAM 判断身份/委托当前有效性，不导入 Billing 包、不调用 Billing、不读取钱包/价格/hold/账本；Billing 判断付款主体映射、账户归属、价格、余额及可否预留扣减。IAM 的 allowed 不是“可以完成这笔扣款”。
+
+| 候选 | 适配判断与首发建议 |
+|---|---|
+| A 现有专用在线 verify | 首发保留：满足当前成员/会话事实重读而不跨库；保留 resource/scope/client 隔离。承认 IAM/Redis/DB/Audit 故障会阻断新准入，不能用测试全绿证明延迟或SLO已经达标 |
+| B Billing 直接标准 introspection + 本地业务 policy | 更标准、专用代码更少，但 JWT 的 scope/tenant 是签发时快照；当前框架 introspection 不天然重查 Member。先证明统一 active 的成员撤销语义，或明确接受剩余 token TTL 窗口，才可等价替换A |
+| C JWT 本地验证 / 另建通用授权引擎 | 本地验证降低运行时耦合但有撤销窗口；新通用PDP不自动减少网络跳数或业务复杂度。当前没有证据值得再引入IAM产品/策略引擎或新的万能check接口 |
+
+A 是有意取舍，不因已有投入就永久保留：后续验收须有端到端 timeout/负载/故障预算、验证与审计成本、拒绝新准入但保留已授权结算恢复的测试。在线重读只证明读取时刻状态；不保证成员撤销与 Billing 扣款跨库原子。decision_ref 不可重放作凭据，Billing admission/receipt 必须保留自己的账务依据。
+
+### 外部事实与适配结论（均于2026-09-12核验）
+
+| 一手依据 | 已核验事实 | Kokoro 取舍，不冒充外部要求 |
+|---|---|---|
+| [RFC7662](https://www.rfc-editor.org/rfc/rfc7662.html)、[RFC8707](https://www.rfc-editor.org/rfc/rfc8707.html) | 资源服务器向授权服务器内省token，调用方需认证；resource/audience有标准隔离机制 | 保留Billing audience与认证，不因去耦改为接受任意IAM token |
+| [Keycloak Authorization Services](https://www.keycloak.org/docs/latest/authorization_services/index.html) | 显式区分PDP决策与资源服务器侧PEP执行 | 用此职责词汇解释现状，不引入Keycloak依赖、不宣称当前端点实现其协议 |
+| [Better Auth OAuth Provider](https://better-auth.com/docs/plugins/oauth-provider) | introspection权限由签发client/resource-server绑定决定；带sid的JWT可在session结束后被内省判为inactive，JWT claims仍是签发快照 | 本地精确版本仍1.7.3；文档不证明Member变更自动撤销。复用框架，不手写第二套OAuth |
+| [Stripe Billing credits](https://docs.stripe.com/billing/subscriptions/usage-based/billing-credits) | grant与不可变追加ledger分开，有有效期/使用范围/消耗顺序；credits在invoice finalization时应用 | 借鉴永久grant来源与journal；其账单抵扣不是本仓实时hold/capture/release的替代，不再把渠道Payment成功等同Credit已发放 |
+| [Lago钱包](https://getlago.com/docs/guide/wallet-and-prepaid-credits/overview) | 区分钱包充值/赠送/消费；ongoing balance是周期刷新的使用估计，而非本仓原子预留凭据 | 保留授权/余额投影/批次/流水/冻结分责，不用余额查询代替原子准入。未据文档推广多钱包或premium功能 |
+| [Kill Bill部署文档](https://docs.killbill.io/latest/userguide_deployment)、[插件边界](https://docs.killbill.io/latest/plugin_introduction) | 持久事件与通知队列；内核/外部插件投递分离以免外部慢操作阻塞内核；插件经API而非直接改核心表 | 复用现有Scheduler唤醒，账务判断在Billing；渠道网络在事务外，未知结果恢复。合并outbox存储不代表合并所有worker并发/重试预算 |
+
+另直接读取 Lago 固定源码 `c8edce86727dfeda27deb3742f53a5e68d929d85` 的 [WalletTransaction](https://github.com/getlago/lago-api/blob/c8edce86727dfeda27deb3742f53a5e68d929d85/app/models/wallet_transaction.rb) 与 [SettleService](https://github.com/getlago/lago-api/blob/c8edce86727dfeda27deb3742f53a5e68d929d85/app/services/wallet_transactions/settle_service.rb)：明确状态/方向/剩余量及settled更新后after_commit排webhook。这里只证实这些代码；未运行其测试，也不把after_commit独自当作崩溃窗口无丢失的证明。不开拷贝Ruby表/decimal类型/全套引擎的任务。
+
+### 带入既有B8实施验收，不扩大产品范围
+
+1. 先固定事实/状态机/唯一writer和失败恢复，再决定表与目录；31张表是当前模型结果，不是优化KPI。
+2. IAM授权事实与Billing账务事实分开；scope/policy注册不带入钱包计算；依赖图分别检查源码import、HTTP调用、启动以及故障传播，不能只看import无环。
+3. 共享Credit事务组仍一次Prisma callback提交本地事实/receipt/outbox；Redis丢失不使扣减重做；第三方HTTP不进入事务。
+4. 单一outbox存储的namespace、领取过滤与worker预算必须证明核心账务任务不被慢provider/通知饿死。是否需要独立执行池以现有worker职责与隔离测试决定，不照搬Kill Bill的表数或新增消息总线。
+5. Scheduler只决定何时投递；到期资格、幂等结果、批量边界及重复/迟到唤醒由Billing验证。部署工具注册与调度回调是不同控制流；避免互相等待启动，不把所有双向配置引用一概称为循环依赖。
+
 ## 基线与执行边界
 
 - 工作目录：`/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing`。
