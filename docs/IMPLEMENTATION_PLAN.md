@@ -26,6 +26,18 @@
 
 M2b文档门通过：billing_model_r2只读复核key-binding、两域一致性、事务/根查询与worker边界，无剩余设计P1/P2。三设计绝对路径：`/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/TECHNICAL_DESIGN.md`、`/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/API_CONTRACT.md`、`/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/DATA_MODEL.md`。设计审查基线`47b676f`+本卡/三设计，当前Schema仍31表；32表fresh/catalog/Prisma的实现验证待本卡writer交付，不冒称已通过。M1b committed HEAD的`pnpm contract:check`及8文件204项复验通过；一次误在Root执行Vitest的命令因无该依赖退出，切回Billing后完成复验。M2b仅组件门，无新业务owner/外部API未决，不阻断实施；线上运行、worker与消费者验收另属连续全目标。
 
+### M2b 持久一致性续派卡（2026-09-13）
+
+| 项 | 续派边界 |
+|---|---|
+| 已验收/新基线 | 生命周期提交 `ccd617a3d3ecfc95c6563879feceac8ed1eb2519`，Billing 独立仓 codex/billing-ts-prisma-alignment；Root 本卡更新前 clean。不是整仓通过 |
+| Owner | billing_transaction_m2a 继续唯一 writer；Root 管理 Git/index、终审和主树验证；billing_model_r2 持久性只读审查按交付后续派 |
+| 目标 | 同一 Prisma 事务中的正规化 receipt/key binding、AuditAppender、fenced Outbox；canonical 31→32 与只读生成同步，不再重做生命周期切片 |
+| 文件集 | 继承本节总卡允许集；重点 command-receipt/audit/outbox 具名组件、DatabaseModule 注册、必要 transaction scope accessor、SQL/generated、对应 unit/integration/architecture/文档；不修改旧 runtime/HTTP/其他仓，不操作 Git/index |
+| 完成条件 | 已批准 key1/id1→key2/id1→key2/id2 冲突及单份效果；并发/两域交叉/损坏结果/跨 scope 拒绝；receipt+binding+业务+audit+outbox 原子回滚；Outbox claim/renew/late-write fencing/重试与 requeue；32 表 fresh/catalog/prisma 同步，原门禁不削弱 |
+| 验证/资源 | 先测试实际 RED 后实现，复用实例、自建 UUID 临时数据库；一次只有该 writer 操作测试库，Root 等冻结后串行验收。新测试真实依赖显式 SCHEMA_ADMIN_URL，禁止默认开发者凭据或静默造绿 |
+| 交付 | 代码/测试/schema/必要文档自洽后停写，报实际文件/hash/日志/剩余风险；共享提交由 Root 完成。worker loop/drain/最后 attempt 恢复、HTTP/业务组仍属 M3/M4，不从总目标删除 |
+
 ### M2b 生命周期 R1：Root 集成验收（2026-09-13）
 
 - 基线 `a98dfdf349118f512dbeff5473b50db9cbd03961`，负责人 billing_transaction_m2a 冻结交接 13 个源码/依赖/测试文件；Root 独立复验并串行提交，未接入旧业务 runtime。此提交仅完成本卡生命周期/root API 子切片，receipt/key binding、audit、outbox 仍待同负责人继续实施。
