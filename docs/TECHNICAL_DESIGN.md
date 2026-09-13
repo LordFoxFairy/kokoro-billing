@@ -1,5 +1,44 @@
 # kokoro-billing 技术设计
 
+## B8-M3 完整业务与 Nest 运行切换（2026-09-13）
+
+本节以 `19195a13775123d666a586c90fc649116328880c` 为实施前基线，承接 D1、R2/R3、D2a/c/d、D3 与已验 M1b/M2b；覆盖旧段落“尚待业务授权”的阶段表述，不推翻既定状态机。当前32表与事务组件已验，生产入口仍旧 Fastify/pg，整仓不可部署。唯一执行范围和检查点见 IMPLEMENTATION_PLAN 的 M3 实施卡。
+
+### 完整切换边界
+
+只搬 Credit 会留下 Metering/Payment/Refund/Subscription 中直接写余额的第二 writer，故采用一个 Billing 内完整迁移任务，按内部检查点审查，不将中间状态发布。业务根和公开面沿 D1 七 feature，框架支持沿现有 config/database 及 D1 批准的 http/health；增加 auth/cache/worker 是承接既有身份、Redis 提示、worker 生命周期的具名支持，不产生新业务 owner。比较保留旧 application/infrastructure 接口桥接（双轨、跨事务，淘汰）与 owner module 真实承接（采用）。
+
+- Credit：account/grant/hold/allocation/journal/fulfillment/reversal/redeem 的唯一 writer；query 不隐式建账户，ensure 是明确写命令/effect。公开业务类型不泄漏 Prisma。
+- Metering：完整价格 revision、按次报价、admission、usage、execution；通过 Credit 事务内 effect 完成 reserve/capture/release。包含免费 included 无假 hold、原授权快照不重新定价、受信执行证据验证。
+- Payment core：账户映射、inbox 和 settlement 事实；不导入 PaymentEvents。PaymentEvents 是既定上层子能力，组合 Checkout/Refund/Subscription/Credit，不把这些依赖反向导出至 payment.public。
+- Checkout/Refund/Subscription/Reconciliation：完整承接 D2/D3 状态机、跨 owner effect 与只读一致快照，不只创建模块壳。Reconciliation 不直接修账。
+- HTTP 由 NestFactory + FastifyAdapter 装配真实 Controller/Guard/Pipe/Filter，删除独立 Fastify server/factory；worker 和 seed 从 Nest context 获取同一 owner service，不另建 pg writer。停止接活、await in-flight/renewal、关闭网络/Redis、最后关闭 Prisma；初始化失败保留原异常并清理已创建资源。
+
+### 事务组和恢复
+
+根 service 使用 TransactionService.run/runRoot；事务内组合能力要求同一受信 tenant/actor 和当前 client，不开启第二根 receipt。准入/usage/hold/account/journal 与 receipt/audit，以及仅在 R3 受控 registry 已有 receiver 时的 outbox，同提交；Payment/Subscription 的证据 T1 与履约 T2 按 D2 分开，每个阶段内部完整原子。Refund T2 锁退款事实及 Payment 锁定快照，再通过 Credit 写永久冲正（零 delta 不写零额 journal）。到期命令一个 tenant/batch 内 hold 到期和 grant 到期同事务、同 receipt 固定结果，不各自提交。
+
+锁顺序沿 D1：command key/identity → 根资源 → account（多账户排序）→ grant ID → hold/allocation ID；实际消耗选择顺序仍 expiry/burn priority/issued/id，不能与加锁顺序混淆。所有外部授权/provider 请求在事务外，返回后重新验证本地状态/身份。余额与金额内部 bigint/int64，wire 整数字符串；不恢复 quota/token pricing 占位。
+
+复用已验 CommandReceiptRepository/AuditAppender/OutboxRepository，业务注册真实 event handler；没有 receiver 的事件不得空 ACK。沿 R3 保留三种 payment effect，已确认无 receiver 的 Credit/usage 纯通知 emit 随切换删除；事务组中的 outbox 只指本用例确有已注册任务时，不要求为每次余额变动造通知。provider/execution inbox 与 outbox 的 claim/renew/finalize 均受 lease fencing；最后 attempt 查询 owner 永久结果再收敛，不仅凭 attempts 标失败。Checkout 使用稳定 provider key、持久 attempt、事务外网络及条件 finalize，未知结果不新建第二付款；Subscription 的持久 evidence refresh、generation、有限预算按 D2d 承接。
+
+### HTTP 与生成工具选择
+
+YAML design-first 决定不变。增加 `@nestjs/platform-fastify@12.0.1`（runtime），保留同 major Nest 和既有 Fastify 5.12.1；不用另一套 Express server。传输类型用 `@hey-api/openapi-ts@0.99.0` 的 TypeScript-only plugin 从本地 v2 YAML 生成，生成到 `src/generated/billing-api/`。运行 schema 是同 YAML 的确定性 JSON 导出（保留 refs/约束，不自写 schema-to-type 编译器），由 `ajv@8.20.0` 的 2020 实现和 `ajv-formats@3.0.1` 校验。types、schema、digest/provenance 均只读，生成/漂移脚本在现有 scripts/，不得在生产启动下载/生成协议。
+
+schema 注册和 compiled validator 启动一次完成；失败启动拒绝，不静默剥未知字段/插默认值/转换金额。输入、输出类型和实际 JSON 约束需成对验证；header/query transport 的字符串转换只针对契约声明的参数。原始 webhook 字节先受限采集并验签，不经 JSON 再编码。JWT/JWKS、BFF/admin/service 凭据保留独立边界，敏感消费 token 不进持久 receipt/digest/log。
+
+2026-09-13 registry 核验：四包 MIT；Nest adapter peers common/core ^12；Hey API Node >=22.18、TS >=5.5.3（另显式包含 >=6），本仓 Node24.20/TS6.0.3 满足声明；Ajv formats peer ^8。`openapi-typescript@7.13.0` peer `typescript:^5.x` 与本仓不符，淘汰，禁止 override peer 假装兼容。自写编译器和 code-first Swagger 副本均淘汰。Hey API 为 0.x 开发版本，存在 minor breaking 风险，只用 dev TypeScript 生成插件并精确固定，升级逐次 diff/compile/contract 验证；退出路径是替换离线生成器，唯一 YAML 和 runtime JSON 不变。安装后 frozen install/audit/生成重现/类型编译和 source/dist HTTP 实测才算兼容；不以此版本元数据声称性能达标。
+
+官方工具语义来源（非本仓通过证据）：[Nest Fastify adapter](https://docs.nestjs.com/techniques/performance)、[Hey API get started/versioning](https://heyapi.dev/docs/openapi/typescript/get-started)、[TypeScript plugin](https://heyapi.dev/docs/openapi/typescript/plugins/typescript)、[Ajv JSON Schema dialect](https://ajv.js.org/json-schema.html)。选择与故障/退出边界为本仓工程决定。
+
+### 未决项与完成门
+
+订阅“账单结清或渠道实收”商业条件已向用户询问；不阻断 Credit/Metering/Payment/Checkout 和订阅证据/策略选择实现。批准前不激活自动周期 grant policy，不把默认 review 称订阅已完成；已批准 policy 必须具名、随报价冻结并覆盖正常付费主路径和例外。其余 M3 无新 owner/Schema/API 未决项；发现不一致由 Root 裁决，不由实现者改冻结协议。
+
+最终删除旧全局四层及 pg 业务实现、v1 route/contract/check 分支和旧 factory；pg 仅保留 Prisma adapter/Schema治理需要，不靠将 SQL 字符串搬入 Prisma raw 冒充 ORM。门禁检查真实 model writer、feature DAG/public export、禁止跨仓 ORM、禁止旧表/路径和框架类型渗透。全量 unit/integration/contract/architecture、schema/drift/生成、HTTP 24 operation source/dist、worker恢复/drain与原始有效行为承接均为验收条件，不 skip 旧失败测试造绿。消费者由 owner 提交后在后续授权仓串行更新，未完成不称整仓发布完成。
+
+
 ## B8-M2b 一致性组件与命令键绑定（2026-09-13，实施设计）
 
 组件已实现并通过Root独立验收：32表、永久key绑定、受信审计、fenced Outbox及Nest生命周期；实际命令、SHA与范围见唯一任务板M2b。主进程和业务writer仍未切换，本节组件验收不等于运行时上线。

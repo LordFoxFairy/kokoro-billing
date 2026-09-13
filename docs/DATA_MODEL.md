@@ -1,5 +1,27 @@
 # kokoro-billing 数据模型
 
+## B8-M3 七 owner Prisma writer 承接（2026-09-13）
+
+实施前基线 `19195a13775123d666a586c90fc649116328880c`，canonical 当前为32表，SQL SHA256 `b8dd35be1137432742e3a250b3c95b406d5c993bd850f67ab720e21007cba521`。本阶段冻结 SQL 与正规生成 Prisma schema/provenance，不恢复任何旧表、view、alias、FK 或第二 schema。以下是实现映射与事务组补充，不维护第二份字段定义。
+
+| 唯一 writer | 承接事实 | 原子组/跨 owner 方式 |
+|---|---|---|
+| Credit | account/grant/hold/allocation/journal/fulfillment/reversal/redeem | 普通 CRUD 用 typed Prisma；锁经当前 tx 具名参数化 raw，余额/分配/流水/永久结果同提交 |
+| Metering | feature price revision/price、admission、usage event/settlement、execution inbox | 根用例 + Credit 事务内 effect，禁止本模块直接写 Credit model |
+| Payment core | provider account/customer mapping、inbox、settlement | T1 记录可信事实；上层 PaymentEvents 用 owner API 编排，非核心反向依赖 |
+| Checkout | offer/revision、checkout | 冻结报价与持久 attempt，提交后网络，回写校验 generation/身份；无网络长事务 |
+| Refund | refund | 累计金额约束通过 Payment 锁定快照；Credit T2 冲正保存固定基数/结果，零 delta 的 journal=NULL |
+| Subscription | subscription/period/term | T1 证据及资格观察与唯一任务，T2 通过 Credit 履约；晚证据/重复/同周期多 invoice 不二次发放 |
+| Database 支持 | receipt/key binding、audit、outbox | 唯一具名组件写入，同业务 callback；无 Redis TTL 正确性依赖 |
+| Reconciliation | 无新业务表 | 六 owner 同 readOnlySnapshot 读取，差异报告/具名重试，不直接修复余额 |
+
+准入/usage–hold 绑定、支付履约、退款冲正、订阅周期发放、redeem/admin grant 各完整事务组必须覆盖尾部异常深层回滚。到期按一个可信 tenant/batch 原子处理 hold 后处理 grant，同一个 receipt 保存最终结果；加锁遵循 account→grant ID→hold/allocation 的全局顺序，不保留旧 grant-first 锁图。query/seed/worker 也遵守同一 writer，不以“脚本”绕过。
+
+No-FK 完整性检查包括 tenant/account/subject、grant/journal/fulfillment、hold/usage、refund/settlement 与 provider account 绑定；唯一约束和条件更新兜底并发，不能先查询后无锁写。账户创建是显式写能力，不让 GET 隐式创建。永久 receipt/key 不清理；append-only 账本/审计保持既定 retention，Redis 丢失后重放仍只产生一份业务效果。
+
+SQL/Prisma 未变不等于业务可用。M3 三设计门完成后允许七 owner writer 实施，最终 fresh/catalog/Prisma 一致性、真实 PG 并发/回滚、所有业务 test、HTTP 与 worker smoke 在 Root 冻结主树验收。此前 M1 135 项旧业务失败是待替换行为清单，删除旧源码同时承接有效断言而非 skip/remove 测试。订阅商业资格 policy 的未决与不激活边界见 TECHNICAL_DESIGN。
+
+
 ## B8-M2b 命令与key绑定正规化（2026-09-13，目标32表）
 
 M1曾为31表；M2b现已落实32表canonical及生成物，Root真实fresh/catalog/Prisma验收见唯一任务板。为修复换key重放后该key仍可复用的已验证缺口，采用[技术方案M2b](TECHNICAL_DESIGN.md#b8-m2b-一致性组件与命令键绑定2026-09-13实施设计)：命令receipt拥有唯一业务identity/digest/永久结果，请求key绑定拥有唯一key→receipt事实，均由CommandReceiptRepository同一Prisma事务写入。

@@ -1,5 +1,18 @@
 # kokoro-billing API 契约策略
 
+## B8-M3 唯一 v2 运行契约承接（2026-09-13）
+
+实施前基线 `19195a13775123d666a586c90fc649116328880c`。目标机器源继续为 `contract/openapi/v2/openapi.yaml`，SHA256 `eb95b6ddf4c3e611ff3eb065bcb39dad97d47cbf2203f8d6fd8105f17a5b42ad`，24 operation/19 path。本阶段不修改它的字段、权限或成功语义；运行切换删除 v1 源、route、validator 分支，不保留双部署。原 M1b/M2b 明确的身份、账务授权、201/202/Location、provider ACK、nullable、永久重放和 GET 最新状态全部为实现断言。
+
+类型和运行 schema 从本地 YAML 确定性生成至 `src/generated/billing-api/`，schema 导出保留 JSON Schema 2020-12 约束和 ref，TS 类型由精确 Hey API 生成器产生。生成器只启用 TypeScript 插件，不创建第二套 SDK/server、可编辑 Zod DTO 或代码反向生成 YAML。运行时 Ajv2020+formats 一次编译；response 不匹配视为内部错误，不能把失败内容照常返回成功。原始 provider body 的签名处理、空/文本 ACK 与 JSON API 分开。依赖比较、版本和退出路线见 TECHNICAL_DESIGN 的 M3。
+
+`contract:check` 最终覆盖生成物漂移、24 operation 的实际 Nest 路由/状态/媒体类型/认证/请求与响应；分别测试无凭据、部分凭据、跨租户、重放及坏 payload，避免只检查 decorator 字符串。源码与 dist HTTP 均从真实 Nest 根装配运行。响应金额为字符串并覆盖 bigint > Number.MAX_SAFE_INTEGER，nullable 必填、时间 Z、未知字段拒绝、无旧 request-id body 字段。
+
+IAM 使用其既有固定版本 artifact，Billing→IAM 验证本人消费授权，IAM 无 Billing 查询依赖。网络在业务事务外，失败/timeout 不产生准入或资金副作用；重放仍先校验身份。Scheduler 的批次使用稳定 occurrence identity，在 Billing HTTP 实现证明同 batch 原子重放；跨仓 scheduler/BFF/Web 更新须 owner committed artifact 后由 Root 分仓授权，M3 不越界修改消费者。
+
+订阅商业 policy 选择仍待用户回复，显式记录于技术方案；这不是新增/改变 HTTP 契约的许可。验收前 v2 experimental 未发布标记不提前改 stable，模拟 provider 验证不记作真实渠道 sandbox 通过。
+
+
 ## B8-M2b 幂等key永久绑定（2026-09-13）
 
 M1b机器artifact仍`47b676f`的v2字节；不改route、请求或状态。依照[技术方案M2b](TECHNICAL_DESIGN.md#b8-m2b-一致性组件与命令键绑定2026-09-13实施设计)，同业务identity同参数换key成功重放时也必须永久绑定新key；以后该key改变identity或参数返回既定409。Binding是内部持久事实，不增加HTTP资源、consumer字段或跨仓依赖；原请求的认证/tenant/subject校验先于结果重放。成功结果、Checkout首次表示/GET最新表示与provider ACK语义保持M1b裁决。Prisma生命周期/审计/outbox本轮只在隔离组件验证，不声称v2已上线。

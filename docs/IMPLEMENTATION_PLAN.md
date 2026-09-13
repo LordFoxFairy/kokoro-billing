@@ -21,6 +21,27 @@
 | 已确定依赖 | 继承三设计D1/R2/R3/M1b/M2b，Credit不依赖Metering/Payment；Metering→Credit；Payment核心不依赖provider-events编排；网络均在业务事务外，当前组件不与旧pg拼接事务 |
 | 交付/验证 | 先给实际文件/方法/完整事务写表/调用方/测试迁移清单，Root据此固定业务切片边界并更新三设计当前态。所有代码写入必须等明确切片卡；无新owner/协议裁决不重复询问用户 |
 
+### M3 实施卡（2026-09-13，设计门通过，C1 准备实施）
+
+| 项 | 授权与完成条件 |
+|---|---|
+| ID/优先级 | B8-M3/P0：完整七业务模块、真实 Nest HTTP/worker/seed，替换并删除旧四层/pg 业务路径；内部检查点不是可部署完成状态 |
+| 基线 | `/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing`，`codex/billing-ts-prisma-alignment`，`19195a13775123d666a586c90fc649116328880c`；Root本卡前clean，随后三设计/本卡修改仅属Root |
+| 角色 | billing_transaction_m2a 为唯一源码/测试/必要文档 writer，沿用既有负责人/模型；billing_model_r2 独立只读规格/质量审查；Root总体设计、边界裁决、Git/index/最终验证。本卡复核通过并由Root明确续派后写入 |
+| 三设计 | TECHNICAL_DESIGN/API_CONTRACT/DATA_MODEL 顶部 M3 与既定 D1/R2/R3/D2/D3；只读盘点已完成11组writer，拒绝Credit单独接线形成混合事务 |
+| 允许集 | 本仓 src 七modules与框架支持、原四层/bootstrap/main/config/database 必要承接和删除；scripts worker/seed/契约生成与校验/验证入口；test 对应unit/integration/contract/architecture/smoke/fixtures；package/lock/workspace/tsconfig/eslint/prettier/CI/Docker仅此运行切换必要项；src/generated/billing-api只读正规生成；README/INDEX/AGENTS/contract README/docs当前设计/任务板/验收/运行文档 |
+| 冻结/排除 | 不改其他仓与Root；SQL canonical32及generated Prisma schema/provenance、v2 YAML已验字节冻结，需变更先报Root；不操作Git/index/分支、不重置共享资源、不发布远程、不批量无关格式化/升级 |
+| 依赖 | Database既有组件→Credit+Paymentcore→Metering/Checkout→Refund/Subscription→PaymentEvents/Reconciliation→HTTP/worker；七feature严格DAG，公开面不含repository/Prisma，网络事务外；具体锁/两阶段见三设计 |
+| 新工具 | @nestjs/platform-fastify12.0.1、ajv8.20.0、ajv-formats3.0.1 runtime；@hey-api/openapi-ts0.99.0 dev TypeScript-only；YAML纯JSON schema导出。openapi-typescript7.13.0 TS5 peer不兼容淘汰。安装后必须验证精确lock/peer/frozen/audit/生成compile/runtime |
+| C1检查点 | Credit核心与Metering同事务组真实实现/测试（含redeem/admin/subscription-payment fulfillment effect、退款effect、expiry），初次可冻结定向验证供Root审查；保持完整M3任务持续，不宣称独立模块壳完成，不提前将其与旧pg连接 |
+| C2检查点 | Payment/Checkout/Refund/Subscription+PaymentEvents承接全部owner writer/外部网络恢复，Reconciliation只读快照；Credit消费者不直接写Credit模型，实际并发/尾部回滚/可信证据与重复效果测试 |
+| C3检查点 | 真Nest v2 HTTP24op、worker和seed全接线，删除旧四层/factory/v1，源码/dist运行、worker drain/lease/unknown recovery、全部旧有效行为承接；无永久双轨。仅这里整体运行cutover后可请求整仓验收 |
+| 验证 | pnpm format:check/lint/typecheck/build/sql:check/contract:check；新增contract:generate与contract生成drift；prisma:check、fresh/catalog32；DATABASE_URL/SCHEMA_ADMIN_URL/REDIS_TEST_URL显式自有隔离资源，pnpm test和test:integration零静默skip；source/dist24op与worker恢复、最后attempt、跨tenant、Redis loss、深层回滚；frozen install/audit |
+| 风险/后续 | subscription付款资格policy用户确认中；其他链路继续实现，不以policy未激活冒称订阅全完成。跨仓consumer/M4剩余恢复与真实provider sandbox/镜像/完整发布门仍属Goal，M3不删范围 |
+| 交付 | 每检查点停写交绝对文件集/实际日志/风险；Root核范围、独立审查及主树重跑再串行自洽commit，随后续派同writer。最终交付SHA和通过/失败/跳过数量回填本表 |
+
+M3 文档门：billing_model_r2 只读复核 `19195a1` + Root 四文档 diff，无 P1；唯一 P2“每个账务组是否必须 emit”已明确为仅 R3 受控有 receiver 的任务，删除无 receiver 纯通知，不扩展 registry。三份入口为 `/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/TECHNICAL_DESIGN.md`、`/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/API_CONTRACT.md`、`/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/DATA_MODEL.md`。Root 当前实际 `pnpm contract:check` 旧17/目标24、`pnpm sql:check` 通过，SQL/v2 SHA 与上卡冻结一致；未重跑未变化的32表集成，前次 M2b 实测证据仍绑定938bd46。订阅policy待用户商业确认，不阻断C1事务effect和其他模块；没有其他C1前置未决。C1完成后停写审查，后续同writer续派C2/C3，完整Goal不缩小。
+
 ## B8-M2b 执行卡（2026-09-13，设计已复核，组件实施中）
 
 | 项 | 决定 |
