@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { parse } from "yaml";
+import { assertV2OpenApi } from "./openapi-v2-target.js";
 
 type OpenApiDocument = {
   readonly openapi?: string;
@@ -429,3 +430,15 @@ if (missing.length > 0 || stale.length > 0) {
 console.log(
   `OpenAPI governance and route parity passed: ${implementation.size} routes`,
 );
+
+const v2Source = await readFile(
+  resolve(root, "contract/openapi/v2/openapi.yaml"),
+  "utf8",
+);
+const v2Digest = createHash("sha256").update(v2Source).digest("hex");
+if (!contractReadme.includes(v2Digest))
+  throw new Error(
+    `contract/README.md v2 provenance digest must be ${v2Digest}`,
+  );
+assertV2OpenApi(parse(v2Source) as unknown);
+console.log("OpenAPI v2 target governance passed: 24 operations");

@@ -8,12 +8,12 @@
 
 **Tech Stack:** 当前 Fastify + pg + Zod 3；目标 Nest 12 + Prisma 7.10.0、SQL-first只读生成链，见ADR-0003；B6a已安装Prisma生成链；生产仍Fastify/pg，Nest与业务writer未切换。
 
-## B8-M1b 机器契约执行卡（2026-09-13，进行中）
+## B8-M1b 机器契约执行卡（2026-09-13，目标契约已验收）
 
 | 项 | 决定 |
 |---|---|
 | 目标/优先级 | P0：按API_CONTRACT M1b决定落实完整v2机器对象/操作、语义负例、artifact治理；不以泛型schema或文件存在冒充完成 |
-| 基线 | `/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing`，codex/billing-ts-prisma-alignment，903465059398a4b3a75f68900466fa1003063aae，起始clean；Root先改三设计/本卡后交接 |
+| 基线 | `/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing`，codex/billing-ts-prisma-alignment，85cd137b2d71f7b2bb1c0776e07f8524d5a76f04，起始clean；Root先改三设计/本卡后交接 |
 | 角色 | billing_transaction_m2a唯一writer；billing_model_r2只读规格审查；Root接口裁决/质量审查/主树验收及Git；iam_billing_authorization已交只读消费者盘点 |
 | 文件集 | contract/openapi/v2/openapi.yaml、contract/README；scripts/verify-openapi.ts与必要具名target验证helper；test/contract目标契约测试与必要architecture；三设计/CURRENT/INDEX/本卡。禁止SQL/generated Prisma/package/lock/runtime/其他仓写入 |
 | 放置/删除 | v2在现有版本目录体系，不另建共享contract或operation模型；原位改stable v1及code-first双来源淘汰。当前v1只为未切换旧源码验证，M3同切删除原目录和旧校验分支，不延长兼容期 |
@@ -22,6 +22,16 @@
 | 交付 | Agent停写交文件及日志；Root独立验证后明确路径commit，不操作共享基础设施；v2运行时/消费者/Sandbox仍待验 |
 
 M1b设计审查：billing_model_r2只读核查后仅提出billing_subject是否保留的P1；Root已固定必填原对象kind/ref、仅归因及user本人绑定，payer仅来自IAM。其余同步/异步、UUID/opaque、查询和provider ACK与31表一致，放行目标机器源/治理实现，未放行runtime。Root `pnpm contract:check` 基线仍17条旧route通过。
+
+R1修复已将Catalog完整BFF凭据、Checkout额外subject断言、admin独立proxy凭据及Refund GET双认证组写入机器源；响应显式nullable、正金额、既有字段边界和逐operation错误语义已收紧。正式变异门覆盖删认证、消费token、成功表示、provider ACK、path UUID、permission、error语义、unknown字段及nullable。此记录仅为待Root验收的目标contract证据；runtime/consumer/provider sandbox仍未完成。
+
+### Root M1b-R1 集成验收
+
+- 交付基线`85cd137b2d71f7b2bb1c0776e07f8524d5a76f04`，8个本切片文件；v2 SHA256 `eb95b6ddf4c3e611ff3eb065bcb39dad97d47cbf2203f8d6fd8105f17a5b42ad`。v1仍`58fbe4fea083ba12e0db23f49e995b96500d01af0013febf40eba3093510ef63`，SQL/Prisma/package/lock/业务源码未改。
+- Root首轮独立变异探针发现8/8错误契约被接受（`/tmp/billing-m1b-root-mutations-red.log`），并核对源码找出BFF/admin凭据退化。审查员关于三个me已有BFF分支的初始意见经Root源码/v1核对撤回：三者保持user-only，不扩大权限。
+- 修复后billing_model_r2只读复审无剩余本切片P1/P2；Root冻结树实际执行`pnpm format:check && pnpm lint && pnpm typecheck && pnpm build && pnpm contract:check && pnpm exec vitest run test/contract test/architecture --no-file-parallelism`全部通过：**8文件204项通过，0失败/0跳过**。旧runtime17route与目标24operation分别报告。
+- Root再执行独立探针：8/8变异被拒绝、24operation/ref/身份/ACK通过；官方OpenAPI3.1结构元Schema和41个JSON Schema组件通过；Draft202012+format实例15/15通过。上述官方元Schema/实例验证是本轮独立证据，不冒充已进入仓库CI。日志`/tmp/billing-m1b-r1-root-frozen-gates.log`。
+- 不操作基础设施，不复跑未改变的135项旧业务失败，不称整仓全绿。v2未接入HTTP；Nest/Prisma业务writer、共享事务组、worker、消费者、源码/dist与provider sandbox/镜像仍未闭环。下一阶段直接进入M2一致性支持及M3/M4连续迁移。
 
 ## B8-M1 执行卡（2026-09-13，离线模型已验收；禁止部署）
 

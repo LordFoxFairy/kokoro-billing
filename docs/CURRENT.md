@@ -1,5 +1,13 @@
 # kokoro-billing 当前状态
 
+## B8-M1b v2目标机器契约（2026-09-13，目标契约已验收）
+
+- 新增唯一目标机器源`contract/openapi/v2/openapi.yaml`：OpenAPI 3.1 / info.version 2.0.0，共24个experimental internal-owner operation；包含5类持久结果GET、拆分后的三条provider webhook及完整typed request/result/error/header/security。
+- `contract:check`继续验证字节不变v1的17条真实Fastify route parity，并独立验证v2的ref闭合、operationId/治理、UUID与opaque身份、request-id、201/202 Location、caller authority禁用字段及三种provider ACK。
+- 本切片不修改runtime、SQL/Prisma或消费者。v2通过仅证明目标artifact；M3整体切换后才删除v1校验分支并证明运行parity，当前仍不可部署。
+
+Root冻结树format/lint/typecheck/build/contract通过；contract+architecture **204通过/0失败/0跳过**，独立8项变异、24operation、41组件结构与15实例通过。仅验证目标artifact，精确hash/日志/审查及未完成项见唯一任务板M1b。
+
 ## B8-M1 当前 canonical Schema（2026-09-13，离线模型已验收；禁止部署）
 
 - `database/schema.sql` 已收敛为31张 `billing_*` 表、429列、31个单列 `id UUID` 主键、零外键；三类receipt、两类outbox及acquisition/fulfillment已分别合并为单一事实表，Prisma只读生成物由该SQL刷新。

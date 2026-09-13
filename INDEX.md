@@ -1,7 +1,7 @@
 # kokoro-billing 仓库地图
 
-本文描述当前代码与事实边界。进度与缺口见 [`docs/CURRENT.md`](docs/CURRENT.md)，字段级 wire contract 见
-[`contract/openapi/v1/openapi.yaml`](contract/openapi/v1/openapi.yaml)。
+本文描述当前代码与事实边界。进度与缺口见 [`docs/CURRENT.md`](docs/CURRENT.md)，目标字段级wire contract见
+[`contract/openapi/v2/openapi.yaml`](contract/openapi/v2/openapi.yaml)；未切换的旧Fastify runtime仍由字节不变的v1校验。
 
 这是Fastify/pg现状地图，不是新实现的四层模板；Nest/Prisma目标与切片见
 [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)及ADR-0003。
@@ -11,6 +11,7 @@
 | 路径 | 职责 | 约束 |
 |---|---|---|
 | `contract/openapi/v1/openapi.yaml` | Billing HTTP v1 的 machine source | owner-authored；先改 contract，再改实现/消费者 |
+| `contract/openapi/v2/openapi.yaml` | Billing clean-slate v2目标machine source | 24个experimental operation；M3切换前不代表runtime parity或可部署 |
 | `database/schema.sql` | 35 张 Billing 表的 canonical Schema | PostgreSQL 16；空库安装；无 FK/REFERENCES |
 | `.node-version` / `package.json` / `pnpm-lock.yaml` | 固定Node24.20.0、pnpm与精确依赖 | 本地、CI和镜像版本由toolchain治理测试核对 |
 | `test/architecture/toolchain.test.ts` | 工具链配置正反例 | manifest/lock、CI实际门、Docker FROM、engineStrict；不代替运行验收 |

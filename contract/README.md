@@ -1,6 +1,6 @@
 # kokoro-billing contract governance
 
-Canonical machine source：[`openapi/v1/openapi.yaml`](openapi/v1/openapi.yaml)。人类语义见
+Target canonical machine source：[`openapi/v2/openapi.yaml`](openapi/v2/openapi.yaml)；当前尚未切换的Fastify运行时继续由字节不变的[`openapi/v1/openapi.yaml`](openapi/v1/openapi.yaml)校验route parity。人类语义见
 [`../docs/API_CONTRACT.md`](../docs/API_CONTRACT.md)，它不构成第二份字段级 contract。
 
 ## Owner
@@ -15,7 +15,7 @@ IAM identity、Agent Run、Scheduler schedule 或任何其他仓库的数据库�
 
 **Visibility:** `internal-owner`。
 
-全部 17 个 operation 均为 `internal-owner`，只供受信 service、deployment probe/scraper、admin gateway 或已验证 payment
+目标24个operation与当前17个operation均为 `internal-owner`，只供受信 service、deployment probe/scraper、admin gateway 或已验证 payment
 provider 使用。Storefront route 的 IAM user/BFF alternative 不使本契约成为 Root Developer API 的 `public` surface；
 Browser 仍通过 Web/BFF 访问。
 
@@ -31,7 +31,7 @@ Browser 仍通过 Web/BFF 访问。
 
 ## Version
 
-**Version:** OpenAPI `info.version=1.0.0`，业务 route 位于 `/v1/**`。`/healthz`、`/readyz` 与 `/metrics` 是有意
+**Version:** 目标OpenAPI `info.version=2.0.0`、格式3.1.0，业务route位于`/v2/**`且在runtime/consumer切换前为experimental；当前运行时artifact仍为1.0.0与`/v1/**`。`/healthz`、`/readyz` 与 `/metrics` 是有意
 不带版本的运行端点。`package.json` 的 `0.1.0` 是 private implementation version，不替代 wire version。
 
 V1 内只接受 backward-compatible 变更；仅修改 `info.version` 不能使 breaking change 兼容。
@@ -45,7 +45,7 @@ V1 内只接受 backward-compatible 变更；仅修改 `info.version` 不能使 
 pnpm contract:check
 ```
 
-该命令校验 OpenAPI 版本、tenant/request ID/execution-event 边界、capture/release/settlement/expiry command body、
+该命令保留v1的17条真实runtime parity，并独立校验v2的24条目标operation、全部本地`$ref`、唯一operationId、tenant/request ID/execution-event 边界、capture/release/settlement/expiry command body、
 Idempotency-Key、execution-event 409、Redis degraded readiness、production webhook provider/signature location、全部 operation metadata 与 Fastify route parity。
 HTTP runtime 仍由手写 Zod/mapper 实现；生成物若未来引入，
 只能从本 source 生成到明确的 read-only directory，并在同一 commit 校验 drift。
@@ -74,16 +74,18 @@ form-body `sign`/`sign_type=RSA2` 由 `x-kokoro-provider-signatures` 区分；fi
 ## Provenance
 
 **Provenance:** repository `https://github.com/LordFoxFairy/kokoro-billing`，source path
-`contract/openapi/v1/openapi.yaml`，当前 source SHA-256：
+`contract/openapi/v2/openapi.yaml`，当前目标source SHA-256：
 
 ```text
-58fbe4fea083ba12e0db23f49e995b96500d01af0013febf40eba3093510ef63
+eb95b6ddf4c3e611ff3eb065bcb39dad97d47cbf2203f8d6fd8105f17a5b42ad
 ```
+
+当前未切换v1的固定SHA-256仍为`58fbe4fea083ba12e0db23f49e995b96500d01af0013febf40eba3093510ef63`；M1b不修改其字节。
 
 复核：
 
 ```bash
-shasum -a 256 contract/openapi/v1/openapi.yaml
+shasum -a 256 contract/openapi/v2/openapi.yaml
 git rev-parse HEAD
 ```
 
@@ -116,7 +118,6 @@ allow-list 内的 operation。
 
 ## Validation scope and gaps
 
-当前 `contract:check` 能证明 YAML 可解析、capture/release/settlement/expiry shape、execution-event 冲突状态、Redis degraded
-readiness、Idempotency-Key、webhook provider/signature、核心禁用字段、metadata 与 route 集合；它不能证明所有 request/response 与运行时
-Zod 逐字段相等。其余 mutation body、generic response、错误集合与 ledger time format 仍需在后续 contract-first 变更中补齐，详见
+当前 `contract:check` 能证明v1运行route parity，以及v2 YAML可解析、本地ref闭合、24条operation治理、typed command/resource结果、唯一Execution 202、201/202 Location、UUID/opaque边界、request-id与caller authority禁用字段、provider ACK差异；它不能证明v2与尚未切换的运行时
+Zod逐字段相等。runtime parity、consumer pin与真实provider sandbox仍需在后续实现切片闭合，详见
 [`../docs/CURRENT.md`](../docs/CURRENT.md)。
