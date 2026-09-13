@@ -1,4 +1,5 @@
 import type { Prisma } from "../generated/prisma/client.js";
+import type { PrismaClient } from "../generated/prisma/client.js";
 
 export const transactionModes = ["write", "readOnlySnapshot"] as const;
 export type TransactionMode = (typeof transactionModes)[number];
@@ -29,3 +30,25 @@ export const defaultTransactionOptions: TransactionOptions = Object.freeze({
 export const maximumTransactionTimeoutMs = 2_147_483_647;
 
 export type TransactionClient = Prisma.TransactionClient;
+
+type ReadMethod =
+  | "findUnique"
+  | "findUniqueOrThrow"
+  | "findFirst"
+  | "findFirstOrThrow"
+  | "findMany"
+  | "count"
+  | "aggregate"
+  | "groupBy";
+type ReadDelegate<T> = Pick<T, Extract<keyof T, ReadMethod>>;
+type PrismaModelKey = {
+  [K in keyof PrismaClient]: K extends `$${string}`
+    ? never
+    : PrismaClient[K] extends object
+      ? K
+      : never;
+}[keyof PrismaClient];
+
+export type RootReadClient = {
+  readonly [K in PrismaModelKey]: ReadDelegate<PrismaClient[K]>;
+};

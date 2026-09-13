@@ -85,15 +85,26 @@ const prisma = (edge: DependencyEdge) =>
   edge.target.startsWith("@prisma/") ||
   edge.target.startsWith("src/generated/prisma/");
 const approvedTransactionPrismaEdge = (edge: DependencyEdge) =>
-  edge.target === "src/generated/prisma/client.ts" &&
-  ((edge.source === "src/database/transaction.service.ts" &&
-    edge.kind === "type" &&
-    edge.symbols.length === 1 &&
-    edge.symbols[0] === "PrismaClient") ||
-    (edge.source === "src/database/transaction.types.ts" &&
+  (edge.target === "src/generated/prisma/client.ts" &&
+    ((edge.source === "src/database/transaction.service.ts" &&
       edge.kind === "type" &&
       edge.symbols.length === 1 &&
-      edge.symbols[0] === "Prisma"));
+      edge.symbols[0] === "PrismaClient") ||
+      (edge.source === "src/database/transaction.types.ts" &&
+        edge.kind === "type" &&
+        edge.symbols.length > 0 &&
+        edge.symbols.every((symbol) =>
+          ["Prisma", "PrismaClient"].includes(symbol),
+        )) ||
+      (edge.source === "src/database/prisma.service.ts" &&
+        edge.kind === "value" &&
+        edge.symbols.length === 1 &&
+        edge.symbols[0] === "PrismaClient"))) ||
+  (edge.source === "src/database/prisma.service.ts" &&
+    edge.target === "@prisma/adapter-pg" &&
+    edge.kind === "value" &&
+    edge.symbols.length === 1 &&
+    edge.symbols[0] === "PrismaPg");
 const database = (edge: DependencyEdge) =>
   prisma(edge) ||
   /^(?:pg|postgres|redis|ioredis)(?:\/|$)/.test(edge.target) ||

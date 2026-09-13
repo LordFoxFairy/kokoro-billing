@@ -1,5 +1,11 @@
 # kokoro-billing 当前状态
 
+## B8-M2b 生命周期与根查询（2026-09-13，组件验收）
+
+- DatabaseModule/PrismaService 已实现 Nest 管理的单 Client/pool、并发初始化与幂等清理；TransactionService 接入生命周期 gate、只读 root client 与独立 worker 根事务入口。当前主进程仍旧 Fastify/pg，未接入新数据库组件。
+- Root 冻结树真实定向测试 **239 通过、0 失败、0 跳过**；frozen install、生产/完整 audit、format/lint/typecheck/build/sql/contract 全通过。两个原缺陷探针与源码/dist NestFactory 数据库上下文 smoke 通过，独立审查通过。具体范围、命令和日志见唯一任务板 M2b 生命周期 R1。
+- 当前 canonical 仍 31 表；32 表永久 key binding、receipt/audit/outbox 持久组件尚未交付。旧业务 135 项失败保留至整体 writer 切换；不宣称整仓可部署或只需配置。
+
 ## B8-M1b v2目标机器契约（2026-09-13，目标契约已验收）
 
 - 新增唯一目标机器源`contract/openapi/v2/openapi.yaml`：OpenAPI 3.1 / info.version 2.0.0，共24个experimental internal-owner operation；包含5类持久结果GET、拆分后的三条provider webhook及完整typed request/result/error/header/security。

@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { PrismaClient } from "../generated/prisma/client.js";
+import type { PrismaLifecycleGate } from "./prisma.types.js";
 import {
   preserveTransactionFailure,
   TransactionContextError,
@@ -9,6 +10,7 @@ import {
   type TransactionClient,
   type TransactionMode,
   type TransactionOptions,
+  type RootReadClient,
   type TransactionScope,
   maximumTransactionTimeoutMs,
 } from "./transaction.types.js";
@@ -45,19 +47,89 @@ function extendPrisma(
 
 export class TransactionService {
   readonly #storage = new AsyncLocalStorage<TransactionState>();
+  readonly #rootReadStorage = new AsyncLocalStorage<object>();
   readonly #client: PrismaClient;
   readonly #options: TransactionOptions;
+  readonly #lifecycle: PrismaLifecycleGate | undefined;
 
-  constructor(client: PrismaClient, options: Partial<TransactionOptions> = {}) {
+  constructor(
+    client: PrismaClient,
+    options: Partial<TransactionOptions> = {},
+    lifecycle?: PrismaLifecycleGate,
+  ) {
     this.#options = Object.freeze({ ...defaultTransactionOptions, ...options });
     this.#validateOptions();
     this.#client = client;
+    this.#lifecycle = lifecycle;
+  }
+
+  async readRoot<T>(
+    callback: (client: RootReadClient) => Promise<T>,
+  ): Promise<T> {
+    this.#assertDatabaseReady();
+    this.assertNoActiveTransaction();
+    const state = { active: true };
+    const owner = Object.freeze({});
+    const readOperations = new Set([
+      "findUnique",
+      "findUniqueOrThrow",
+      "findFirst",
+      "findFirstOrThrow",
+      "findMany",
+      "count",
+      "aggregate",
+      "groupBy",
+    ]);
+    const client = this.#client.$extends({
+      query: {
+        $allOperations: async ({ operation, args, query }) => {
+          this.#assertDatabaseReady();
+          this.assertNoActiveTransaction();
+          if (!state.active)
+            throw new TransactionContextError(
+              "TRANSACTION_CONTEXT_CLOSED",
+              "The root read context is closed",
+            );
+          if (this.#rootReadStorage.getStore() !== owner)
+            throw new TransactionContextError(
+              "TRANSACTION_CONTEXT_MISMATCH",
+              "The root read client belongs to another async context",
+            );
+          if (!readOperations.has(operation))
+            throw new TransactionContextError(
+              "ROOT_READ_ONLY",
+              "Root reads cannot execute mutations or raw SQL",
+            );
+          // Prisma erases the operation-specific result type in extension hooks.
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+          return await query(args);
+        },
+      },
+    });
+    try {
+      return await this.#rootReadStorage.run(
+        owner,
+        async () => await callback(client as unknown as RootReadClient),
+      );
+    } finally {
+      state.active = false;
+    }
+  }
+
+  async runRoot<T>(
+    scope: TransactionScope,
+    callback: () => Promise<T>,
+  ): Promise<T> {
+    this.#assertDatabaseReady();
+    this.assertNoActiveTransaction();
+    return await this.run(scope, callback);
   }
 
   async run<T>(
     scope: TransactionScope,
     callback: () => Promise<T>,
   ): Promise<T> {
+    this.#assertDatabaseReady();
     const current = this.#storage.getStore();
     if (current !== undefined) return this.#runNested(current, scope, callback);
 
@@ -65,7 +137,10 @@ export class TransactionService {
     let rootState: TransactionState | undefined;
     const guardedClient = extendPrisma(
       this.#client,
-      () => this.#assertOwnedQueryAllowed(rootState),
+      () => {
+        this.#assertDatabaseReady();
+        this.#assertOwnedQueryAllowed(rootState);
+      },
       (error) => this.#markRollbackOnly(error),
     );
     try {
@@ -236,6 +311,18 @@ export class TransactionService {
         "The transaction context is closed",
       );
     if (state.hasRollbackCause) throw state.firstRollbackCause;
+  }
+
+  #assertDatabaseReady(): void {
+    try {
+      this.#lifecycle?.assertReady();
+    } catch (error) {
+      throw new TransactionContextError(
+        "DATABASE_NOT_READY",
+        "The Prisma database lifecycle is not accepting operations",
+        { cause: error },
+      );
+    }
   }
 
   #validateOptions(): void {

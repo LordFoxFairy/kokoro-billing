@@ -316,7 +316,7 @@ describe("Billing dependency policy", () => {
     );
   });
 
-  it("allows only the transaction component's exact generated client imports", () => {
+  it("allows only the database components' exact Prisma imports", () => {
     const generated = "src/generated/prisma/client.ts";
     expect(
       checkBillingDependencies(
@@ -324,7 +324,9 @@ describe("Billing dependency policy", () => {
           "src/database/transaction.service.ts":
             "import type { PrismaClient } from '../generated/prisma/client.js';",
           "src/database/transaction.types.ts":
-            "import type { Prisma } from '../generated/prisma/client.js';",
+            "import type { Prisma, PrismaClient } from '../generated/prisma/client.js';",
+          "src/database/prisma.service.ts":
+            "import { PrismaPg } from '@prisma/adapter-pg'; import { PrismaClient } from '../generated/prisma/client.js';",
           [generated]: "export class PrismaClient {}; export type Prisma = {};",
         }),
       ).filter((item) => item.code === "production-prisma"),
@@ -344,7 +346,11 @@ describe("Billing dependency policy", () => {
       ],
       [
         "src/database/transaction.types.ts",
-        "import type { PrismaClient } from '../generated/prisma/client.js';",
+        "import type { PrismaClient } from '@prisma/client';",
+      ],
+      [
+        "src/database/prisma.service.ts",
+        "import { PrismaClient } from '@prisma/adapter-pg';",
       ],
       [
         "src/database/transaction.service.ts",

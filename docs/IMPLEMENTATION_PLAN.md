@@ -26,6 +26,17 @@
 
 M2b文档门通过：billing_model_r2只读复核key-binding、两域一致性、事务/根查询与worker边界，无剩余设计P1/P2。三设计绝对路径：`/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/TECHNICAL_DESIGN.md`、`/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/API_CONTRACT.md`、`/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/DATA_MODEL.md`。设计审查基线`47b676f`+本卡/三设计，当前Schema仍31表；32表fresh/catalog/Prisma的实现验证待本卡writer交付，不冒称已通过。M1b committed HEAD的`pnpm contract:check`及8文件204项复验通过；一次误在Root执行Vitest的命令因无该依赖退出，切回Billing后完成复验。M2b仅组件门，无新业务owner/外部API未决，不阻断实施；线上运行、worker与消费者验收另属连续全目标。
 
+### M2b 生命周期 R1：Root 集成验收（2026-09-13）
+
+- 基线 `a98dfdf349118f512dbeff5473b50db9cbd03961`，负责人 billing_transaction_m2a 冻结交接 13 个源码/依赖/测试文件；Root 独立复验并串行提交，未接入旧业务 runtime。此提交仅完成本卡生命周期/root API 子切片，receipt/key binding、audit、outbox 仍待同负责人继续实施。
+- 新增 DatabaseModule/PrismaService：精确 Nest 12.0.1 依赖、一个 Prisma adapter pool、共享初始化/清理 Promise、单调 ready/closing/closed 状态。注入的 TransactionService 每次根入口/查询检查生命周期；readRoot 仅暴露只读 model 能力，拒绝 mutation/raw、逃逸 client、异步借用及事务内 root 查询；runRoot 保留事务 ALS 边界。
+- Root 首轮常规 235 项通过仍发现两个真实缺陷：readRoot callback 进入事务后 captured root client 可误读 root pool；初始化失败后 destroy 重复 pool.end。独立 RED 日志 `/tmp/billing-m2b-root-lifecycle-red.log`；R1 同一探针零失败，初始化错误由 init 调用者持有，后续重复 destroy 成功。日志 `/tmp/billing-m2b-root-r1-probes.log`。
+- Root 冻结树执行 `pnpm install --frozen-lockfile`、`pnpm audit --prod`、`pnpm audit`（均未发现已知漏洞），以及 `pnpm format:check && pnpm lint && pnpm typecheck && pnpm build && pnpm sql:check && pnpm contract:check` 全通过。真实测试命令：`SCHEMA_ADMIN_URL=<同实例管理连接> pnpm exec vitest run test/unit/transaction.test.ts test/integration/transaction.test.ts test/integration/prisma-lifecycle.test.ts test/architecture test/contract --no-file-parallelism`，**11 文件 239 通过、0 失败、0 跳过**；日志 `/tmp/billing-m2b-root-r1-final-gates.log`。
+- Root 使用真实 NestFactory.createApplicationContext，分别从源码 tsx 与构建后 node 加载 DatabaseModule，验证持久写/读、ready→closed、已注入服务停止后不执行根 callback、重复关闭；两个模式均通过，只创建/清理自有临时 PG database。此为数据库上下文 smoke，不是 Billing HTTP 或 provider sandbox。
+- billing_model_r2 独立最终只读审查无剩余本切片 P1/P2。其“readRoot callback 内禁止独立 runRoot”意见经契约复核撤回：只读 client 不是任意 JS 回调的 sandbox，不承诺跨查询快照；原子读写必须用一个业务事务。事务内使用 captured root client 仍拒绝，不放宽已有保障。
+- Root 另执行 `SCHEMA_ADMIN_URL=<同实例管理连接> pnpm prisma:check`，派生物无漂移；在自有 canonical 临时库运行 target-schema、prisma-generation、prisma-persistence、transaction、schema-drift、schema-installation、postgres-schema、ownership，**8 文件 102 通过、0 失败、0 跳过**，覆盖 fresh install/完整 catalog/拒绝非空安装/失败回滚，资源已清理。日志 `/tmp/billing-m2b-root-r1-schema.log` 与 `/tmp/billing-m2b-root-r1-schema-check.log`。
+- Schema/generated/HTTP/旧业务 writer 未改。M1 全量旧业务 135 项失败仍属 M3/M4；本轮未重复全量旧业务 suite，不将定向绿代替整仓绿。后续仍需永久 key 绑定、AuditAppender/fenced Outbox、七模块及旧 pg 删除、worker/drain/恢复、v2 HTTP、消费者与完整发布验收。
+
 ## B8-M1b 机器契约执行卡（2026-09-13，目标契约已验收）
 
 | 项 | 决定 |

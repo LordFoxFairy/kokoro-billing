@@ -4,7 +4,7 @@ import { readBillingDependencyGraph } from "./typescript-dependency-project.js";
 import { checkBillingDependencies } from "./billing-dependency-policy.js";
 
 describe("Prisma generation boundary", () => {
-  it("keeps production source free of Prisma imports before the B8 cutover", async () => {
+  it("limits production Prisma imports to the approved database components", async () => {
     const graph = await readBillingDependencyGraph();
     expect(graph.diagnostics).toEqual([]);
     expect(

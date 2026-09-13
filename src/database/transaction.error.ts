@@ -4,6 +4,8 @@ export const transactionErrorCodes = [
   "TRANSACTION_MODE_MISMATCH",
   "TRANSACTION_CONTEXT_CLOSED",
   "TRANSACTION_ALREADY_ACTIVE",
+  "ROOT_READ_ONLY",
+  "DATABASE_NOT_READY",
 ] as const;
 
 export type TransactionErrorCode = (typeof transactionErrorCodes)[number];

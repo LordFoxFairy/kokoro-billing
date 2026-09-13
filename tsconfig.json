@@ -14,7 +14,8 @@
     "skipLibCheck": true,
     "types": ["node", "vitest/globals"],
     "forceConsistentCasingInFileNames": true,
-    "noUncheckedSideEffectImports": true
+    "noUncheckedSideEffectImports": true,
+    "experimentalDecorators": true
   },
   "include": ["src", "test", "scripts", "vitest.config.ts", "prisma.config.ts"]
 }

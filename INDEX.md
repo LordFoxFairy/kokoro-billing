@@ -12,7 +12,7 @@
 |---|---|---|
 | `contract/openapi/v1/openapi.yaml` | Billing HTTP v1 的 machine source | owner-authored；先改 contract，再改实现/消费者 |
 | `contract/openapi/v2/openapi.yaml` | Billing clean-slate v2目标machine source | 24个experimental operation；M3切换前不代表runtime parity或可部署 |
-| `database/schema.sql` | 35 张 Billing 表的 canonical Schema | PostgreSQL 16；空库安装；无 FK/REFERENCES |
+| `database/schema.sql` | 31 张 Billing 表的 canonical Schema | PostgreSQL 16；空库安装；无 FK/REFERENCES |
 | `.node-version` / `package.json` / `pnpm-lock.yaml` | 固定Node24.20.0、pnpm与精确依赖 | 本地、CI和镜像版本由toolchain治理测试核对 |
 | `test/architecture/toolchain.test.ts` | 工具链配置正反例 | manifest/lock、CI实际门、Docker FROM、engineStrict；不代替运行验收 |
 | `.prettierrc.json` / `.prettierignore` / `test/architecture/formatting.test.ts` | 固定本地格式与实际正反例门 | 正向手写范围、精确生成排除；不代替typed lint或机器事实源验证 |
@@ -55,6 +55,8 @@ domain -> no HTTP/PostgreSQL/Redis/provider SDK
 `src/domain/payment/services/billing-state-machine.ts` 当前承载 PaymentCollection、PaymentAttempt 与 Admission 的纯状态迁移规则。
 
 ## 横切基础设施
+
+- `src/database/`：目标 Prisma 事务及 Nest 单 Client/pool 生命周期组件；readRoot/runRoot 与当前事务 query gate 已有真实隔离测试，尚未装配到旧主进程，receipt/audit/outbox 仍按任务板实施。
 
 - `src/config/`：环境变量解析、auth/provider/timeout 启动约束。
 - `src/infrastructure/auth/`：JWT、service/BFF/admin context 验证。
