@@ -8,6 +8,19 @@
 
 **Tech Stack:** 当前 Fastify + pg + Zod 3；目标 Nest 12 + Prisma 7.10.0、SQL-first只读生成链，见ADR-0003；B6a已安装Prisma生成链；生产仍Fastify/pg，Nest与业务writer未切换。
 
+## B8-M3 业务切换放行卡（2026-09-13，Root 收敛实施边界）
+
+| 项 | 本轮边界 |
+|---|---|
+| 目标/P0 | 在已验32表/Prisma/一致性组件上落实七feature完整业务writer及Nest运行切换；删除旧pg业务与全局四层，不以平行未接线模块作为最终交付 |
+| 基线 | Billing `/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing`，codex/billing-ts-prisma-alignment，`938bd46fa7a0660d783ab39dcfe509f75345eaad`，Root本卡前clean；M2b最终325项与19探针已验 |
+| 当前事实 | 主进程仍bootstrap→Fastify interfaces→application ports→pg repositories；Payment/Refund/Metering旧writer均直接写Credit表；canonical已32表而旧表已删除，135项历史旧业务失败尚待迁移 |
+| 放置/粒度 | 按TECH D1采用src/modules七feature公开面+具名service/repository；继续旧全局四层或新增旁路SDK淘汰。复用本任务板与三设计，不新建第二任务中心；具体切片由Root核定后续派 |
+| 角色 | Root负责整体顺序/事务组/旧路径删除/共享入口与Git；billing_transaction_m2a只读盘点Credit/Metering跨表writer及测试承接，输出后再续派写入；billing_model_r2按Root完成的切片门只读审查 |
+| 本轮只读范围 | src/application/{credit,metering}、对应pg repositories以及Payment/Refund对Credit的直接写入、相关tests/scripts调用；无源码/Schema/contract修改，无PG/Redis/进程操作，Git由Root |
+| 已确定依赖 | 继承三设计D1/R2/R3/M1b/M2b，Credit不依赖Metering/Payment；Metering→Credit；Payment核心不依赖provider-events编排；网络均在业务事务外，当前组件不与旧pg拼接事务 |
+| 交付/验证 | 先给实际文件/方法/完整事务写表/调用方/测试迁移清单，Root据此固定业务切片边界并更新三设计当前态。所有代码写入必须等明确切片卡；无新owner/协议裁决不重复询问用户 |
+
 ## B8-M2b 执行卡（2026-09-13，设计已复核，组件实施中）
 
 | 项 | 决定 |
