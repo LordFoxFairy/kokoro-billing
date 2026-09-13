@@ -12,7 +12,7 @@
 |---|---|---|
 | `contract/openapi/v1/openapi.yaml` | Billing HTTP v1 的 machine source | owner-authored；先改 contract，再改实现/消费者 |
 | `contract/openapi/v2/openapi.yaml` | Billing clean-slate v2目标machine source | 24个experimental operation；M3切换前不代表runtime parity或可部署 |
-| `database/schema.sql` | 31 张 Billing 表的 canonical Schema | PostgreSQL 16；空库安装；无 FK/REFERENCES |
+| `database/schema.sql` | 32 张 Billing 表的 canonical Schema | PostgreSQL 16；空库安装；无 FK/REFERENCES；含永久command key binding |
 | `.node-version` / `package.json` / `pnpm-lock.yaml` | 固定Node24.20.0、pnpm与精确依赖 | 本地、CI和镜像版本由toolchain治理测试核对 |
 | `test/architecture/toolchain.test.ts` | 工具链配置正反例 | manifest/lock、CI实际门、Docker FROM、engineStrict；不代替运行验收 |
 | `.prettierrc.json` / `.prettierignore` / `test/architecture/formatting.test.ts` | 固定本地格式与实际正反例门 | 正向手写范围、精确生成排除；不代替typed lint或机器事实源验证 |
@@ -29,6 +29,8 @@
 | `scripts/expire-credit-holds.ts` | Expiry worker | 显式 tenant/batch identity；Redis lease 协调；PostgreSQL receipt/事务维护事实 |
 
 ## 依赖方向
+
+`src/database/`现包含尚未接入旧runtime的Nest/Prisma生命周期、事务、command receipt/key binding、audit与fenced outbox具名组件；仅DatabaseModule导出这些能力，不暴露裸Prisma client。
 
 ```text
 interfaces -> application -> domain

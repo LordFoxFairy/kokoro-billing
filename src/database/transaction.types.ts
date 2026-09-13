@@ -11,6 +11,11 @@ export type TransactionScope = Readonly<{
   mode: TransactionMode;
 }>;
 
+export type ActiveTransaction = Readonly<{
+  scope: TransactionScope;
+  client: TransactionClient;
+}>;
+
 export type TransactionOptions = Readonly<{
   maxWaitMs: number;
   timeoutMs: number;

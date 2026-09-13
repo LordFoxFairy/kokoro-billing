@@ -77,13 +77,11 @@ integration("Prisma PostgreSQL persistence", () => {
         {
           ...base,
           id: id(),
-          idempotency_key: id(),
           result_json: Prisma.DbNull,
         },
         {
           ...base,
           id: id(),
-          idempotency_key: id(),
           result_json: Prisma.JsonNull,
           result_schema_version: 1,
           status: "succeeded",
@@ -119,8 +117,18 @@ integration("Prisma PostgreSQL persistence", () => {
               command_namespace: "general",
               api_surface: "internal",
               request_schema_version: 1,
-              idempotency_key: suffix,
               payload_digest: hash,
+            },
+          });
+          await tx.billing_command_key_binding.create({
+            data: {
+              id: id(),
+              tenant_id: "tenant",
+              command_name: "grant",
+              command_namespace: "general",
+              api_surface: "internal",
+              idempotency_key: suffix,
+              command_receipt_id: receipt.id,
             },
           });
           await tx.billing_credit_account.create({
@@ -197,7 +205,13 @@ integration("Prisma PostgreSQL persistence", () => {
     ).toMatchObject({ available_micros: 1n, subject_id: "committed" });
     expect(
       await fixture.client.billing_command_receipt.findFirstOrThrow({
-        where: { idempotency_key: "committed" },
+        where: {
+          id: (
+            await fixture.client.billing_command_key_binding.findFirstOrThrow({
+              where: { idempotency_key: "committed" },
+            })
+          ).command_receipt_id,
+        },
       }),
     ).toMatchObject({
       status: "succeeded",
@@ -237,7 +251,7 @@ integration("Prisma PostgreSQL persistence", () => {
         });
         return { promise, resolveArrival, rejectArrival };
       });
-      const workers = ["key-a", "key-b"].map((key, index) =>
+      const workers = [0, 1].map((index) =>
         (async () => {
           let arrived = false;
           try {
@@ -264,7 +278,6 @@ integration("Prisma PostgreSQL persistence", () => {
                     api_surface: "internal",
                     request_schema_version: 1,
                     command_identity: identity,
-                    idempotency_key: key,
                     payload_digest: hash,
                   },
                 });
@@ -309,10 +322,9 @@ integration("Prisma PostgreSQL persistence", () => {
       reason: { code: "P2002", meta: anyObject },
     });
     expect(new Set(backendPids).size).toBe(2);
-    const winner =
-      await fixture.client.billing_command_receipt.findFirstOrThrow({
-        where: { tenant_id: "tenant", command_name: "same" },
-      });
+    await fixture.client.billing_command_receipt.findFirstOrThrow({
+      where: { tenant_id: "tenant", command_name: "same" },
+    });
     await expect(
       fixture.client.billing_command_receipt.create({
         data: {
@@ -322,8 +334,7 @@ integration("Prisma PostgreSQL persistence", () => {
           command_namespace: "general",
           api_surface: "internal",
           request_schema_version: 1,
-          command_identity: id(),
-          idempotency_key: winner.idempotency_key,
+          command_identity: identity,
           payload_digest: hash,
         },
       }),
@@ -337,7 +348,6 @@ integration("Prisma PostgreSQL persistence", () => {
         api_surface: "internal",
         request_schema_version: 1,
         command_identity: identity,
-        idempotency_key: winner.idempotency_key,
         payload_digest: hash,
       },
     });

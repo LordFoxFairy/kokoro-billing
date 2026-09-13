@@ -8,7 +8,7 @@ const adminUrl = process.env.SCHEMA_ADMIN_URL;
 const integration = describe.skipIf(adminUrl === undefined);
 
 integration("B8 target canonical schema", () => {
-  it("installs exactly 31 billing-owned UUID resources without foreign keys", async () => {
+  it("installs exactly 32 billing-owned UUID resources without foreign keys", async () => {
     await withCanonicalReference(
       assertDefined(adminUrl),
       await readFile("database/schema.sql", "utf8"),
@@ -21,7 +21,7 @@ integration("B8 target canonical schema", () => {
           const relations = await pool.query<{ name: string }>(
             "SELECT tablename name FROM pg_tables WHERE schemaname='public' ORDER BY tablename",
           );
-          expect(relations.rows).toHaveLength(31);
+          expect(relations.rows).toHaveLength(32);
           expect(
             relations.rows.every(({ name }) => name.startsWith("billing_")),
           ).toBe(true);
@@ -40,7 +40,7 @@ integration("B8 target canonical schema", () => {
              WHERE tc.table_schema='public' AND tc.constraint_type='PRIMARY KEY'
                AND k.column_name='id' AND c.udt_name='uuid'`,
           );
-          expect(primaryKeys.rows[0]?.count).toBe(31);
+          expect(primaryKeys.rows[0]?.count).toBe(32);
           const foreignKeys = await pool.query<{ count: number }>(
             "SELECT COUNT(*)::int count FROM information_schema.table_constraints WHERE table_schema='public' AND constraint_type='FOREIGN KEY'",
           );
@@ -63,11 +63,11 @@ integration("B8 target canonical schema", () => {
         });
         try {
           const invalid = [
-            `INSERT INTO billing_command_receipt (id,tenant_id,command_namespace,api_surface,command_name,idempotency_key,request_schema_version,payload_digest,status) VALUES (gen_random_uuid(),'t','bad','internal','c','k',1,repeat('a',64),'processing')`,
+            `INSERT INTO billing_command_receipt (id,tenant_id,command_namespace,api_surface,command_name,request_schema_version,payload_digest,status) VALUES (gen_random_uuid(),'t','bad','internal','c',1,repeat('a',64),'processing')`,
             `INSERT INTO billing_outbox (id,tenant_id,event_namespace,aggregate_type,aggregate_id,event_type,event_identity,payload_schema_version,payload_digest,payload_json,attempts,next_attempt_at,requeue_generation) VALUES (gen_random_uuid(),'t','credit','a',gen_random_uuid(),'e','i',0,repeat('a',64),'{}',0,now(),0)`,
             `INSERT INTO billing_credit_fulfillment_reversal (id,tenant_id,fulfillment_id,payment_reversal_id,amount_micros,journal_id,policy_version,input_digest,refund_amount_minor,prior_refund_amount_minor,prior_credit_micros,settlement_amount_minor,fulfillment_authorized_micros,grant_original_micros,grant_remaining_micros_before,grant_status_before) VALUES (gen_random_uuid(),'t',gen_random_uuid(),gen_random_uuid(),0,gen_random_uuid(),1,repeat('a',64),1,0,0,1,1,1,1,'active')`,
-            `INSERT INTO billing_command_receipt (id,tenant_id,command_namespace,api_surface,command_name,idempotency_key,request_schema_version,payload_digest,status,result_json) VALUES (gen_random_uuid(),'t','general','internal','c','partial-json',1,repeat('a',64),'processing','{}')`,
-            `INSERT INTO billing_command_receipt (id,tenant_id,command_namespace,api_surface,command_name,idempotency_key,request_schema_version,payload_digest,status,result_schema_version) VALUES (gen_random_uuid(),'t','general','internal','c','partial-version',1,repeat('a',64),'unknown',1)`,
+            `INSERT INTO billing_command_receipt (id,tenant_id,command_namespace,api_surface,command_name,request_schema_version,payload_digest,status,result_json) VALUES (gen_random_uuid(),'t','general','internal','c',1,repeat('a',64),'processing','{}')`,
+            `INSERT INTO billing_command_receipt (id,tenant_id,command_namespace,api_surface,command_name,request_schema_version,payload_digest,status,result_schema_version) VALUES (gen_random_uuid(),'t','general','internal','c',1,repeat('a',64),'unknown',1)`,
           ];
           for (const sql of invalid)
             await expect(pool.query(sql)).rejects.toMatchObject({
@@ -150,15 +150,19 @@ integration("B8 target canonical schema", () => {
           });
         };
         try {
-          const receipt = (key: string, identity: string) =>
-            `INSERT INTO billing_command_receipt (id,tenant_id,command_namespace,api_surface,command_name,command_identity,idempotency_key,request_schema_version,payload_digest,status) VALUES (gen_random_uuid(),'t','general','internal','command','${identity}','${key}',1,repeat('a',64),'processing')`;
-          await pool.query(receipt("key-1", "identity-1"));
-          await conflict(
-            receipt("key-1", "identity-2"),
-            "uq_billing_command_receipt_key",
+          const receipt = (id: string, identity: string) =>
+            `INSERT INTO billing_command_receipt (id,tenant_id,command_namespace,api_surface,command_name,command_identity,request_schema_version,payload_digest,status) VALUES ('${id}'::uuid,'t','general','internal','command','${identity}',1,repeat('a',64),'processing')`;
+          const firstReceipt = "00000000-0000-4000-8000-000000000011";
+          await pool.query(receipt(firstReceipt, "identity-1"));
+          await pool.query(
+            `INSERT INTO billing_command_key_binding (id,tenant_id,command_namespace,api_surface,command_name,idempotency_key,command_receipt_id) VALUES (gen_random_uuid(),'t','general','internal','command','key-1','${firstReceipt}'::uuid)`,
           );
           await conflict(
-            receipt("key-2", "identity-1"),
+            `INSERT INTO billing_command_key_binding (id,tenant_id,command_namespace,api_surface,command_name,idempotency_key,command_receipt_id) VALUES (gen_random_uuid(),'t','general','internal','command','key-1',gen_random_uuid())`,
+            "uq_billing_command_key_binding_scope",
+          );
+          await conflict(
+            receipt("00000000-0000-4000-8000-000000000012", "identity-1"),
             "uq_billing_command_receipt_identity",
           );
 

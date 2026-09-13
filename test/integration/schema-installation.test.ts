@@ -78,14 +78,14 @@ integration("canonical schema installation", () => {
     }
   }
 
-  it("installs exactly 31 canonical tables and rejects a repeat installation", async () => {
+  it("installs exactly 32 canonical tables and rejects a repeat installation", async () => {
     await install();
     const pool = new Pool({ connectionString: databaseUrl(database), max: 1 });
     try {
       const result = await pool.query<{ count: string }>(
         "SELECT count(*)::text AS count FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','p')",
       );
-      expect(result.rows[0]?.count).toBe("31");
+      expect(result.rows[0]?.count).toBe("32");
     } finally {
       await pool.end();
     }

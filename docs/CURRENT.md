@@ -1,10 +1,16 @@
 # kokoro-billing 当前状态
 
+## B8-M2b 持久一致性组件（2026-09-13，组件已验收）
+
+- canonical 已从31表更新为32表：`billing_command_receipt`不再保存单值key，新增永久`billing_command_key_binding`；正式Prisma schema/provenance由canonical刷新。
+- 新增事务内`CommandReceiptRepository`、`AuditAppender`与`OutboxRepository`。它们实现双域命令重放、可信scope审计、数据库时钟lease/fence、generation CAS requeue；当前仍未接入旧Fastify/pg业务writer或worker。
+- Root 最终冻结树真实定向测试 **325 通过、0 失败、0 跳过**；receipt 11项、Outbox/audit 8项独立探针通过，Prisma/格式/lint/typecheck/build/SQL/contract 与源码/dist Nest数据库上下文通过。frozen install及生产/完整audit通过，独立最终审查通过；精确hash/日志/范围见唯一任务板。M3/M4之前不可部署，旧业务失败不通过恢复旧表或双writer掩盖。
+
 ## B8-M2b 生命周期与根查询（2026-09-13，组件验收）
 
 - DatabaseModule/PrismaService 已实现 Nest 管理的单 Client/pool、并发初始化与幂等清理；TransactionService 接入生命周期 gate、只读 root client 与独立 worker 根事务入口。当前主进程仍旧 Fastify/pg，未接入新数据库组件。
 - Root 冻结树真实定向测试 **239 通过、0 失败、0 跳过**；frozen install、生产/完整 audit、format/lint/typecheck/build/sql/contract 全通过。两个原缺陷探针与源码/dist NestFactory 数据库上下文 smoke 通过，独立审查通过。具体范围、命令和日志见唯一任务板 M2b 生命周期 R1。
-- 当前 canonical 仍 31 表；32 表永久 key binding、receipt/audit/outbox 持久组件尚未交付。旧业务 135 项失败保留至整体 writer 切换；不宣称整仓可部署或只需配置。
+- 生命周期切片已验收；永久key绑定与持久组件已按上节完成组件验收。旧业务失败保留至整体 writer 切换；不宣称整仓可部署或只需配置。
 
 ## B8-M1b v2目标机器契约（2026-09-13，目标契约已验收）
 

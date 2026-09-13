@@ -327,7 +327,12 @@ describe("Billing dependency policy", () => {
             "import type { Prisma, PrismaClient } from '../generated/prisma/client.js';",
           "src/database/prisma.service.ts":
             "import { PrismaPg } from '@prisma/adapter-pg'; import { PrismaClient } from '../generated/prisma/client.js';",
-          [generated]: "export class PrismaClient {}; export type Prisma = {};",
+          "src/database/outbox.repository.ts":
+            "import { Prisma } from '../generated/prisma/client.js';",
+          "src/database/persisted-json.ts":
+            "import { Prisma } from '../generated/prisma/client.js';",
+          [generated]:
+            "export class PrismaClient {}; export const Prisma = {};",
         }),
       ).filter((item) => item.code === "production-prisma"),
     ).toEqual([]);
@@ -359,6 +364,14 @@ describe("Billing dependency policy", () => {
       [
         "src/database/transaction.types.ts",
         "import type { PrismaPg } from '@prisma/adapter-pg';",
+      ],
+      [
+        "src/database/outbox.error.ts",
+        "import type { Prisma } from '../generated/prisma/client.js';",
+      ],
+      [
+        "src/database/audit-appender.ts",
+        "import { PrismaClient } from '../generated/prisma/client.js';",
       ],
     ] as const)
       expectPolicy(

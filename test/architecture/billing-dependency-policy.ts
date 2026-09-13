@@ -99,7 +99,15 @@ const approvedTransactionPrismaEdge = (edge: DependencyEdge) =>
       (edge.source === "src/database/prisma.service.ts" &&
         edge.kind === "value" &&
         edge.symbols.length === 1 &&
-        edge.symbols[0] === "PrismaClient"))) ||
+        edge.symbols[0] === "PrismaClient") ||
+      (edge.source === "src/database/outbox.repository.ts" &&
+        edge.kind === "value" &&
+        edge.symbols.length === 1 &&
+        edge.symbols[0] === "Prisma") ||
+      (edge.source === "src/database/persisted-json.ts" &&
+        edge.kind === "value" &&
+        edge.symbols.length === 1 &&
+        edge.symbols[0] === "Prisma"))) ||
   (edge.source === "src/database/prisma.service.ts" &&
     edge.target === "@prisma/adapter-pg" &&
     edge.kind === "value" &&

@@ -57,13 +57,13 @@ integration("full canonical catalog drift", () => {
     });
   }
 
-  it("accepts the canonical 31-table schema and cleans its reference database", async () => {
+  it("accepts the canonical 32-table schema and cleans its reference database", async () => {
     const before = await admin.query<{ datname: string }>(
       "SELECT datname FROM pg_database WHERE datname LIKE 'billing_reference_%' ORDER BY datname",
     );
     const result = await verify();
     expect(result.differences).toEqual([]);
-    expect(result.objectCounts.relations).toBe(31);
+    expect(result.objectCounts.relations).toBe(32);
     expect(result.canonicalSha256).toMatch(/^[a-f0-9]{64}$/u);
     const after = await admin.query<{ datname: string }>(
       "SELECT datname FROM pg_database WHERE datname LIKE 'billing_reference_%' ORDER BY datname",

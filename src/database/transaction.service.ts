@@ -8,6 +8,7 @@ import {
 import {
   defaultTransactionOptions,
   type TransactionClient,
+  type ActiveTransaction,
   type TransactionMode,
   type TransactionOptions,
   type RootReadClient,
@@ -229,6 +230,17 @@ export class TransactionService {
       throw error;
     }
     return state.client;
+  }
+
+  requireActive(expectedTenantId: string): ActiveTransaction {
+    const state = this.#storage.getStore();
+    if (state === undefined)
+      throw new TransactionContextError(
+        "TRANSACTION_REQUIRED",
+        "An active transaction is required",
+      );
+    const client = this.requireActiveTransaction(expectedTenantId, "write");
+    return Object.freeze({ scope: state.scope, client });
   }
 
   assertNoActiveTransaction(): void {

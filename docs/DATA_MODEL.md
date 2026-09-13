@@ -2,13 +2,13 @@
 
 ## B8-M2b 命令与key绑定正规化（2026-09-13，目标32表）
 
-当前committed canonical为M1的31表。为修复换key重放后该key仍可复用的已验证缺口，采用[技术方案M2b](TECHNICAL_DESIGN.md#b8-m2b-一致性组件与命令键绑定2026-09-13实施设计)：命令receipt拥有唯一业务identity/digest/永久结果，请求key绑定拥有唯一key→receipt事实，均由CommandReceiptRepository同一Prisma事务写入。
+M1曾为31表；M2b现已落实32表canonical及生成物，Root真实fresh/catalog/Prisma验收见唯一任务板。为修复换key重放后该key仍可复用的已验证缺口，采用[技术方案M2b](TECHNICAL_DESIGN.md#b8-m2b-一致性组件与命令键绑定2026-09-13实施设计)：命令receipt拥有唯一业务identity/digest/永久结果，请求key绑定拥有唯一key→receipt事实，均由CommandReceiptRepository同一Prisma事务写入。
 
 - 从`billing_command_receipt`删除`idempotency_key`及`uq_billing_command_receipt_key`；其UUID、tenant/namespace/surface/command、nullable业务identity、版本/digest/状态/result/时间和非空identity partial UNIQUE保留。
 - 新增`billing_command_key_binding`：`id UUID`主键；`tenant_id VARCHAR(191)`、`command_namespace VARCHAR(16)`、`api_surface VARCHAR(32)`、`command_name VARCHAR(128)`、`idempotency_key VARCHAR(128)`、`command_receipt_id UUID`均非空；`created_at TIMESTAMPTZ(3)`非空默认当前UTC毫秒瞬时点。namespace general/payment/admission、surface internal的CHECK与命令相同；key非空；scope+key UNIQUE。
 - key lookup以scope+key唯一索引执行，随后按receipt PK读取并验证同scope、identity与digest。非空identity仍仅在receipt上unique。没有外键，完整性由同事务writer/不变量与真实负例证明；没有无查询收益的receipt反向索引，没有JSON key数组或双存idempotency_key。
 - binding不可修改/重新指向，生命周期跟随永久receipt；本切片不增加清理/历史迁移/可重用TTL，Redis丢失不改变绑定。成功identity重放的新key同事务持久绑定，参数冲突不绑定新key。
-- 全部原账务表不改变职责/状态。canonical唯一SQL源与生成Prisma同步；对应catalog数量32、所有本地主键UUID、零FK；字段/约束/索引完整drift照常验证。此处为待实现目标，不把下方M1已验31表证据更新成32表实测。
+- 全部原账务表不改变职责/状态。canonical唯一SQL源与生成Prisma同步；对应catalog数量32、所有本地主键UUID、零FK；字段/约束/索引完整drift照常验证。本节32表已在M2b实际验证；下方M1的31表数字保留为历史切片证据，不冒充同一次验证。
 
 
 ## B8-M1b 首发目标契约切片（2026-09-13）

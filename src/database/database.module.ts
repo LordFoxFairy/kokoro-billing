@@ -2,6 +2,9 @@ import { Module, type DynamicModule } from "@nestjs/common";
 import { PrismaService } from "./prisma.service.js";
 import type { PrismaServiceOptions } from "./prisma.types.js";
 import { TransactionService } from "./transaction.service.js";
+import { CommandReceiptRepository } from "./command-receipt.repository.js";
+import { AuditAppender } from "./audit-appender.js";
+import { OutboxRepository } from "./outbox.repository.js";
 
 export const PRISMA_SERVICE_OPTIONS = Symbol("PRISMA_SERVICE_OPTIONS");
 
@@ -31,8 +34,33 @@ export class DatabaseModule {
               prisma,
             ),
         },
+        {
+          provide: CommandReceiptRepository,
+          inject: [TransactionService],
+          useFactory: (transactions: TransactionService) =>
+            new CommandReceiptRepository(transactions),
+        },
+        {
+          provide: AuditAppender,
+          inject: [TransactionService],
+          useFactory: (transactions: TransactionService) =>
+            new AuditAppender(transactions),
+        },
+        {
+          provide: OutboxRepository,
+          inject: [TransactionService, AuditAppender],
+          useFactory: (
+            transactions: TransactionService,
+            audit: AuditAppender,
+          ) => new OutboxRepository(transactions, audit),
+        },
       ],
-      exports: [TransactionService],
+      exports: [
+        TransactionService,
+        CommandReceiptRepository,
+        AuditAppender,
+        OutboxRepository,
+      ],
     };
   }
 }

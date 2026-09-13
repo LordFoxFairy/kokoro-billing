@@ -119,7 +119,6 @@ CREATE TABLE IF NOT EXISTS billing_command_receipt (
   api_surface VARCHAR(32) NOT NULL,
   command_name VARCHAR(128) NOT NULL,
   command_identity VARCHAR(255) NULL,
-  idempotency_key VARCHAR(128) NOT NULL,
   request_schema_version INTEGER NOT NULL,
   payload_digest CHAR(64) NOT NULL,
   status VARCHAR(32) NOT NULL DEFAULT 'processing',
@@ -127,13 +126,26 @@ CREATE TABLE IF NOT EXISTS billing_command_receipt (
   result_json JSONB NULL,
   created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  CONSTRAINT uq_billing_command_receipt_key UNIQUE (tenant_id, command_namespace, api_surface, command_name, idempotency_key),
   CONSTRAINT ck_billing_command_receipt_namespace CHECK (command_namespace IN ('general', 'payment', 'admission')),
   CONSTRAINT ck_billing_command_receipt_surface CHECK (api_surface = 'internal'),
   CONSTRAINT ck_billing_command_receipt_versions CHECK (request_schema_version > 0 AND (result_schema_version IS NULL OR result_schema_version > 0)),
   CONSTRAINT ck_billing_command_receipt_digest CHECK (payload_digest ~ '^[0-9a-f]{64}$'),
   CONSTRAINT ck_billing_command_receipt_status CHECK (status IN ('processing', 'succeeded', 'failed', 'unknown')),
   CONSTRAINT ck_billing_command_receipt_result CHECK ((status = 'succeeded' AND result_schema_version IS NOT NULL AND result_json IS NOT NULL) OR (status <> 'succeeded' AND result_schema_version IS NULL AND result_json IS NULL))
+);
+CREATE TABLE IF NOT EXISTS billing_command_key_binding (
+  id UUID NOT NULL PRIMARY KEY,
+  tenant_id VARCHAR(191) NOT NULL,
+  command_namespace VARCHAR(16) NOT NULL,
+  api_surface VARCHAR(32) NOT NULL,
+  command_name VARCHAR(128) NOT NULL,
+  idempotency_key VARCHAR(128) NOT NULL,
+  command_receipt_id UUID NOT NULL,
+  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT uq_billing_command_key_binding_scope UNIQUE (tenant_id, command_namespace, api_surface, command_name, idempotency_key),
+  CONSTRAINT ck_billing_command_key_binding_namespace CHECK (command_namespace IN ('general', 'payment', 'admission')),
+  CONSTRAINT ck_billing_command_key_binding_surface CHECK (api_surface = 'internal'),
+  CONSTRAINT ck_billing_command_key_binding_key CHECK (idempotency_key <> '')
 );
 CREATE TABLE IF NOT EXISTS billing_outbox (
   id UUID NOT NULL PRIMARY KEY,

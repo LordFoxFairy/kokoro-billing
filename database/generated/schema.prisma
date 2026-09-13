@@ -105,6 +105,20 @@ model billing_checkout {
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model billing_command_key_binding {
+  id                 String   @id @db.Uuid
+  tenant_id          String   @db.VarChar(191)
+  command_namespace  String   @db.VarChar(16)
+  api_surface        String   @db.VarChar(32)
+  command_name       String   @db.VarChar(128)
+  idempotency_key    String   @db.VarChar(128)
+  command_receipt_id String   @db.Uuid
+  created_at         DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@unique([tenant_id, command_namespace, api_surface, command_name, idempotency_key], map: "uq_billing_command_key_binding_scope")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model billing_command_receipt {
   id                     String   @id @db.Uuid
   tenant_id              String   @db.VarChar(191)
@@ -112,7 +126,6 @@ model billing_command_receipt {
   api_surface            String   @db.VarChar(32)
   command_name           String   @db.VarChar(128)
   command_identity       String?  @db.VarChar(255)
-  idempotency_key        String   @db.VarChar(128)
   request_schema_version Int
   payload_digest         String   @db.Char(64)
   status                 String   @default("processing") @db.VarChar(32)
@@ -122,7 +135,6 @@ model billing_command_receipt {
   updated_at             DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
 
   @@unique([tenant_id, command_namespace, api_surface, command_name, command_identity], map: "uq_billing_command_receipt_identity", where: raw("(command_identity IS NOT NULL)"))
-  @@unique([tenant_id, command_namespace, api_surface, command_name, idempotency_key], map: "uq_billing_command_receipt_key")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.

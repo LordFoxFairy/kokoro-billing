@@ -38,6 +38,16 @@ M2b文档门通过：billing_model_r2只读复核key-binding、两域一致性�
 | 验证/资源 | 先测试实际 RED 后实现，复用实例、自建 UUID 临时数据库；一次只有该 writer 操作测试库，Root 等冻结后串行验收。新测试真实依赖显式 SCHEMA_ADMIN_URL，禁止默认开发者凭据或静默造绿 |
 | 交付 | 代码/测试/schema/必要文档自洽后停写，报实际文件/hash/日志/剩余风险；共享提交由 Root 完成。worker loop/drain/最后 attempt 恢复、HTTP/业务组仍属 M3/M4，不从总目标删除 |
 
+### M2b 持久一致性：Root 集成验收（2026-09-13）
+
+- 基线 `63732b55ceb39001a29ab5f9e9b198a82c3fab38`，billing_transaction_m2a 为唯一实现者，Root 接收冻结文件、独立验证并负责提交。当前 32 表已实际 fresh install/完整 catalog 验证；SQL SHA256 `b8dd35be1137432742e3a250b3c95b406d5c993bd850f67ab720e21007cba521`，generated schema `eabf3ab6fae504ac94e874941237cae4c8bec1134dcf0b6025ce47bee1361595`，provenance `0260305a6f581a66095f3cea741c5f7ffbbed093c7901b92adebffc39a5590c1`。没有第二份可编辑 Schema 或旧 key 列。
+- 永久 receipt/key binding 由同一个具名组件维护。`execute` 仅包裹当前业务事务的 claim/replay/complete，不开启根事务或引入通用 command bus；嵌套 run 保留 effect/codec 故障的 rollback-only。AuditAppender 从可信 scope 取 actor。Outbox 仅注册已确定的三种 payment effect，根 worker 调用方负责 runRoot；没有提前启用旧 worker 双消费。
+- Root 首次冻结验收 324 项通过后，独立审查仍发现跨 scope binding 与合法 identity 并存时误分类为409。Root 真实 RED `/tmp/billing-m2b-root-scope-corruption-red.log` 复现，修复为先校验 keyed scope，再比较两域身份；正式组合回归与同一独立探针均通过。billing_model_r2 最终只读审查无剩余本切片 P1/P2。
+- 最终冻结树：`pnpm format:check && pnpm lint && pnpm typecheck && pnpm build && pnpm sql:check && pnpm contract:check && pnpm prisma:check` 全通过。Root 真实定向命令 `pnpm exec vitest run test/integration/{command-receipt,outbox,audit-appender,prisma-lifecycle,target-schema,prisma-generation,prisma-persistence,transaction,schema-drift,schema-installation,postgres-schema}.test.ts test/unit/{transaction,persisted-json}.test.ts test/architecture test/contract --no-file-parallelism --reporter=verbose`，**21 文件 325 项通过、0 失败、0 跳过**。独占目标 database 通过 withCanonicalReference 安装，显式 DATABASE_URL 与 SCHEMA_ADMIN_URL，资源已清理；日志 `/tmp/billing-m2-root-focused.log`。
+- Root 另跑独立 receipt 11 项、Outbox/audit 8 项全部通过：两个 Prisma Client 并发、永久换 key 绑定、两域冲突、损坏结果、跨 tenant、外层吞错后整组回滚、五类事实同提交，以及 renew/complete/retry/deadLetter 在行锁等待后租约过期均拒绝。Root JSON RED 4 项原静默变形输入在严格边界后全部拒绝；对应正式 unit 测试保留旧 parser 断言。日志 `/tmp/billing-m2b-root-persistence-final.log`、`/tmp/billing-m2b-root-json-red.log`、`/tmp/billing-m2b-root-json-green.log`。
+- 源码 tsx / 构建后 node 的真实 NestFactory 数据库 context 均通过写/读/生命周期/关闭后 callback 零调用 smoke。冻结依赖未改变；本轮 Root `pnpm install --frozen-lockfile`、`pnpm audit --prod`、`pnpm audit` 均通过，未发现已知漏洞（`/tmp/billing-m2b-root-persistence-gates.log`）。这些都不是 Billing HTTP、支付 sandbox 或镜像验收。
+- 当前仍是不可部署中间态：旧 Fastify/pg 与旧 HTTP 未切，最近完整旧业务结果仍为 M1 的135失败，未假称本轮重跑全量；下一步为七模块完整 writer/事务组替换、删除旧路径，再交付 HTTP/worker/消费者与完整运行验收。全部原目标保留。
+
 ### M2b 生命周期 R1：Root 集成验收（2026-09-13）
 
 - 基线 `a98dfdf349118f512dbeff5473b50db9cbd03961`，负责人 billing_transaction_m2a 冻结交接 13 个源码/依赖/测试文件；Root 独立复验并串行提交，未接入旧业务 runtime。此提交仅完成本卡生命周期/root API 子切片，receipt/key binding、audit、outbox 仍待同负责人继续实施。
