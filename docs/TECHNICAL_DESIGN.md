@@ -1,5 +1,10 @@
 # kokoro-billing 技术设计
 
+## B8-M1b 首发目标契约切片（2026-09-13）
+
+采用[API_CONTRACT的M1b决定](API_CONTRACT.md#b8-m1b-首发机器契约实施决定2026-09-13)统一覆盖历史major/调用身份/202未决表述：v2设计先行，M3删除v1及旧writer，不双部署；同步事实201/200与Execution202区分，结果查询依托既有Checkout/Settlement/Refund/Admission/Execution资源，不新增operation表。M1的31表canonical不变。IAM已发布本人消费授权经固定artifact消费，payer来自其可信user结果，不来自body。M1b仅完成机器契约/治理与验证，不放行运行时部署；完整writer、消费者和故障恢复门仍在唯一任务板。
+
+
 ## B8-M1 canonical 模型切片实施决定（2026-09-13）
 
 本轮仅落实已审R2/R3/D2目标canonical与只读Prisma，字段/约束唯一设计见[DATA_MODEL的M1决定](DATA_MODEL.md#b8-m1-canonical-模型切片实施决定2026-09-13)。当前v1机器合同及Fastify/pg仍是旧运行时；新Schema是完整切换的非部署中间态，不代表旧HTTP已适配，也不改HTTP权限、字段、状态或消费者。完整业务切换仍须目标机器契约与全部writer/consumer同时闭合。首发无真实数据不授权清库；禁止兼容表/view/第二canonical。本次授权仅离线Schema/生成/约束验证，不把局部文档门当作生产重写放行。

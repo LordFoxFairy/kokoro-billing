@@ -8,6 +8,21 @@
 
 **Tech Stack:** 当前 Fastify + pg + Zod 3；目标 Nest 12 + Prisma 7.10.0、SQL-first只读生成链，见ADR-0003；B6a已安装Prisma生成链；生产仍Fastify/pg，Nest与业务writer未切换。
 
+## B8-M1b 机器契约执行卡（2026-09-13，进行中）
+
+| 项 | 决定 |
+|---|---|
+| 目标/优先级 | P0：按API_CONTRACT M1b决定落实完整v2机器对象/操作、语义负例、artifact治理；不以泛型schema或文件存在冒充完成 |
+| 基线 | `/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing`，codex/billing-ts-prisma-alignment，903465059398a4b3a75f68900466fa1003063aae，起始clean；Root先改三设计/本卡后交接 |
+| 角色 | billing_transaction_m2a唯一writer；billing_model_r2只读规格审查；Root接口裁决/质量审查/主树验收及Git；iam_billing_authorization已交只读消费者盘点 |
+| 文件集 | contract/openapi/v2/openapi.yaml、contract/README；scripts/verify-openapi.ts与必要具名target验证helper；test/contract目标契约测试与必要architecture；三设计/CURRENT/INDEX/本卡。禁止SQL/generated Prisma/package/lock/runtime/其他仓写入 |
+| 放置/删除 | v2在现有版本目录体系，不另建共享contract或operation模型；原位改stable v1及code-first双来源淘汰。当前v1只为未切换旧源码验证，M3同切删除原目录和旧校验分支，不延长兼容期 |
+| 数据/依赖 | 无Schema变更；仅使用现有YAML/TS/Vitest，test可import具名验证helper；src不依赖scripts；绝不复制IAM ORM/DTO |
+| 验证 | TDD目标文件/约束缺失RED→GREEN；解析/ref完整性、全部operation typed request/response/header/error/security/路径UUID/opaque字段/202查询、变异负例；pnpm contract:check/format:check/lint/typecheck/build及contract/architecture测试。旧135项业务集成失败保持M3待办，不换Schema造绿 |
+| 交付 | Agent停写交文件及日志；Root独立验证后明确路径commit，不操作共享基础设施；v2运行时/消费者/Sandbox仍待验 |
+
+M1b设计审查：billing_model_r2只读核查后仅提出billing_subject是否保留的P1；Root已固定必填原对象kind/ref、仅归因及user本人绑定，payer仅来自IAM。其余同步/异步、UUID/opaque、查询和provider ACK与31表一致，放行目标机器源/治理实现，未放行runtime。Root `pnpm contract:check` 基线仍17条旧route通过。
+
 ## B8-M1 执行卡（2026-09-13，离线模型已验收；禁止部署）
 
 | 项 | 决定 |

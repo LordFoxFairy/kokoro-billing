@@ -1,5 +1,10 @@
 # kokoro-billing 数据模型
 
+## B8-M1b 首发目标契约切片（2026-09-13）
+
+采用[API_CONTRACT的M1b决定](API_CONTRACT.md#b8-m1b-首发机器契约实施决定2026-09-13)统一覆盖历史major/调用身份/202未决表述：v2设计先行，M3删除v1及旧writer，不双部署；同步事实201/200与Execution202区分，结果查询依托既有Checkout/Settlement/Refund/Admission/Execution资源，不新增operation表。M1的31表canonical不变。IAM已发布本人消费授权经固定artifact消费，payer来自其可信user结果，不来自body。M1b仅完成机器契约/治理与验证，不放行运行时部署；完整writer、消费者和故障恢复门仍在唯一任务板。
+
+
 ## B8-M1 canonical 模型切片实施决定（2026-09-13）
 
 用户已确认首发、无真实账务数据，Root按已审R2/R3进入M1离线Schema切片。此次是完整迁移中间态，不发布、不部署旧Fastify/pg到新Schema。运行API仍是当前v1机器源；目标资源/身份与R2/R3、IAM ADR006一致，真正HTTP/消费者变更随M1b/M3闭合，不把离线生成当作HTTP可用。禁止兼容表、alias/view/第二Schema、迁移旧数据或清共享库。

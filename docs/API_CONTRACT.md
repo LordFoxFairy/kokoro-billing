@@ -1,5 +1,37 @@
 # kokoro-billing API 契约策略
 
+## B8-M1b 首发机器契约实施决定（2026-09-13）
+
+以已验收M1 `903465059398a4b3a75f68900466fa1003063aae`为基线，执行已批准的首发clean-slate，不再等待历史部署/真实数据回答。当前Fastify/v1未接新Schema，整仓仍禁止部署。
+采用目标 `/v2`、OpenAPI 2.0.0语义版本（文档格式沿用OpenAPI 3.1），唯一目标机器源 `contract/openapi/v2/openapi.yaml`；不原位修改已标stable的v1，不新增code-first副本。v2在实现与消费者验收前标experimental/未发布。v1仅服务当前旧源码回归；M3切换时删除v1文件、旧route与旧validator分支，历史字节由Git保存，不发布双版本运行窗口。比较原位改v1（与当前stable声明冲突，淘汰）和另建共享contract/通用operation服务（改变owner且无必要，淘汰），采用本仓版本目录。
+
+### 命令与资源结果裁决
+
+| 能力 | v2路径/结果 | 持久事实与恢复 |
+|---|---|---|
+| health/ready/metrics | 原无版本路径、原媒体类型；全部响应x-request-id | 不增加业务事实；readiness区分依赖degraded |
+| catalog/account/ledger/subscription reads | 原业务资源集合改v2；catalog保留`/v2/commerce/catalog`，其余`/v2/billing/me/...` | typed表示、bounded limit/cursor，去quota壳；subscription观察状态/term与Credit applied分别表达 |
+| admission | POST `/v2/internal/billing/admissions` 201；GET `/{admission_id}` 200；capture/release 200 | Billing生成UUID；新准入的IAM个人授权+按次价格+Credit hold同业务编排；capture/release复用原持久授权与受信execution evidence，不再重报价格或付款人；无新operation表 |
+| execution event | POST `/v2/internal/billing/execution-events` 202；GET `/{execution_event_id}` 200 | 外部event_id opaque；内部execution_event_id UUID。202只表示inbox+receipt已提交，Location指向该资源；GET暴露received/processed/failed、dead_lettered_at及安全错误，processed不等于execution成功或扣款成功；关联业务结果由admission查询。此版本无取消入口，事件事实不可撤销 |
+| Checkout | POST `/v2/billing/checkouts` 201；GET `/{checkout_id}` 200 | 请求只选offer_revision_id，不接收金额/币种/quote_snapshot。Billing冻结报价并创建资源；201不保证provider URL已就绪。准备后的provider创建在事务外，GET提供session_creation_status/payment status/nullable URL/截止。POST相同key重放首次创建表示，后续状态由GET读取，BFF/Web必须支持等待和重试，而非假设立即有URL |
+| Settlement | POST `/v2/internal/payment/settlements` 201；GET `/{settlement_id}` 200 | 同步记录付款事实，不承诺自动Credit发放。Billing生成settlement UUID；caller提供provider、provider_account_id、external_payment_ref、amount_minor、currency_code，账户必须经owner校验同tenant/provider；业务identity为tenant+provider+external_payment_ref，账户/金额漂移冲突。无需另造command_id替代已存在外部付款身份；Credit发放仍需可信Checkout/授权。查询分开付款status和nullable fulfillment结果 |
+| Refund | POST `/v2/internal/payment/refunds`、`/v2/admin/billing/refunds` 201；GET `/v2/internal/payment/refunds/{refund_id}` 200（同tenant且对应worker/admin权限） | 仅记录已存在渠道退款的追踪事实，不创建外部退款。body settlement_id为Billing UUID，external_ref为真实Refund.id，amount_minor/reason；账户与币种从已验证settlement取得，删除无实现allocation_mode。初始无可信观察则unknown/waiting_provider；可信webhook T1与Credit T2另行恢复。identity为账户+external_ref；GET分开渠道status与credit_effect_status，零delta应用结果可无journal |
+| hold expiry | POST `/v2/internal/credit-holds/expire` 200 | 一个有界batch同步提交，响应含batch_id与实际expired_hold_ids。batch_id仍opaque，Scheduler每次occurrence稳定且不同轮次不同；同key/identity replay读永久结果，无需虚构异步operation/GET |
+| provider webhook | 分成`/v2/webhooks/payment/stripe`、`/alipay`、`/wechat`，分别机器化签名位置/原始body/ACK | 先验签及账户归属并提交inbox+outbox，再ACK；Stripe 200空body、Alipay 200 text/plain精确success、WeChat 204空body。不得将provider协议强套Billing JSON/202。ACK仅表示已持久接收，重复有效投递仍ACK；持久化失败不得成功ACK |
+
+### 身份、表示与artifact
+
+- Billing本地资源和路径引用UUID；tenant/user/client/invocation/execution/provider/外部event/batch身份仍按owner契约opaque及原明确上限，不用通用UUID管道。不再让caller settlement_id兼任本地主键。
+- 新admission在现有受信service认证之外，要求`x-billing-consumption-token`携带原始Billing OAuth user access token（非Bearer前缀，非空且<=16KiB）；仅用于调用IAM固定artifact的verifyBillingAuthorization，不记日志/receipt/SQL或透传错误。IAM返回tenant/user必须与调用tenant及本次绑定一致，payer固定该user本人钱包。body删除payer_ref；必须保留既有对象形态billing_subject={kind,ref}作为使用归因，kind闭集user/project/organization/service，ref为1–255字符opaque string；持久化到billing_subject_kind/ref，不得选择钱包。kind=user时ref必须等于验证所得user_id，其余类型仅作调用服务负责的归因，不因此授予访问该资源的权限。没有token、scope不足或IAM故障拒绝新准入，不猜免费/组织钱包；同scope重放仍校验调用主体，capture/release根据原admission所有权及受信执行身份恢复，不要求另一个当前用户代付。
+- 现有service/admin/user角色许可语义不扩大。任意tenant/service/subject header只是已认证代理协议中的选择或断言，必须验证允许的service/tenant/subject代理边界；不把明文header本身当认证。个人消费scope固定billing:credit.consume，IAM不调用Billing，decision_ref不作凭据。
+- 所有Billing JSON成功为data，分页metadata仅有业务分页语义；错误为error.code/message/retryable及受限details；request ID只在x-request-id，删除旧header/body meta.request_id。逐operation声明错误状态/可重试规则，未知异常只返回稳定安全消息。201/202声明Location；查询权限与原写入资源tenant/subject匹配，不可见统一404。
+- UTC instant RFC3339且以Z结束，现金minor与Credit micros均十进制整数string；有符号journal允许负号，余额非负；现金currency_code大写三字母，不以CRD冒充币种。显式nullable而非遗漏猜测；对象默认拒绝未知字段，provider原始payload及具名versioned执行证据允许受限扩展。
+- artifact采用现有Git固定对象路径，不引入第二套SDK发布服务：consumer记录repository、完整commit、source_path、info.version、sha256；从已提交owner artifact生成consumer本地只读类型，并校验摘要。M1b不编造尚未产生的commit/tag、不发布远程；最终consumer pin由M5完成。
+- M1b只落目标机器源、其静态/语义反例门及治理文档，不冒称runtime parity。当前`pnpm contract:check`保持v1真实route校验并显式增加v2 target检查，分别报告；M3删旧分支后改成唯一v2 runtime parity。字段schema只在YAML可编辑，设计文档不复制第二套对象。
+
+官方协议依据于2026-09-13重新核验：[Stripe webhook](https://docs.stripe.com/webhooks?lang=node)、[支付宝异步通知](https://help.alipay.com/support/help_detail.htm?help_id=491081)、[微信JSAPI通知](https://pay.wechatpay.cn/doc/v3/merchant/4012791861)。它们只证明签名/ACK等渠道协议要求，不证明本仓sandbox已通过；幂等与本地事务取舍由本仓设计/测试负责。
+
+
 ## B8-M1 canonical 模型切片实施决定（2026-09-13）
 
 本轮仅落实已审R2/R3/D2目标canonical与只读Prisma，字段/约束唯一设计见[DATA_MODEL的M1决定](DATA_MODEL.md#b8-m1-canonical-模型切片实施决定2026-09-13)。当前v1机器合同及Fastify/pg仍是旧运行时；新Schema是完整切换的非部署中间态，不代表旧HTTP已适配，也不改HTTP权限、字段、状态或消费者。完整业务切换仍须目标机器契约与全部writer/consumer同时闭合。首发无真实数据不授权清库；禁止兼容表/view/第二canonical。本次授权仅离线Schema/生成/约束验证，不把局部文档门当作生产重写放行。
