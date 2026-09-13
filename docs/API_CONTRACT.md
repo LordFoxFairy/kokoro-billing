@@ -1,5 +1,10 @@
 # kokoro-billing API 契约策略
 
+## B8-M2b 幂等key永久绑定（2026-09-13）
+
+M1b机器artifact仍`47b676f`的v2字节；不改route、请求或状态。依照[技术方案M2b](TECHNICAL_DESIGN.md#b8-m2b-一致性组件与命令键绑定2026-09-13实施设计)，同业务identity同参数换key成功重放时也必须永久绑定新key；以后该key改变identity或参数返回既定409。Binding是内部持久事实，不增加HTTP资源、consumer字段或跨仓依赖；原请求的认证/tenant/subject校验先于结果重放。成功结果、Checkout首次表示/GET最新表示与provider ACK语义保持M1b裁决。Prisma生命周期/审计/outbox本轮只在隔离组件验证，不声称v2已上线。
+
+
 ## B8-M1b 首发机器契约实施决定（2026-09-13）
 
 以已验收M1 `903465059398a4b3a75f68900466fa1003063aae`为基线，执行已批准的首发clean-slate，不再等待历史部署/真实数据回答。当前Fastify/v1未接新Schema，整仓仍禁止部署。

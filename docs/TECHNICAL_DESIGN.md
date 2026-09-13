@@ -1,5 +1,44 @@
 # kokoro-billing 技术设计
 
+## B8-M2b 一致性组件与命令键绑定（2026-09-13，实施设计）
+
+本节承接已提交M1b `47b676f8c77ef3e31af0a69de2c48e1756d8ecd8`与D1/R3，不另开业务owner。当前仍旧Fastify/pg，目标组件不得接入旧业务或并行消费；M2–M4整体切换前均不可部署。
+
+### 已验证的幂等缺口与裁决
+
+现有admission writer在同identity换key时仅返回原receipt，没有保存新key；因此`key1/id1成功 → key2/id1成功重放 → key2/id2`仍会执行新效果。现有测试只覆盖前两步。单receipt行的一个key加identity UNIQUE无法持久承载多key绑定。
+比较：换key直接409（实现较小，但丢失已保留的重放能力，淘汰）；把key数组塞入JSON/改写原key（唯一性及不可变边界变差，淘汰）；命令结果与请求key绑定正规化（采用）。新增`billing_command_key_binding`，从receipt移出单值idempotency_key与对应UNIQUE；每个key永久绑定一个receipt，多个key可指向同一业务命令结果。它是新的账务一致性事实，不是旧Schema兼容alias/view；不保留重复可编辑key来源。目标由31表变32表，数量不是设计KPI。
+
+### 一致性支持公开能力与放置
+
+扩展现有`src/database/`，不用`modules/common`或业务feature承载框架存储。DatabaseModule只公开事务、receipt、outbox、audit能力；PrismaService负责一个Client/adapter pool的Nest生命周期，不向业务公开裸client，不创建通用execute/BaseRepository。
+
+- `TransactionService.readRoot(callback)`仅供具名repository普通只读查询：无ALS上下文时允许，active/rollback-only/继承closed均拒绝；返回给callback的能力只包含Prisma只读model方法，运行时extension也拒绝写操作及raw SQL。事务内查询仍走`requireActiveTransaction`，不得fallback root。
+- `TransactionService.runRoot(scope, callback)`是worker生命周期的独立根入口：先assertNoActiveTransaction，再run。调用必须在业务run完成/抛错之后；禁止清除活跃ALS绕过业务原子组，禁止savepoint/新pool。过期或被继承的上下文拒绝，调度/续租从根worker生命周期发起。
+- 保留M2a同client/tenant/actor/mode、rollback-only首因、关闭后误用和预算行为。PrismaService负责connect/disconnect的幂等性、初始连接失败清理与停止后拒绝新查询；当前组件通过Nest application context测试，暂不安装HTTP adapter或接main。
+- `CommandReceiptRepository`唯一写receipt+key binding；claim/replay/complete必须处于同一tenant写事务。固定namespace/surface，调用者传业务身份与versioned digest，不传表名。成功结果由命令提供的版本codec解码，损坏不重新执行。新processing只在同事务内存在，正常失败整组回滚。
+- `AuditAppender`唯一append审计，受信actor/tenant取当前业务scope或核对一致；无成功后补写事务、无token/secret。审计对象形状由各owner最小字段定义，不从HTTP payload直接复制。
+- `OutboxRepository`唯一enqueue/claim/renew/complete/retry/dead-letter/requeue持久组件：enqueue加入业务事务，队列生命周期用独立根事务。namespace/event type选择是具名allow-list，不接表名；全部晚写按tenant+namespace+id+token+未终态+数据库实际clock_timestamp有效lease过滤。payment aggregate唯一域与event identity同时校验，不能任选一个已有行。
+- Outbox本切片仅实现持久组件，不重写旧worker loop。最后attempt的owner结果查询、poison decode、续租await/drain及HTTP/业务调用接线在M3/M4使用该组件闭合，不在repo执行任意provider handler，不假ACK、不接双消费者。
+
+### 原子去重步骤与raw范围
+
+1. 按固定编码确定tenant/namespace/surface/command下key锁和非空identity锁，排序后获取transaction advisory锁；哈希碰撞至多串行，数据库UNIQUE仍最终兜底。
+2. 查询key binding及其同scope receipt，另查询identity receipt；悬空/跨scope binding为内部不变量错误；两域指向不同receipt为冲突。
+3. 任一既存receipt先核identity、request version与digest。成功且合法：key尚未绑定时同事务插入binding后返回原结果；已绑定时重放。非成功/损坏不执行effect，不借新key获得新机会。不同digest不创建绑定。
+4. 两域皆空：创建receipt及初始binding，再由外层执行业务，complete/audit/outbox同一callback。不同key同identity并发只产生一个receipt、多条binding、一份业务效果；不同key不同identity独立。
+5. complete只能更新当前scope/身份/digest一致的processing行，成功不可覆盖。任何深层故障同时回滚receipt、全部新binding和业务/audit/outbox。不能在P2002导致的aborted tx内继续读；注册的claim竞态仅在完整回滚后按预算重查，不泛重试未知提交。
+
+普通CRUD/聚合用typed Prisma。raw仅允许已有事务set_config、确定namespace advisory锁、具名行锁、SKIP LOCKED与clock_timestamp fence；固定SQL、绑定参数、结果边界验证，不包原pg查询或公开unsafe API。
+
+### 依赖与验收
+
+为实际Nest生命周期安装精确`@nestjs/common/core/testing`12.0.1、reflect-metadata0.2.2、rxjs7.8.2；testing为dev。Node24.20.0、Prisma7.10.0保持。Root2026-09-13查询registry的版本/peer/optional peer/license/integrity记录于`/tmp/billing-m2-root-dependency-metadata.log`；Nest MIT，其余两者Apache-2.0。Nest optional HTTP/microservices peers不据此自动扩展范围。源码保持ESM，显式Inject/factory避免tsx缺失构造metadata假设。安装后frozen install/audit/生命周期源码及dist实测才是兼容证据。
+官方语义：[Nest v12迁移](https://docs.nestjs.com/migration-guide)、[Prisma v7事务](https://docs.prisma.io/docs/orm/v7/prisma-client/queries/transactions)。不升级其他核心包追latest。
+
+Schema/Prisma fresh+drift，真实PG多client回滚/并发/跨tenant/失租晚写和Nest connect/close失败；format/lint/typecheck/build/sql/contract/prisma门。读写/资源清理用本轮独占数据库，复用实例；完整旧runtime失败仍保留至整体替换，不恢复旧表造绿。精确文件授权与状态以唯一任务板M2b为准。
+
+
 ## B8-M1b 首发目标契约切片（2026-09-13）
 
 采用[API_CONTRACT的M1b决定](API_CONTRACT.md#b8-m1b-首发机器契约实施决定2026-09-13)统一覆盖历史major/调用身份/202未决表述：v2设计先行，M3删除v1及旧writer，不双部署；同步事实201/200与Execution202区分，结果查询依托既有Checkout/Settlement/Refund/Admission/Execution资源，不新增operation表。M1的31表canonical不变。IAM已发布本人消费授权经固定artifact消费，payer来自其可信user结果，不来自body。M1b仅完成机器契约/治理与验证，不放行运行时部署；完整writer、消费者和故障恢复门仍在唯一任务板。

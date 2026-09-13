@@ -8,6 +8,24 @@
 
 **Tech Stack:** 当前 Fastify + pg + Zod 3；目标 Nest 12 + Prisma 7.10.0、SQL-first只读生成链，见ADR-0003；B6a已安装Prisma生成链；生产仍Fastify/pg，Nest与业务writer未切换。
 
+## B8-M2b 执行卡（2026-09-13，设计已复核，组件实施中）
+
+| 项 | 决定 |
+|---|---|
+| 目标/P0 | 完成Nest/Prisma生命周期、root只读/worker根事务、正规化receipt/key绑定、AuditAppender与fenced Outbox持久组件；为M3/M4完整writer切换提供真实可用基础 |
+| 基线 | `/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing`，codex/billing-ts-prisma-alignment，47b676f8c77ef3e31af0a69de2c48e1756d8ecd8，Root本卡/三设计前clean；M1b目标contract204测试已验 |
+| Owner/角色 | Root设计、审查、Git/index、主树集成验证；billing_transaction_m2a下一阶段唯一writer；billing_model_r2只读设计/终审；iam_billing_authorization已交只读writer定位及key2/id2缺口 |
+| 放置与粒度 | 复用src/database；比较业务modules/common及独立新模块均淘汰，这是有明确3表+key绑定的持久支持，不是业务owner。数据库生命周期/事务/三个具名writer按变化原因分文件，不建BaseRepository或空层 |
+| 允许文件集 | src/database现有transaction三个文件；新增prisma.service.ts/prisma.types.ts/database.module.ts、command-receipt.repository.ts/command-receipt.types.ts/command-receipt.error.ts、outbox.repository.ts/outbox.types.ts/outbox.error.ts、audit-appender.ts/audit.types.ts；需要的具名持久JSON codec仅限该目录，不复制旧层。database/schema.sql及正规生成schema/provenance；package.json/pnpm-lock.yaml/pnpm-workspace.yaml/tsconfig*.json只限本切片必要依赖与编译；相关test/unit与test/integration的transaction/receipt/outbox/audit/prisma-lifecycle/schema/Prisma fixture；test/architecture依赖与新writer门；INDEX/CURRENT/本卡/三设计/ADR0003的当前证据 |
+| 排除 | src/application/domain/infrastructure/interfaces/bootstrap/main以及旧worker/seed本轮不接新实现；不改v1/v2字节/HTTP/其他仓；不批量格式化、不改无关依赖、不删失败测试/兼容旧表 |
+| 数据与依赖 | M2b三设计明确31→32表key binding正规化，保留同identity换key重放且每key永久绑定；SQL唯一source、无FK。Nest12.0.1 core/common/testing+reflect0.2.2/rxjs7.8.2精确固定，暂不安装HTTP adapter；registry证据见TECHNICAL_DESIGN。业务API不暴露ORM/Repository，内部database角色可用本仓generated类型 |
+| 删除 | 删除receipt单值key列/旧唯一约束，不保留双可编辑key来源；目标组件不启用旧pg双轨。旧运行时在M3/M4一次切换后删除，当前中间组件不发布 |
+| 验证 | 先真实RED：key1/id1→key2/id1→key2/id2最后必须409且效果仍一份；多client并发key/identity、不同digest、两域交叉、损坏结果、跨tenant/actor/关闭上下文、业务+receipt+binding+audit+outbox深层回滚、租约过期/旧token晚写；root read mutation拒绝；Nest真实生命周期源码/dist。复用fixture自建PG；不reset或启动共享服务 |
+| 命令 | pnpm format:check/lint/typecheck/build/sql:check/contract:check；prisma:refresh→prisma:check；schema fresh/catalog32；pnpm exec vitest run test/unit/transaction.test.ts test/integration/transaction.test.ts test/integration/command-receipt.test.ts test/integration/outbox.test.ts test/integration/audit-appender.test.ts test/integration/prisma-lifecycle.test.ts test/architecture --no-file-parallelism（新增文件在实现前不假称存在）；pnpm install --frozen-lockfile及pnpm audit。原135业务失败保留，不放宽门禁 |
+| 阶段/交付 | 设计复核后单writer实施，允许先提交依赖/生命周期与后提交receipt/outbox的自洽切片，但共享index仅Root。writer停写交文件/hash/命令/资源；Root重跑并独立审查后提交。最后attempt恢复、worker loop/drain、业务owner/NestHTTP/消费者仍属M3/M4/M5 |
+
+M2b文档门通过：billing_model_r2只读复核key-binding、两域一致性、事务/根查询与worker边界，无剩余设计P1/P2。三设计绝对路径：`/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/TECHNICAL_DESIGN.md`、`/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/API_CONTRACT.md`、`/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/DATA_MODEL.md`。设计审查基线`47b676f`+本卡/三设计，当前Schema仍31表；32表fresh/catalog/Prisma的实现验证待本卡writer交付，不冒称已通过。M1b committed HEAD的`pnpm contract:check`及8文件204项复验通过；一次误在Root执行Vitest的命令因无该依赖退出，切回Billing后完成复验。M2b仅组件门，无新业务owner/外部API未决，不阻断实施；线上运行、worker与消费者验收另属连续全目标。
+
 ## B8-M1b 机器契约执行卡（2026-09-13，目标契约已验收）
 
 | 项 | 决定 |
