@@ -1,5 +1,16 @@
 # kokoro-billing 数据模型
 
+## B8-M1 canonical 模型切片实施决定（2026-09-13）
+
+用户已确认首发、无真实账务数据，Root按已审R2/R3进入M1离线Schema切片。此次是完整迁移中间态，不发布、不部署旧Fastify/pg到新Schema。运行API仍是当前v1机器源；目标资源/身份与R2/R3、IAM ADR006一致，真正HTTP/消费者变更随M1b/M3闭合，不把离线生成当作HTTP可用。禁止兼容表、alias/view/第二Schema、迁移旧数据或清共享库。
+
+M1只落实DATA_MODEL既定35→31映射：所有资源PK为应用生成id UUID，同仓引用UUID，外部tenant/subject/provider/event/command身份仍opaque；Money整数最小单位+currency_code、Credit整数micros，TIMESTAMPTZ(3)。合并三receipt、两outbox、acquisition/fulfillment。
+新增支持字段冻结：receipt(command_namespace general/payment/admission, api_surface internal, request_schema_version正整数, payload_digest 64位小写hex, result_schema_version正整数或NULL, result_json)，成功必须同时有两个result，非成功两列NULL；key/非空identity在tenant/namespace/surface/command域双唯一。outbox(event_namespace credit/payment,event_identity,payload_schema_version正整数,payload_digest,payload_json,requeue_generation非负,last_error_code,completed_at)，namespace+event_identity唯一，payment三元组partial唯一，lease成对、终态互斥且无lease。
+fulfillment保存tenant/subject/credit_account_id UUID NOT NULL/source_kind/source_ref/program_key/authorized_micros/effective_at/expires_at/authorization_policy_version/authorization_digest/grant_id/grant_journal_id/created_at/committed_at，source_kind限payment_settlement/subscription_period；tenant+source_kind+source_ref、grant、journal分别唯一。account非唯一，一账户可多次履约；同事务必须验证tenant/account/subject与grant/journal一致。不保留重复acquisition或无独立生命周期的status。refund reversal保留原fulfillment/grant与可空journal，零冲正有永久结果。
+FeaturePrice采用完整revision快照：不可变published_at/effective_from/revision、feature_key、unit_price_micros>=0；同revision+feature唯一，删token费率/label分支/effective_to和quota占位。admission保存明确pricing_revision_id/feature_price_id/authorized_micros/pricing_snapshot_digest，quantity为一次调用1，不把CRD当币种。usage与hold仍保持同tenant一对一逻辑/唯一约束。
+其他Checkout、Refund、Subscription、Execution的已批准持久状态字段按TECHNICAL_DESIGN D2a/c/d与DATA_MODEL落实；任何新增业务规则不由实现者猜测。M1新增DDL测试只证明target canonical，而非旧业务集成成功。完成目标门后继续整组writer，不以中间可生成替代全Goal。
+
+
 > **B8-S4 局部实施门（2026-09-12，基线 ada75b2）**：当前扣减链路的 usage–hold 绑定先在现有唯一 writer 落地；
 > canonical `entitlement_usage_event.credit_hold_id VARCHAR(36) NULL UNIQUE` 匹配当前 hold 类型，派生 event 使用独立 randomUUID。
 > 同事务验证 scope/state、持久绑定及重放；HTTP 17 操作和内部方法签名不变，无新 API、FK、迁移或兼容分支。

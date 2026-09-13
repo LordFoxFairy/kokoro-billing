@@ -8,6 +8,19 @@
 
 **Tech Stack:** 当前 Fastify + pg + Zod 3；目标 Nest 12 + Prisma 7.10.0、SQL-first只读生成链，见ADR-0003；B6a已安装Prisma生成链；生产仍Fastify/pg，Nest与业务writer未切换。
 
+## B8-M1 执行卡（2026-09-13，进行中）
+
+| 项 | 决定 |
+|---|---|
+| 目标 | 将已审R2/R3模型落实canonical 31表、只读Prisma及真实Schema约束测试；中间态不部署，后续完整writer/contract/consumer目标不缩小 |
+| 基线 | `/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing`，codex/billing-ts-prisma-alignment，1dcac770796bf7f80740f5f30801a80d3bea2057，起始clean |
+| 分工 | Root先写三设计/本卡；交接后billing_transaction_m2a为单一实现writer；billing_model_r2只读规格审查；Root只读并最终主树验证/Git提交 |
+| 文件集 | database/schema.sql及正式生成schema/provenance；scripts/verify-sql-naming.ts；对应schema/Prisma/transaction架构与集成测试；三设计/CURRENT/INDEX/database README与本卡可交付修改，不改IAM/其他仓/package/lock/生产pg业务 |
+| 放置 | 现有database canonical+generated，不另建schema；真实约束测试放现有test/integration，一文件覆盖独立模型不变量，不新建目录 |
+| API边界 | 原v1运行时尚未切换；目标Billing内部UUID与外部opaque身份已定，M1离线canonical不暴露新HTTP。旧源码对新Schema不兼容属完整切片待办，不保留旧表维持假绿 |
+| 验证 | isolated fresh install、catalog 31表/UUID/零FK/约束反例、prisma refresh/check重复生成、sql:check、typecheck/build/target tests；完整旧业务suite失败与后续writer owner逐项报告，不skip/削弱门禁 |
+| 交付 | Agent只交文件/日志不操作index；Root独立审查+主树验证再按路径提交，任务状态只验收M1证据不宣称可发布 |
+
 ## B8-R5 成熟方案对照：身份边界、账本与调度（2026-09-12，只读研究结论）
 
 本轮用户要求重新深思并参考成熟方案。基线 Billing `6ba108f4fbe948fa3944df0754ce3868ae0abd0d`、IAM `0f06f33b7390c27c2a57170d3c8dfb74b6c51908`，均干净。
