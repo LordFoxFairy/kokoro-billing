@@ -33,9 +33,9 @@ integration("Prisma PostgreSQL persistence", () => {
   it("performs typed CRUD with UTC millisecond and exact BigInt/JSON null semantics", async () => {
     const accountId = id();
     const instant = new Date("2026-09-08T12:34:56.789Z");
-    await fixture.client.entitlement_credit_account.create({
+    await fixture.client.billing_credit_account.create({
       data: {
-        credit_account_id: accountId,
+        id: accountId,
         tenant_id: "tenant",
         subject_id: "subject",
         available_micros: 9_007_199_254_740_993n,
@@ -47,8 +47,8 @@ integration("Prisma PostgreSQL persistence", () => {
       const before = await tx.$queryRaw<Array<{ pid: number; txid: bigint }>>`
         SELECT pg_catalog.pg_backend_pid() AS pid, pg_catalog.txid_current() AS txid
       `;
-      const updated = await tx.entitlement_credit_account.update({
-        where: { credit_account_id: accountId },
+      const updated = await tx.billing_credit_account.update({
+        where: { id: accountId },
         data: { generation: { increment: 1n } },
       });
       const after = await tx.$queryRaw<Array<{ pid: number; txid: bigint }>>`
@@ -66,39 +66,44 @@ integration("Prisma PostgreSQL persistence", () => {
     const base = {
       tenant_id: "tenant",
       command_name: "json-test",
-      payload_hash: hash,
-      status: "succeeded",
+      command_namespace: "general",
+      api_surface: "internal",
+      request_schema_version: 1,
+      payload_digest: hash,
+      status: "processing",
     };
-    await fixture.client.entitlement_command_receipt.createMany({
+    await fixture.client.billing_command_receipt.createMany({
       data: [
         {
           ...base,
-          receipt_id: id(),
+          id: id(),
           idempotency_key: id(),
           result_json: Prisma.DbNull,
         },
         {
           ...base,
-          receipt_id: id(),
+          id: id(),
           idempotency_key: id(),
           result_json: Prisma.JsonNull,
+          result_schema_version: 1,
+          status: "succeeded",
         },
       ],
     });
     expect(
-      await fixture.client.entitlement_command_receipt.count({
+      await fixture.client.billing_command_receipt.count({
         where: { result_json: { equals: Prisma.DbNull } },
       }),
     ).toBe(1);
     expect(
-      await fixture.client.entitlement_command_receipt.count({
+      await fixture.client.billing_command_receipt.count({
         where: { result_json: { equals: Prisma.JsonNull } },
       }),
     ).toBe(1);
-    await fixture.client.entitlement_credit_account.delete({
-      where: { credit_account_id: accountId },
+    await fixture.client.billing_credit_account.delete({
+      where: { id: accountId },
     });
-    expect(await fixture.client.entitlement_credit_account.count()).toBe(0);
+    expect(await fixture.client.billing_credit_account.count()).toBe(0);
   });
 
   it("commits receipt/account/journal/outbox atomically and rolls all back on failure", async () => {
@@ -106,26 +111,29 @@ integration("Prisma PostgreSQL persistence", () => {
       fixture.client.$transaction(
         async (tx) => {
           const account = id();
-          const receipt = await tx.entitlement_command_receipt.create({
+          const receipt = await tx.billing_command_receipt.create({
             data: {
-              receipt_id: id(),
+              id: id(),
               tenant_id: "tenant",
               command_name: "grant",
+              command_namespace: "general",
+              api_surface: "internal",
+              request_schema_version: 1,
               idempotency_key: suffix,
-              payload_hash: hash,
+              payload_digest: hash,
             },
           });
-          await tx.entitlement_credit_account.create({
+          await tx.billing_credit_account.create({
             data: {
-              credit_account_id: account,
+              id: account,
               tenant_id: "tenant",
               subject_id: suffix,
               available_micros: 1n,
             },
           });
-          await tx.entitlement_credit_journal.create({
+          await tx.billing_credit_journal.create({
             data: {
-              journal_id: id(),
+              id: id(),
               tenant_id: "tenant",
               credit_account_id: account,
               journal_seq: 1n,
@@ -135,26 +143,31 @@ integration("Prisma PostgreSQL persistence", () => {
               source_ref: suffix,
             },
           });
-          await tx.entitlement_outbox.create({
+          await tx.billing_outbox.create({
             data: {
-              outbox_id: id(),
+              id: id(),
               tenant_id: "tenant",
+              event_namespace: "credit",
+              event_identity: suffix,
+              payload_schema_version: 1,
+              payload_digest: hash,
               aggregate_type: "credit",
               aggregate_id: account,
               event_type: "granted",
               payload_json: { suffix, account, result: "credited" },
             },
           });
-          await tx.entitlement_command_receipt.update({
-            where: { receipt_id: receipt.receipt_id },
+          await tx.billing_command_receipt.update({
+            where: { id: receipt.id },
             data: {
               status: "succeeded",
+              result_schema_version: 1,
               result_json: { account, result: "credited" },
             },
           });
           expect(
-            await fixture.client.entitlement_credit_account.count({
-              where: { credit_account_id: account },
+            await fixture.client.billing_credit_account.count({
+              where: { id: account },
             }),
           ).toBe(0);
           if (fail) throw new Error("rollback marker");
@@ -171,19 +184,19 @@ integration("Prisma PostgreSQL persistence", () => {
     );
     expect(
       await Promise.all([
-        fixture.client.entitlement_command_receipt.count(),
-        fixture.client.entitlement_credit_account.count(),
-        fixture.client.entitlement_credit_journal.count(),
-        fixture.client.entitlement_outbox.count(),
+        fixture.client.billing_command_receipt.count(),
+        fixture.client.billing_credit_account.count(),
+        fixture.client.billing_credit_journal.count(),
+        fixture.client.billing_outbox.count(),
       ]),
     ).toEqual([1, 1, 1, 1]);
     expect(
-      await fixture.client.entitlement_credit_account.findUniqueOrThrow({
-        where: { credit_account_id: committedAccount },
+      await fixture.client.billing_credit_account.findUniqueOrThrow({
+        where: { id: committedAccount },
       }),
     ).toMatchObject({ available_micros: 1n, subject_id: "committed" });
     expect(
-      await fixture.client.entitlement_command_receipt.findFirstOrThrow({
+      await fixture.client.billing_command_receipt.findFirstOrThrow({
         where: { idempotency_key: "committed" },
       }),
     ).toMatchObject({
@@ -191,7 +204,7 @@ integration("Prisma PostgreSQL persistence", () => {
       result_json: { account: committedAccount, result: "credited" },
     });
     expect(
-      await fixture.client.entitlement_credit_account.count({
+      await fixture.client.billing_credit_account.count({
         where: { subject_id: "rolled-back" },
       }),
     ).toBe(0);
@@ -199,9 +212,9 @@ integration("Prisma PostgreSQL persistence", () => {
 
   it("surfaces real CHECK and partial UNIQUE errors, including concurrent distinct backends", async () => {
     await expect(
-      fixture.client.entitlement_credit_account.create({
+      fixture.client.billing_credit_account.create({
         data: {
-          credit_account_id: id(),
+          id: id(),
           tenant_id: "tenant",
           subject_id: "bad",
           available_micros: -1n,
@@ -242,14 +255,17 @@ integration("Prisma PostgreSQL persistence", () => {
                 assertDefined(arrivals[index]).resolveArrival();
                 await createGate;
                 if (failIndex !== undefined) return assertDefined(pid[0]).pid;
-                await tx.entitlement_command_receipt.create({
+                await tx.billing_command_receipt.create({
                   data: {
-                    receipt_id: id(),
+                    id: id(),
                     tenant_id: "tenant",
                     command_name: "same",
+                    command_namespace: "general",
+                    api_surface: "internal",
+                    request_schema_version: 1,
                     command_identity: identity,
                     idempotency_key: key,
-                    payload_hash: hash,
+                    payload_digest: hash,
                   },
                 });
                 return assertDefined(pid[0]).pid;
@@ -294,38 +310,44 @@ integration("Prisma PostgreSQL persistence", () => {
     });
     expect(new Set(backendPids).size).toBe(2);
     const winner =
-      await fixture.client.entitlement_command_receipt.findFirstOrThrow({
+      await fixture.client.billing_command_receipt.findFirstOrThrow({
         where: { tenant_id: "tenant", command_name: "same" },
       });
     await expect(
-      fixture.client.entitlement_command_receipt.create({
+      fixture.client.billing_command_receipt.create({
         data: {
-          receipt_id: id(),
+          id: id(),
           tenant_id: "tenant",
           command_name: "same",
+          command_namespace: "general",
+          api_surface: "internal",
+          request_schema_version: 1,
           command_identity: id(),
           idempotency_key: winner.idempotency_key,
-          payload_hash: hash,
+          payload_digest: hash,
         },
       }),
     ).rejects.toMatchObject({ code: "P2002", meta: anyObject });
-    await fixture.client.entitlement_command_receipt.create({
+    await fixture.client.billing_command_receipt.create({
       data: {
-        receipt_id: id(),
+        id: id(),
         tenant_id: "other-tenant",
         command_name: "same",
+        command_namespace: "general",
+        api_surface: "internal",
+        request_schema_version: 1,
         command_identity: identity,
         idempotency_key: winner.idempotency_key,
-        payload_hash: hash,
+        payload_digest: hash,
       },
     });
   });
 
   it("uses parameterized row locks, SKIP LOCKED, and independent transaction budgets", async () => {
     const accountId = id();
-    await fixture.client.entitlement_credit_account.create({
+    await fixture.client.billing_credit_account.create({
       data: {
-        credit_account_id: accountId,
+        id: accountId,
         tenant_id: "tenant",
         subject_id: "locked",
       },
@@ -347,25 +369,25 @@ integration("Prisma PostgreSQL persistence", () => {
           Array<{ pid: number }>
         >`SELECT pg_catalog.pg_backend_pid() AS pid`;
         holderPid = assertDefined(backend[0]).pid;
-        await tx.$queryRaw`SELECT credit_account_id FROM public.entitlement_credit_account WHERE tenant_id = ${"tenant"} AND credit_account_id = ${accountId} FOR UPDATE`;
+        await tx.$queryRaw`SELECT id FROM public.billing_credit_account WHERE tenant_id = ${"tenant"} AND id = ${accountId} FOR UPDATE`;
         locked();
         await gate;
       },
       { timeout: 2_000 },
     );
     void holder.catch(lockFailed);
-    let contender: Promise<Array<{ credit_account_id: string }>> | undefined;
+    let contender: Promise<Array<{ id: string }>> | undefined;
     try {
       await acquired;
       expect(
         await fixture.client
-          .$queryRaw`SELECT credit_account_id FROM public.entitlement_credit_account WHERE tenant_id = ${"wrong-tenant"} AND credit_account_id = ${accountId} FOR UPDATE`,
+          .$queryRaw`SELECT id FROM public.billing_credit_account WHERE tenant_id = ${"wrong-tenant"} AND id = ${accountId} FOR UPDATE`,
       ).toEqual([]);
       const skipped = await fixture.client.$transaction(
         (tx) =>
           tx.$queryRaw<
-            Array<{ credit_account_id: string }>
-          >`SELECT credit_account_id FROM public.entitlement_credit_account WHERE tenant_id = ${"tenant"} AND credit_account_id = ${accountId} FOR UPDATE SKIP LOCKED`,
+            Array<{ id: string }>
+          >`SELECT id FROM public.billing_credit_account WHERE tenant_id = ${"tenant"} AND id = ${accountId} FOR UPDATE SKIP LOCKED`,
       );
       expect(skipped).toEqual([]);
       await expect(
@@ -374,7 +396,7 @@ integration("Prisma PostgreSQL persistence", () => {
             Array<{ value: string }>
           >`SELECT pg_catalog.set_config('lock_timeout', '50ms', true) AS value`;
           expect(setting).toEqual([{ value: "50ms" }]);
-          await tx.$queryRaw`SELECT credit_account_id FROM public.entitlement_credit_account WHERE tenant_id = ${"tenant"} AND credit_account_id = ${accountId} FOR UPDATE`;
+          await tx.$queryRaw`SELECT id FROM public.billing_credit_account WHERE tenant_id = ${"tenant"} AND id = ${accountId} FOR UPDATE`;
         }),
       ).rejects.toMatchObject({
         code: "P2010",
@@ -383,8 +405,8 @@ integration("Prisma PostgreSQL persistence", () => {
       contender = fixture.client.$transaction(
         (tx) =>
           tx.$queryRaw<
-            Array<{ credit_account_id: string }>
-          >`SELECT credit_account_id FROM public.entitlement_credit_account WHERE tenant_id = ${"tenant"} AND credit_account_id = ${accountId} FOR UPDATE`,
+            Array<{ id: string }>
+          >`SELECT id FROM public.billing_credit_account WHERE tenant_id = ${"tenant"} AND id = ${accountId} FOR UPDATE`,
       );
       let waiting = false;
       for (let attempt = 0; attempt < 50 && !waiting; attempt += 1) {
@@ -403,7 +425,7 @@ integration("Prisma PostgreSQL persistence", () => {
       await Promise.allSettled([holder, ...(contender ? [contender] : [])]);
     }
     await holder;
-    expect(await contender).toEqual([{ credit_account_id: accountId }]);
+    expect(await contender).toEqual([{ id: accountId }]);
     await expect(
       fixture.client.$transaction(
         async (tx) => {

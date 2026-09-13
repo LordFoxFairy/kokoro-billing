@@ -1,6 +1,16 @@
 # kokoro-billing 当前状态
 
-## B8-S4 当前扣减链路（2026-09-12）
+## B8-M1 当前 canonical Schema（2026-09-13，离线模型已验收；禁止部署）
+
+- `database/schema.sql` 已收敛为31张 `billing_*` 表、429列、31个单列 `id UUID` 主键、零外键；三类receipt、两类outbox及acquisition/fulfillment已分别合并为单一事实表，Prisma只读生成物由该SQL刷新。
+- Checkout/Refund/Subscription/Execution恢复状态与约束已进入canonical；target-schema、Prisma、事务及Schema安装定向测试通过。此切片仅是未部署的模型中间态，不表示当前Fastify/pg业务writer已完成切换。
+- 完整旧业务测试仍有依赖已删除旧表的预期失败；禁止恢复兼容表制造双canonical。生产writer、HTTP/消费者及共享Credit事务组由后续M3闭环。
+
+Root冻结树实跑：format/lint/typecheck/build/sql/旧contract/Prisma一致性通过；7个本切片真实integration文件88项通过，独立约束探针32项通过；完整756项为621通过、135失败、0跳过，失败属于旧pg业务integration。精确hash、日志、命令、审查与未运行边界见唯一任务板B8-M1。
+
+> 下方为按阶段保留的历史交付记录，其中“当前”“35表”“尚未切换Schema”等描述仅指各节标注的历史基线，不覆盖本页顶部M1事实；生产writer仍旧pg、目标Nest业务仍未交付。
+
+## B8-S4 历史扣减链路切片（2026-09-12）
 
 - 修复默认 UUID capture 的 22001，以及合法255字符 invocation 拼接内部key/source的长度溢出；删除短hold测试规避。内部事件随机UUID，内部关联使用 Billing admission UUID，外部调用身份/HTTP合同未收紧。
 - 当前canonical增量为 usage_event.credit_hold_id VARCHAR(36) NULL UNIQUE，与当前hold类型一致；35表/369列/128约束/84索引。Prisma schema/provenance由canonical重新生成，不手改或另立schema源。

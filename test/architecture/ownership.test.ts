@@ -414,13 +414,15 @@ describe("billing ownership architecture", () => {
     expect(schema).not.toMatch(/TIMESTAMPTZ\((?!3\))/iu);
     expect(schema).not.toMatch(/\bSELECT\s+\*/iu);
     expect(schema).toContain(
-      "CREATE TABLE IF NOT EXISTS entitlement_credit_journal",
+      "CREATE TABLE IF NOT EXISTS billing_credit_journal",
     );
     expect(schema).toContain(
-      "CREATE TABLE IF NOT EXISTS payment_command_receipt",
+      "CREATE TABLE IF NOT EXISTS billing_command_receipt",
     );
-    expect(schema).toContain("uq_payment_command_receipt_identity");
-    expect(schema).toContain("uq_entitlement_command_receipt_identity");
+    expect(schema).toContain("uq_billing_command_receipt_identity");
+    expect(schema).not.toMatch(
+      /CREATE TABLE IF NOT EXISTS (?:payment|entitlement)_command_receipt/u,
+    );
   });
 });
 

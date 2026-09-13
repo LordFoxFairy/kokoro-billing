@@ -22,13 +22,13 @@ const writeScope = (tenantId = "tenant-a"): TransactionScope => ({
   mode: "write",
 });
 const accountData = (id: string, tenantId = "tenant-a") => ({
-  credit_account_id: id,
+  id,
   tenant_id: tenantId,
   subject_id: id,
 });
 const accountCount = async (fixture: PrismaDatabaseFixture, id: string) =>
-  fixture.client.entitlement_credit_account.count({
-    where: { credit_account_id: id },
+  fixture.client.billing_credit_account.count({
+    where: { id },
   });
 
 describeDatabase("TransactionService with PostgreSQL", () => {
@@ -53,7 +53,7 @@ describeDatabase("TransactionService with PostgreSQL", () => {
         const first = await tx.$queryRawUnsafe<
           Array<{ pid: number; txid: bigint }>
         >("SELECT pg_backend_pid() pid, txid_current() txid");
-        await tx.entitlement_credit_account.create({
+        await tx.billing_credit_account.create({
           data: accountData(marker),
         });
         await service.run(writeScope(), async () => {
@@ -65,13 +65,13 @@ describeDatabase("TransactionService with PostgreSQL", () => {
           expect(second[0]).toEqual(first[0]);
         });
         const hidden = await outside.query<{ count: number }>(
-          "SELECT count(*)::int count FROM entitlement_credit_account WHERE credit_account_id=$1",
+          "SELECT count(*)::int count FROM billing_credit_account WHERE id=$1",
           [marker],
         );
         expect(hidden.rows[0]?.count).toBe(0);
       });
       const visible = await outside.query<{ count: number }>(
-        "SELECT count(*)::int count FROM entitlement_credit_account WHERE credit_account_id=$1",
+        "SELECT count(*)::int count FROM billing_credit_account WHERE id=$1",
         [marker],
       );
       expect(visible.rows[0]?.count).toBe(1);
@@ -87,7 +87,7 @@ describeDatabase("TransactionService with PostgreSQL", () => {
       await expect(
         service.run(writeScope(), async () => {
           const tx = service.requireActiveTransaction("tenant-a", "write");
-          await tx.entitlement_credit_account.create({ data: accountData(id) });
+          await tx.billing_credit_account.create({ data: accountData(id) });
           try {
             await service.run(writeScope(), async () => Promise.reject(cause));
           } catch {
@@ -131,10 +131,10 @@ describeDatabase("TransactionService with PostgreSQL", () => {
     try {
       await service.run(writeScope(), async () => {
         const tx = service.requireActiveTransaction("tenant-a", "write");
-        await tx.entitlement_credit_account.create({ data: accountData(id) });
+        await tx.billing_credit_account.create({ data: accountData(id) });
         try {
           await tx.$queryRawUnsafe(
-            "SELECT missing_column FROM entitlement_audit_event",
+            "SELECT missing_column FROM billing_audit_event",
           );
         } catch (error) {
           sqlError = error;
@@ -265,7 +265,7 @@ describeDatabase("TransactionService with PostgreSQL", () => {
       service
         .requireActiveTransaction("tenant-a", "readOnlySnapshot")
         .$queryRawUnsafe<Array<{ count: number }>>(
-          "SELECT count(*)::int count FROM entitlement_audit_event",
+          "SELECT count(*)::int count FROM billing_audit_event",
         );
     const marker = randomUUID();
     try {
@@ -276,13 +276,13 @@ describeDatabase("TransactionService with PostgreSQL", () => {
           async () => {
             const before = await count();
             await outside.query(
-              "INSERT INTO entitlement_audit_event (audit_event_id, tenant_id, operator_id, action, resource_type, resource_id, reason, payload_json, created_at) VALUES ($1,$2,$3,$4,$5,$6,'test','{}',now())",
+              "INSERT INTO billing_audit_event (id, tenant_id, operator_id, action, resource_type, resource_id, reason, payload_json, created_at) VALUES ($1,$2,$3,$4,$5,$6,'test','{}',now())",
               [randomUUID(), "tenant-a", "actor-a", "test", "probe", marker],
             );
             expect(await count()).toEqual(before);
             await service
               .requireActiveTransaction("tenant-a", "readOnlySnapshot")
-              .$executeRawUnsafe("DELETE FROM entitlement_audit_event");
+              .$executeRawUnsafe("DELETE FROM billing_audit_event");
           },
         );
       } catch (error) {
@@ -293,7 +293,7 @@ describeDatabase("TransactionService with PostgreSQL", () => {
         meta: { driverAdapterError: { cause: { originalCode: "25006" } } },
       });
       const persisted = await outside.query<{ count: number }>(
-        "SELECT count(*)::int count FROM entitlement_audit_event WHERE resource_id=$1",
+        "SELECT count(*)::int count FROM billing_audit_event WHERE resource_id=$1",
         [marker],
       );
       expect(persisted.rows[0]?.count).toBe(1);
@@ -313,7 +313,7 @@ describeDatabase("TransactionService with PostgreSQL", () => {
     await expect(
       budgeted.run(writeScope(), async () => {
         const tx = budgeted.requireActiveTransaction("tenant-a", "write");
-        await tx.entitlement_credit_account.create({
+        await tx.billing_credit_account.create({
           data: accountData(statementWriteId),
         });
         await tx.$queryRawUnsafe("SELECT pg_sleep(0.5)");
@@ -370,14 +370,14 @@ describeDatabase("TransactionService with PostgreSQL", () => {
     const id = randomUUID();
     const priorWriteId = randomUUID();
     await fixture.client.$executeRawUnsafe(
-      "INSERT INTO entitlement_audit_event (audit_event_id, tenant_id, operator_id, action, resource_type, resource_id, reason, payload_json, created_at) VALUES ($1,'tenant-a','actor-a','test','probe',$1,'test','{}',now())",
+      "INSERT INTO billing_audit_event (id, tenant_id, operator_id, action, resource_type, resource_id, reason, payload_json, created_at) VALUES ($1,'tenant-a','actor-a','test','probe',$1,'test','{}',now())",
       id,
     );
     const locker = await fixture.pool.connect();
     try {
       await locker.query("BEGIN");
       await locker.query(
-        "UPDATE entitlement_audit_event SET reason='locked' WHERE audit_event_id=$1",
+        "UPDATE billing_audit_event SET reason='locked' WHERE id=$1",
         [id],
       );
       const budgeted = new TransactionService(fixture.client, {
@@ -390,13 +390,13 @@ describeDatabase("TransactionService with PostgreSQL", () => {
         budgeted.run(writeScope(), async () => {
           await budgeted
             .requireActiveTransaction("tenant-a", "write")
-            .entitlement_credit_account.create({
+            .billing_credit_account.create({
               data: accountData(priorWriteId),
             });
           await budgeted
             .requireActiveTransaction("tenant-a", "write")
             .$executeRawUnsafe(
-              "UPDATE entitlement_audit_event SET reason='waiter' WHERE audit_event_id=$1",
+              "UPDATE billing_audit_event SET reason='waiter' WHERE id=$1",
               id,
             );
         }),
@@ -437,7 +437,7 @@ describeDatabase("TransactionService with PostgreSQL", () => {
       await expect(
         service.run(writeScope(), async () => {
           const tx = service.requireActiveTransaction("tenant-a", "write");
-          await tx.entitlement_credit_account.create({ data: accountData(id) });
+          await tx.billing_credit_account.create({ data: accountData(id) });
           await service.run(nestedScope, async () => {
             calls += 1;
           });

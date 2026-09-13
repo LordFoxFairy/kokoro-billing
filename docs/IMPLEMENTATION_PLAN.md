@@ -8,7 +8,7 @@
 
 **Tech Stack:** 当前 Fastify + pg + Zod 3；目标 Nest 12 + Prisma 7.10.0、SQL-first只读生成链，见ADR-0003；B6a已安装Prisma生成链；生产仍Fastify/pg，Nest与业务writer未切换。
 
-## B8-M1 执行卡（2026-09-13，进行中）
+## B8-M1 执行卡（2026-09-13，离线模型已验收；禁止部署）
 
 | 项 | 决定 |
 |---|---|
@@ -20,6 +20,18 @@
 | API边界 | 原v1运行时尚未切换；目标Billing内部UUID与外部opaque身份已定，M1离线canonical不暴露新HTTP。旧源码对新Schema不兼容属完整切片待办，不保留旧表维持假绿 |
 | 验证 | isolated fresh install、catalog 31表/UUID/零FK/约束反例、prisma refresh/check重复生成、sql:check、typecheck/build/target tests；完整旧业务suite失败与后续writer owner逐项报告，不skip/削弱门禁 |
 | 交付 | Agent只交文件/日志不操作index；Root独立审查+主树验证再按路径提交，任务状态只验收M1证据不宣称可发布 |
+
+### Root 集成验收（2026-09-13）
+
+- 实现基线 `8d3fe03`；schema SHA256 `3640580b1f1d2589a709fc20b6a90d279ce491b7728eb837583b860cdbe81a0c`，generated schema `077ce9810bb8d21f579e8b31fb8386ed0af1c351f88015dfa6cf95e1400b7fb3`，provenance `ec6f0d786c089db06536ab091df09ebbb581520b89af883cc6bc830ccae061c8`。提交由Root按本卡16文件串行完成，未改package/lock/HTTP/业务writer/其他仓。
+- billing_model_r2只读规格终审：R1的Execution终态/dispatch、Provider attempt非负及测试覆盖缺口均在R2闭环，无剩余本切片P1/P2。Root另审生成链与测试变更，未删除原事务回滚、并发、锁或drift反例。
+- Root真实独占临时数据库catalog：31表、429列、31个单列`id UUID`主键、0 FK；timestamp均UTC毫秒类型；三receipt/两outbox/两履约事实的旧物理表已删除。完整catalog差异门由32项真实drift测试覆盖，不维护第二份可编辑schema。
+- Root命令 `pnpm format:check && pnpm lint && pnpm typecheck && pnpm build && pnpm sql:check && pnpm contract:check && pnpm prisma:check` 全通过；contract仍17条旧运行时route，此结果不证明目标API已交付。日志 `/tmp/billing-m1-r2-root-gates.log`。
+- Root独立约束探针：receipt/outbox/Checkout 21/21、Execution/Provider 11/11；先分别在固定旧snapshot复现3项Checkout和6项队列反例错误接受，再在R2全部通过。探针与catalog均只创建/清理自有template0数据库。
+- Root全量命令：在本轮独占、已安装canonical的临时数据库设置DATABASE_URL，管理连接设置SCHEMA_ADMIN_URL，共享Redis DB4仅使用测试自建key，执行 `pnpm exec vitest run --no-file-parallelism --reporter=verbose`。实际 **67文件：41通过/26失败；756项：621通过/135失败/0跳过**，退出1；日志 `/tmp/billing-m1-r2-root-full-suite.log`。资源已清理。
+- 本切片7个真实integration文件均通过：target-schema 4、prisma-generation 3、prisma-persistence 5、transaction 18、schema-drift 32、schema-installation 21、postgres-schema 5，共**88项**；ownership架构14项通过。真实失败仍为26个旧pg业务integration文件，访问已退出的payment/entitlement表或因此返回500。失败未删除、未skip，必须在M3完整业务writer/fixture替换后清零；此前e795快照的136失败中旧Schema名称架构断言现已修复。
+- **范围限制**：仅验收M1离线模型，不可部署；未跑/未通过目标Nest HTTP、源码/dist新业务smoke、Scheduler消费者、provider sandbox及镜像验收。后续owner仍为Billing负责人，Root负责契约裁决/跨仓集成，整个Goal保持进行中。
+
 
 ## B8-R5 成熟方案对照：身份边界、账本与调度（2026-09-12，只读研究结论）
 

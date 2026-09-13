@@ -78,14 +78,14 @@ integration("canonical schema installation", () => {
     }
   }
 
-  it("installs exactly 35 canonical tables and rejects a repeat installation", async () => {
+  it("installs exactly 31 canonical tables and rejects a repeat installation", async () => {
     await install();
     const pool = new Pool({ connectionString: databaseUrl(database), max: 1 });
     try {
       const result = await pool.query<{ count: string }>(
         "SELECT count(*)::text AS count FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','p')",
       );
-      expect(result.rows[0]?.count).toBe("35");
+      expect(result.rows[0]?.count).toBe("31");
     } finally {
       await pool.end();
     }
@@ -133,7 +133,7 @@ integration("canonical schema installation", () => {
       `);
       expect(Number(original.rows[0]?.count)).toBeGreaterThan(0);
       const billing = await pool.query<{ count: string }>(
-        "SELECT count(*)::text AS count FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND (c.relname LIKE 'payment_%' OR c.relname LIKE 'entitlement_%')",
+        "SELECT count(*)::text AS count FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND (c.relname LIKE 'billing_%' OR c.relname LIKE 'billing_%')",
       );
       expect(billing.rows[0]?.count).toBe("0");
     } finally {
@@ -173,7 +173,7 @@ integration("canonical schema installation", () => {
     const pool = new Pool({ connectionString: databaseUrl(database), max: 1 });
     try {
       const result = await pool.query<{ schema_name: string }>(
-        "SELECT DISTINCT n.nspname AS schema_name FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.relname LIKE 'payment_%' OR c.relname LIKE 'entitlement_%'",
+        "SELECT DISTINCT n.nspname AS schema_name FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.relname LIKE 'billing_%' OR c.relname LIKE 'billing_%'",
       );
       expect(result.rows.map((row) => row.schema_name)).toEqual(["public"]);
     } finally {

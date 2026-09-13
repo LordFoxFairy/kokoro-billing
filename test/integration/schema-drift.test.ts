@@ -57,13 +57,13 @@ integration("full canonical catalog drift", () => {
     });
   }
 
-  it("accepts the canonical 35-table schema and cleans its reference database", async () => {
+  it("accepts the canonical 31-table schema and cleans its reference database", async () => {
     const before = await admin.query<{ datname: string }>(
       "SELECT datname FROM pg_database WHERE datname LIKE 'billing_reference_%' ORDER BY datname",
     );
     const result = await verify();
     expect(result.differences).toEqual([]);
-    expect(result.objectCounts.relations).toBe(35);
+    expect(result.objectCounts.relations).toBe(31);
     expect(result.canonicalSha256).toMatch(/^[a-f0-9]{64}$/u);
     const after = await admin.query<{ datname: string }>(
       "SELECT datname FROM pg_database WHERE datname LIKE 'billing_reference_%' ORDER BY datname",
@@ -106,50 +106,50 @@ integration("full canonical catalog drift", () => {
   it.each([
     [
       "missing CHECK",
-      "ALTER TABLE entitlement_credit_account DROP CONSTRAINT ck_entitlement_credit_account_balances",
+      "ALTER TABLE billing_credit_account DROP CONSTRAINT ck_billing_credit_account_balances",
       "constraints",
     ],
     [
       "changed CHECK predicate",
-      "ALTER TABLE entitlement_credit_account DROP CONSTRAINT ck_entitlement_credit_account_balances; ALTER TABLE entitlement_credit_account ADD CONSTRAINT ck_entitlement_credit_account_balances CHECK (available_micros >= -1 AND held_micros >= 0)",
+      "ALTER TABLE billing_credit_account DROP CONSTRAINT ck_billing_credit_account_balances; ALTER TABLE billing_credit_account ADD CONSTRAINT ck_billing_credit_account_balances CHECK (available_micros >= -1 AND held_micros >= 0)",
       "constraints",
     ],
     [
       "changed type precision",
-      "ALTER TABLE entitlement_credit_account ALTER COLUMN created_at TYPE timestamptz",
+      "ALTER TABLE billing_credit_account ALTER COLUMN created_at TYPE timestamptz",
       "columns",
     ],
     [
       "changed default",
-      "ALTER TABLE entitlement_credit_account ALTER COLUMN updated_at DROP DEFAULT",
+      "ALTER TABLE billing_credit_account ALTER COLUMN updated_at DROP DEFAULT",
       "columns",
     ],
     [
       "changed nullability",
-      "ALTER TABLE entitlement_credit_account ALTER COLUMN updated_at DROP NOT NULL",
+      "ALTER TABLE billing_credit_account ALTER COLUMN updated_at DROP NOT NULL",
       "columns",
     ],
     [
       "missing column",
-      "ALTER TABLE entitlement_credit_account DROP COLUMN generation",
+      "ALTER TABLE billing_credit_account DROP COLUMN generation",
       "columns",
     ],
-    ["missing table", "DROP TABLE payment_outbox", "relations"],
-    ["missing index", "DROP INDEX ix_payment_outbox_dispatch", "indexes"],
+    ["missing table", "DROP TABLE billing_outbox", "relations"],
+    ["missing index", "DROP INDEX ix_billing_outbox_dispatch", "indexes"],
     [
       "changed partial index predicate",
-      "DROP INDEX ix_payment_outbox_dispatch; CREATE INDEX ix_payment_outbox_dispatch ON payment_outbox (next_attempt_at, created_at, outbox_id) WHERE published_at IS NULL",
+      "DROP INDEX ix_billing_outbox_dispatch; CREATE INDEX ix_billing_outbox_dispatch ON billing_outbox (next_attempt_at, id) WHERE completed_at IS NULL",
       "indexes",
     ],
     [
       "missing UNIQUE",
-      "ALTER TABLE entitlement_credit_account DROP CONSTRAINT uq_entitlement_credit_account_subject",
+      "ALTER TABLE billing_credit_account DROP CONSTRAINT uq_billing_credit_account_subject",
       "constraints",
     ],
     ["extra table", "CREATE TABLE drift_extra(id int)", "relations"],
     [
       "extra foreign key",
-      "ALTER TABLE entitlement_credit_account ADD CONSTRAINT drift_fk FOREIGN KEY (tenant_id, subject_id) REFERENCES entitlement_credit_account(tenant_id, subject_id)",
+      "ALTER TABLE billing_credit_account ADD CONSTRAINT drift_fk FOREIGN KEY (tenant_id, subject_id) REFERENCES billing_credit_account(tenant_id, subject_id)",
       "constraints",
     ],
     ["extra type", "CREATE TYPE drift_type AS ENUM ('x')", "types"],
@@ -160,29 +160,29 @@ integration("full canonical catalog drift", () => {
     ],
     [
       "unlogged relation",
-      "ALTER TABLE entitlement_credit_account SET UNLOGGED",
+      "ALTER TABLE billing_credit_account SET UNLOGGED",
       "relations",
     ],
     [
       "RLS policy",
-      "ALTER TABLE entitlement_credit_account ENABLE ROW LEVEL SECURITY; CREATE POLICY drift_policy ON entitlement_credit_account USING (true)",
+      "ALTER TABLE billing_credit_account ENABLE ROW LEVEL SECURITY; CREATE POLICY drift_policy ON billing_credit_account USING (true)",
       "relations",
     ],
     [
       "user trigger",
-      "CREATE FUNCTION drift_trigger_fn() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$; CREATE TRIGGER drift_trigger BEFORE INSERT ON entitlement_credit_account FOR EACH ROW EXECUTE FUNCTION drift_trigger_fn()",
+      "CREATE FUNCTION drift_trigger_fn() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$; CREATE TRIGGER drift_trigger BEFORE INSERT ON billing_credit_account FOR EACH ROW EXECUTE FUNCTION drift_trigger_fn()",
       "triggers",
     ],
     [
       "user rule",
-      "CREATE RULE drift_rule AS ON UPDATE TO entitlement_credit_account DO NOTHING",
+      "CREATE RULE drift_rule AS ON UPDATE TO billing_credit_account DO NOTHING",
       "rules",
     ],
   ])(
     "reports %s without changing target data",
     async (_label, sql, category) => {
       await mutate(
-        "INSERT INTO entitlement_credit_account (credit_account_id,tenant_id,subject_id,status) VALUES ('marker','tenant','subject','active')",
+        "INSERT INTO billing_credit_account (id,tenant_id,subject_id,status) VALUES ('00000000-0000-4000-8000-000000000001','tenant','subject','active')",
       );
       await mutate(sql);
       const result = await verify();
@@ -194,7 +194,7 @@ integration("full canonical catalog drift", () => {
       const pool = new Pool({ connectionString: targetUrl, max: 1 });
       try {
         const marker = await pool.query<{ count: string }>(
-          "SELECT count(*)::text AS count FROM public.entitlement_credit_account WHERE credit_account_id='marker'",
+          "SELECT count(*)::text AS count FROM public.billing_credit_account WHERE id='00000000-0000-4000-8000-000000000001'",
         );
         expect(marker.rows[0]?.count).toBe("1");
       } finally {

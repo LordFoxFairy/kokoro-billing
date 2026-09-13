@@ -1,7 +1,7 @@
 # Database
 
 PostgreSQL 16 is the CI baseline. The 2026-09-08 local verification used PostgreSQL 18.4; this does not replace a CI 16 run.
-`database/schema.sql` is the sole V1 canonical schema.
+`database/schema.sql` is the sole canonical schema. B8-M1 currently defines 31 `billing_*` resources with application-generated UUID primary keys and no foreign keys. This is an offline, non-deployable intermediate until the existing pg writers are switched as one transaction group; no legacy tables or compatibility views are retained.
 
 `pnpm db:apply-schema` installs into an exclusive, empty Billing database, in an existing `public` schema. The URL may omit `schema`
 or contain only `schema=public`; all non-public values, including repeated query parameters, are rejected before connecting.
@@ -26,7 +26,7 @@ host/port/server). The admin role needs CREATEDB; the application role does not.
 credentials in application configuration. CI provides the management URL separately.
 
 The verifier creates a random `billing_reference_<uuid>` database from template0, installs the canonical SQL, then compares a read-only
-REPEATABLE READ target snapshot. It compares all 35 relations, 369 columns, 128 constraints (NOT NULL is a column property), 84 indexes,
+REPEATABLE READ target snapshot. It compares all 31 relations, 429 columns, constraints and indexes,
 plus database locale metadata and unexpected types/routines/triggers/rules/policies. Definitions retain precision, defaults, validation,
 partial predicates, persistence and RLS flags. No data is copied and no target DDL/DML is executed. A differing locale from template0 is
 reported as drift; this tool does not claim database data, owner/ACL, statistics, every extension feature or concurrent DDL equivalence.

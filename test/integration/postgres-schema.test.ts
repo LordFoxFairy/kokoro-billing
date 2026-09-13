@@ -22,19 +22,12 @@ integration("billing canonical PostgreSQL schema", () => {
       );
       const names = tables.map((row) => row.table_name);
       expect(names.length).toBeGreaterThan(0);
-      expect(
-        names.every(
-          (name) =>
-            name.startsWith("entitlement_") || name.startsWith("payment_"),
-        ),
-      ).toBe(true);
-      expect(
-        names.some((name) => name.includes("entitlement_entitlement")),
-      ).toBe(false);
+      expect(names.every((name) => name.startsWith("billing_"))).toBe(true);
+      expect(names.some((name) => name.includes("billing_entitlement"))).toBe(
+        false,
+      );
       expect(names).not.toContain("billing_schema_migrations");
-      expect(names).toContain("payment_command_receipt");
-      expect(names).toContain("entitlement_command_receipt");
-      expect(names).toContain("entitlement_billing_command_receipt");
+      expect(names).toContain("billing_command_receipt");
     } finally {
       await connection.end();
     }
@@ -109,24 +102,22 @@ integration("billing canonical PostgreSQL schema", () => {
         `SELECT indexname AS index_name
            FROM pg_indexes
           WHERE schemaname = current_schema()
-            AND indexname IN ($1, $2, $3, $4, $5, $6)
+            AND indexname IN ($1, $2, $3, $4, $5)
           ORDER BY indexname`,
         [
-          "ix_entitlement_outbox_dispatch",
-          "ix_payment_outbox_dispatch",
-          "ix_payment_provider_event_processing",
-          "ix_payment_settlement_checkout",
-          "ix_entitlement_credit_hold_expiry",
-          "ix_entitlement_credit_grant_expiry",
+          "ix_billing_outbox_dispatch",
+          "ix_billing_provider_event_processing",
+          "ix_billing_settlement_checkout",
+          "ix_billing_credit_hold_expiry",
+          "ix_billing_credit_grant_expiry",
         ],
       );
       expect(indexes.map((row) => row.index_name)).toEqual([
-        "ix_entitlement_credit_grant_expiry",
-        "ix_entitlement_credit_hold_expiry",
-        "ix_entitlement_outbox_dispatch",
-        "ix_payment_outbox_dispatch",
-        "ix_payment_provider_event_processing",
-        "ix_payment_settlement_checkout",
+        "ix_billing_credit_grant_expiry",
+        "ix_billing_credit_hold_expiry",
+        "ix_billing_outbox_dispatch",
+        "ix_billing_provider_event_processing",
+        "ix_billing_settlement_checkout",
       ]);
     } finally {
       await connection.end();
@@ -143,7 +134,7 @@ integration("billing canonical PostgreSQL schema", () => {
       >(
         `SELECT column_name
            FROM information_schema.columns
-          WHERE table_schema = current_schema() AND table_name = 'entitlement_execution_event'
+          WHERE table_schema = current_schema() AND table_name = 'billing_execution_event'
           ORDER BY ordinal_position`,
       );
       expect(columns.map((row) => row.column_name)).not.toContain("signature");
@@ -163,7 +154,7 @@ integration("billing canonical PostgreSQL schema", () => {
         `SELECT table_name, column_name
            FROM information_schema.columns
           WHERE table_schema = current_schema()
-            AND table_name IN ('entitlement_command_receipt', 'entitlement_billing_command_receipt', 'payment_command_receipt')
+            AND table_name = 'billing_command_receipt'
           ORDER BY table_name, ordinal_position`,
       );
       const receiptColumns = new Map<string, string[]>();
@@ -172,13 +163,10 @@ integration("billing canonical PostgreSQL schema", () => {
         names.push(row.column_name);
         receiptColumns.set(row.table_name, names);
       }
-      expect(
-        receiptColumns.get("entitlement_billing_command_receipt"),
-      ).toContain("command_identity");
-      expect(receiptColumns.get("entitlement_command_receipt")).not.toContain(
-        "lease_until",
+      expect(receiptColumns.get("billing_command_receipt")).toContain(
+        "command_identity",
       );
-      expect(receiptColumns.get("payment_command_receipt")).not.toContain(
+      expect(receiptColumns.get("billing_command_receipt")).not.toContain(
         "lease_until",
       );
 
@@ -188,7 +176,7 @@ integration("billing canonical PostgreSQL schema", () => {
         `SELECT indexname AS index_name
            FROM pg_indexes
           WHERE schemaname = current_schema() AND indexname = $1`,
-        ["uq_entitlement_billing_receipt_identity"],
+        ["uq_billing_command_receipt_identity"],
       );
       expect(indexes).toHaveLength(1);
     } finally {

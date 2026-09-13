@@ -38,16 +38,13 @@ for (const match of sql.matchAll(tablePattern)) {
   if (
     table === undefined ||
     !identifier.test(table) ||
-    !/^(entitlement|payment)_/u.test(table)
+    !/^billing_/u.test(table)
   ) {
     errors.push(
       `database/schema.sql: invalid bounded-context table name: ${table ?? "<missing>"}`,
     );
   }
-  if (
-    table?.startsWith("entitlement_entitlement_") ||
-    table?.startsWith("payment_payment_")
-  ) {
+  if (table?.startsWith("billing_billing_")) {
     errors.push(
       `database/schema.sql: duplicated bounded-context owner in table name: ${table}`,
     );
@@ -57,6 +54,10 @@ for (const match of sql.matchAll(namedObjectPattern)) {
   const name = match[1];
   if (name !== undefined && !identifier.test(name))
     errors.push(`database/schema.sql: invalid constraint name: ${name}`);
+  if (name !== undefined && !/^(?:ck|uq)_billing_/u.test(name))
+    errors.push(
+      `database/schema.sql: constraint must use billing owner prefix: ${name}`,
+    );
 }
 
 if (errors.length > 0) throw new Error(errors.join("\n"));

@@ -68,7 +68,7 @@ integration("generated Prisma Client", () => {
             "utf8",
           )
         ).match(/^model /gmu),
-      ).toHaveLength(35);
+      ).toHaveLength(31);
 
       const schemaPath = resolve(
         actualRoot,
@@ -112,7 +112,7 @@ integration("generated Prisma Client", () => {
     const pool = new Pool({ connectionString: url, max: 2 });
     const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
     try {
-      expect(await prisma.entitlement_credit_account.count()).toBe(0);
+      expect(await prisma.billing_credit_account.count()).toBe(0);
     } finally {
       await prisma.$disconnect();
       await pool.end();
