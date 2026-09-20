@@ -13,6 +13,7 @@ export class DatabaseModule {
   static register(options: PrismaServiceOptions): DynamicModule {
     return {
       module: DatabaseModule,
+      global: true,
       providers: [
         {
           provide: PRISMA_SERVICE_OPTIONS,

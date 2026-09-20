@@ -42,6 +42,12 @@
 
 M3 文档门：billing_model_r2 只读复核 `19195a1` + Root 四文档 diff，无 P1；唯一 P2“每个账务组是否必须 emit”已明确为仅 R3 受控有 receiver 的任务，删除无 receiver 纯通知，不扩展 registry。三份入口为 `/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/TECHNICAL_DESIGN.md`、`/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/API_CONTRACT.md`、`/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing/docs/DATA_MODEL.md`。Root 当前实际 `pnpm contract:check` 旧17/目标24、`pnpm sql:check` 通过，SQL/v2 SHA 与上卡冻结一致；未重跑未变化的32表集成，前次 M2b 实测证据仍绑定938bd46。订阅policy待用户商业确认，不阻断C1事务effect和其他模块；没有其他C1前置未决。C1完成后停写审查，后续同writer续派C2/C3，完整Goal不缩小。
 
+### M3-C1 内部基础切片（待 Root 验收）
+
+- 先收敛单一全局 `DatabaseModule.register` 根装配和静态 Credit/Metering module，再扩展其余能力；业务 module 不接收数据库配置、不转导基础设施。
+- 当前基础实现覆盖 owner 计算 command digest、永久 receipt 重放、grant/reserve/capture/release、同事务 audit、按次 quote、usage settlement 与完整 usage identity 校验，以及生效/到期窗口投影。真实 PostgreSQL 定向测试覆盖并发余额竞争、capture/release 竞争、跨 feature 同事务、未来生效、到期、漂移和尾部失败回滚。
+- 本切片交付后仍未完成的 C1 能力为 redeem/admin、批量 grant/hold expiry、Payment/Subscription fulfillment、Refund reversal、pricing publish 与 admission 完整资源编排；这些继续属于 C1，未移出 M3，也不表示旧运行时或 Billing 可部署。
+
 ## B8-M2b 执行卡（2026-09-13，设计已复核，组件实施中）
 
 | 项 | 决定 |
