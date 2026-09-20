@@ -8,6 +8,7 @@ overrides:
   fast-uri@3: 3.1.7
   fast-uri@4: 4.1.4
 
+strictDepBuilds: true
 allowBuilds:
   "@prisma/engines": true
   esbuild: true
