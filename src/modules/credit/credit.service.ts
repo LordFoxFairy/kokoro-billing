@@ -186,7 +186,11 @@ export class CreditService {
     };
     const payloadDigest = commandDigest({
       command: "credit.reserve/v1",
-      ...effect,
+      tenantId: effect.tenantId,
+      accountId: effect.accountId,
+      requestedMicros: effect.requestedMicros,
+      expiresAt: effect.expiresAt,
+      featureKey: effect.featureKey,
     });
     const result = await this.transactions.runRoot(
       {

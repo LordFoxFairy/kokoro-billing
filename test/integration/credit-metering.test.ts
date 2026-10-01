@@ -2,6 +2,7 @@ import "reflect-metadata";
 import { Test } from "@nestjs/testing";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { AuditAppender } from "../../src/database/audit-appender.js";
+import type { AuditAppendInput } from "../../src/database/audit.types.js";
 import { CommandReceiptRepository } from "../../src/database/command-receipt.repository.js";
 import { TransactionService } from "../../src/database/transaction.service.js";
 import { DatabaseModule } from "../../src/database/database.module.js";
@@ -53,6 +54,271 @@ describe.skipIf(adminUrl === undefined)(
         idempotencyKey: key,
         commandIdentity: "grant-identity",
       });
+
+    const reserveFacts = async () => {
+      const client = assertDefined(fixture).client;
+      const query = {
+        where: { tenant_id: "tenant" },
+        orderBy: { id: "asc" as const },
+      };
+      const [
+        accounts,
+        grants,
+        holds,
+        allocations,
+        journals,
+        receipts,
+        bindings,
+        audits,
+        outbox,
+      ] = await Promise.all([
+        client.billing_credit_account.findMany(query),
+        client.billing_credit_grant.findMany(query),
+        client.billing_credit_hold.findMany(query),
+        client.billing_credit_hold_allocation.findMany(query),
+        client.billing_credit_journal.findMany(query),
+        client.billing_command_receipt.findMany(query),
+        client.billing_command_key_binding.findMany(query),
+        client.billing_audit_event.findMany(query),
+        client.billing_outbox.findMany(query),
+      ]);
+      return {
+        accounts,
+        grants,
+        holds,
+        allocations,
+        journals,
+        receipts,
+        bindings,
+        audits,
+        outbox,
+      };
+    };
+
+    test("reserve identity replay permanently binds another key without repeating the effect", async () => {
+      const account = await grant();
+      const input = {
+        tenantId: "tenant",
+        actorId: "service",
+        accountId: account.accountId,
+        requestedMicros: 40n,
+        featureKey: "chat",
+        expiresAt: new Date("2099-01-01T00:00:00Z"),
+        commandIdentity: "reserve-identity",
+        idempotencyKey: "reserve-key-1",
+      } as const;
+      const first = await credit.reserve(input);
+      const beforeReplay = await reserveFacts();
+      expect(
+        await credit.reserve({ ...input, idempotencyKey: "reserve-key-2" }),
+      ).toEqual(first);
+      const afterReplay = await reserveFacts();
+      expect({ ...afterReplay, bindings: beforeReplay.bindings }).toEqual(
+        beforeReplay,
+      );
+      expect(
+        afterReplay.bindings.filter(
+          (binding) => binding.idempotency_key !== "reserve-key-2",
+        ),
+      ).toEqual(beforeReplay.bindings);
+      const reserveBindings = afterReplay.bindings.filter(
+        (binding) => binding.command_name === "credit.reserve",
+      );
+      expect(
+        reserveBindings.map((binding) => binding.idempotency_key).sort(),
+      ).toEqual(["reserve-key-1", "reserve-key-2"]);
+      const receipt = assertDefined(
+        afterReplay.receipts.find(
+          (item) => item.command_name === "credit.reserve",
+        ),
+      );
+      expect(
+        reserveBindings.every(
+          (binding) => binding.command_receipt_id === receipt.id,
+        ),
+      ).toBe(true);
+      expect(receipt).toMatchObject({
+        status: "succeeded",
+        command_identity: input.commandIdentity,
+      });
+      expect(afterReplay.holds).toHaveLength(1);
+      expect(afterReplay.accounts[0]).toMatchObject({
+        available_micros: 60n,
+        held_micros: 40n,
+      });
+      expect(await credit.reserve(input)).toEqual(first);
+      expect(
+        await credit.reserve({ ...input, idempotencyKey: "reserve-key-2" }),
+      ).toEqual(first);
+      expect(await reserveFacts()).toEqual(afterReplay);
+      await expect(
+        credit.reserve({
+          ...input,
+          idempotencyKey: "reserve-key-2",
+          commandIdentity: "another-identity",
+        }),
+      ).rejects.toMatchObject({ code: "COMMAND_IDEMPOTENCY_CONFLICT" });
+      expect(await reserveFacts()).toEqual(afterReplay);
+    });
+
+    test.each(
+      (["same-key", "new-key"] as const).flatMap((keyMode) =>
+        (["amount", "account", "feature", "expiry"] as const).map((field) => ({
+          keyMode,
+          field,
+        })),
+      ),
+    )(
+      "reserve $keyMode rejects $field drift without changing durable facts",
+      async ({ keyMode, field }) => {
+        const account = await grant();
+        const otherAccount = await credit.grant({
+          tenantId: "tenant",
+          actorId: "operator",
+          subjectId: "other-subject",
+          amountMicros: 100n,
+          sourceKind: "admin",
+          sourceRef: "other-source",
+          programKey: "program",
+          effectiveAt: new Date("2026-01-01T00:00:00Z"),
+          idempotencyKey: "other-grant-key",
+        });
+        const input = {
+          tenantId: "tenant",
+          actorId: "service",
+          accountId: account.accountId,
+          requestedMicros: 40n,
+          featureKey: "chat",
+          expiresAt: new Date("2099-01-01T00:00:00Z"),
+          commandIdentity: "reserve-drift-identity",
+          idempotencyKey: "reserve-drift-key-1",
+        } as const;
+        await credit.reserve(input);
+        const before = await reserveFacts();
+        const drift = {
+          amount: { requestedMicros: 41n },
+          account: { accountId: otherAccount.accountId },
+          feature: { featureKey: "other-feature" },
+          expiry: { expiresAt: new Date("2099-02-01T00:00:00Z") },
+        }[field];
+        await expect(
+          credit.reserve({
+            ...input,
+            ...drift,
+            idempotencyKey:
+              keyMode === "same-key"
+                ? input.idempotencyKey
+                : "reserve-drift-key-2",
+          }),
+        ).rejects.toMatchObject({ code: "COMMAND_IDEMPOTENCY_CONFLICT" });
+        expect(await reserveFacts()).toEqual(before);
+      },
+    );
+
+    test("concurrent reserve identity requests with different keys commit one effect and both bindings", async () => {
+      const account = await grant();
+      const input = {
+        tenantId: "tenant",
+        actorId: "service",
+        accountId: account.accountId,
+        requestedMicros: 40n,
+        featureKey: "chat",
+        expiresAt: new Date("2099-01-01T00:00:00Z"),
+        commandIdentity: "concurrent-reserve-identity",
+      } as const;
+      const [first, second] = await Promise.allSettled([
+        credit.reserve({ ...input, idempotencyKey: "concurrent-key-1" }),
+        credit.reserve({ ...input, idempotencyKey: "concurrent-key-2" }),
+      ]);
+      expect([first.status, second.status]).toEqual(["fulfilled", "fulfilled"]);
+      if (first.status !== "fulfilled" || second.status !== "fulfilled")
+        throw new Error("Both reserve identity requests must succeed");
+      expect(second.value).toEqual(first.value);
+      const facts = await reserveFacts();
+      expect(facts.accounts[0]).toMatchObject({
+        available_micros: 60n,
+        held_micros: 40n,
+        generation: 3n,
+      });
+      expect(facts.holds).toHaveLength(1);
+      expect(facts.allocations).toHaveLength(1);
+      expect(facts.allocations[0]).toMatchObject({
+        credit_hold_id: first.value.holdId,
+        held_micros: 40n,
+      });
+      expect(facts.journals).toHaveLength(1);
+      const reserveReceipts = facts.receipts.filter(
+        (item) => item.command_name === "credit.reserve",
+      );
+      expect(reserveReceipts).toHaveLength(1);
+      const reserveReceipt = assertDefined(reserveReceipts[0]);
+      const reserveBindings = facts.bindings.filter(
+        (item) => item.command_name === "credit.reserve",
+      );
+      expect(
+        reserveBindings.map((item) => item.idempotency_key).sort(),
+      ).toEqual(["concurrent-key-1", "concurrent-key-2"]);
+      expect(
+        reserveBindings.every(
+          (item) => item.command_receipt_id === reserveReceipt.id,
+        ),
+      ).toBe(true);
+      const reserveAudits = facts.audits.filter(
+        (item) => item.action === "credit.reserve",
+      );
+      expect(reserveAudits).toHaveLength(1);
+      expect(reserveAudits[0]).toMatchObject({
+        resource_id: first.value.holdId,
+      });
+    });
+
+    test("reserve audit tail failure rolls back the hold, balance, receipt and key binding", async () => {
+      const account = await grant();
+      const before = await reserveFacts();
+      class FailingReserveAudit extends AuditAppender {
+        attempts = 0;
+        override async append(input: AuditAppendInput): Promise<string> {
+          await super.append(input);
+          this.attempts += 1;
+          throw new Error("reserve audit tail");
+        }
+      }
+      const audit = new FailingReserveAudit(tx);
+      const failing = new CreditService(
+        tx,
+        new CommandReceiptRepository(tx),
+        new CreditEffects(tx, new CreditRepository(tx), audit),
+      );
+      const input = {
+        tenantId: "tenant",
+        actorId: "service",
+        accountId: account.accountId,
+        requestedMicros: 40n,
+        featureKey: "chat",
+        expiresAt: new Date("2099-01-01T00:00:00Z"),
+        commandIdentity: "rollback-reserve-identity",
+        idempotencyKey: "rollback-reserve-key",
+      } as const;
+      await expect(failing.reserve(input)).rejects.toThrow(
+        "reserve audit tail",
+      );
+      expect(audit.attempts).toBe(1);
+      expect(await reserveFacts()).toEqual(before);
+      await expect(credit.reserve(input)).resolves.toMatchObject({
+        requestedMicros: 40n,
+      });
+      const afterRetry = await reserveFacts();
+      expect(afterRetry.accounts[0]).toMatchObject({
+        available_micros: 60n,
+        held_micros: 40n,
+        generation: 3n,
+      });
+      expect(afterRetry.holds).toHaveLength(1);
+      expect(afterRetry.allocations).toHaveLength(1);
+      expect(afterRetry.receipts).toHaveLength(before.receipts.length + 1);
+      expect(afterRetry.bindings).toHaveLength(before.bindings.length + 1);
+      expect(afterRetry.audits).toHaveLength(before.audits.length + 1);
+    });
 
     test("grants, permanently replays another key, reserves and captures bigint credit", async () => {
       const first = await grant();

@@ -1,3 +1,11 @@
+## R32 Credit reserve 语义幂等局部修复已由 Root 复验
+
+沿 C1 原实现，只将 reserve semantic digest 与传输 idempotency key 分离；key 继续写入首次 hold effect 和永久 receipt binding，schema/API/runtime 不变，无旧 digest fallback。冻结 source SHA256 4c1da7bfa4efb03562916c18fec86512888f62678c9c0c900236dcc2bd1b753c，test ec271ead541aea41924e166b26c29dcf8eb38c73553da0161bf8ef98f1d96fa5；独立 Sol 最终审查 0P0/0P1/0P2。
+
+Root Node24.20 实际同一 PG 测试 RED 2 failed/22 passed/0skip → GREEN 24 passed/0skip（4.09s），覆盖同 identity 换 key、业务漂移、并发一效果双绑定、audit 写后失败回滚。新 command receipt PG 回归 5 passed；另两旧 DATABASE_URL 套件 23 skipped，不计真实通过。SCHEMA_ADMIN_URL fixture 临时库前后集合相同，cleanup_diff_exit=0，未清共享数据。日志 /tmp/kokoro-billing-reserve-r32-root-{red-r2,green,receipts}.log。
+
+Root pnpm verify 实际退出0：format/lint/typecheck/build/sql/contract，全测试529 passed/280既有资源skip（13.56s）；当前 v1 route17 与 target v2 operation24门保持，不将其当 v2 runtime 已部署证据。五份原 dirty 设计内容完整保留，Git 只接本记录 prefix 与已验两文件。此片不是 capture/release/expiry/metering、正式赠送或整个 Billing/浏览器闭环；后续沿 C1/C2/C3/M5，支付最后。
+
 # kokoro-billing 当前状态
 
 ## B8-M2b 持久一致性组件（2026-09-13，组件已验收）
