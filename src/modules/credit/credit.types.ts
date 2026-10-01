@@ -50,6 +50,10 @@ export type HoldTerminalResult = Readonly<{
   capturedMicros: bigint;
   releasedMicros: bigint;
 }>;
+export type HoldTerminalMutationResult = Readonly<{
+  value: HoldTerminalResult;
+  applied: boolean;
+}>;
 export type CreditAccountSnapshot = Readonly<{
   id: string;
   tenantId: string;

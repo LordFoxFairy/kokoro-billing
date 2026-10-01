@@ -68,33 +68,40 @@ export class CreditEffects {
     const active = this.transactions.requireActive(input.tenantId);
     return this.transactions.run(active.scope, async () => {
       const result = await this.repository.capture(input);
-      await this.audit.append({
-        tenantId: input.tenantId,
-        action: "credit.capture",
-        resourceType: "credit_hold",
-        resourceId: input.holdId,
-        reason: "usage settlement",
-        payload: {
-          sourceRef: input.sourceRef,
-          amountMicros: input.actualMicros.toString(),
-        },
-      });
-      return result;
+      if (result.applied)
+        await this.audit.append({
+          tenantId: input.tenantId,
+          action: "credit.capture",
+          resourceType: "credit_hold",
+          resourceId: input.holdId,
+          reason: "usage settlement",
+          payload: {
+            sourceRef: input.sourceRef,
+            amountMicros: result.value.capturedMicros.toString(),
+            releasedMicros: result.value.releasedMicros.toString(),
+          },
+        });
+      return result.value;
     });
   }
   async release(input: ReleaseCreditInput): Promise<HoldTerminalResult> {
     const active = this.transactions.requireActive(input.tenantId);
     return this.transactions.run(active.scope, async () => {
       const result = await this.repository.release(input);
-      await this.audit.append({
-        tenantId: input.tenantId,
-        action: "credit.release",
-        resourceType: "credit_hold",
-        resourceId: input.holdId,
-        reason: input.sourceRef,
-        payload: { releasedMicros: result.releasedMicros.toString() },
-      });
-      return result;
+      if (result.applied)
+        await this.audit.append({
+          tenantId: input.tenantId,
+          action: "credit.release",
+          resourceType: "credit_hold",
+          resourceId: input.holdId,
+          reason: input.sourceRef,
+          payload: {
+            sourceRef: input.sourceRef,
+            capturedMicros: result.value.capturedMicros.toString(),
+            releasedMicros: result.value.releasedMicros.toString(),
+          },
+        });
+      return result.value;
     });
   }
   async refreshGrantWindows(

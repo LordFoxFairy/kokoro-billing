@@ -1,3 +1,11 @@
+## R38 当前 C1：hold 唯一终态来源已落 canonical
+
+唯一可编辑事实源为 database/schema.sql（32 表）；SHA256 5fbc61465f5af6dcac638ac0e887eb9ca7d29b1f41e60bc55d4f1196b39e755f。billing_credit_hold 新增 terminal_source_ref VARCHAR(255) NULL，无 magic default；active 时必须 NULL，captured/released/expired 时必须非空有界原始来源。
+
+具名 CHECK 约束终态 source 与金额配对：active captured/released=0；captured 两金额和=requested；released/expired captured=0、released=requested。uq_billing_credit_hold_capture_source 为 tenant/source 的 captured-only partial UNIQUE；无新 FK/表/普通索引、journal_id、重复终态 JSON 或零 journal。Runtime 在固定资金锁序内校关系与完整性，重放不改 updated_at；数据库时钟决定首次转换瞬时点。
+
+只读 database/generated/schema.prisma SHA256 5864752d64c08c5305eeb2824a2ccd50de90e9e8cc81b6a874bf7e6ca3e9d2dc，provenance SHA256 b2acd1fada9c6e0d762949672c76d63d0ad10f461a1a0234d9c1c23fd1ade8bb；Prisma/client/adapter 7.10.0，由 Root 自有 canonical reference 正规生成且重新生成比较通过。原 public-only installer 局限保持明确：本片临时库 fresh/catalog 成功不证明应用单库 owner schema 组合。旧数据不兼容，不自动迁移/修表/清理共享数据。
+
 # kokoro-billing 数据模型
 
 ## B8-M3 七 owner Prisma writer 承接（2026-09-13）

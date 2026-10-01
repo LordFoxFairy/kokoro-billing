@@ -1,3 +1,13 @@
+## R38 Root 已验 C1 终态来源切片
+
+当前事实绑定本节所属 Git 提交；实施前 main 5c45f22419db43ae9a128543a056cd1c4a6ff013。仅 Credit capture/release source/replay、canonical CHECK/partial UNIQUE、正规生成及两定点测试，尚非完整 Billing 或正式用户扣费闭环。
+
+Root Node24.20：两 integration 文件真实 PG 131passed/0failed/0skip（20.18s），日志 /tmp/kokoro-billing-terminal-r38-root-green.log。pnpm verify 的 format/lint/typecheck/build/sql/contract 全通过，完整测试 703passed/209skipped/0failed（44.01s），日志 /tmp/kokoro-billing-terminal-r38-root-verify.log；skip 未算真实通过。pnpm prisma:check exit0，日志 /tmp/kokoro-billing-terminal-r38-root-prisma-check.log；自有 reference 集合前后相同，未清共享数据。
+
+独立冻结源审查 P0=0/P1=0/P2=0；repo SHA256 9247d3f813b2b38bc2cff6bdd0ca3a1490bdf04d6bbd068cc42f1f80a9a42588。此前完整门两项 production-prisma 失败通过删除越界 import/无效局部 catch 关闭，架构规则/原断言未放宽。
+
+未闭环：跨 account 同 tenant/source 真实竞争与 HTTP 首因归一、expiry batch/grant 到期释放、单库 owner schema 应用组合、IAM 管理 target/正式赠送、C2/C3/v2唯一 runtime、provider/浏览器完整费用链；支付最后。保留未交接的原五设计工作区段，不把其候选当已发布。
+
 ## R32 Credit reserve 语义幂等局部修复已由 Root 复验
 
 沿 C1 原实现，只将 reserve semantic digest 与传输 idempotency key 分离；key 继续写入首次 hold effect 和永久 receipt binding，schema/API/runtime 不变，无旧 digest fallback。冻结 source SHA256 4c1da7bfa4efb03562916c18fec86512888f62678c9c0c900236dcc2bd1b753c，test ec271ead541aea41924e166b26c29dcf8eb38c73553da0161bf8ef98f1d96fa5；独立 Sol 最终审查 0P0/0P1/0P2。

@@ -1,3 +1,11 @@
+## R38 当前 C1：内部 Credit effect 边界
+
+本提交不修改公开 HTTP 或机器契约，不宣称 v2 runtime 已接线。CreditEffects.capture/release 的公开内部结果仍为 HoldTerminalResult；新增 HoldTerminalMutationResult 的 applied 仅供 Credit 编排审计，不从 credit.public.ts 导出。
+
+source_ref 是原样 opaque 字符串：Unicode code point 长度 1–255，拒绝 NUL/孤立 surrogate，不 trim/normalize。所有终态绑定首次来源；同动作/来源/金额返回原持久结果且零 audit/journal/generation/余额写入，任一身份漂移为 CREDIT_IDEMPOTENCY_CONFLICT。持久终态或 allocation/grant 关系/金额损坏为 CREDIT_HOLD_TERMINAL_CORRUPT；正额 debit 匹配必须 exactly-one，不能先过滤损坏账户/金额。零额/释放不新增零流水。
+
+上述是本地 typed component 的错误，不等于外层 HTTP 已映射。跨 account 的同 source UNIQUE 首因归一、expired batch、正式管理员 target 与 grant API、余额/预占/结算/流水联合用户路径仍待后继。既有机器版本、权限及 micros 整数单位未更改；不发布新的金额单位或前端显示比例 artifact。
+
 # kokoro-billing API 契约策略
 
 ## B8-M3 唯一 v2 运行契约承接（2026-09-13）

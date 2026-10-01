@@ -1,3 +1,13 @@
+## R38 当前 C1：Credit hold 终态来源与重放
+
+本提交完成 Credit 内部 capture/release 的终态组件，不激活 v2 HTTP，不表示完整 C1/C2/C3、正式赠送或支付完成。唯一 writer 仍为 Credit；复用现 TransactionService，先 account、UUID 序 grant、hold、UUID 序 allocation 锁，锁后重核 tenant/account/关系和金额；分配消耗顺序与锁序分开。首次 hold 转换、资金、正额 journal、generation 与 audit 同一事务；精确重放返回持久结果、applied=false、零新写。
+
+hold 的唯一终态身份是动作、不可变 terminal_source_ref 与金额。零额 capture 也保存来源；released/expired 不冒充 captured(0)。持久损坏先于请求身份冲突处理；正额重放按 tenant/usage/debit/source 广查询、要求 exactly-one，然后核 account/负金额，不从账户任取流水。原 account-wide lookup 与无来源重放已删除；private 持久类型来自既有 TransactionClient 返回类型，不直接引入 generated Prisma。
+
+partial captured-source UNIQUE 保证同 tenant/source 不能被不同 hold 占用；SQL 首因与事务回滚保持，Repository 不用无效 P2002 catch 假装映射成功。跨账户真实同 source 竞争和最外 HTTP 稳定冲突映射仍由 C3 完成。expiry batch 与 grant 到期释放策略仍待原 C1 后继，本片不自动把到期 release 改成 expired。
+
+当前 SQL 是 database/schema.sql；只读 Prisma/provenance 由正规 refresh/check 生成。验证见 CURRENT 的 Root 真 PG 与完整门记录。下方历史阶段与尚未接线方案不覆盖本节当前事实；一库多 owner schema 组合尚未由本片验证。
+
 # kokoro-billing 技术设计
 
 ## B8-M3 完整业务与 Nest 运行切换（2026-09-13）

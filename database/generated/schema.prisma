@@ -220,19 +220,21 @@ model billing_credit_grant {
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model billing_credit_hold {
-  id                String   @id @db.Uuid
-  tenant_id         String   @db.VarChar(191)
-  credit_account_id String   @db.Uuid
-  idempotency_key   String   @db.VarChar(128)
-  requested_micros  BigInt
-  status            String   @default("active") @db.VarChar(32)
-  expires_at        DateTime @db.Timestamptz(3)
-  captured_micros   BigInt   @default(0)
-  released_micros   BigInt   @default(0)
-  feature_key       String?  @db.VarChar(255)
-  created_at        DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
-  updated_at        DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+  id                  String   @id @db.Uuid
+  tenant_id           String   @db.VarChar(191)
+  credit_account_id   String   @db.Uuid
+  idempotency_key     String   @db.VarChar(128)
+  requested_micros    BigInt
+  status              String   @default("active") @db.VarChar(32)
+  expires_at          DateTime @db.Timestamptz(3)
+  captured_micros     BigInt   @default(0)
+  released_micros     BigInt   @default(0)
+  terminal_source_ref String?  @db.VarChar(255)
+  feature_key         String?  @db.VarChar(255)
+  created_at          DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+  updated_at          DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
 
+  @@unique([tenant_id, terminal_source_ref], map: "uq_billing_credit_hold_capture_source", where: raw("((status)::text = 'captured'::text)"))
   @@unique([tenant_id, idempotency_key], map: "uq_billing_credit_hold_idempotency")
   @@index([tenant_id, expires_at, id], map: "ix_billing_credit_hold_expiry", where: raw("((status)::text = 'active'::text)"))
 }

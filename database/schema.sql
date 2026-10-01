@@ -48,13 +48,24 @@ CREATE TABLE IF NOT EXISTS billing_credit_hold (
   expires_at TIMESTAMPTZ(3) NOT NULL,
   captured_micros BIGINT NOT NULL DEFAULT 0,
   released_micros BIGINT NOT NULL DEFAULT 0,
+  terminal_source_ref VARCHAR(255) NULL,
   feature_key VARCHAR(255) NULL,
   created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   CONSTRAINT uq_billing_credit_hold_idempotency UNIQUE (tenant_id, idempotency_key),
   CONSTRAINT ck_billing_credit_hold_status CHECK (status IN ('active', 'captured', 'released', 'expired')),
-  CONSTRAINT ck_billing_credit_hold_amounts CHECK (requested_micros >= 0 AND captured_micros >= 0 AND released_micros >= 0 AND captured_micros + released_micros <= requested_micros)
+  CONSTRAINT ck_billing_credit_hold_amounts CHECK (requested_micros >= 0 AND captured_micros >= 0 AND released_micros >= 0 AND captured_micros + released_micros <= requested_micros),
+  CONSTRAINT ck_billing_credit_hold_terminal_source CHECK (
+    (status = 'active' AND terminal_source_ref IS NULL)
+    OR (status IN ('captured', 'released', 'expired') AND terminal_source_ref IS NOT NULL AND char_length(terminal_source_ref) BETWEEN 1 AND 255)
+  ),
+  CONSTRAINT ck_billing_credit_hold_terminal_amounts CHECK (
+    (status = 'active' AND captured_micros = 0 AND released_micros = 0)
+    OR (status = 'captured' AND captured_micros + released_micros = requested_micros)
+    OR (status IN ('released', 'expired') AND captured_micros = 0 AND released_micros = requested_micros)
+  )
 );
+CREATE UNIQUE INDEX IF NOT EXISTS uq_billing_credit_hold_capture_source ON billing_credit_hold (tenant_id, terminal_source_ref) WHERE status = 'captured';
 CREATE TABLE IF NOT EXISTS billing_credit_hold_allocation (
   id UUID NOT NULL PRIMARY KEY,
   credit_hold_id UUID NOT NULL,

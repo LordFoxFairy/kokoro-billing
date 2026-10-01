@@ -2,12 +2,359 @@ import { readFile } from "node:fs/promises";
 import { Pool } from "pg";
 import { describe, expect, it } from "vitest";
 import { withCanonicalReference } from "../../scripts/canonical-reference.js";
+import { readSchemaCatalog } from "../../scripts/schema-catalog.js";
+import { compareSchemaCatalogs } from "../../scripts/schema-verification.js";
 import { assertDefined } from "../assert-defined.js";
 
 const adminUrl = process.env.SCHEMA_ADMIN_URL;
 const integration = describe.skipIf(adminUrl === undefined);
 
 integration("B8 target canonical schema", () => {
+  const withHoldSchema = async (run: (pool: Pool) => Promise<void>) =>
+    withCanonicalReference(
+      assertDefined(adminUrl),
+      await readFile("database/schema.sql", "utf8"),
+      async (url) => {
+        const pool = new Pool({
+          connectionString: publicSchemaUrl(url),
+          max: 1,
+        });
+        try {
+          await run(pool);
+        } finally {
+          await pool.end();
+        }
+      },
+    );
+  const requireTerminalColumn = async (pool: Pool) => {
+    const column = await pool.query<{
+      data_type: string;
+      character_maximum_length: number;
+      is_nullable: string;
+      column_default: string | null;
+    }>(
+      "SELECT data_type,character_maximum_length,is_nullable,column_default FROM information_schema.columns WHERE table_schema='public' AND table_name='billing_credit_hold' AND column_name='terminal_source_ref'",
+    );
+    expect(column.rows, "canonical terminal source column is required").toEqual(
+      [
+        {
+          data_type: "character varying",
+          character_maximum_length: 255,
+          is_nullable: "YES",
+          column_default: null,
+        },
+      ],
+    );
+  };
+  const insertHold = (
+    pool: Pool,
+    input: {
+      status: string;
+      source: string | null;
+      captured: number;
+      released: number;
+      tenant?: string;
+      requested?: number;
+    },
+  ) =>
+    pool.query(
+      "INSERT INTO billing_credit_hold (id,tenant_id,credit_account_id,idempotency_key,requested_micros,status,expires_at,captured_micros,released_micros,terminal_source_ref) VALUES (gen_random_uuid(),$1,gen_random_uuid(),gen_random_uuid()::text,$2,$3,now()+interval '1 hour',$4,$5,$6)",
+      [
+        input.tenant ?? "tenant",
+        input.requested ?? 40,
+        input.status,
+        input.captured,
+        input.released,
+        input.source,
+      ],
+    );
+
+  it("R34 T09 catalog has the single terminal source, two CHECKs and captured-only business UNIQUE", async () => {
+    await withHoldSchema(async (pool) => {
+      await requireTerminalColumn(pool);
+      const checks = await pool.query<{
+        name: string;
+        validated: boolean;
+        definition: string;
+      }>(
+        "SELECT conname AS name,convalidated AS validated,pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid='public.billing_credit_hold'::regclass AND contype='c' ORDER BY conname",
+      );
+      expect(checks.rows.map(({ name }) => name)).toEqual([
+        "ck_billing_credit_hold_amounts",
+        "ck_billing_credit_hold_status",
+        "ck_billing_credit_hold_terminal_amounts",
+        "ck_billing_credit_hold_terminal_source",
+      ]);
+      expect(checks.rows.every(({ validated }) => validated)).toBe(true);
+      const sourceCheck = assertDefined(
+        checks.rows.find(
+          ({ name }) => name === "ck_billing_credit_hold_terminal_source",
+        ),
+      );
+      expect(sourceCheck.definition).toContain("IS NULL");
+      expect(sourceCheck.definition).toContain("IS NOT NULL");
+      expect(sourceCheck.definition).toContain("char_length");
+      const index = await pool.query<{
+        unique: boolean;
+        valid: boolean;
+        predicate: string;
+        keys: string[];
+      }>(
+        "SELECT i.indisunique AS unique,i.indisvalid AS valid,pg_get_expr(i.indpred,i.indrelid) AS predicate,ARRAY(SELECT a.attname::text FROM unnest(i.indkey) WITH ORDINALITY k(attnum,ord) JOIN pg_attribute a ON a.attrelid=i.indrelid AND a.attnum=k.attnum WHERE k.ord<=i.indnkeyatts ORDER BY k.ord) AS keys FROM pg_index i JOIN pg_class c ON c.oid=i.indexrelid WHERE i.indrelid='public.billing_credit_hold'::regclass AND c.relname='uq_billing_credit_hold_capture_source'",
+      );
+      expect(index.rows).toHaveLength(1);
+      const actual = assertDefined(index.rows[0]);
+      expect(actual).toMatchObject({
+        unique: true,
+        valid: true,
+        keys: ["tenant_id", "terminal_source_ref"],
+      });
+      expect(actual.predicate.replace(/::text|[()\s]/gu, "")).toBe(
+        "status='captured'",
+      );
+      const journalUniques = await pool.query<{ name: string }>(
+        "SELECT conname AS name FROM pg_constraint WHERE conrelid='public.billing_credit_journal'::regclass AND contype='u' ORDER BY conname",
+      );
+      expect(journalUniques.rows.map(({ name }) => name)).toEqual([
+        "uq_billing_credit_journal_sequence",
+        "uq_billing_credit_journal_source",
+      ]);
+      const foreignKeys = await pool.query<{ count: number }>(
+        "SELECT count(*)::int AS count FROM pg_constraint WHERE conrelid IN ('public.billing_credit_hold'::regclass,'public.billing_credit_journal'::regclass) AND contype='f'",
+      );
+      expect(foreignKeys.rows[0]?.count).toBe(0);
+    });
+  });
+
+  it.each([
+    { status: "active", source: "unexpected", captured: 0, released: 0 },
+    { status: "active", source: "", captured: 0, released: 0 },
+    ...["captured", "released", "expired"].flatMap((status) =>
+      [null, ""].map((source) => ({
+        status,
+        source,
+        captured: 0,
+        released: 40,
+      })),
+    ),
+  ])(
+    "R34 T09 source CHECK rejects $status / $source including explicit NULL",
+    async (row) => {
+      await withHoldSchema(async (pool) => {
+        await requireTerminalColumn(pool);
+        await expect(insertHold(pool, row)).rejects.toMatchObject({
+          code: "23514",
+          constraint: "ck_billing_credit_hold_terminal_source",
+        });
+      });
+    },
+  );
+
+  it.each([
+    { status: "active", source: null, captured: 1, released: 0 },
+    { status: "active", source: null, captured: 0, released: 1 },
+    { status: "captured", source: "capture", captured: 30, released: 9 },
+    { status: "captured", source: "capture", captured: 0, released: 39 },
+    { status: "released", source: "cancel", captured: 1, released: 39 },
+    { status: "released", source: "cancel", captured: 0, released: 39 },
+    { status: "expired", source: "batch", captured: 1, released: 39 },
+    { status: "expired", source: "batch", captured: 0, released: 39 },
+  ])(
+    "R34 T09 terminal amount CHECK rejects $status/$captured/$released",
+    async (row) => {
+      await withHoldSchema(async (pool) => {
+        await requireTerminalColumn(pool);
+        await expect(insertHold(pool, row)).rejects.toMatchObject({
+          code: "23514",
+          constraint: "ck_billing_credit_hold_terminal_amounts",
+        });
+      });
+    },
+  );
+
+  it.each([
+    { status: "active", source: null, captured: 0, released: 0 },
+    { status: "captured", source: "positive", captured: 30, released: 10 },
+    { status: "captured", source: "zero", captured: 0, released: 40 },
+    { status: "captured", source: "full", captured: 40, released: 0 },
+    { status: "released", source: "cancel", captured: 0, released: 40 },
+    { status: "expired", source: "batch", captured: 0, released: 40 },
+    {
+      status: "captured",
+      source: "zero-fixture",
+      captured: 0,
+      released: 0,
+      requested: 0,
+    },
+  ])(
+    "R34 T09 valid $status/$captured/$released pairing installs unchanged",
+    async (row) => {
+      await withHoldSchema(async (pool) => {
+        await requireTerminalColumn(pool);
+        expect((await insertHold(pool, row)).rowCount).toBe(1);
+      });
+    },
+  );
+
+  it.each([
+    { first: 30, second: 20 },
+    { first: 0, second: 0 },
+    { first: 30, second: 0 },
+    { first: 0, second: 30 },
+  ])(
+    "R34 T06 captured-only UNIQUE rejects same-tenant source reuse $first/$second without a journal",
+    async ({ first, second }) => {
+      await withHoldSchema(async (pool) => {
+        await requireTerminalColumn(pool);
+        await insertHold(pool, {
+          status: "captured",
+          source: "shared",
+          captured: first,
+          released: 40 - first,
+        });
+        await expect(
+          insertHold(pool, {
+            status: "captured",
+            source: "shared",
+            captured: second,
+            released: 40 - second,
+          }),
+        ).rejects.toMatchObject({
+          code: "23505",
+          constraint: "uq_billing_credit_hold_capture_source",
+        });
+        expect(
+          (
+            await pool.query<{ count: number }>(
+              "SELECT count(*)::int AS count FROM billing_credit_hold",
+            )
+          ).rows[0]?.count,
+        ).toBe(1);
+        expect(
+          (
+            await pool.query<{ count: number }>(
+              "SELECT count(*)::int AS count FROM billing_credit_journal",
+            )
+          ).rows[0]?.count,
+        ).toBe(0);
+      });
+    },
+  );
+  it.each([
+    { first: "released", second: "released" },
+    { first: "expired", second: "expired" },
+    { first: "released", second: "expired" },
+    { first: "captured", second: "released" },
+    { first: "captured", second: "expired" },
+  ])(
+    "R34 T06 common source is legal for $first/$second",
+    async ({ first, second }) => {
+      await withHoldSchema(async (pool) => {
+        await requireTerminalColumn(pool);
+        await insertHold(pool, {
+          status: first,
+          source: "common-source",
+          captured: 0,
+          released: 40,
+        });
+        await insertHold(pool, {
+          status: second,
+          source: "common-source",
+          captured: 0,
+          released: 40,
+        });
+        expect(
+          (
+            await pool.query<{ count: number }>(
+              "SELECT count(*)::int AS count FROM billing_credit_hold",
+            )
+          ).rows[0]?.count,
+        ).toBe(2);
+      });
+    },
+  );
+  it("R34 T06 same capture source remains independent across tenants", async () => {
+    await withHoldSchema(async (pool) => {
+      await requireTerminalColumn(pool);
+      for (const tenant of ["tenant-a", "tenant-b"])
+        await insertHold(pool, {
+          tenant,
+          status: "captured",
+          source: "same-source",
+          captured: 0,
+          released: 40,
+        });
+      expect(
+        (
+          await pool.query<{ count: number }>(
+            "SELECT count(*)::int AS count FROM billing_credit_hold",
+          )
+        ).rows[0]?.count,
+      ).toBe(2);
+    });
+  });
+  it("R34 T09 VARCHAR bound counts Unicode characters and rejects 256 without truncation", async () => {
+    await withHoldSchema(async (pool) => {
+      await requireTerminalColumn(pool);
+      const source = "😀".repeat(255);
+      await insertHold(pool, {
+        status: "captured",
+        source,
+        captured: 0,
+        released: 40,
+      });
+      const stored = await pool.query<{ source: string; length: number }>(
+        "SELECT terminal_source_ref AS source,char_length(terminal_source_ref) AS length FROM billing_credit_hold",
+      );
+      expect(stored.rows).toEqual([{ source, length: 255 }]);
+      await expect(
+        insertHold(pool, {
+          status: "captured",
+          source: "😀".repeat(256),
+          captured: 0,
+          released: 40,
+        }),
+      ).rejects.toMatchObject({ code: "22001" });
+      expect(
+        (
+          await pool.query<{ count: number }>(
+            "SELECT count(*)::int AS count FROM billing_credit_hold",
+          )
+        ).rows[0]?.count,
+      ).toBe(1);
+    });
+  });
+
+  it.each(["missing", "wrong-predicate"] as const)(
+    "R34 T09 real catalog drift detects %s captured-source index",
+    async (damage) => {
+      await withHoldSchema(async (pool) => {
+        await requireTerminalColumn(pool);
+        const before = await readSchemaCatalog(pool.query.bind(pool));
+        expect(
+          before.indexes.some(({ key }) =>
+            key.endsWith(".uq_billing_credit_hold_capture_source"),
+          ),
+        ).toBe(true);
+        await pool.query("DROP INDEX uq_billing_credit_hold_capture_source");
+        if (damage === "wrong-predicate")
+          await pool.query(
+            "CREATE UNIQUE INDEX uq_billing_credit_hold_capture_source ON billing_credit_hold (tenant_id,terminal_source_ref) WHERE status='released'",
+          );
+        const after = await readSchemaCatalog(pool.query.bind(pool));
+        expect(compareSchemaCatalogs(before, after)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              category: "indexes",
+              key: "public.billing_credit_hold.uq_billing_credit_hold_capture_source",
+              kind: damage === "missing" ? "missing" : "changed",
+            }),
+          ]),
+        );
+      });
+    },
+  );
+
   it("installs exactly 32 billing-owned UUID resources without foreign keys", async () => {
     await withCanonicalReference(
       assertDefined(adminUrl),
