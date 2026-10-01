@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Billing Internal Owner API
-  version: 2.0.0
+  version: 2.0.1
   description: Experimental clean-slate target contract; not deployed.
 servers:
   - url: https://billing.internal
@@ -2523,6 +2523,17 @@ components:
     PositiveDecimal:
       type: string
       pattern: ^[1-9][0-9]*$
+    CreditMicros:
+      allOf:
+        - $ref: "#/components/schemas/DecimalInteger"
+      x-kokoro-credit-unit:
+        definition_version: 1
+        display_unit: credit
+        micros_per_credit: "1000000"
+    NonNegativeCreditMicros:
+      allOf:
+        - $ref: "#/components/schemas/CreditMicros"
+        - $ref: "#/components/schemas/NonNegativeDecimal"
     CurrencyCode:
       type: string
       pattern: ^[A-Z]{3}$
@@ -2652,7 +2663,7 @@ components:
         currency_code:
           $ref: "#/components/schemas/CurrencyCode"
         credit_micros:
-          $ref: "#/components/schemas/NonNegativeDecimal"
+          $ref: "#/components/schemas/NonNegativeCreditMicros"
         billing_interval:
           type: string
           enum:
@@ -2695,9 +2706,9 @@ components:
             - active
             - disabled
         available_micros:
-          $ref: "#/components/schemas/NonNegativeDecimal"
+          $ref: "#/components/schemas/NonNegativeCreditMicros"
         held_micros:
-          $ref: "#/components/schemas/NonNegativeDecimal"
+          $ref: "#/components/schemas/NonNegativeCreditMicros"
     CreditAccountResponse:
       type: object
       additionalProperties: false
@@ -2723,9 +2734,9 @@ components:
         sequence:
           $ref: "#/components/schemas/NonNegativeDecimal"
         delta_micros:
-          $ref: "#/components/schemas/DecimalInteger"
+          $ref: "#/components/schemas/CreditMicros"
         balance_after_micros:
-          $ref: "#/components/schemas/NonNegativeDecimal"
+          $ref: "#/components/schemas/NonNegativeCreditMicros"
         source_kind:
           type: string
           minLength: 1
@@ -2809,7 +2820,7 @@ components:
         period_end:
           $ref: "#/components/schemas/UtcInstant"
         grant_micros:
-          $ref: "#/components/schemas/NonNegativeDecimal"
+          $ref: "#/components/schemas/NonNegativeCreditMicros"
     SubscriptionsResponse:
       type: object
       additionalProperties: false
@@ -2973,7 +2984,7 @@ components:
             - unknown
             - rejected
         authorized_micros:
-          $ref: "#/components/schemas/NonNegativeDecimal"
+          $ref: "#/components/schemas/NonNegativeCreditMicros"
         pricing_revision_id:
           $ref: "#/components/schemas/Uuid"
         feature_price_id:

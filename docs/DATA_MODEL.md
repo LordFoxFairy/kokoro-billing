@@ -1,3 +1,47 @@
+## R40 Root 验收：积分单位机器事实与引用位置门
+
+本切片仅交付 experimental v2 2.0.1 的 source/validator，不激活 v2 HTTP、赠送、BFF/Web消费或支付。唯一 Credit 单位 metadata 为 1 Credit = 1,000,000 micros；不是现金兑换率、模型加价倍率或余额阈值。七 Credit 字段引用与原整数 wire 保持，现金/sequence、SQL/账务值不变；下方候选与70/71结果保留为历史，以本节为当前事实。
+
+Root Node24.20.0 真复验：契约72passed/0failed/0skip；pnpm verify 595passed/383skipped/0failed（14.77s），format/lint/typecheck/build/sql/contract 全通过。日志 /tmp/kokoro-billing-unit-r40-root-72-full.log。Root 额外真实 YAML parse probe 拒含点 component 和共享 Credit alias 的额外位置，并接受合法现金 alias，/tmp/kokoro-billing-unit-r40-root-position-probes.log。独立冻结72审查 P0/P1/P2 均0；原71测试字节及四份原dirty正文逐字保留。383资源skip不算通过，v2运行与正式扣费旅程仍待验。Root统一提交此限定8文件 source/前缀；不接五份未交付设计正文。
+
+## R40 YAML alias 位置语义返修，待 Root 独立验收
+
+Root 继 R39 含点 key 真RED后，报告第二位置绕行真RED：YAML.stringify/parse 的合法 alias 可让额外 component 与已允许 Credit 字段共享同一 node，identity Set 因此放过不同出现位置；Root 应拒断言 exit1，日志 /tmp/kokoro-billing-unit-r40-root-alias-red.log。原 writer 本轮仅 append 一个用例：先把现金 amount_minor ref 共享到 ExtraCashAlias，经真实 YAML stringify/parse 核 node shared=true 且原 validator 接受；再把 Credit 字段 ref 共享到 ExtraCreditAlias，经同样解析核 node shared=true，要求 credit unit 专属拒绝。worker 本单例真实RED为1failed/71因筛选skipped，实际收到 []；没有修改原70/71文本或断言。
+
+现唯一 visit 仅增加第三 callback 参数 readonly (string|number)[] segments，object key 保留为一个 string segment、array index 为 number segment，每次出现位置都遍历，即使共享 node。单位引用允许位置和 metadata 唯一位置比较 JSON.stringify(segmentArray)，不比较显示 path 或 node identity；含点/括号/转义字符 key 与结构层次不混淆。显示 path 和其他旧 callback/check 行保持，原检查剥单位段及版本并还原 visit 后逐字一致；无第二 walker、序列化/clone 规避 alias、合法 alias/key 禁令或第二单位配置。下方 R39 identity 实现和70/71结果仅保留作历史，当前实现以本段为准。
+
+原21027 bytes/test SHA256 `5067ac12c3014a4b5d88cc998f81538cefc97ee97d8957308501fbb82d49cbac` 整段保持作 prefix，内含原20558 bytes/`252f289590f4ac3cb09649b6953eddd6b146a8b9619fcb94760b802d0e6d6c9f`。追加后 test SHA256 `b130e6f4628cba948140392a0838ab18f26736e693c436798a1bed8f34642e5d`；validator SHA256 `5237d3a42057c2828f943eff17f49e63e55b44508b19c0b8bd326c7194f51bb6`。source YAML f632ddec、README、v1、SQL/generated、其他 tests/IMPLEMENTATION_PLAN 及四份原 body 保持冻结；无 Git/共享基础设施写入。
+
+Node24.20 worker 实际定点72passed/0failed/0skip（1.49s）；定点格式/ESLint/tsc exit0。完整 pnpm verify exit0：format/lint/typecheck/build/sql/contract 全通过，595passed/383skipped/0failed（978，13.91s，31files passed/42skipped），本会话工具日志 session30870。执行前清资源环境变量；离线Prisma generate为原脚本调用，383资源skip不算通过，既有 ECONNREFUSED 127.0.0.1:1 故障负例输出保留。最终冻结由 Root 独立 review/复验/提交，不把本 worker GREEN 或之前独立审当二次返修已放行，也不宣称真实资源、发布 artifact、v2 runtime、消费者或完整 Billing 完成。
+
+## R39-P2 含点 component 名称碰撞返修，待 Root 独立验收
+
+Root 独立审发现诊断字符串 path 被误用于允许位置判定：合法 component key `CatalogItem.properties.credit_micros` 与真实字段显示路径碰撞，可混入 CreditMicros 引用。本轮原 writer 仅 append 一项真实负例；同一用例先确认合法含点名称的普通 string schema 被接受，再将其换为 CreditMicros ref 并要求 credit unit 专属诊断。worker 实际单例 RED：1failed/70因筛选skipped、收到 []；随后仅现 validator 的 Credit 引用允许集合与 metadata 定义位置改用实际 JsonObject 节点身份，path 字符串仅作诊断，不禁止合法含点名称。原 metadata/ref/cash/auth/整数门与旧70项断言保持。
+
+原冻结 test 的前20558 bytes SHA256 `252f289590f4ac3cb09649b6953eddd6b146a8b9619fcb94760b802d0e6d6c9f` 完整保留作 prefix；append 后 test SHA256 `5067ac12c3014a4b5d88cc998f81538cefc97ee97d8957308501fbb82d49cbac`，validator SHA256 `44e1a6a100ffa2e3daa33bada04955fd30f4eb3a214116e6019c10e39d9faf53`。YAML `f632ddec7b4a8528fcb325ef45f63bd2e37a05319f3505581a9515332cccf16e`、README、v1、SQL/generated、其他测试、IMPLEMENTATION_PLAN 与四份原 body 保持锁定；无 Git/共享服务/资源操作。
+
+Node24.20 worker 定点71passed/0failed/0skip（1.42s），定点格式/ESLint/tsc exit0；完整 pnpm verify exit0：format/lint/typecheck/build/sql/contract 全通过，594passed/383skipped/0failed（977，13.99s；31files passed/42skipped），工具日志 session60716。清除资源环境变量；383资源skip不计真实通过，既有Redis故障负例 ECONNREFUSED 127.0.0.1:1 保留，离线Prisma generate为原脚本调用。此前70/593与完整文件冻结描述属于返修前历史；当前事实以本段71/594与追加前缀保护为准。Root 对最终冻结源独立 review、复验及提交仍待，不冒称 P2 已获独立放行、artifact/runtime/消费者/完整 Billing 完成。
+
+## R39 Credit 单位 source/validator GREEN 候选，未提交发布
+
+基线 main `78aa2a3a88107ca1014893b10ae08150bb78ad7a`；Root 已实际冻结 RED 57failed/13passed/0skip，独立三面/测试审0P0/P1/P2。本轮只完成批准的单位机器源与离线 validator 候选：contract/openapi/v2/openapi.yaml info.version=2.0.1，SHA256 `f632ddec7b4a8528fcb325ef45f63bd2e37a05319f3505581a9515332cccf16e`；两 Credit schema、唯一 metadata 与七引用已落源，所有非单位 YAML 事实与原 wire/24 operation 保持。缺失/多份/错误location、metadata精确集合/类型/值、原整数组合/绑定用真实 visit 校验并返回单位专属诊断，原 validation 未删。
+
+冻结 test SHA256 `252f289590f4ac3cb09649b6953eddd6b146a8b9619fcb94760b802d0e6d6c9f` 整字节保持；worker实际70passed/0failed/0skip，定点lint/typecheck0，完整门记录由同CURRENT本次前缀给出。Root 独立复验/提交尚待；candidate不是已发布artifact、不是v2 runtime或消费者GREEN。本片无SQL/生产/额度/价格/阈值变化，无新生成器/依赖/目录，原dirty正文完整保护。下列R38段保留批准设计和实施前事实；当前source状态以本段为准。
+
+## R38 Credit 单位与持久数据：批准显示定义，零 DDL 变更
+
+基线 main `78aa2a3a88107ca1014893b10ae08150bb78ad7a`。唯一 canonical 仍 database/schema.sql，32 表，SHA256 `5fbc61465f5af6dcac638ac0e887eb9ca7d29b1f41e60bc55d4f1196b39e755f`；本前缀之外原文逐字节保留。SQL/Prisma/account/grant/hold/allocation/journal/price/receipt 与所有持久 amount 不变，不回填/重算/转换历史事实，不运行数据迁移或调整额度。
+
+Billing Credit 固定显示单位 1 Credit=1,000,000 micros，唯一机器定义后继落现 v2 YAML 的 CreditMicros.x-kokoro-credit-unit：definition_version=1、display_unit=credit、micros_per_credit="1000000"。CreditMicros allOf 引用现 DecimalInteger；NonNegativeCreditMicros allOf 引用 CreditMicros 与现 NonNegativeDecimal，仅前者持 metadata。info.version 目标2.0.1/experimental，当前source仍2.0.0、digest `eb95b6ddf4c3e611ff3eb065bcb39dad97d47cbf2203f8d6fd8105f17a5b42ad`，不是已发布单位 artifact。
+
+七 wire 金额 CatalogItem.credit_micros、CreditAccount.available_micros/held_micros、LedgerEntry.delta_micros/balance_after_micros、Subscription.grant_micros、Admission.authorized_micros 使用专用 ref；除 delta signed 外均非负。复用现十进制整数约束，不改 bigint 存储或 JSON string 语义。现金 amount_minor 及 ledger sequence 的原通用整数 ref 保留；禁止给通用 schema 附积分尺度，禁止用现金币种/token/grant program 推算 Credit。六位显示精度派生自10^6，不持久化第二份比例、浮点 credit 或单位配置表。
+
+比较契约 schema metadata（采用）与业务 response metadata（淘汰）：固定单位没有账户/tenant可变生命周期，不成为数据库事实或新 GET，不需要 cache/transaction/idempotency。单位发布与消费者 pin/provenance 从 owner committed YAML 单向派生，经 BFF 正式契约方向承接；Web 不读本仓数据/源码或直连服务。当前无单位生成链，本轮不改生成/依赖；后继验证确定性提取/--check 后才称 artifact 已发布，不把候选设计或 Prisma 生成当证据。
+
+当前测试阶段仅现契约文件的真实 validator RED，覆盖单份 metadata、固定定义/类型、七 ref、现金/sequence隔离及合法控制；不写 YAML/validator/SQL/生成或运行 PG。Schema/catalog/131已验C1保持，不能证明单位或完整计费。后继不调整低余额阈值、现金价格/grant额度，不凭旧无真实数据记录宣称配置已迁移；金额/价格/grant数据审计及完整消费者切换仍由各 owner 与 Root 独立收口。
+
+---
+
 ## R38 当前 C1：hold 唯一终态来源已落 canonical
 
 唯一可编辑事实源为 database/schema.sql（32 表）；SHA256 5fbc61465f5af6dcac638ac0e887eb9ca7d29b1f41e60bc55d4f1196b39e755f。billing_credit_hold 新增 terminal_source_ref VARCHAR(255) NULL，无 magic default；active 时必须 NULL，captured/released/expired 时必须非空有界原始来源。

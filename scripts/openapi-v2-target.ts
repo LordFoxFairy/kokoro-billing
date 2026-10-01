@@ -78,30 +78,165 @@ const at = (root: JsonObject, pointer: string): unknown =>
     );
 const visit = (
   value: unknown,
-  callback: (node: JsonObject, path: string) => void,
+  callback: (
+    node: JsonObject,
+    path: string,
+    segments: readonly (string | number)[],
+  ) => void,
   path = "$",
+  segments: readonly (string | number)[] = [],
 ): void => {
   if (Array.isArray(value))
     return value.forEach((item, index) =>
-      visit(item, callback, `${path}[${index}]`),
+      visit(item, callback, `${path}[${index}]`, [...segments, index]),
     );
   const node = object(value);
   if (!node) return;
-  callback(node, path);
+  callback(node, path, segments);
   for (const [key, nested] of Object.entries(node))
-    visit(nested, callback, `${path}.${key}`);
+    visit(nested, callback, `${path}.${key}`, [...segments, key]);
 };
 const schemaProperties = (document: JsonObject, name: string): JsonObject =>
   (object(object(object(document.components)?.schemas)?.[name])
     ?.properties as JsonObject) ?? {};
+
+const creditUnitExtension = "x-kokoro-credit-unit";
+const creditAmountBindings = [
+  ["CatalogItem", "credit_micros", "NonNegativeCreditMicros"],
+  ["CreditAccount", "available_micros", "NonNegativeCreditMicros"],
+  ["CreditAccount", "held_micros", "NonNegativeCreditMicros"],
+  ["LedgerEntry", "delta_micros", "CreditMicros"],
+  ["LedgerEntry", "balance_after_micros", "NonNegativeCreditMicros"],
+  ["Subscription", "grant_micros", "NonNegativeCreditMicros"],
+  ["Admission", "authorized_micros", "NonNegativeCreditMicros"],
+] as const;
+const nonCreditAmountBindings = [
+  ["CatalogItem", "amount_minor", "NonNegativeDecimal"],
+  ["Checkout", "amount_minor", "PositiveDecimal"],
+  ["SettlementCreateRequest", "amount_minor", "PositiveDecimal"],
+  ["Settlement", "amount_minor", "PositiveDecimal"],
+  ["RefundCreateRequest", "amount_minor", "PositiveDecimal"],
+  ["Refund", "amount_minor", "PositiveDecimal"],
+  ["LedgerEntry", "sequence", "NonNegativeDecimal"],
+] as const;
+const hasExactKeys = (
+  node: JsonObject | undefined,
+  keys: readonly string[],
+): boolean =>
+  node !== undefined &&
+  Object.keys(node).length === keys.length &&
+  keys.every((key) => Object.hasOwn(node, key));
+const hasExactRefs = (value: unknown, refs: readonly string[]): boolean =>
+  Array.isArray(value) &&
+  value.length === refs.length &&
+  value.every((item, index) => {
+    const node = object(item);
+    return hasExactKeys(node, ["$ref"]) && node?.$ref === refs[index];
+  });
+
+function validateCreditUnit(root: JsonObject, errors: string[]): void {
+  const schemas = object(object(root.components)?.schemas) ?? {};
+  const signed = object(schemas.CreditMicros);
+  const nonnegative = object(schemas.NonNegativeCreditMicros);
+  const metadata = object(signed?.[creditUnitExtension]);
+  const definitions: string[] = [];
+  const allowedRefs = new Set([
+    JSON.stringify([
+      "components",
+      "schemas",
+      "NonNegativeCreditMicros",
+      "allOf",
+      0,
+    ]),
+    ...creditAmountBindings.map(([schema, field]) =>
+      JSON.stringify(["components", "schemas", schema, "properties", field]),
+    ),
+  ]);
+  visit(root, (node, path, segments) => {
+    if (Object.hasOwn(node, creditUnitExtension))
+      definitions.push(JSON.stringify([...segments, creditUnitExtension]));
+    if (
+      (node.$ref === "#/components/schemas/CreditMicros" ||
+        node.$ref === "#/components/schemas/NonNegativeCreditMicros") &&
+      !allowedRefs.has(JSON.stringify(segments))
+    )
+      errors.push(`credit unit has an unexpected amount binding at ${path}`);
+  });
+  if (
+    definitions.length !== 1 ||
+    definitions[0] !==
+      JSON.stringify([
+        "components",
+        "schemas",
+        "CreditMicros",
+        creditUnitExtension,
+      ])
+  )
+    errors.push("credit unit must have exactly one definition at CreditMicros");
+  if (
+    !hasExactKeys(metadata, [
+      "definition_version",
+      "display_unit",
+      "micros_per_credit",
+    ]) ||
+    metadata?.definition_version !== 1 ||
+    metadata.display_unit !== "credit" ||
+    metadata.micros_per_credit !== "1000000"
+  )
+    errors.push(
+      "credit unit must define version 1 and exactly 1000000 micros as a string",
+    );
+  if (
+    !hasExactKeys(signed, ["allOf", creditUnitExtension]) ||
+    !hasExactRefs(signed?.allOf, ["#/components/schemas/DecimalInteger"])
+  )
+    errors.push("credit unit CreditMicros must compose DecimalInteger");
+  if (
+    !hasExactKeys(nonnegative, ["allOf"]) ||
+    !hasExactRefs(nonnegative?.allOf, [
+      "#/components/schemas/CreditMicros",
+      "#/components/schemas/NonNegativeDecimal",
+    ])
+  )
+    errors.push(
+      "credit unit NonNegativeCreditMicros must compose both original constraints",
+    );
+  for (const [name, pattern] of [
+    ["DecimalInteger", "^-?(?:0|[1-9][0-9]*)$"],
+    ["NonNegativeDecimal", "^(?:0|[1-9][0-9]*)$"],
+    ["PositiveDecimal", "^[1-9][0-9]*$"],
+  ] as const) {
+    const schema = object(schemas[name]);
+    if (
+      !hasExactKeys(schema, ["type", "pattern"]) ||
+      schema?.type !== "string" ||
+      schema.pattern !== pattern
+    )
+      errors.push(`credit unit must preserve the original ${name} constraint`);
+  }
+  for (const [schema, field, amountSchema] of [
+    ...creditAmountBindings,
+    ...nonCreditAmountBindings,
+  ]) {
+    const amount = object(schemaProperties(root, schema)[field]);
+    if (
+      !hasExactKeys(amount, ["$ref"]) ||
+      amount?.$ref !== `#/components/schemas/${amountSchema}`
+    )
+      errors.push(
+        `credit unit ${schema}.${field} must reference ${amountSchema}`,
+      );
+  }
+}
 
 export function validateV2OpenApi(document: unknown): string[] {
   const root = object(document);
   if (!root) return ["document must be an object"];
   const errors: string[] = [];
   if (root.openapi !== "3.1.0") errors.push("openapi must be 3.1.0");
-  if (object(root.info)?.version !== "2.0.0")
-    errors.push("info.version must be 2.0.0");
+  if (object(root.info)?.version !== "2.0.1")
+    errors.push("info.version must be 2.0.1");
+  validateCreditUnit(root, errors);
   const paths = object(root.paths) ?? {};
   const actual = new Map<string, JsonObject>();
   const ids = new Set<string>();

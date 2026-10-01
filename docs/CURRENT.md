@@ -1,3 +1,39 @@
+## R40 Root 验收：积分单位机器事实与引用位置门
+
+本切片仅交付 experimental v2 2.0.1 的 source/validator，不激活 v2 HTTP、赠送、BFF/Web消费或支付。唯一 Credit 单位 metadata 为 1 Credit = 1,000,000 micros；不是现金兑换率、模型加价倍率或余额阈值。七 Credit 字段引用与原整数 wire 保持，现金/sequence、SQL/账务值不变；下方候选与70/71结果保留为历史，以本节为当前事实。
+
+Root Node24.20.0 真复验：契约72passed/0failed/0skip；pnpm verify 595passed/383skipped/0failed（14.77s），format/lint/typecheck/build/sql/contract 全通过。日志 /tmp/kokoro-billing-unit-r40-root-72-full.log。Root 额外真实 YAML parse probe 拒含点 component 和共享 Credit alias 的额外位置，并接受合法现金 alias，/tmp/kokoro-billing-unit-r40-root-position-probes.log。独立冻结72审查 P0/P1/P2 均0；原71测试字节及四份原dirty正文逐字保留。383资源skip不算通过，v2运行与正式扣费旅程仍待验。Root统一提交此限定8文件 source/前缀；不接五份未交付设计正文。
+
+## R40 YAML alias 位置语义返修，待 Root 独立验收
+
+Root 继 R39 含点 key 真RED后，报告第二位置绕行真RED：YAML.stringify/parse 的合法 alias 可让额外 component 与已允许 Credit 字段共享同一 node，identity Set 因此放过不同出现位置；Root 应拒断言 exit1，日志 /tmp/kokoro-billing-unit-r40-root-alias-red.log。原 writer 本轮仅 append 一个用例：先把现金 amount_minor ref 共享到 ExtraCashAlias，经真实 YAML stringify/parse 核 node shared=true 且原 validator 接受；再把 Credit 字段 ref 共享到 ExtraCreditAlias，经同样解析核 node shared=true，要求 credit unit 专属拒绝。worker 本单例真实RED为1failed/71因筛选skipped，实际收到 []；没有修改原70/71文本或断言。
+
+现唯一 visit 仅增加第三 callback 参数 readonly (string|number)[] segments，object key 保留为一个 string segment、array index 为 number segment，每次出现位置都遍历，即使共享 node。单位引用允许位置和 metadata 唯一位置比较 JSON.stringify(segmentArray)，不比较显示 path 或 node identity；含点/括号/转义字符 key 与结构层次不混淆。显示 path 和其他旧 callback/check 行保持，原检查剥单位段及版本并还原 visit 后逐字一致；无第二 walker、序列化/clone 规避 alias、合法 alias/key 禁令或第二单位配置。下方 R39 identity 实现和70/71结果仅保留作历史，当前实现以本段为准。
+
+原21027 bytes/test SHA256 `5067ac12c3014a4b5d88cc998f81538cefc97ee97d8957308501fbb82d49cbac` 整段保持作 prefix，内含原20558 bytes/`252f289590f4ac3cb09649b6953eddd6b146a8b9619fcb94760b802d0e6d6c9f`。追加后 test SHA256 `b130e6f4628cba948140392a0838ab18f26736e693c436798a1bed8f34642e5d`；validator SHA256 `5237d3a42057c2828f943eff17f49e63e55b44508b19c0b8bd326c7194f51bb6`。source YAML f632ddec、README、v1、SQL/generated、其他 tests/IMPLEMENTATION_PLAN 及四份原 body 保持冻结；无 Git/共享基础设施写入。
+
+Node24.20 worker 实际定点72passed/0failed/0skip（1.49s）；定点格式/ESLint/tsc exit0。完整 pnpm verify exit0：format/lint/typecheck/build/sql/contract 全通过，595passed/383skipped/0failed（978，13.91s，31files passed/42skipped），本会话工具日志 session30870。执行前清资源环境变量；离线Prisma generate为原脚本调用，383资源skip不算通过，既有 ECONNREFUSED 127.0.0.1:1 故障负例输出保留。最终冻结由 Root 独立 review/复验/提交，不把本 worker GREEN 或之前独立审当二次返修已放行，也不宣称真实资源、发布 artifact、v2 runtime、消费者或完整 Billing 完成。
+
+## R39-P2 含点 component 名称碰撞返修，待 Root 独立验收
+
+Root 独立审发现诊断字符串 path 被误用于允许位置判定：合法 component key `CatalogItem.properties.credit_micros` 与真实字段显示路径碰撞，可混入 CreditMicros 引用。本轮原 writer 仅 append 一项真实负例；同一用例先确认合法含点名称的普通 string schema 被接受，再将其换为 CreditMicros ref 并要求 credit unit 专属诊断。worker 实际单例 RED：1failed/70因筛选skipped、收到 []；随后仅现 validator 的 Credit 引用允许集合与 metadata 定义位置改用实际 JsonObject 节点身份，path 字符串仅作诊断，不禁止合法含点名称。原 metadata/ref/cash/auth/整数门与旧70项断言保持。
+
+原冻结 test 的前20558 bytes SHA256 `252f289590f4ac3cb09649b6953eddd6b146a8b9619fcb94760b802d0e6d6c9f` 完整保留作 prefix；append 后 test SHA256 `5067ac12c3014a4b5d88cc998f81538cefc97ee97d8957308501fbb82d49cbac`，validator SHA256 `44e1a6a100ffa2e3daa33bada04955fd30f4eb3a214116e6019c10e39d9faf53`。YAML `f632ddec7b4a8528fcb325ef45f63bd2e37a05319f3505581a9515332cccf16e`、README、v1、SQL/generated、其他测试、IMPLEMENTATION_PLAN 与四份原 body 保持锁定；无 Git/共享服务/资源操作。
+
+Node24.20 worker 定点71passed/0failed/0skip（1.42s），定点格式/ESLint/tsc exit0；完整 pnpm verify exit0：format/lint/typecheck/build/sql/contract 全通过，594passed/383skipped/0failed（977，13.99s；31files passed/42skipped），工具日志 session60716。清除资源环境变量；383资源skip不计真实通过，既有Redis故障负例 ECONNREFUSED 127.0.0.1:1 保留，离线Prisma generate为原脚本调用。此前70/593与完整文件冻结描述属于返修前历史；当前事实以本段71/594与追加前缀保护为准。Root 对最终冻结源独立 review、复验及提交仍待，不冒称 P2 已获独立放行、artifact/runtime/消费者/完整 Billing 完成。
+
+## R39 Credit 单位 source/validator 候选已过 worker 离线门
+
+基线 main `78aa2a3a88107ca1014893b10ae08150bb78ad7a`；Root R39真RED57failed/13passed/0skip与独立三面/测试0P0/P1/P2为放行前置。本轮 source 尚待 Root 独立复验/提交，不称已发布单位 artifact、v2 runtime、消费者或完整Billing完成。原五dirty设计body及C1已验代码/SQL完整保护。
+
+contract/openapi/v2/openapi.yaml 候选 info.version=2.0.1/experimental、SHA256 `f632ddec7b4a8528fcb325ef45f63bd2e37a05319f3505581a9515332cccf16e`：CreditMicros 引用现 DecimalInteger，唯一 x-kokoro-credit-unit 定义version1/display_unit credit/micros_per_credit string "1000000"；NonNegativeCreditMicros 复用前者与现NonNegativeDecimal，七Credit字段绑定。除版本、两schema、七ref之外，完整解析对象逐项核与实施前相同；现金amount_minor、sequence、24operation/19path、auth/permission/原整数wire保持。无新response metadata/API/目录/生成器/依赖/SQL/额度/价格/低余额阈值。真实visit校metadata唯一位置/集合/类型/固定值、整数组合和所有单位ref允许位置/金额绑定；原validation剥本新增段与版本后逐字hash一致，未删旧安全门。
+
+冻结 test SHA256 `252f289590f4ac3cb09649b6953eddd6b146a8b9619fcb94760b802d0e6d6c9f` 整字节保持。worker Node24.20实际 vitest定点70passed/0failed/0skip（1.36s），定点ESLint与tsc --noEmit exit0。完整 pnpm verify 首次仅format首门因最后一处validator格式退出1，修正该现文件后完整重跑exit0：format/lint/typecheck/build/sql/contract全部0；test为593passed/383skipped/0failed（976，13.98s，31files passed/42files skipped）。完整门按已有脚本调用离线Prisma generate（7.10.0）；没有refresh/数据库连接，生成字节保持。v1现runtime 17 route parity与v2目标24operation通过，不等于v2HTTP runtime已验。
+
+执行前清除 DATABASE_URL/PRISMA_DATABASE_URL/SCHEMA_ADMIN_URL/REDIS_URL/REDIS_TEST_URL；383skip是未连接实际资源的既有PG/Redis等集成项（含冻结131），不计通过。纯套件已有Redis故障负例输出 ECONNREFUSED 127.0.0.1:1 保留；未连接共享Redis/PG/provider、启动开发服务或写Git。没有prisma:check/真实PG/消费者/正式provider/浏览器证据。Root继承冻结source/docs/test后重跑70/全门并独立审，按限定文件与prefix集成提交；BFF正式发布方向的固定owner commit/version/digest与单位生成、Web一次移除旧比例仍后继，原完整C1/C2/C3/M5、admin/IAM target、支付最后边界保持。
+
+---
+
 ## R38 Root 已验 C1 终态来源切片
 
 当前事实绑定本节所属 Git 提交；实施前 main 5c45f22419db43ae9a128543a056cd1c4a6ff013。仅 Credit capture/release source/replay、canonical CHECK/partial UNIQUE、正规生成及两定点测试，尚非完整 Billing 或正式用户扣费闭环。

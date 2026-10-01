@@ -25,21 +25,27 @@ Browser 仍通过 Web/BFF 访问。
 |---|---|
 | `x-kokoro-owner` | `kokoro-billing` |
 | `x-kokoro-visibility` | `internal-owner` |
-| `x-kokoro-stability` | `stable` |
+| `x-kokoro-stability` | v1 `stable`；v2 `experimental` |
 | `x-kokoro-idempotency` | `inherent`、`read-only`、`required` 或 `provider-event-id` |
 | `x-kokoro-permission` | 与当前 route auth/allow-list 对齐的精确值 |
 
 ## Version
 
-**Version:** 目标OpenAPI `info.version=2.0.0`、格式3.1.0，业务route位于`/v2/**`且在runtime/consumer切换前为experimental；当前运行时artifact仍为1.0.0与`/v1/**`。`/healthz`、`/readyz` 与 `/metrics` 是有意
+**Version:** 目标OpenAPI `info.version=2.0.1`、格式3.1.0，业务route位于`/v2/**`且在runtime/consumer切换前为experimental；当前运行时artifact仍为1.0.0与`/v1/**`。`/healthz`、`/readyz` 与 `/metrics` 是有意
 不带版本的运行端点。`package.json` 的 `0.1.0` 是 private implementation version，不替代 wire version。
 
 V1 内只接受 backward-compatible 变更；仅修改 `info.version` 不能使 breaking change 兼容。
 
+## Credit unit metadata（2.0.1 source candidate）
+
+唯一机器定义在 `components.schemas.CreditMicros.x-kokoro-credit-unit`：definition_version=1、display_unit=credit、micros_per_credit="1000000"（string）。CreditMicros 复用 DecimalInteger，NonNegativeCreditMicros 复用 CreditMicros 与 NonNegativeDecimal；metadata 仅出现一处，七 Credit 字段引用专 schema。现金 amount_minor、ledger sequence、原整数约束及全部24 operation保持；无新增 response metadata/查询、浮点 credit、SQL数据换算、现金兑换率或grant额度。
+
+本切片仅交付仍 experimental 的 source/validator：Root 已独立复验72项契约、595项纯测试及引用位置 probe，并获独立审查；383项资源测试跳过。v2 runtime、单位生成 client、BFF/Web消费者尚未切换。`contract:check` 和契约负例只验证 source/validator，不证明上述运行链。后继从包含此source的 immutable commit、version与完整SHA256提取 metadata，经 BFF 正式发布方向生成只读消费 artifact；缺失/多份/类型值/版本/digest漂移均拒绝，不回落旧10^4或另一手写配置。Hey API目标并非当前已安装生成器，不假定它会自动保留 extension。本片不创建生成器/依赖/产物或第二可编辑contract。
+
 ## Generation
 
 **Generation:** 当前 OpenAPI YAML 由 Billing owner 在本仓直接维护和 review，不从 TypeScript/Zod 生成。当前没有
-`src/generated/` client/server artifact，也没有 contract generation script。
+Billing HTTP client/server 或 Credit 单位生成 artifact，也没有 contract generation script；已有 Prisma 生成物属于独立数据库链路。
 
 ```bash
 pnpm contract:check
@@ -77,7 +83,7 @@ form-body `sign`/`sign_type=RSA2` 由 `x-kokoro-provider-signatures` 区分；fi
 `contract/openapi/v2/openapi.yaml`，当前目标source SHA-256：
 
 ```text
-eb95b6ddf4c3e611ff3eb065bcb39dad97d47cbf2203f8d6fd8105f17a5b42ad
+f632ddec7b4a8528fcb325ef45f63bd2e37a05319f3505581a9515332cccf16e
 ```
 
 当前未切换v1的固定SHA-256仍为`58fbe4fea083ba12e0db23f49e995b96500d01af0013febf40eba3093510ef63`；M1b不修改其字节。
