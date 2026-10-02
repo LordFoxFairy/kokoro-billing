@@ -1,3 +1,9 @@
+import type {
+  BillingAuth,
+  BillingUserContext,
+  BillingBffContext,
+  BillingInternalContext,
+} from "../../infrastructure/auth/billing-auth.types.js";
 import Fastify, {
   LogController,
   type FastifyInstance,
@@ -38,38 +44,6 @@ declare module "fastify" {
 // HTTP uses the platform tenant vocabulary. Existing application ports still
 // expose the repository's internal tenantId value object; this is the only
 // translation point and is not part of the wire contract.
-export type BillingUserContext = {
-  readonly tenantId: string;
-  readonly subjectId: string;
-};
-export type BillingInternalContext = {
-  readonly tenantId: string;
-  readonly serviceId: string;
-};
-export type BillingBffContext = {
-  readonly tenantId: string;
-  readonly serviceId: "web-bff";
-  readonly subjectId?: string;
-};
-export type BillingAdminContext = {
-  readonly tenantId: string;
-  readonly operatorId: string;
-  readonly role: string;
-};
-export type BillingAuth = {
-  readonly user: (
-    request: FastifyRequest,
-  ) => Promise<BillingUserContext | null>;
-  readonly internal: (
-    request: FastifyRequest,
-  ) => Promise<BillingInternalContext | null>;
-  readonly bff: (request: FastifyRequest) => Promise<BillingBffContext | null>;
-  readonly admin: (
-    request: FastifyRequest,
-  ) => Promise<BillingAdminContext | null>;
-  readonly webhook: (request: FastifyRequest) => Promise<boolean>;
-};
-
 type CheckoutPort = Pick<CheckoutService, "create"> &
   Partial<Pick<CheckoutService, "createHostedSession">>;
 type UsagePort = Pick<UsageSettlementService, "expireExpiredHolds">;

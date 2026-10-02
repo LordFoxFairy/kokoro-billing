@@ -233,11 +233,22 @@ export function analyzeDependencies(
   const host = project.host ?? memoryHost(project);
   const edges: DependencyEdge[] = [];
   const diagnostics: DependencyDiagnostic[] = [];
+  // Scanned assets participate in resolution, not TypeScript parsing/exports.
+  const scanned = new Set(
+    [...project.files.keys()].map((path) => resolve(path)),
+  );
   const sources = new Map(
-    [...project.files].map(([path, content]) => [
-      resolve(path),
-      ts.createSourceFile(resolve(path), content, ts.ScriptTarget.Latest, true),
-    ]),
+    [...project.files]
+      .filter(([path]) => /\.(?:ts|mts|cts|tsx)$/.test(path))
+      .map(([path, content]) => [
+        resolve(path),
+        ts.createSourceFile(
+          resolve(path),
+          content,
+          ts.ScriptTarget.Latest,
+          true,
+        ),
+      ]),
   );
   const compilerHost: ts.CompilerHost = {
     ...ts.createCompilerHost(project.options),
@@ -346,7 +357,7 @@ export function analyzeDependencies(
           target = slash(relative(root, canonical));
           targetKind = "internal";
           if (
-            !sources.has(resolve(canonical)) &&
+            !scanned.has(resolve(canonical)) &&
             !target.startsWith("src/generated/prisma/")
           ) {
             report("unscanned-internal", node, target, kind);

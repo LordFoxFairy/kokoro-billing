@@ -765,3 +765,132 @@ describe("public named export lineage", () => {
     expect(checkBillingDependencies(actual)).toEqual([]);
   });
 });
+
+// R76: assets are real scanned inputs, never a diagnostic suppression or TS AST.
+describe("R76 exact provenance asset and transport-error boundary", () => {
+  const filter = "src/http/error.filter.ts";
+  const runtime = "@prisma/client/runtime/client";
+  const constructors =
+    "PrismaClientInitializationError, PrismaClientKnownRequestError";
+  it("allows exactly the two public native error constructors in the one transport filter", () => {
+    const actual = graph({
+      [filter]: `import { ${constructors} } from '${runtime}';`,
+    });
+    expect(actual.diagnostics).toEqual([]);
+    expect(checkBillingDependencies(actual)).toEqual([]);
+    expect(actual.edges[0]?.symbols).toEqual([
+      "PrismaClientInitializationError",
+      "PrismaClientKnownRequestError",
+    ]);
+  });
+  it.each([
+    [filter, `import { PrismaClient } from '${runtime}';`],
+    [filter, `import { ${constructors}, PrismaClient } from '${runtime}';`],
+    [filter, `import { PrismaClientInitializationError } from '${runtime}';`],
+    [
+      filter,
+      `import { PrismaClientKnownRequestError as A, PrismaClientKnownRequestError as B } from '${runtime}';`,
+    ],
+    [filter, `import * as Prisma from '${runtime}';`],
+    [filter, `import type { ${constructors} } from '${runtime}';`],
+    [filter, `export { ${constructors} } from '${runtime}';`],
+    [filter, `import('${runtime}');`],
+    [
+      "src/http/other.filter.ts",
+      `import { ${constructors} } from '${runtime}';`,
+    ],
+    [
+      "src/modules/orders/service.ts",
+      `import { ${constructors} } from '${runtime}';`,
+    ],
+    [filter, "import { Prisma } from '../generated/prisma/client.js';"],
+  ])("rejects wider native/Prisma edge %#", (source, statement) => {
+    expect(checkBillingDependencies(graph(valid))).toEqual([]);
+    const actual = graph({
+      [source]: statement,
+      "src/generated/prisma/client.ts": "export const Prisma = {};",
+    });
+    expect(checkBillingDependencies(actual).map((item) => item.code)).toContain(
+      "production-prisma",
+    );
+  });
+  it("resolves a scanned provenance asset but never parses it or exports it as TypeScript", () => {
+    const actual = graph(
+      {
+        "src/http/billing-http.module.ts":
+          "import provenance from '../generated/billing-api/provenance.json' with { type: 'json' };",
+        "src/generated/billing-api/provenance.json":
+          '{"owner":"@kokoro/billing","schema_bindings":{"CreditAccount":"CreditAccountSchema"}}',
+      },
+      { resolveJsonModule: true },
+    );
+    expect(actual.diagnostics).toEqual([]);
+    expect(actual.edges[0]).toMatchObject({
+      targetKind: "internal",
+      target: "src/generated/billing-api/provenance.json",
+    });
+    expect(actual.nodes).toEqual(["src/http/billing-http.module.ts"]);
+    expect(
+      actual.exports.some((binding) => binding.origin.source.endsWith(".json")),
+    ).toBe(false);
+  });
+  it("scans only the exact real provenance asset, rejects other unscanned JSON and validates provenance JSON", async () => {
+    const directory = await mkdtemp(resolve(tmpdir(), "billing-r76-assets-"));
+    try {
+      await mkdir(resolve(directory, "src/http"), { recursive: true });
+      await mkdir(resolve(directory, "src/generated/billing-api"), {
+        recursive: true,
+      });
+      await writeFile(
+        resolve(directory, "tsconfig.json"),
+        JSON.stringify({
+          compilerOptions: {
+            module: "NodeNext",
+            moduleResolution: "NodeNext",
+            resolveJsonModule: true,
+          },
+          include: ["src"],
+        }),
+      );
+      const entry = resolve(directory, "src/http/billing-http.module.ts");
+      const asset = resolve(
+        directory,
+        "src/generated/billing-api/provenance.json",
+      );
+      await writeFile(asset, '{"owner":"@kokoro/billing"}');
+      await writeFile(
+        entry,
+        "import p from '../generated/billing-api/provenance.json' with { type: 'json' };",
+      );
+      const control = await readBillingDependencyGraph(directory);
+      expect(control.diagnostics).toEqual([]);
+      expect(control.nodes).toEqual(["src/http/billing-http.module.ts"]);
+      await writeFile(
+        resolve(directory, "src/generated/billing-api/other.json"),
+        '{"other":true}',
+      );
+      await writeFile(
+        entry,
+        "import p from '../generated/billing-api/other.json' with { type: 'json' };",
+      );
+      expect((await readBillingDependencyGraph(directory)).diagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: "unscanned-internal",
+            target: "src/generated/billing-api/other.json",
+          }),
+        ]),
+      );
+      await writeFile(
+        entry,
+        "import p from '../generated/billing-api/provenance.json' with { type: 'json' };",
+      );
+      await writeFile(asset, "{broken");
+      await expect(readBillingDependencyGraph(directory)).rejects.toThrow(
+        "Invalid Billing provenance JSON",
+      );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+});

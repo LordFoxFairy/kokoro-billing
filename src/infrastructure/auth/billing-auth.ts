@@ -1,3 +1,9 @@
+import { validateBillingPersonalHttpOptions } from "../../config/runtime-config.js";
+import {
+  assertBillingIdentity,
+  decodeBillingIdentityHeader,
+  billingHeaderCount,
+} from "./billing-identity-header.js";
 import type { FastifyRequest } from "fastify";
 import { timingSafeEqual } from "node:crypto";
 import { createRemoteJWKSet, jwtVerify } from "jose";
@@ -7,20 +13,9 @@ import type {
   BillingBffContext,
   BillingInternalContext,
   BillingUserContext,
-} from "../../interfaces/http/server.js";
-
-type AuthMode = "internal-header" | "jwks";
-
-export type BillingAuthOptions = {
-  readonly mode: AuthMode;
-  readonly internalServiceSecret: string;
-  /** The bearer credential emitted by the BFF when it calls Billing. */
-  readonly bffServiceToken: string;
-  readonly operatorProxySecret: string;
-  readonly jwksUrl?: string;
-  readonly issuer: string;
-  readonly audience?: string;
-};
+  BillingAuthOptions,
+  BillingPersonalAuth,
+} from "./billing-auth.types.js";
 
 const headerValue = (
   request: FastifyRequest,
@@ -222,6 +217,7 @@ export const createBillingAuth = (options: BillingAuthOptions): BillingAuth => {
           typeof verification.payload.sub === "string"
             ? verification.payload.sub
             : undefined;
+        assertBillingIdentity(subjectId, "subject");
         return tenantId !== undefined &&
           subjectId !== undefined &&
           sameTenant(request, tenantId)
@@ -242,3 +238,100 @@ export const createBillingAuth = (options: BillingAuthOptions): BillingAuth => {
     webhook: async () => Promise.resolve(true),
   };
 };
+
+export function createBillingPersonalAuth(
+  options: BillingAuthOptions,
+): BillingPersonalAuth {
+  const config = validateBillingPersonalHttpOptions(options);
+  const jwks = createRemoteJWKSet(new URL(config.jwksUrl), {
+    timeoutDuration: 2_000,
+    cacheMaxAge: 300_000,
+    cooldownDuration: 10_000,
+  });
+  const single = (request: FastifyRequest, name: string): boolean =>
+    typeof request.headers[name] === "string" &&
+    billingHeaderCount(request.raw.rawHeaders, name) === 1;
+  const identity = (
+    request: FastifyRequest,
+    name: string,
+    kind: "tenant" | "subject",
+  ) => {
+    if (!single(request, name))
+      throw new TypeError("Repeated Billing identity header");
+    return decodeBillingIdentityHeader(request.headers[name], kind);
+  };
+  return {
+    authenticate: async (request) => {
+      const token = bearer(request);
+      const machine =
+        [
+          "x-kokoro-service",
+          "x-kokoro-internal-secret",
+          "x-kokoro-subject",
+        ].some((name) => Object.hasOwn(request.headers, name)) ||
+        credentialMatches(token, config.bffServiceToken);
+      if (machine) {
+        if (
+          !single(request, "x-kokoro-service") ||
+          !single(request, "x-kokoro-internal-secret") ||
+          !single(request, "authorization") ||
+          request.headers["x-kokoro-service"] !== "web-bff" ||
+          !credentialMatches(
+            headerValue(request, "x-kokoro-internal-secret"),
+            config.internalServiceSecret,
+          ) ||
+          !credentialMatches(token, config.bffServiceToken)
+        )
+          return { ok: false, status: 403 };
+        for (const name of ["x-kokoro-tenant-id", "x-kokoro-subject"]) {
+          if (
+            request.headers[name] === undefined ||
+            request.headers[name] === ""
+          )
+            return { ok: false, status: 403 };
+        }
+        try {
+          return {
+            ok: true,
+            context: Object.freeze({
+              tenantId: identity(request, "x-kokoro-tenant-id", "tenant"),
+              subjectId: identity(request, "x-kokoro-subject", "subject"),
+            }),
+          };
+        } catch {
+          return { ok: false, status: 400 };
+        }
+      }
+      if (token === undefined || !single(request, "authorization"))
+        return { ok: false, status: 401 };
+      let tenantId: string;
+      let subjectId: string;
+      try {
+        const { payload } = await jwtVerify(token, jwks, {
+          algorithms: ["RS256"],
+          issuer: config.issuer,
+          audience: config.audience,
+          requiredClaims: ["exp", "sub", "tenant_id"],
+        });
+        assertBillingIdentity(payload.tenant_id, "tenant");
+        assertBillingIdentity(payload.sub, "subject");
+        tenantId = payload.tenant_id;
+        subjectId = payload.sub;
+      } catch {
+        return { ok: false, status: 401 };
+      }
+      if (
+        request.headers["x-kokoro-tenant-id"] === undefined ||
+        request.headers["x-kokoro-tenant-id"] === ""
+      )
+        return { ok: false, status: 403 };
+      try {
+        if (identity(request, "x-kokoro-tenant-id", "tenant") !== tenantId)
+          return { ok: false, status: 403 };
+        return { ok: true, context: Object.freeze({ tenantId, subjectId }) };
+      } catch {
+        return { ok: false, status: 400 };
+      }
+    },
+  };
+}

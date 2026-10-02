@@ -179,3 +179,63 @@ export const readBillingRuntimeConfig = (
     port: readPort(env),
   };
 };
+
+import type {
+  BillingAuthOptions,
+  BillingPersonalHttpOptions,
+} from "../infrastructure/auth/billing-auth.types.js";
+
+export function validateBillingPersonalHttpOptions(
+  options: BillingAuthOptions,
+): BillingPersonalHttpOptions {
+  if (
+    options.mode !== "jwks" ||
+    options.jwksUrl === undefined ||
+    options.audience === undefined ||
+    options.issuer.trim().length === 0 ||
+    options.audience.trim().length === 0
+  )
+    throw new Error(
+      "Personal Billing HTTP requires explicit JWKS, issuer and audience",
+    );
+  for (const value of [
+    options.internalServiceSecret,
+    options.bffServiceToken,
+    options.operatorProxySecret,
+  ]) {
+    if (!/^[!-~]{32,4096}$/u.test(value))
+      throw new Error(
+        "Personal Billing HTTP requires explicit strong service credentials",
+      );
+  }
+  if (options.operatorProxySecret === options.internalServiceSecret)
+    throw new Error(
+      "Personal Billing HTTP credentials must have distinct roles",
+    );
+  const url = new URL(options.jwksUrl);
+  if (
+    !["http:", "https:"].includes(url.protocol) ||
+    url.username ||
+    url.password
+  )
+    throw new Error("Personal Billing HTTP requires a valid JWKS endpoint");
+  return Object.freeze({
+    ...options,
+    mode: "jwks",
+    jwksUrl: options.jwksUrl,
+    audience: options.audience,
+  });
+}
+export function readBillingPersonalHttpOptions(
+  env: NodeJS.ProcessEnv = process.env,
+): BillingPersonalHttpOptions {
+  return validateBillingPersonalHttpOptions({
+    mode: readAuthMode(env),
+    internalServiceSecret: required(env, "INTERNAL_SERVICE_SECRET"),
+    bffServiceToken: required(env, "BILLING_BFF_SERVICE_TOKEN"),
+    operatorProxySecret: required(env, "BILLING_OPERATOR_PROXY_SECRET"),
+    jwksUrl: required(env, "BILLING_AUTH_JWKS_URL"),
+    issuer: required(env, "BILLING_AUTH_JWT_ISSUER"),
+    audience: required(env, "BILLING_AUTH_JWT_AUDIENCE"),
+  });
+}

@@ -84,6 +84,15 @@ const prisma = (edge: DependencyEdge) =>
   edge.target === "@prisma/client" ||
   edge.target.startsWith("@prisma/") ||
   edge.target.startsWith("src/generated/prisma/");
+// R76's HTTP exception boundary admits error constructors, never ORM clients.
+const approvedTransportErrorEdge = (edge: DependencyEdge) =>
+  edge.source === "src/http/error.filter.ts" &&
+  edge.target === "@prisma/client/runtime/client" &&
+  edge.kind === "value" &&
+  edge.form === "import" &&
+  edge.symbols.length === 2 &&
+  edge.symbols.includes("PrismaClientInitializationError") &&
+  edge.symbols.includes("PrismaClientKnownRequestError");
 const approvedTransactionPrismaEdge = (edge: DependencyEdge) =>
   (edge.target === "src/generated/prisma/client.ts" &&
     ((edge.source === "src/database/transaction.service.ts" &&
@@ -186,7 +195,11 @@ export function checkBillingDependencies(
         kind: edge.kind,
         location: edge.location,
       });
-    if (prisma(edge) && !approvedTransactionPrismaEdge(edge))
+    if (
+      prisma(edge) &&
+      !approvedTransactionPrismaEdge(edge) &&
+      !approvedTransportErrorEdge(edge)
+    )
       report("production-prisma");
     if (
       (edge.target === "node:module" || edge.target === "module") &&

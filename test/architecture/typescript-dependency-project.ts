@@ -30,6 +30,10 @@ export async function readBillingDependencyGraph(
         .join("\n"),
     );
   const files = new Map<string, string>();
+  const provenancePath = resolve(
+    root,
+    "src/generated/billing-api/provenance.json",
+  );
   async function walk(directory: string) {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
       const path = resolve(directory, entry.name);
@@ -37,7 +41,15 @@ export async function readBillingDependencyGraph(
       if (entry.isDirectory()) await walk(path);
       else if (/\.(?:ts|mts|cts|tsx)$/.test(entry.name))
         files.set(path, await readFile(path, "utf8"));
-      else if (entry.isSymbolicLink())
+      else if (entry.isFile() && path === provenancePath) {
+        const content = await readFile(path, "utf8");
+        try {
+          JSON.parse(content);
+        } catch (error) {
+          throw new Error("Invalid Billing provenance JSON", { cause: error });
+        }
+        files.set(path, content);
+      } else if (entry.isSymbolicLink())
         throw new Error(`Unsupported source symlink: ${path}`);
     }
   }

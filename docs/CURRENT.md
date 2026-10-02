@@ -1,3 +1,32 @@
+## R78 Root 验收：正式本人读 HTTP 组件（2026-10-02）
+
+本切片 source/测试/依赖自洽22路径：R77冻结20与已审R73manifest/lock2。独立source审0P0/P1/P2。Root fresh Node24 pure 34文件1038pass/0fail/0skip19.26s，/tmp/kokoro-billing-r77-root-pure.log；真实Nest/Prisma/PG本人读9pass/0fail/0skip2.11s，/tmp/kokoro-billing-r77-root-real-pg.log，owner临时数据库全部回收/无他库删除/tracked不变。Root format/lint/typecheck/build/sql/contract/generated漂移实际exit0，/tmp/kokoro-billing-r78-root-offline.log；原失败与skip历史保留。两GET closed输入、可信双认证/u1完整身份、零GET写入、BigInt精度/私有边界/typed错误由本组件验证。
+
+此组件不是完整C3可部署runtime：main/source-dist所有operations、log-on、旧v1删除、BFF固定consumer、授权赠送/预占/结算或释放/流水、实际provider-cost×可配置1.4和整用户收费链仍待后继。原audit6high/5moderate exit1保持未清零，支付渠道最后。下方worker“真实PG待执行”等是冻结时历史，不冒称完整产品通过。
+
+本CURRENT提交只包含本Root及3118-byte已交接worker前缀＋原HEAD正文；原五dirty设计文档与其未交接body均不提交，工作树保持。Root独占index/Git，原WIN06下一C3只读准备，不写冻结文件。
+
+## R74/R76：本人 GET 源码候选已冻结待 Root（2026-10-02）
+
+Billing main `a49c787660f0306970c9ab0b932d869520307cf9` 未变；WIN06单writer，本片不提交/暂存/切分支。Root R74授完整R59阶段4，两本人GET现已真实Nest注册；R76另授四现architecture文件精确接线。原四文档/第五PLAN全文（R77最终只保留本CURRENT事实前缀，另三文档本轮前缀已撤回）、三机器、R67原59354bytes契约239项、R71typed-lint全文件、四API生成/SQL/Prisma/业务与R73manifest/lock保护。旧main/bootstrap/C3/消费者和共享资源锁不变。
+
+当前实际门禁（Node24.20.0/pnpm11.25.0、资源env全unset）：
+
+| 检查 | 实际结果 |
+|---|---|
+| 完整纯测试unit/contract/architecture/http | 34文件、1038passed、0failed、0skipped、18.00s；/tmp/kokoro-billing-r76-full-pure-final.log |
+| format:check / lint | exit0 / exit0 |
+| tsc --noEmit / build配置--noEmit / 直接tsc build | exit0 / exit0 / exit0；未跑会generate的wrapper |
+| contract:check / sql:check / contract:generated:check | exit0（旧17+v2 24）/ exit0 / exit0 |
+| 新real PG HTTP文件加载/collect | 资源guard9skip、0行为断言；Root待执行，不计pass。最初--includeSkipped探测CLI不支持exit1，日志另保留；后已用unset资源的guard加载验证，不是数据库失败。 |
+| audit | exit1；6high/5moderate/0critical，R73高危/critical ID/module/version/URL集合不变；/tmp/kokoro-billing-r76-audit.json |
+
+首轮full-pure有2真实架构fail和1无效fixture第三fail：大小写对象key覆盖，actual raw=normalized=1且folded=false，所以200不是生产重复头反例。修后真实数组folded wire raw=normalized=1/folded=true，只改raw名case不增因素；两GET身份400/机器credential403/user Authorization401且零read。已有canonical decoder/凭据匹配正确，未为凑GREEN更改helper或泛拒所有HTTP header。R76 architecture新增14项先95总计92pass/3fail，再在授权源/target/两native Error symbol闭集及唯一provenance资产扫描解法后全绿。详证/tmp/kokoro-billing-r76-architecture-red.log、/tmp/kokoro-billing-r76-scoped-green.log、/tmp/kokoro-billing-r76-inject-cardinality.json。
+
+HTTP采用显式profile/43schema provider，Credit目录controller/mapper/query＋HttpModule导入现CreditModule的Service export，无第二wire/schema或钱包owner；auth类型从旧server机械提取，旧route/server余文不变。所有个人query/body/identity在read前拒绝，精度/UTC/schema/错误/request-id/no-store矩阵完整；历史R73前置RED不是本片深层证据。真实PG九项、source/dist、旧全部runtime/C3、BFF消费者、log-on观测与RC镜像未执行，Root独立审查/主树复验/提交仍是放行门。pure readiness的ECONNREFUSED127.0.0.1:1为原失败依赖fixture，不是启动或复用真实Redis。本worker无运行中执行句柄；Root窗口/资源句柄不触碰。最终精确freeze后停写。完整C3根装配还须关闭Fastify默认含raw URL的请求日志并真验log-on观测，当前logger:false fixture不证明该门。
+
+---
+
 ## R71：生成质量门修复候选（2026-10-02，待 Root 审查/集成复验）
 
 Billing main 基线仍 `156451051f6ee47ba9b128f481f96094bfb9f731`。按 Root R71 窄授，只修改现 pnpm-workspace.yaml/pnpm-lock.yaml、eslint.config.mjs、typed-lint.test.ts EOF 和 TECHNICAL_DESIGN/CURRENT 当前事实前缀。R67 官方生成实现/四产物和其他业务、机器/SQL/HTTP/资源/Git 边界冻结；下方 R67 的两项待裁决与旧“未生成”描述保留为历史，不代表本次候选状态。
