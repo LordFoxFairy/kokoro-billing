@@ -1,3 +1,66 @@
+## R43-WIN06：Credit 本人钱包与 ledger 只读组件设计门
+
+### R52 当前身份容量修复候选（纯门通过，待 Root 冻结复验）
+
+Root R51 已真复验：codec 74 项为59pass/15fail，真实 PG 21项为20pass/1fail，唯一 R19 合法身份容量失败；R18 timeout 恢复已通过。本轮只改现 codec、两现测试必要 closed-wire fixture 及四份当前前缀，其他六 source、旧写测试、SQL/contract/generated/deps/runtime/HTTP/gift 与五原正文均锁。
+
+未发布的内部 cursor v1 现在仅六字段：version、scope、identityDigest、accountId、highWaterSequence、lastSequence。identityDigest 为 SHA-256：UTF-8 domain tag `kokoro.billing.credit-ledger.identity.v1` 加一个 NUL 字节，依次追加 tenant 的 uint32-BE UTF-8 字节长度与字节，再追加 subject 的同格式长度与字节；无填充 base64url 固定43字符。受信 tenant 最多191、subject 最多255个 Unicode code point，非空且拒 NUL/孤立 surrogate；不缩合法域、不推定 UUID、不增加 secret。decode 用受信 context 重算并在 SQL 前绑定，返回内部语义对象仍保留 tenantId/subjectId；旧七字段 raw identity 格式直接拒绝，不双读。account/scope/bigint/2048 限额与现账户权限边界不变。
+
+旧非法字段用例迁到新合法 closed-wire 基线并先验合法控制；foreign identity 改为真实 digest mismatch，非法身份用受信 context 实测，subject 非法192改256以承接已裁定255合法域；canonical trailing-bit 别名仍同字节却被拒。R01–19正文及R18预算不变，只迁 helper。Node24.20.0：146纯测试（74 codec＋72契约）pass/0fail/0skip；format/lint/tsc noEmit/无生成build均exit0。integration只collect21项、0错误，19资源guard未执行；当前候选待Root真实PG与独立审，不是HTTP或完整收费链验收。以下R47/R43为历史阶段，当前格式与状态以本节为准。
+
+### R47 历史实现候选（待 Root 真 PG 与独立验收）
+
+Root 已通过 D0 与 R46 高水位四反例复审，按唯一 task.md 卡续授六个现 Credit TS、同目录 credit-ledger-cursor.ts、现 test/unit 的 codec 单测，以及旧 credit-metering 三处构造机械补参；不新目录/Module/Pool。CreditService 的 getMyAccount/listMyLedger 现已实现候选，mandatory 第四参 CreditRepository，现 credit.module DI 复用 Effects 同一 Repository 实例。读取直接走具名 Repository 与现 TransactionService readOnlySnapshot；现 getAccount/grant/reserve/Effects 行为保持，不借 Effects 读、optional/self-new 或旧表 fallback。
+
+codec 仅有界 closed base64url/UTF-8/JSON、受信 tenant/subject、UUID 与 bigint 边界；Repository 只查本人钱包、检查同账户 child 关系、真实 cursor boundary，并在完整高水位历史 window SUM 后裁页。numeric 以文本转 bigint，不 Number/浮点；只读事务的实际 READ ONLY/REPEATABLE READ 与预算复用既有实现。原机器/SQL/Prisma/generated/deps/runtime/HTTP/gift 均未改。
+
+Worker Node24.20 实际 scoped Prettier/ESLint、tsc --noEmit、tsc -p tsconfig.build.json exit0，codec 59passed/0failed/0skip。纯 codec 开发 RED 为合法 round-trip/ceil 两项失败，不是 import 错误；R46 Root 的20failed/0skip均停缺能力前置断言，未到 R01–18 业务。当前 integration SHA5c2c1f91全文冻结；旧写测试只有三构造迁移，原全部断言不变。Root 尚须在冻结主树执行20真实 PG、原写矩阵及独立审；候选不是正式组件验收、HTTP发布或完整收费链。以下为 R43 D0 阶段记录，本阶段范围与状态以本小节为准，原设计及其下历史正文保留。
+
+任务 R43-WIN06；Billing main 基线 `07fdd0746f99f718c042f0b7bee54e524d2f2a79`，Root 唯一任务表 `docs/task.md` 的 R43 行。当前只有本次四份文档前缀获授权，原五份 dirty 全文保持；source/test/contract/SQL/generated/dependency/runtime/Git/资源均不改。以下是当前设计候选，不是实现、HTTP 发布或测试通过声明。Root 三面文档门通过后才续授 tests RED，再单独授实现；赠送权限的人类裁决未回，本片不新增/推定 gift 授权。
+
+### 当前事实与目标边界
+
+R41 对实际 `createBillingServer` 作纯内存 inject：v2 24 operations 中21个业务路径全部404；旧 v1 account double 返回200。断言 `GET /v2/billing/me/credit-account -> 200` 实收404、exit1；这只证明缺少注册，不证明真实数据库、身份或 HTTP 集成。现入口 `src/main.ts -> src/bootstrap/create-billing-runtime.ts -> src/interfaces/http/server.ts` 是旧 Fastify/pg，旧读取和 admission 引用 `entitlement_*` 并有旧 envelope。当前没有 Nest HTTP Controller；不得将旧 handler 换前缀或加 v2 alias 当切换。
+
+已验 canonical Credit 位于 `src/modules/credit/`，现 `CreditService.getAccount(tenantId, accountId)` 通过 `readRoot` 查询账户；grant/reserve、CreditEffects capture/release 和 Metering quote/settle 是可复用组件，不是当前生产 HTTP writer 已切换。尚无可信本人 subject 的账户读取、canonical ledger 读取、对应传输接线。目标仅在 Credit owner 增加 `getMyAccount({tenantId, subjectId})` 与 `listMyLedger({tenantId, subjectId}, {limit?, cursor?})` 内部公开方法，不创建客户端任意 account selector；既有 getAccount 的调用语义保留。本片不修赠送、C1 expiry、C2 admission/IAM/evidence、支付或完整 M3 运行切换。
+
+### 放置、粒度与依赖裁决
+
+| 设计项 | 本片结论 |
+|---|---|
+| Owner/唯一 writer | Billing Credit 拥有账户、grant/hold/allocation/journal；本片读取已有事实，写入仍只走现 Credit 用例，不建第二 writer |
+| 当前目录/契约/测试 | 现 credit.service/repository/types/error/public/module；canonical database/schema.sql；v2两读 operation；现 credit-metering 与 target-schema 真PG回归。五 dirty 已有未交付设计不由本片接管 |
+| 位置 A（采用） | 扩展现 src/modules/credit/credit.service.ts、credit.repository.ts、credit.types.ts、credit.error.ts、credit.public.ts，并在后继GREEN修改现credit.module.ts DI；纯 cursor codec 后继新增同目录 credit-ledger-cursor.ts。不建子目录或 Module |
+| 位置 B（淘汰） | 独立 src/modules/wallet-read/ 或 credit/queries/：没有独立事实/生命周期，只有两用例，不为读侧机械建 CQRS/空层 |
+| 位置 C（淘汰） | 旧 application/credit 与 infrastructure/postgres/repositories/credit：仍引用旧表/旧 wire，无法承接 canonical 唯一 owner |
+| 角色粒度 | Service 决定读取上下文与语义，Repository 作具名限定查询，types 放内部输入/投影，error 放稳定内部错误；codec 只有有界游标编码/解析这一变化原因，不塞入 Service 的 wire/通用 schema |
+| 测试位置 | 后继新增 test/integration/credit-read.test.ts，复用现 prisma-database.fixture；比继续扩巨型 credit-metering 更聚焦只读行为。原131等写回归不改。codec纯规则单测可后继放 test/unit/credit-ledger-cursor.test.ts；tests阶段具体批准文件集由 Root续授，现不建文件 |
+| 依赖/生命周期 | CreditService -> TransactionService -> CreditRepository；CreditService强制显式注入现CreditRepository，禁止optional/自行new/借Effects读；Repository 获取本scope readOnlySnapshot client；cursor codec无I/O。只访问Billing canonical表，禁止旧pg实现/外仓ORM/数据库/Redis/provider或HTTP类型穿透业务；不另建Pool/连接/事务实现 |
+| 数据/API/generated | 零DDL、零metadata/倍率/额度/阈值变更；v2机器24 operations/24 paths（21个v2业务＋3个健康/观测）保持。内部bigint/Date与后继生成wire类型语义不同，不能手写重复API DTO；正式生成/唯一Nest接线属于后继M3 |
+| 删除/保留 | 当前只增文档，不删除有效旧runtime；最终M3切换时删除旧v1/source/handler/validator分支和旧entitlement调用，禁止长期双读、fallback或alias |
+| 验证边界 | 本D0仅hash/suffix/diff与离线SQL/contract；后继组件真实PG、unit/architecture/build，最后唯一Nest HTTP及BFF/Web旅程另验。不会用R41 double或资源skip冒称集成 |
+
+### 查询与失败语义
+
+后继GREEN的CreditService构造固定为四个mandatory参数（TransactionService、CommandReceiptRepository、CreditEffects、CreditRepository，Repository为第四参）；现构造仍只有前三参，本D0不改源码。credit.module.ts在现Service provider的inject/useFactory加入现CreditRepository，复用现已注册的唯一实例，不新provider/Module/层。新只读用例直接调用该Repository的具名读取，不经CreditEffects读、不自行new或optional fallback。后继GREEN文件集另包括现test/integration/credit-metering.test.ts三处new CreditService（本基线44/1703/2039行）机械补第四参，所有原断言/fixture业务行为保持；1703处将现Effects中的inline repository提为local供两者共用，其余参数不改。本tests-only阶段该旧测试字节锁定，仅新credit-read测试可在Root续授后创建。
+
+身份输入只能来自后继传输的受信 user context，tenant 与JWT本人subject校验后进入用例；header/body/cursor不是授权来源。两个 operation 当前权限是 authenticated-user，不借赠送权限或 credit.consume 扩大/缩小它。getMyAccount 找不到本人钱包返回 null（后继404），不隐式创建；disabled 钱包仍可读 status，不将读取当消费。listMyLedger 先解析/校验有界参数与 cursor 的 tenant/subject，再只查询本人账户；无本人钱包为 CREDIT_ACCOUNT_NOT_FOUND，匹配后再比较 cursor.account。不查询他人账户证明 cursor 有效，不形成存在性 oracle。
+
+两用例用现 TransactionService.runRoot，scope actorId=受信subject、mode=readOnlySnapshot。它已执行 READ ONLY/REPEATABLE READ；账户解析与本页journal查询在同一快照、同一有限timeout内完成，不使用write模式的 CreditRepository.findAccount，也不把允许纯模型读但禁止raw的readRoot误作window-SQL入口。Repository 新具名只读方法必须 requireActiveTransaction(expectedTenant, readOnlySnapshot)；不加FOR UPDATE，不在GET refreshGrantWindows/expiry/ensure/account/grant/hold/receipt/audit/outbox，不做缓存。账户余额是既有已提交投影，不在GET修账或重算；C1未完成的到期语义仍独立阻部署。
+
+分页和 balance_after 的唯一方案见 DATA_MODEL 同名前缀；内部金额/sequence保持 bigint，PostgreSQL SUM(bigint)的numeric以精确文本转BigInt，不走Number/浮点。后继wire映射仅用十进制string与UTC ISO Z；账户不夹带tenant/subject/grants/generation旧字段。原稿中任何未来查询/框架目录示例与本片冲突时，以本段及当前三大手册为准，不展开总体重写。
+
+### RED、实现与验收顺序
+
+1. Root审三面一致/批准范围。本轮不新建测试、prod stub或导出，不跑资源。
+2. 后继tests-only先在新 credit-read integration 中对现真实 CreditService 明确断言两个公开方法存在再调用，缺方法应形成预期断言RED，不靠模块加载/编译错误当行为证据；使用既有 canonical 自有临时库fixture。18项场景编号/边界见 API_CONTRACT，本轮未执行。
+3. Root核RED和数据隔离后才授上述现角色文件、credit.module.ts DI、旧credit-metering三处机械构造更新及必要codec实现；复用现module注入，不建设read Module或HTTP alias。
+4. Root在冻结主树真PG复验，原131/SQL/catalog/Prisma与全门不放宽；唯一路由/认证/生成schema/no-store/error/request-id、v1删除及BFF消费属于后继M3整体验收，不与只读组件混报。
+
+后继命令：Node24.20下 `vitest run test/integration/credit-read.test.ts --no-file-parallelism`（Root提供独占 SCHEMA_ADMIN_URL，skip不算GREEN）；codec unit若获授则单独跑；原 `credit-metering.test.ts`、`target-schema.test.ts` 真PG回归；`pnpm verify`、`pnpm prisma:check` 与 fresh/catalog 按Root资源卡执行。当前任何新方法、cursor文件、HTTP/schema生成或这些资源门均未交付。
+
+---
+
 ## R40 Root 验收：积分单位机器事实与引用位置门
 
 本切片仅交付 experimental v2 2.0.1 的 source/validator，不激活 v2 HTTP、赠送、BFF/Web消费或支付。唯一 Credit 单位 metadata 为 1 Credit = 1,000,000 micros；不是现金兑换率、模型加价倍率或余额阈值。七 Credit 字段引用与原整数 wire 保持，现金/sequence、SQL/账务值不变；下方候选与70/71结果保留为历史，以本节为当前事实。

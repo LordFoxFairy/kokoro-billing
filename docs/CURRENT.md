@@ -1,3 +1,43 @@
+## R56 Root 本人账户/流水读取组件验收
+
+Root在本切片冻结源上执行credit-read及原credit-metering真实PostgreSQL测试111passed/0failed/0skipped；全部unit/contract/architecture637passed/0failed/0skipped，format/lint/typecheck/build exit0。独立14文件审P0/P1/P2均0。日志/tmp/kokoro-billing-r55-root-read-write-green.log与/tmp/kokoro-billing-r55-root-full-pure.log，fixture inventory为空。
+
+本提交只发布Credit本人read-only RR组件与严格固定identityDigest cursor及测试，不激活v2 HTTP、不操作赠送/充值、不证明正式用户扣费或支付闭环；旧admin grant设计正文未接收，工作树仍有受保护设计草稿，不冒称clean部署。下方R52/R47/R43是前序阶段记录，其“待Root”不覆盖本段组件证据。
+
+## R43-WIN06：Credit 本人钱包/ledger 只读设计候选，未授tests
+
+### R52 当前候选：合法191/255身份的固定 digest，已冻结纯门待 Root
+
+Billing main仍 `07fdd0746f99f718c042f0b7bee54e524d2f2a79`。Root R51已真复验74pure59pass15fail、21真实PG20pass1fail；R18恢复已过，唯一R19为合法tenant191/subject255四字节身份导致旧raw cursor容量失败。Root已裁定保合法域与2048，未发布v1改domain-separated length-prefixed SHA-256 identityDigest。此前R47的2251字符/身份域未决是历史证据，不是当前方案；当前支持tenant191与subject255 Unicode code point，拒空/NUL/孤立surrogate。
+
+本轮只有现codec、两现测试必要wire fixture和四D0当前前缀变更。closed六字段version/scope/identityDigest/accountId/highWaterSequence/lastSequence，digest固定43字符base64url；domain UTF-8 `kokoro.billing.credit-ledger.identity.v1`＋NUL，tenant/subject分别uint32-BE UTF-8字节长度＋字节。decode用受信context重算，SQL前绑定；旧raw七字段直接拒绝，无双读/secret。其他六source、旧write、第五IMPLEMENTATION_PLAN与五原正文、SQL/contract/gen/deps/HTTP/policy锁，Git/index与真实资源归Root。
+
+Node24.20.0实际：pnpm format:check、pnpm lint、tsc --noEmit、tsc -p tsconfig.build.json均exit0；vitest两现文件为146pass/0fail/0skip（74codec＋72契约，1.59s）。初次tsc发现test.each联合patch无tenantId/subjectId属性，已用Record<string,unknown>局部变量修复后重新通过；未放宽lint/type规则。旧wire负例迁到有效新格式，逐字段非法仍实测并有合法控制；subject192非法边界纠正为256。R01–19正文和R18 literal保留，仅cursor helper迁移；integration仅collect21/0错误、19资源guard未执行，不计pass。无共享资源/服务/Git写入。
+
+冻结后Root重跑74pure、21真实PG、原写矩阵并独立审；本候选不是组件最终验收、正式HTTP、本人登录或完整收费旅程。以下R47/R43为历史快照，其旧测试数量/格式/待裁决状态不代表当前。
+
+### R47 历史组件候选已过 worker 纯门，待 Root 真 PG
+
+基线仍 Billing main `07fdd0746f99f718c042f0b7bee54e524d2f2a79`；Root 已续授六现 Credit source/DI、同目录 codec/现 unit 单测及旧 credit-metering 三构造机械补 mandatory 第四 Repository。当前两个本人读方法已存在，现 Module 同实例 DI、READ ONLY RR编排、受信tenant/subject与严格cursor/账户/实际boundary绑定、固定高水位/完整window SUM→文本BigInt、wrongtenant child/负累计/非法row failclosed均落候选。源码未接正式HTTP，未修改SQL/Prisma/machine/generated/deps/runtime/gift。
+
+Node24.20 worker真实执行：scoped Prettier check/ESLint、tsc --noEmit、tsc -p tsconfig.build.json均exit0；vitest run test/unit/credit-ledger-cursor.test.ts --no-file-parallelism --no-cache为59passed/0failed/0skip。该纯codec此前最小throw stub的合法round-trip/ceil RED为2failed/57passed（不是missing import）；随后完整实现移除stub。初次lint有prefer-promise-reject-errors错误，已用async直接throw/await修复并重新通过，不放宽规则。未执行任何PG/Redis/provider、应用服务或Git写入。
+
+最终补验 pnpm format:check、pnpm lint、tsc --noEmit、无generation的tsc -p tsconfig.build.json均exit0；codec59＋冻结v2契约72合计131passed/0failed/0skip（1.61s），不是原PG131写矩阵。仅collect读取integration20项、0收集错误，18资源guard未执行。额外纯codec容量probe：若受信tenant/subject均允许191个4-byte Unicode code point，则现闭集JSON/base64url产生2251字符，超过已批准2048预算，编码明确CREDIT_INVALID_CURSOR；本片未擅自放宽限额、变格式或推定IAM身份只能UUID。受信身份实际域是否排除此输入/如何支持最大身份分页需Root裁决，不能由20典型PG场景或59codec单测冒称已解决。
+
+Root报告R46真实20failed/0skip/2.53s、资源清洁：2能力和18fresh fixture均停缺方法前置断言，R01–18业务尚未到达，日志/tmp/kokoro-billing-r46-root-credit-read-red.log。本候选需Root重新执行正式20资源断言、旧写矩阵及独立source审；不把59纯unit或历史131通过称作本阶段integration GREEN。冻结read test27461bytes/SHA2565c2c1f915419dd504862978466feb379593b3c6200701d6218d623f81465f43f全文保持，旧测试三ctor机械修改可逆恢复原2d937c4d全文。四doc仅在本R43前缀补阶段事实，第五IMPLEMENTATION_PLAN及五原dirtybody锁；未提交，由Root集成/Git负责。以下是R43 D0阶段记录，本阶段范围/状态以本小节为准，M3正式HTTP/BFF/Web旅程及gift/C1expiry/C2/C3/支付仍后继。
+
+任务 R43-WIN06；Billing main 基线 `07fdd0746f99f718c042f0b7bee54e524d2f2a79`，Root 唯一任务表 `docs/task.md` 的 R43 行。当前只有本次四份文档前缀获授权，原五份 dirty 全文保持；source/test/contract/SQL/generated/dependency/runtime/Git/资源均不改。以下是当前设计候选，不是实现、HTTP 发布或测试通过声明。Root 三面文档门通过后才续授 tests RED，再单独授实现；赠送权限的人类裁决未回，本片不新增/推定 gift 授权。
+
+R41实际只读证据：已解析v2机器24 operations/24 paths（21个v2业务＋3个健康/观测），纯内存生产createBillingServer的21个业务v2请求均404；旧v1本人balance double200；期望getMyCreditAccount=200的断言实收404、exit1，日志为当时本会话35f3f1。进程未listen、无数据库/Redis/provider，关闭内存server；这不是身份/数据库或正式HTTP集成通过。07fdd074只已发布单位source/validator，不把R40 72/595离线门当runtime读账已完成。
+
+三面当前候选一致：TECHNICAL_DESIGN定义现Credit owner中两只读用例/flat codec（不新Module/空层），API_CONTRACT承接现 getMyCreditAccount/getMyCreditLedger及machine权限/错误，不改YAML；DATA_MODEL明确canonical account/journal、READ ONLY REPEATABLE READ、sequence倒序/固定高水位、完整历史window SUM后再裁页、cursor严格tenant+subject+account绑定、bigint精度和零GET写入。后继CreditService强制第四参显式注入现CreditRepository，现credit.module.ts DI同实例，新读不借Effects/自行new/optional；GREEN额外只机械更新旧credit-metering三处构造，原断言保持、tests阶段字节仍锁。R18补wrong-tenant journal关系探测、负累计/非法row失败封闭。现getAccount仅按tenant/accountId；新本人subject/ledger接口尚未实现。现生产仍旧Fastify/pg/entitlement_*，不加v2 alias，不回读旧表。
+
+下一门：Root独立审三面一致、原dirtysuffix/范围与machine/Schema。通过后才续授test/integration/credit-read.test.ts的R01–R18真实fixture RED（方法存在断言和行为），再授权有限现Credit角色文件/codec实现。原131写回归、72契约、SQL/Prisma/fresh/全门不能删/skip降标；最终唯一Nest认证/生成wire/error/request-id/no-store/删除v1与BFF/Web真实旅程另验。gift的人类权限决策仍待，不写未知赠送角色、不执行赠送、预占或实际入账；C1 expiry/C2/C3/支付最后等既有缺口不由读侧设计消除。
+
+本轮只四docs前缀；其下全部原文包括R40/R39/R38及五dirty设计保持字节，第五 IMPLEMENTATION_PLAN不改。新API/schema/SQL/generated/依赖/源/test/运行接线全部未写。当前文档门检查命令：git diff --check、离线 pnpm sql:check/pnpm contract:check、逐文件SHA及整段suffix比较；实际命令结果随交接报告给出，尚未执行的unit/integration/build/schema/smoke不记作通过。原独立D0审0P0/0P1/2P2：本轮仅在R43新前缀修24paths真实计数与mandatory Repository/DI闭环，补R18失败封闭，所有旧正文不改。返修候选待Root复核，不把本修改称独立放行或自行开始tests。
+
+---
+
 ## R40 Root 验收：积分单位机器事实与引用位置门
 
 本切片仅交付 experimental v2 2.0.1 的 source/validator，不激活 v2 HTTP、赠送、BFF/Web消费或支付。唯一 Credit 单位 metadata 为 1 Credit = 1,000,000 micros；不是现金兑换率、模型加价倍率或余额阈值。七 Credit 字段引用与原整数 wire 保持，现金/sequence、SQL/账务值不变；下方候选与70/71结果保留为历史，以本节为当前事实。

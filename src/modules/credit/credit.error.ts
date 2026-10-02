@@ -4,6 +4,9 @@ export type CreditErrorCode =
   | "CREDIT_INSUFFICIENT"
   | "CREDIT_HOLD_NOT_ACTIVE"
   | "CREDIT_HOLD_TERMINAL_CORRUPT"
+  | "CREDIT_INVALID_QUERY"
+  | "CREDIT_INVALID_CURSOR"
+  | "CREDIT_READ_CORRUPT"
   | "CREDIT_IDEMPOTENCY_CONFLICT";
 
 export class CreditError extends Error {

@@ -1,3 +1,51 @@
+## R43-WIN06：Credit 本人读取与 ledger 分页数据设计门（零DDL）
+
+### R52 当前 identityDigest 方案（零 DDL，资源复验待 Root）
+
+canonical account/journal、查询、完整高水位历史SUM、readonly RR、实际boundary、tenant/account绑定及精确BigInt均不改。唯一编码变化为未发布v1 closed六字段version/scope/identityDigest/accountId/highWaterSequence/lastSequence，移除raw tenantId/subjectId，不留fallback/双读。内部语义cursor仍保留受信identity，digest不保存、不建表/索引/投影/secret，也不是认证token。
+
+identityDigest = SHA-256：UTF-8 `kokoro.billing.credit-ledger.identity.v1`＋NUL字节作为domain，随后tenant uint32-BE UTF-8字节长度＋UTF-8字节，随后subject同格式长度＋字节；无填充base64url固定43字符，长度前缀按字节而非字符。受信tenant1..191、subject1..255个Unicode code point，拒NUL/孤立surrogate；encode/decode共同验证，decode重新计算与wire精确比较并在任何SQL前拒foreign。不改2048预算、UUID账户与0<=last<=high<=9223372036854775807、规范decimal/Base64/UTF-8/closed-key门。
+
+Root R51实际21PG20pass1fail、R19合法191/255四字节身份容量失败，R18恢复已过。本轮codec74＋契约72纯测试146pass/0fail/0skip，format/lint/tsc两门exit0；integration仅collect21/0错误，无PG/Redis/provider或服务执行。R01–19/timeout正文保持，helper改为新合法wire使account/boundary/foreign负例继续到达对应门。真实最大身份两页与GET零事实写入由Root冻结复验，尚不宣称当前PG通过。以下R47/R43为历史阶段，游标当前方案以本节与下方更新后的格式段为准。
+
+### R47 历史查询候选（零 DDL，真实 PG 待验）
+
+新增具名 Repository 方法使用现 readOnlySnapshot client；先按受信 tenant+subject 找 canonical 钱包，不 ensure/refresh/write。cursor.account只与本人 id 比较，不作他人查询 selector。绑定后仅 EXISTS 探测同account wrong-tenant child与非法行，未选择异tenant payload；两个边界由限定 tenant/account 的真实 journal count核验。首次 max与续页固定highWater均留同只读RR事务内。
+
+实际静态参数化 CTE：history到高水位计算完整 SUM(bigint) window，page外层再 seq<last/倒序/limit+1；history负累计 EXISTS 独立于page，LEFT JOIN sentinel让空续页也携带完整性结论，不静默丢弃损坏历史。sequence/delta/SUM以::text精确转BigInt；初页highWater+1用numeric比较容纳BIGINT上限，不把sequence或金额转Number。cursor规范非负decimal与BIGINT范围用BigInt判断，严格<=2048 raw/闭集/UTF-8/base64url，codec无数据库或签名配置。零 schema/table/index/view/投影/生成变化，不跨 owner，原写入路径保留。
+
+Worker仅纯codec59passed及静态lint/typecheck/build exit0；这不证明SQL执行、RR/timeout、EXPLAIN或事实零写。Root20真实PG和原写矩阵待本候选冻结后复验；R46真实RED只是缺能力前置断言。integration全文SHA5c2c1f91锁、旧131断言锁，三构造机械补mandatory Repository。以下为 R43 D0 阶段记录，本阶段事实以本小节为准，五原dirty正文保持。
+
+任务 R43-WIN06；Billing main 基线 `07fdd0746f99f718c042f0b7bee54e524d2f2a79`，Root 唯一任务表 `docs/task.md` 的 R43 行。当前只有本次四份文档前缀获授权，原五份 dirty 全文保持；source/test/contract/SQL/generated/dependency/runtime/Git/资源均不改。以下是当前设计候选，不是实现、HTTP 发布或测试通过声明。Root 三面文档门通过后才续授 tests RED，再单独授实现；赠送权限的人类裁决未回，本片不新增/推定 gift 授权。
+
+### 唯一事实与查询owner
+
+canonical仍 `database/schema.sql`（32表，SHA256 `5fbc61465f5af6dcac638ac0e887eb9ca7d29b1f41e60bc55d4f1196b39e755f`），正规生成schema/provenance/client保持字节，不新表、列、索引、view、migration、cursor/session或余额投影。账户唯一键 uq_billing_credit_account_subject(tenant_id,subject_id)，journal按既有 uq_billing_credit_journal_sequence(credit_account_id,journal_seq) 唯一排序。tenant写入边界仍Billing，本片不跨owner SQL/JOIN，不从旧entitlement_*读或union，不把代码表前缀误当已完成多owner schema部署。public-only事务/installer边界仍后继，未验应用单库组合。
+
+账户只SELECT canonical billing_credit_account，WHERE tenant_id=trustedTenant AND subject_id=trustedSubject；GET不创建账户、不refresh windows、不写generation/updated_at、不缓存、不写receipt/audit/outbox。disabled行同样只读返回status。使用同一 READ ONLY REPEATABLE READ快照作账户绑定和账本页，复用TransactionService.runRoot(mode=readOnlySnapshot)的有限预算，不另连Pool、不FOR UPDATE；CreditService后继mandatory第四参显式注入现CreditRepository，由现credit.module.ts DI复用已注册实例；读取不绕Repository、不借Effects、不optional或自行new。Repository.requireActiveTransaction须核tenant与mode，不能复用要求write的现findAccount。旧credit-metering三处构造机械补参仅属GREEN，本tests阶段仍锁。仅getMyAccount单表也使用这个明确scope，不扩大readRoot允许raw的权限。
+
+journal页只读当前找到的本人accountId，同时WHERE tenant_id与credit_account_id。No-FK下不按cursor提供的账户查，也不依赖UUID猜测代替tenant/subject绑定；所有grant/hold/journal写入与完整性维护沿现owner写用例。R18失败封闭必须先在同只读快照对已绑定本人accountId作child关系完整性探测：只检查同accountId关联journal是否存在tenant不一致（EXISTS或总引用数/本tenant引用数比较），不选取或返回异tenant内容，也不按他人accountId查。wrong-tenant child是CREDIT_READ_CORRUPT，不能仅WHERE tenant过滤后假装空页/正确累计。账户状态/金额与journal source_kind/source_ref等machine所需row非法、完整累计为负同样失败封闭，后继500稳定安全错误；不clamp/abs/fallback/GET修复。钱包available/held读取已提交投影；ledger balance_after为该账户全账本累计余额，包含尚held的posted credit，不等于当前available，也不把reserve/release重新造debit/zero journal。
+
+### 排序、高水位与精确累计
+
+采用单账户单调唯一journal_seq倒序；不是created_at分页，所以相同时间/时钟精度不会碰撞，不复制旧timestamp+sequence+id游标规则。第一页同一快照内确定 max(journal_seq) 高水位；空账本直接items空/nextCursor=null。所有页只看 seq<=highWater，续页追加 seq<lastSequence，ORDER BY journal_seq DESC、LIMIT limit+1；有more时对返回最后一行编码nextCursor，否则显式null。跨请求不持有数据库事务/服务端cursor；append-only历史和固定highWater稳定旧页，新第一页才看新journal。若将来允许retention/更改历史，需要owner另行breaking设计；当前不自动GC。
+
+canonical journal没有balance_after列。本查询在本tenant/account完整历史（到高水位）上计算 `SUM(amount_micros) OVER (ORDER BY journal_seq ROWS UNBOUNDED PRECEDING)`，然后外层才过滤lastSequence/排序/limit，不能先裁page再SUM。只从账本事实推导每行balanceAfter，不用当前available/held倒算，不落新projection。SUM(bigint)在PostgreSQL为numeric，采用静态Prisma参数化$queryRaw SELECT（返回amount/sequence/sum的精确十进制文本，再转BigInt），不Number/浮点；source_ref/kind和UTC created_at从原行投影。SUM为负或行不满足machine约束是CREDIT_READ_CORRUPT ->后继500，不abs/clamp/fallback。不额外创建覆盖索引；先使用现account/sequence UNIQUE与绑定过滤，后继Root真PG EXPLAIN/预算结果不达标才独立评估，不在D0臆称性能达标。
+
+### Cursor是有界不可信输入，不是授权
+
+后继 codec 放现Credit目录单文件，只编码/严格解析。当前内部编码闭集v1格式：version=1，scope=credit.ledger，identityDigest、accountId、highWaterSequence、lastSequence；identityDigest按本页R52 domain与长度前缀重算，内部语义对象tenantId/subjectId来自受信context；highWaterSequence/lastSequence为规范非负十进制string，accountId为UUID，tenant最多191/subject最多255个Unicode code point，JSON UTF-8/base64url，原始cursor<=2048字符，不允许未知key/缺值/非对象/数组/坏编码。这是opaque query cursor的内部格式，不增加网络DTO或第二机器单位；不保存游标，不创建secret/signing配置，不把base64当加密/认证。
+
+先语法/limit/tenant/subject校验，坏或foreign cursor拒绝且零SQL。然后只查询受信本人钱包：不存在404；cursor.accountId必须等于查得accountId，否则400且无他人lookup。0<=lastSequence<=highWaterSequence，两个boundary的journal行都必须属于同tenant/account且实际存在（相等允许）；不存在/超序为400，不按当前max自动纠正或fallback第一页。cursor不保证客户端未自行选择本账户合法分页起点，但任何输入只能缩到已授权账户且有界页，绝不因可改cursor获得他人权限。高水位/末行原字串规范性与范围以BigInt判断，无Number精度损失；codec读写与查询都不信cursor授予的数据范围。
+
+### 影响与验证界限
+
+内部账户/ledger投影使用bigint、Date；后继传输映射为现机器schema十进制string/UTC Z，必须精确保留9007199254740993与负delta，不保存display Credit/float，唯一单位metadata07fdd074保持。账户当前状态/seq/账本历史不被读取改变，时间只从库UTC事实转换。没账户为null/not_found；有账户没journal是正常空页，不伪造grant。读到错误/timeout时事务结束、零账务副作用；服务错误按API同名前缀映射现machine code，不新增wire状态。
+
+后继Root-owned fixture用现 createPrismaDatabaseFixture 从 canonical SQL新建临时库，测试R01–R18：真实跨tenant/subject/账户cursor与高水位并发、完整window累计、DB READ ONLY、深层失败后零写入、BigInt精度；只有实际执行且0skip才是integration。原131写/终态和fresh/catalog/Prisma检查仍保留；本片未建测试、未运行资源、未seed/grant实际用户、未改现金/积分价格/额度/消费授权/到期。三面门通过不意味着唯一Nest runtime、gift、预占或正式扣费旅程已发布。
+
+---
+
 ## R40 Root 验收：积分单位机器事实与引用位置门
 
 本切片仅交付 experimental v2 2.0.1 的 source/validator，不激活 v2 HTTP、赠送、BFF/Web消费或支付。唯一 Credit 单位 metadata 为 1 Credit = 1,000,000 micros；不是现金兑换率、模型加价倍率或余额阈值。七 Credit 字段引用与原整数 wire 保持，现金/sequence、SQL/账务值不变；下方候选与70/71结果保留为历史，以本节为当前事实。

@@ -4,6 +4,10 @@ export { CreditError } from "./credit.error.js";
 export type {
   CaptureCreditInput,
   CreditAccountSnapshot,
+  CreditReadContext,
+  CreditLedgerPageInput,
+  CreditLedgerItem,
+  CreditLedgerPage,
   GrantCreditEffectInput,
   GrantCreditInput,
   GrantCreditResult,

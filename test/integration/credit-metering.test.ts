@@ -41,7 +41,12 @@ describe.skipIf(adminUrl === undefined)(
       tx = new TransactionService(fixture.client);
       const repository = new CreditRepository(tx);
       effects = new CreditEffects(tx, repository, new AuditAppender(tx));
-      credit = new CreditService(tx, new CommandReceiptRepository(tx), effects);
+      credit = new CreditService(
+        tx,
+        new CommandReceiptRepository(tx),
+        effects,
+        repository,
+      );
     });
     afterEach(async () => {
       await fixture?.close();
@@ -1700,10 +1705,12 @@ describe.skipIf(adminUrl === undefined)(
         }
       }
       const audit = new FailingReserveAudit(tx);
+      const repository = new CreditRepository(tx);
       const failing = new CreditService(
         tx,
         new CommandReceiptRepository(tx),
-        new CreditEffects(tx, new CreditRepository(tx), audit),
+        new CreditEffects(tx, repository, audit),
+        repository,
       );
       const input = {
         tenantId: "tenant",
@@ -2040,6 +2047,7 @@ describe.skipIf(adminUrl === undefined)(
         tx,
         new CommandReceiptRepository(tx),
         failingEffects,
+        repository,
       );
       await expect(
         service.grant({

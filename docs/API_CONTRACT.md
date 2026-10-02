@@ -1,3 +1,74 @@
+## R43-WIN06：本人钱包/ledger API 承接设计门（不改机器事实源）
+
+### R52 当前 cursor 承接（内部修复，未发布 HTTP）
+
+内部 opaque cursor v1 改为 closed 六字段 version/scope/identityDigest/accountId/highWaterSequence/lastSequence，禁止 raw tenantId/subjectId 旧格式双读。identityDigest 仅是分页身份绑定：SHA-256(domain UTF-8 `kokoro.billing.credit-ledger.identity.v1`＋NUL；tenant uint32-BE UTF-8字节长度＋字节；subject同格式长度＋字节)，固定43字符无填充base64url。decode 在任何 SQL 前按受信 context 验 tenant191/subject255 Unicode code point 合法域并重算；非空、无NUL/孤立surrogate，身份不来自query/body/token自报。内部CreditLedgerCursor仍有tenantId/subjectId，不改公开请求/响应/权限或generated类型，不把digest当签名或授权。
+
+2048 raw预算、version=1/scope=credit.ledger、UUID account、规范decimal→BigInt及0<=last<=high<=BIGINT_MAX全部保持；SQL后的本人account/真实boundary绑定与原只读事务不改。v2机器experimental2.0.1/24operations/24paths、HTTP错误/status/no-store/request-id/认证与赠送policy仍锁，尚未正式接线。
+
+Root R51报告74pure59pass15fail、21真实PG20pass1fail（R19容量；R18已过）；当前worker146pure全部pass/0fail/0skip，format/lint/无生成typecheck/build exit0。旧wire负例用新合法基线逐字段实测，legacy raw拒绝有合法控制；subject非法边界改256。integration只collect21/0错误，19资源guard未执行；Root须复验冻结候选，不以纯codec替代HTTP/PG。以下R47/R43是历史阶段，不是当前未决格式。
+
+### R47 历史内部读取候选（未发布 HTTP）
+
+现 CreditService 已增加 getMyAccount(CreditReadContext) 与 listMyLedger(CreditReadContext, CreditLedgerPageInput)，相关内部 bigint/Date 投影从 credit.public 导出；cursor 与 SQL 精确文本 Row 仍是 owner 内部类型，不手写第二 wire DTO。mandatory 第四参 Repository 与现 Module DI 同实例完成候选，原读写方法不改。page 闭集与 limit=50/1..100、cursor 语法/tenant/subject在事务前拒绝；仅通过后进入 readOnlySnapshot，查本人钱包并绑定 account/boundary。缺钱包 null/ledger CREDIT_ACCOUNT_NOT_FOUND，disabled 可读；新增三个内部错误类别沿 D0，不改任何机器 HTTP code/status/权限。
+
+纯 codec 59passed/0failed/0skip；scoped lint/typecheck/build exit0，不是两路 HTTP 验收。冻结 R01–18 integration SHA5c2c1f91未由 worker 执行，Root 后继真实资源与业务断言仍待；R46 Root20失败均停缺方法前置断言，不记作业务已覆盖。v2仍 experimental2.0.1/24 operations/24 paths，YAML/正式生成/认证/Nest HTTP/no-store/request-id/删除v1/BFF消费未改，不加旧 Fastify v2 alias，不推定赠送权限。以下为 R43 D0 阶段记录，本阶段状态以本小节为准，历史正文保持。
+
+任务 R43-WIN06；Billing main 基线 `07fdd0746f99f718c042f0b7bee54e524d2f2a79`，Root 唯一任务表 `docs/task.md` 的 R43 行。当前只有本次四份文档前缀获授权，原五份 dirty 全文保持；source/test/contract/SQL/generated/dependency/runtime/Git/资源均不改。以下是当前设计候选，不是实现、HTTP 发布或测试通过声明。Root 三面文档门通过后才续授 tests RED，再单独授实现；赠送权限的人类裁决未回，本片不新增/推定 gift 授权。
+
+### 机器契约与传输分层
+
+唯一机器源 `contract/openapi/v2/openapi.yaml` 在07fdd074是 experimental 2.0.1、24 operations/24 paths（21个v2业务＋3个健康/观测），SHA256 `f632ddec7b4a8528fcb325ef45f63bd2e37a05319f3505581a9515332cccf16e`。本设计承接现有 `getMyCreditAccount`（GET /v2/billing/me/credit-account）与 `getMyCreditLedger`（GET /v2/billing/me/credit-ledger），不添加operation/path/字段/权限。成功schema分别链接源内 CreditAccountResponse、CreditLedgerResponse/ LedgerEntry/Page；参数使用现 TenantId/Limit/Cursor，schema不在Markdown或手写DTO建立第二可编辑副本。读权限 authenticated-user、idempotency read-only保持，不要求grant key或构建永久GET receipt。
+
+当前真实注册仍v1；R41内存探针21个v2业务404，旧v1账户double200；两operation缺注册，且canonical read methods未具备。第一片只交Credit内部读取能力，不给Fastify补v2别名。后继唯一Nest Guard验证JWT/tenant，形成tenant+本人subject，Controller调Credit用例并映射到正式生成的只读wire类型/运行schema；header/body/cursor不自报身份。正式生产module/生成链当前未接，不声称存在。后继GREEN以CreditService mandatory第四参显式注入现CreditRepository，现credit.module.ts DI复用同实例；不借Effects提供读能力或自行new/optional。旧credit-metering三处构造仅在GREEN机械补参并保持全部原断言，本tests阶段锁定。Browser -> Web同源adapter -> BFF -> Billing；Web不直连Billing或读取owner表。
+
+成功只使用现machine data结构：钱包不返回旧extra属性；ledger使用源定义的items/page而不是旧entries形态。金额与sequence保持十进制string，含 `9007199254740993` 和负delta必须精确；UtcInstant输出ISO Z，request ID仅x-request-id，删除旧body meta.request_id/x-kokoro-request-id属于后继M3，不在本片修改。后继两读使用Cache-Control:no-store；不返回Location/receipt/replayed或比例副本，不为UI列表增加网络usage API。
+
+### 参数、可见性与错误（已有machine状态，不新增wire code）
+
+limit省略=50，整数1..100；cursor省略为第一页，显式空/非string/>2048字符无效，不clamp/coerce坏值。opaque cursor由本owner解析；内部version/scope、受信tenant/subject的identityDigest、account、高水位/末行位置及有界编码按DATA_MODEL当前设计。cursor只是分页输入，不是授权凭据或持久session。身份先验证；语法/tenant/subject不匹配400且不读账务；通过后只找本人钱包，无本人钱包404；其余账户绑定/不存在边界400，不能跨账户读取。
+
+| 后继HTTP状态 | 现machine code/retryable | 语义 |
+|---|---|---|
+| 200 | 源内成功schema | 钱包存在（含disabled）；已有钱包的空账本为items=[]/next_cursor=null。无账户不临时造零钱包 |
+| 400 | billing.invalid_request / false | limit/cursor/未知query或caller account/subject选择非法；foreign cursor统一invalid，不暴露目标存在性 |
+| 401 | billing.unauthenticated / false | 缺失/无效用户认证，零账务I/O |
+| 403 | billing.forbidden / false | 已认证但tenant/代理边界禁止，零他人查询 |
+| 404 | billing.not_found / false | 本人钱包不存在，余额/ledger一致；不可见资源不返回他人账户信息 |
+| 500 | billing.internal_error / false | 不变量/非法持久行/响应schema失败，稳定安全消息，不clamp负balance或回退旧表 |
+| 503 | billing.dependency_unavailable / true | 数据库不可判定/有界依赖超时，不伪造空钱包或空账本 |
+
+组件内部新增必要的 CREDIT_INVALID_QUERY/CREDIT_INVALID_CURSOR/CREDIT_READ_CORRUPT 类别时统一放现credit.error.ts；缺账户沿 CREDIT_ACCOUNT_NOT_FOUND。它们不成为新增HTTP error code，映射到上述现machine结果；不从数据库message/string判断，不返回SQL、token或cursor payload。无新tenant/actor body字段和grant授权；disabled消费限制、赠送管理员target规则均留其owner后继，不把下方gift候选当本片已定权限。
+
+### 最小RED矩阵与阶段
+
+以下R01–R18为场景组，不预报test数量/执行结果。后继组件测试文件精确为 `test/integration/credit-read.test.ts`，使用现 `createPrismaDatabaseFixture` 自有临时库、生产 CreditService/Repository/TransactionService；原 credit-metering/target-schema 和 frozen72契约测试不改、不替换成double。纯codec单测文件需Root另授，不能以missing import当真RED。
+
+| ID | 必须锁定的断言 |
+|---|---|
+| R01 | 已有本人钱包返回正确account/status/available/held，两个公开读取方法先有明确定义断言 |
+| R02 | 不存在钱包返回null/账户not_found，账户数/时间/generation不变，不ensure |
+| R03 | 同subject跨tenant读取只见自身；他tenant钱包存在仍不改变本人不存在结果 |
+| R04 | 同tenant不同subject隔离，输入无任意account选择 |
+| R05 | disabled钱包只读可见disabled，零消费/入账效果 |
+| R06 | 9007199254740993余额/sequence与signed delta保持bigint精确，后继wire String/UTC-Z断言不走Number |
+| R07 | ledger无本人钱包为not_found，不返回假empty |
+| R08 | 有钱包零journal返回空items/nextCursor=null，零写入 |
+| R09 | 相同created_at多条journal以sequence稳定倒序，多页无重复/漏项 |
+| R10 | 每行balanceAfter是完整账户历史累计，不是当前page subtotal/当前available/held投影 |
+| R11 | limit省略/1/100及0/101/分数/坏类型明确边界，不clamp |
+| R12 | 空/超长/非法base64url/UTF8/JSON/非闭集对象/坏version/scope/整数cursor -> invalid，零SQL |
+| R13 | cursor tenant/subject与受信context不等 -> invalid，零SQL、不查询他人 |
+| R14 | cursor account与本人钱包不等 -> invalid，不按cursor account查账 |
+| R15 | 同账户伪造不存在boundary/末行>高水位/非法sequence -> invalid，不以当前max改写cursor |
+| R16 | 第一页后真实追加journal，旧cursor高水位固定；再读同cursor稳定，后继新第一页才见新行 |
+| R17 | 成功/空/失败读取前后account/grant/hold/allocation/journal/receipt/key/audit/outbox事实与generation/updated_at完全相同；DB READ ONLY拒绝故障注入write |
+| R18 | owned账户引用的wrong-tenant journal不能被tenant过滤隐藏；完整累计负数、非法source_kind/source_ref等row必须CREDIT_READ_CORRUPT失败封闭（后继500），不clamp/旧表fallback/伪空页；SUM numeric精度、DB失败/有界timeout安全映射并正常结束事务 |
+
+R41 HTTP assert200实收404是已发生的独立缺注册RED，本D0不再执行它。后继M3另建唯一Nest HTTP RED，覆盖两路注册、401/403/400/404/500/503、exact success/schema/request-id/no-store及旧v1不存在；组件GREEN不能抵消它。赠送/预占/capture/release/usage闭环和真实BFF/Web旅程保持未验，不把这两个read operation冒称全扣费链。
+
+---
+
 ## R40 Root 验收：积分单位机器事实与引用位置门
 
 本切片仅交付 experimental v2 2.0.1 的 source/validator，不激活 v2 HTTP、赠送、BFF/Web消费或支付。唯一 Credit 单位 metadata 为 1 Credit = 1,000,000 micros；不是现金兑换率、模型加价倍率或余额阈值。七 Credit 字段引用与原整数 wire 保持，现金/sequence、SQL/账务值不变；下方候选与70/71结果保留为历史，以本节为当前事实。

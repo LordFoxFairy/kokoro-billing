@@ -2,6 +2,8 @@ import type { AuditAppender } from "../../database/audit-appender.js";
 import type { CommandReceiptRepository } from "../../database/command-receipt.repository.js";
 import type { TransactionService } from "../../database/transaction.service.js";
 import { commandDigest } from "../../database/canonical-digest.js";
+import { decodeCreditLedgerCursor } from "./credit-ledger-cursor.js";
+import { CreditError } from "./credit.error.js";
 import {
   grantResultCodec,
   reserveResultCodec,
@@ -10,6 +12,9 @@ import type { CreditRepository } from "./credit.repository.js";
 import type {
   CaptureCreditInput,
   CreditAccountSnapshot,
+  CreditReadContext,
+  CreditLedgerPageInput,
+  CreditLedgerPage,
   GrantCreditEffectInput,
   GrantCreditInput,
   GrantCreditResult,
@@ -134,7 +139,54 @@ export class CreditService {
     private readonly transactions: TransactionService,
     private readonly receipts: CommandReceiptRepository,
     private readonly effects: CreditEffects,
+    private readonly repository: CreditRepository,
   ) {}
+  getMyAccount(
+    context: CreditReadContext,
+  ): Promise<CreditAccountSnapshot | null> {
+    return this.transactions.runRoot(
+      {
+        tenantId: context.tenantId,
+        actorId: context.subjectId,
+        operation: "credit.get_my_account",
+        mode: "readOnlySnapshot",
+      },
+      () => this.repository.findMyAccount(context),
+    );
+  }
+
+  async listMyLedger(
+    context: CreditReadContext,
+    page: CreditLedgerPageInput = {},
+  ): Promise<CreditLedgerPage> {
+    if (
+      page === null ||
+      typeof page !== "object" ||
+      Array.isArray(page) ||
+      Object.keys(page).some((key) => key !== "limit" && key !== "cursor") ||
+      (Object.hasOwn(page, "limit") &&
+        (typeof page.limit !== "number" ||
+          !Number.isInteger(page.limit) ||
+          page.limit < 1 ||
+          page.limit > 100))
+    )
+      throw new CreditError(
+        "CREDIT_INVALID_QUERY",
+        "Invalid Credit ledger query",
+      );
+    const cursor = Object.hasOwn(page, "cursor")
+      ? decodeCreditLedgerCursor(page.cursor, context)
+      : undefined;
+    return await this.transactions.runRoot(
+      {
+        tenantId: context.tenantId,
+        actorId: context.subjectId,
+        operation: "credit.list_my_ledger",
+        mode: "readOnlySnapshot",
+      },
+      () => this.repository.listMyLedger(context, page.limit ?? 50, cursor),
+    );
+  }
   async grant(input: GrantCreditInput): Promise<GrantCreditResult> {
     const effect: GrantCreditEffectInput = {
       tenantId: input.tenantId,

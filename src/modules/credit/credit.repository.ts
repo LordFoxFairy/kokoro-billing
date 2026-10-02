@@ -2,9 +2,16 @@ import { randomUUID } from "node:crypto";
 import type { TransactionService } from "../../database/transaction.service.js";
 import type { TransactionClient } from "../../database/transaction.types.js";
 import { CreditError } from "./credit.error.js";
+import { encodeCreditLedgerCursor } from "./credit-ledger-cursor.js";
 import type {
   CaptureCreditInput,
   CreditAccountSnapshot,
+  CreditReadContext,
+  CreditLedgerCursor,
+  CreditLedgerPage,
+  CreditLedgerQueryRow,
+  CreditLedgerItem,
+  CreditLedgerIntegrity,
   GrantCreditEffectInput,
   GrantCreditResult,
   HoldTerminalMutationResult,
@@ -25,6 +32,192 @@ type PersistedCreditGrant = Awaited<
 
 export class CreditRepository {
   constructor(private readonly transactions: TransactionService) {}
+
+  async findMyAccount(
+    context: CreditReadContext,
+  ): Promise<CreditAccountSnapshot | null> {
+    const client = this.transactions.requireActiveTransaction(
+      context.tenantId,
+      "readOnlySnapshot",
+    );
+    const row = await client.billing_credit_account.findFirst({
+      where: { tenant_id: context.tenantId, subject_id: context.subjectId },
+    });
+    if (row === null) return null;
+    if (
+      row.tenant_id !== context.tenantId ||
+      row.subject_id !== context.subjectId ||
+      (row.status !== "active" && row.status !== "disabled") ||
+      row.available_micros < 0n ||
+      row.held_micros < 0n
+    )
+      throw new CreditError(
+        "CREDIT_READ_CORRUPT",
+        "Credit account facts are invalid",
+      );
+    return {
+      id: row.id,
+      tenantId: row.tenant_id,
+      subjectId: row.subject_id,
+      status: row.status,
+      availableMicros: row.available_micros,
+      heldMicros: row.held_micros,
+    };
+  }
+
+  async listMyLedger(
+    context: CreditReadContext,
+    limit: number,
+    cursor?: CreditLedgerCursor,
+  ): Promise<CreditLedgerPage> {
+    const client = this.transactions.requireActiveTransaction(
+      context.tenantId,
+      "readOnlySnapshot",
+    );
+    const account = await this.findMyAccount(context);
+    if (account === null)
+      throw new CreditError(
+        "CREDIT_ACCOUNT_NOT_FOUND",
+        "Credit account was not found",
+      );
+    if (cursor !== undefined && cursor.accountId !== account.id)
+      throw new CreditError(
+        "CREDIT_INVALID_CURSOR",
+        "Invalid Credit ledger cursor",
+      );
+
+    // No FK: inspect only the existence of a bad child relation for this
+    // already-owned account. Never select foreign tenant payloads.
+    const integrity = await client.$queryRaw<CreditLedgerIntegrity[]>`
+      SELECT
+        EXISTS (SELECT 1 FROM billing_credit_journal
+          WHERE credit_account_id=${account.id}::uuid AND tenant_id<>${context.tenantId}) AS "wrongTenant",
+        EXISTS (SELECT 1 FROM billing_credit_journal
+          WHERE credit_account_id=${account.id}::uuid AND tenant_id=${context.tenantId}
+            AND (journal_seq<0 OR amount_micros=0 OR source_kind='' OR source_ref=''
+              OR char_length(source_kind)>64 OR char_length(source_ref)>255
+              OR entry_kind NOT IN ('grant','debit','release','reversal','expiry','adjustment'))) AS "invalidRow"`;
+    if (
+      integrity.length !== 1 ||
+      integrity[0]?.wrongTenant !== false ||
+      integrity[0].invalidRow !== false
+    )
+      throw new CreditError(
+        "CREDIT_READ_CORRUPT",
+        "Credit ledger facts are invalid",
+      );
+
+    let highWaterSequence: bigint;
+    if (cursor !== undefined) {
+      const count = await client.billing_credit_journal.count({
+        where: {
+          tenant_id: context.tenantId,
+          credit_account_id: account.id,
+          journal_seq: { in: [cursor.highWaterSequence, cursor.lastSequence] },
+        },
+      });
+      if (count !== (cursor.highWaterSequence === cursor.lastSequence ? 1 : 2))
+        throw new CreditError(
+          "CREDIT_INVALID_CURSOR",
+          "Invalid Credit ledger cursor",
+        );
+      highWaterSequence = cursor.highWaterSequence;
+    } else {
+      const maximum = await client.billing_credit_journal.aggregate({
+        where: { tenant_id: context.tenantId, credit_account_id: account.id },
+        _max: { journal_seq: true },
+      });
+      if (maximum._max.journal_seq === null)
+        return { items: [], nextCursor: null };
+      highWaterSequence = maximum._max.journal_seq;
+    }
+    // numeric comparison allows bigint's upper ceiling + 1 on an initial page.
+    const beforeSequence = cursor?.lastSequence ?? highWaterSequence + 1n;
+    const rows = await client.$queryRaw<CreditLedgerQueryRow[]>`
+      WITH history AS (
+        SELECT id, journal_seq, amount_micros, source_kind, source_ref, created_at,
+          SUM(amount_micros) OVER (ORDER BY journal_seq ROWS UNBOUNDED PRECEDING) AS balance_after
+        FROM billing_credit_journal
+        WHERE tenant_id=${context.tenantId} AND credit_account_id=${account.id}::uuid
+          AND journal_seq<=${highWaterSequence.toString()}::bigint
+      ), page AS (
+        SELECT * FROM history WHERE journal_seq<${beforeSequence.toString()}::numeric
+        ORDER BY journal_seq DESC LIMIT ${limit + 1}
+      )
+      SELECT EXISTS (SELECT 1 FROM history WHERE balance_after<0) AS "historyCorrupt",
+        page.id AS "journalId", page.journal_seq::text AS "sequenceText",
+        page.amount_micros::text AS "deltaText", page.balance_after::text AS "balanceText",
+        page.source_kind AS "sourceKind", page.source_ref AS "sourceRef", page.created_at AS "createdAt"
+      FROM (VALUES (1)) AS anchor(n) LEFT JOIN page ON TRUE
+      ORDER BY page.journal_seq DESC`;
+    if (rows.length === 0 || rows.some((row) => row.historyCorrupt !== false))
+      throw new CreditError(
+        "CREDIT_READ_CORRUPT",
+        "Credit ledger facts are invalid",
+      );
+    const items: CreditLedgerItem[] = [];
+    for (const row of rows) {
+      if (row.journalId === null) {
+        if (
+          rows.length !== 1 ||
+          row.sequenceText !== null ||
+          row.deltaText !== null ||
+          row.balanceText !== null ||
+          row.sourceKind !== null ||
+          row.sourceRef !== null ||
+          row.createdAt !== null
+        )
+          throw new CreditError(
+            "CREDIT_READ_CORRUPT",
+            "Credit ledger row is invalid",
+          );
+        continue;
+      }
+      if (
+        typeof row.sequenceText !== "string" ||
+        !/^(?:0|[1-9][0-9]*)$/u.test(row.sequenceText) ||
+        typeof row.deltaText !== "string" ||
+        !/^-?[1-9][0-9]*$/u.test(row.deltaText) ||
+        typeof row.balanceText !== "string" ||
+        !/^(?:0|[1-9][0-9]*)$/u.test(row.balanceText) ||
+        typeof row.sourceKind !== "string" ||
+        row.sourceKind.length === 0 ||
+        Array.from(row.sourceKind).length > 64 ||
+        typeof row.sourceRef !== "string" ||
+        !this.#validTerminalSource(row.sourceRef) ||
+        !(row.createdAt instanceof Date) ||
+        !Number.isFinite(row.createdAt.getTime())
+      )
+        throw new CreditError(
+          "CREDIT_READ_CORRUPT",
+          "Credit ledger row is invalid",
+        );
+      items.push({
+        journalId: row.journalId,
+        sequence: BigInt(row.sequenceText),
+        deltaMicros: BigInt(row.deltaText),
+        balanceAfterMicros: BigInt(row.balanceText),
+        sourceKind: row.sourceKind,
+        sourceRef: row.sourceRef,
+        createdAt: row.createdAt,
+      });
+    }
+    const hasMore = items.length > limit;
+    const pageItems = items.slice(0, limit);
+    const last = pageItems.at(-1);
+    const nextCursor =
+      hasMore && last !== undefined
+        ? encodeCreditLedgerCursor({
+            version: 1,
+            scope: "credit.ledger",
+            ...context,
+            accountId: account.id,
+            highWaterSequence,
+            lastSequence: last.sequence,
+          })
+        : null;
+    return { items: pageItems, nextCursor };
+  }
 
   async findAccount(
     tenantId: string,

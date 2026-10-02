@@ -24,12 +24,18 @@ import { CreditEffects, CreditService } from "./credit.service.js";
     },
     {
       provide: CreditService,
-      inject: [TransactionService, CommandReceiptRepository, CreditEffects],
+      inject: [
+        TransactionService,
+        CommandReceiptRepository,
+        CreditEffects,
+        CreditRepository,
+      ],
       useFactory: (
         transactions: TransactionService,
         receipts: CommandReceiptRepository,
         effects: CreditEffects,
-      ) => new CreditService(transactions, receipts, effects),
+        repository: CreditRepository,
+      ) => new CreditService(transactions, receipts, effects, repository),
     },
   ],
   exports: [CreditEffects, CreditService],
