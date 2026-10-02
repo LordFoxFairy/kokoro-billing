@@ -42,4 +42,13 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    files: ["src/generated/billing-api/types.gen.ts"],
+    rules: {
+      "@typescript-eslint/no-duplicate-type-constituents": [
+        "error",
+        { ignoreIntersections: true, ignoreUnions: false },
+      ],
+    },
+  },
 );

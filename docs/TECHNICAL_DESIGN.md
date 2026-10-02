@@ -1,3 +1,95 @@
+## R71：正式生成质量门窄修复候选（2026-10-02，待 Root 集成验收）
+
+归属：Billing 现有 owner contract 的生成工具与质量门；只扩展现有 workspace/lock、ESLint 配置、typed-lint EOF 测试和本节事实前缀，不新增业务模块、writer、schema、API 或运行进程。基线仍 main `156451051f6ee47ba9b128f481f96094bfb9f731`；R67 生成实现和四个正式产物冻结不改，Root 负责审查、复验与提交。以下为 R71 当前候选；下方 R67 的 lint/audit 待裁决及更早“未生成”描述保留为前序记录，不覆盖本节。
+
+### 依赖解析、安全差量与退出路径
+
+2026-10-02 重新核验官方版本与 advisory：官方生成器 `@hey-api/openapi-ts@0.99.0`、`@hey-api/shared@0.5.0`、`@hey-api/json-schema-ref-parser@1.4.4` 保持固定；parser 原固定 `js-yaml@4.2.0`。仅在现四条 override 后加入父依赖选择器 `"@hey-api/json-schema-ref-parser@1.4.4>js-yaml": 4.3.2`，没有全局 js-yaml override 或其他依赖升级。pnpm 11.25.0 的 [官方父依赖 override 语义](https://pnpm.io/settings/dependency-resolution#overrides) 支持该范围；`pnpm install --lockfile-only --prefer-offline` 后逐对象比较确认 importer/settings、其他 package/snapshot、原四条 override 全不变，只有 js-yaml 的 version/integrity、parser 依赖边和新 override 改变，packages/snapshots 各 438。随后 `pnpm install --frozen-lockfile` exit0，真实从 generator→parser 和 generator→shared→parser 两条 require 解析均为 4.3.2，实际 `load` API 存在。
+
+[官方 4.3.2 registry metadata](https://registry.npmjs.org/js-yaml/4.3.2) 与 [4.3.2 导出源码](https://github.com/nodeca/js-yaml/blob/4.3.2/index.js) 已核验：MIT，同 4.x 的 CJS/ESM 导出及 `load` 使用方式，依赖仍 `argparse:^2.0.1`，未声明 engines；现运行环境 Node24.20.0 满足 generator/parser 的 Node>=22.18.0。未新增 runtime 依赖、SDK 或自定义 resolver；兼容性以本次实际 canonical YAML 两次生成、四产物完整字节与 824 纯门证明，不外推到任意第三方 YAML。
+
+官方 4.x 受影响范围分别为 [GHSA-52cp-r559-cp3m](https://github.com/advisories/GHSA-52cp-r559-cp3m) `>=4.0.0 <4.3.0`、[GHSA-5p4m-2wfm-xmqj](https://github.com/advisories/GHSA-5p4m-2wfm-xmqj) `>=4.0.0 <4.3.1`、[GHSA-2883-xcg3-v3hh](https://github.com/advisories/GHSA-2883-xcg3-v3hh) `>=4.0.0 <4.3.2`；因此 4.3.1 仍覆盖第三项风险，选择精确 4.3.2。实际 `pnpm audit --json` exit1：R67 新增的三项 js-yaml high（1123911/1138115/1193727）及所有 js-yaml advisory 均消失，9high/5moderate 回到既存 6high/5moderate、0critical；剩余 fastify/fast-uri/brace-expansion 风险未修改、未关闭，不称全量审计 GREEN 或可发布。父依赖 override 的退出条件是后续正式 parser 版本自身固定已修复版本、经过独立供应链/锁文件审查与完整生成/纯门后移除；不得直接删除并回退 4.2.0。
+
+### 单正式文件 lint profile 与真实边界证据
+
+按 [typescript-eslint 官方选项](https://typescript-eslint.io/rules/no-duplicate-type-constituents/#options)，最后一条 flat-config 仅匹配 `src/generated/billing-api/types.gen.ts`：`@typescript-eslint/no-duplicate-type-constituents` 仍为 error，设置 `ignoreIntersections:true`、`ignoreUnions:false`。这是官方 `allOf` alias 交叉的窄豁免，不忽略 generated 目录、不关闭规则、不自动修复或手改产物；手写 source/scripts/test 与其他正式 index/schemas 文件仍使用原严格配置，generated 中 union、显式 any 和全部既有 unsafe/Promise/非空/穷尽检查继续 error。
+
+[Hey API TypeScript 插件](https://heyapi.dev/docs/openapi/typescript/plugins/typescript) 与 [正式 resolver hook](https://heyapi.dev/docs/openapi/typescript/plugins/concepts/resolvers) 已核验；0.99.0 默认将两个不同 `$ref` 输出为交叉，未提供 resolved alias 等价去重开关。R70 曾只读核实 `CreditMicros & NonNegativeDecimal` 两别名均最终为 string；本片不引入类型推断/自定义 resolver，也不改变 owner 原 `allOf` 事实。profile 的退出条件是后续正式生成器在原 schema 不变下可靠去重且完整生成字节/契约/typed-lint 门经 Root 验收；再移除该精确 profile，不能以手改 generated 作为退出路径。
+
+现 `test/architecture/typed-lint.test.ts` 原 3742bytes 全文保留，只 EOF 追加 20 项：实际 `calculateConfigForFile` 的唯一范围与 severity/options、真实 `lintText` 的合法控制、5 类非目标文件重复 intersection 负例、目标 union 负例及 12 项目标 typed-lint 负例。先在原配置得到 2failed/23passed、exit1（有效配置无窄选项、目标 intersection 仍报错），再加 profile 得 25passed/0failed/0skip、exit0；不是 regex-only 或缺失 import RED。原 R67 全部 33 条 EOF 契约断言保持，完整契约文件仍 239 项。
+
+### 本次真实验证与冻结边界
+
+Node24.20.0 / pnpm11.25.0：format:check、lint、`tsc --noEmit`、`tsc -p tsconfig.build.json --noEmit`、contract:check（17 routes＋24 operations）、sql:check（canonical 静态）均 exit0；`vitest run test/unit test/contract test/architecture --no-file-parallelism --no-cache` 为 29files、824passed/0failed/0skip，16.13s（原804＋本片20，不重复累计）。`contract:generated:check` 前后各 exit0，两次实际 `contract:generate` 后 index.ts/types.gen.ts/schemas.gen.ts/provenance.json 全字节 SHA-256 与 R67 相同。未执行会刷新 Prisma 的 test/typecheck/build wrapper，没有 source/dist runtime 或 integration/schema/smoke 通过声明。
+
+只有 R71 授权六现路径可改变；其余 267 个基线 tracked/既有候选路径、canonical YAML/checker、原 R67 59354bytes 契约测试、package manifest、两 scripts、四正式产物、API/DATA 文档、第五 IMPLEMENTATION_PLAN 与两份文档本节之前的完整原文保持。未操作 Git/index/提交、HTTP/共享 PostgreSQL/Redis/provider，也未改变赠送、收费或其他 owner；Root 最终复验与独立审查仍待。审计历史风险后续 owner 为 Root/Billing 依赖切片，本候选不越界修复。
+
+## R59：本人读取 HTTP D0（R66机器候选已验；生成/HTTP未实施）
+
+R67 当前生成候选（2026-10-02）：按 Root docs/task.md 已审范围实施两个普通 scripts，官方 Hey API 0.99.0 的 TypeScript＋schemas(json) 两插件生成 index.ts/types.gen.ts/schemas.gen.ts，closed binding/provenance 输出 provenance.json；没有 SDK/client 或手改官方产物。43 原 schema/$ref/单位 metadata 语义、双次全字节一致与只读漂移门已实测通过；原206契约全文保持，仅EOF追加33项，完整29文件804pass/0fail/0skip，15.31s。format、两noEmit编译、contract:check 17+24、sql:check、frozen install 与 generated check 均exit0。本片尚未验收：官方 types.gen.ts:19 的 CreditMicros & NonNegativeDecimal 触发现有 typed-lint 重复交叉类型规则（exit1）；audit exit1，基线6high/5moderate，当前9high/5moderate，新增3high来自生成器固定 js-yaml4.2.0。未手改生成物、放宽门禁或升级既有依赖；Root 后续裁决与独立复验待进行。下列 R59/R66“未生成/工具冻结/Phase A”是前序阶段记录，不覆盖本段当前状态；HTTP/runtime、Nest adapter/Ajv、SQL/Prisma、赠送/计价/支付、其他owner与Git/资源边界仍保持，未发布或启动服务。
+
+R67 安装前官方 registry 核验：latest 为 @hey-api/openapi-ts 0.99.0，MIT，Node >=22.18.0，TypeScript peer >=5.5.3 || >=6.0.0 || 6.0.1-rc；本仓 Node24.20.0/pnpm11.25.0/TypeScript6.0.3/Prettier3.9.6 实测。manifest/lock 只新增该官方 devDependency 与生成/检查命令；28 个新增传递依赖，既有解析版本保持。依据：[官方 registry metadata](https://registry.npmjs.org/@hey-api/openapi-ts/0.99.0)、[官方 schemas 两插件配置说明](https://heyapi.dev/docs/openapi/typescript/plugins/schemas)。js-yaml4.2.0 是 ref-parser1.4.4 的精确依赖；registry 已确认同 major 修复版4.3.2存在，但本轮未擅自加入 override 或变更默认生成策略，Root 收到风险后续裁决。
+
+
+Billing main 156451051f6ee47ba9b128f481f96094bfb9f731已发布本人read组件；原111真PG/637纯门是组件历史证据，不重做Service/Repository/事务/cursor。运行入口仍src/main.ts→bootstrap/create-billing-runtime.ts→interfaces/http/server.ts旧Fastify/pg；BFF消费和正式HTTP尚未闭合。当前工作树experimental2.0.2 source/checker候选已由Root R66在Node24实测29 files、771passed/0fail/0skip（含206契约，不重复累计）、format/lint/两noEmit编译门exit0，12.42s；Sol三机器反向字节审0P0/P1/P2，日志 /tmp/kokoro-billing-r66-root-machine-green.log。候选尚未提交发布、生成或注册正式HTTP，机器治理通过不等于运行认证通过。Root唯一任务卡docs/task.md R66；本Phase A仅对齐contract README与四R59当前前缀，历史正文/第五IMPLEMENTATION_PLAN及三机器/source/tests/SQL/generated/依赖/Git/资源冻结。
+
+### 放置与唯一依赖
+
+| 项 | 当前裁决与后继门 |
+|---|---|
+| Owner/唯一 writer | Billing Credit；本片只有读，不创建第二钱包或账本 writer。IAM 拥有 Session/身份，BFF 拥有已验证请求 context；Billing 不读取其数据库。 |
+| 当前事实 | CreditService.getMyAccount/listMyLedger、mandatory Repository、CreditModule 和 DatabaseModule 已发布；HTTP Controller/Guard、billing-api 正式生成目录及 Nest Fastify adapter 尚缺。三机器候选已冻结但未提交，既有设计草稿保持；本Phase A仅README/四R59前缀，其他源码不改。 |
+| 位置 A（采用） | 现 src/modules/credit 下普通 credit-read.controller/mapper/query 文件；分别是两路传输、内部 bigint/Date 到生成 wire 的纯映射、声明 query 的严格解析。现 credit.module 接线，不新一级模块。 |
+| 位置 B（淘汰） | src/modules/wallet-read 或 credit/queries 独立读模块：没有新的业务事实、权限或生命周期；旧 interfaces/http/server 新增 v2 alias 同样淘汰。 |
+| 框架粒度 | 已批准 src/http 承接 Guard/Filter/框架 provider；现 infrastructure/auth 承接认证及纯身份头 codec，auth.types 从旧 server 提取。不在 Service 混入 HTTP/schema/配置，不为三文件建新业务目录。 |
+| 依赖/生命周期 | Controller -> 已发布 CreditService -> 同一 TransactionService/Repository；框架 auth/header/schema 向 Controller 提供受信 context。DatabaseModule 保持一个 client/pool，READ ONLY REPEATABLE READ 不另实现。框架 provider 与配置由显式 Nest root/module 装配，无 optional/self-new Repository、裸 ORM 透出或旧 pg 查询桥。 |
+| 数据/API | 零 DDL、零账户初始化、零 receipt/audit/outbox。24 operation/24 path 维持；两现GET的BFF委派、u1 profile与auth-selection已进入机器候选，不承接admin grant。现 public-only Prisma/installer 限制保留，不能称多 owner schema 组合通过。 |
+| 删除/切换 | 两读 HTTP 是完整 C3 的依赖检查点，不是另一个可长期运行的服务。正式 main 切换时唯一 Nest root 替代旧 factory/server，移除 v1 route/contract/check 分支及完整 C3 已承接的旧 pg writer；不在两读检查点删除仍承担有效写职责的旧代码。 |
+| 验证 | 已验machine/checker -> 后继正规生成 -> 实际 Nest 注册与身份/响应 RED -> 窄 HTTP GREEN -> Root 真 PG/source/dist/故障恢复及完整 C3 验收。缺导出/缺 adapter/import 错误不计行为 RED，404 只证明缺注册。 |
+
+### 已裁定的本人主体与凭据
+
+BFF SessionAdmissionClient 验证 IAM SessionAuthorization 的已发布响应，将 tenant_id/user_id 放入 RequestContext.identity.namespace/userId；ownerIdentityHeaders 只由此 context 构造身份，liveOwnerRequest 固定 web-bff。upstream 过滤浏览器身份头，不转发用户 Bearer。Billing 对两本人 GET 验证 tenantContext/serviceCaller/internalSecret/serviceBearer/subjectContext 五因素，service=web-bff、subject mandatory；actor 是服务不等于本人 subject，不从 body/query/cursor 取得权限。
+
+共同的 tenant/Authorization 不是单独的机器标记：出现 serviceCaller/internalSecret/subjectContext 等机器专有因素，或提供已配置 BFF service credential，即进入完整机器分支；认证因素缺失或机器凭据错误统一 forbidden，禁止降级 JWT；完整机器认证后身份头编码/语义解析非法按 API 400，缺/空 mandatory subject 仍403。完全无机器标记时，userBearer 是独立 IAM JWT issuer/固定 audience/当前 tenant 绑定分支，主体取经验证的 sub；禁止开发 internal-header 模式进入正式 HTTP。BFF 发出的 Bearer 与 BILLING_BFF_SERVICE_TOKEN、internal secret 必须明确配置匹配，配置缺失拒启动；不回落 upstreamSecret/serviceToken。令牌、secret、cursor 不写日志/receipt。
+
+### R61 已裁定：完整合法身份的 canonical HTTP 表示
+
+191/255 按 Unicode code point 而非 JS UTF-16 length，身份非空且拒 NUL/孤立 surrogate；不 trim、NFC、剥 BOM 或把身份限制为 UUID/ASCII。Node raw header 不能承载任意 Unicode，现 tenant/subject header 的 raw string 与 .length 检查不是完整域实现。
+
+Root R61 已采纳两本人 GET 专属 `personal-identity-u1` profile：现 x-kokoro-tenant-id/x-kokoro-subject 的值对所有身份统一为 `u1.` + 无 padding 的 base64url(UTF-8(identity))，包括 ASCII 身份；不 dual-read raw/percent/编码格式，不对未知前缀猜测。规范长度/解码/示例及机器参数位于 API_CONTRACT 的 R59 节。对比 literal raw Unicode（平台拒绝且语义不完整）和 canonical percent UTF-8（可行但4-byte最大身份需2292/3060个百分号编码字符），已采纳 u1（tenant<=1022、subject<=1363 ASCII字符），当前experimental2.0.2 machine/checker候选已Root771纯门及独立0审，但该wire未提交发布/生成；HTTP codec/auth/consumer仍待后继源码续授。
+
+consumer 必须 owner-first：Billing 发布该 profile/commit/digest 后，BFF 仅本人的两 GET adapter 从 IAM 验证 context 编码 header，并传显式 Billing credential；不全局改变其他 owner 的 ownerIdentityHeaders/upstream 行为，不改浏览器输入、不转发用户 token、不新增 IAM 人类权限。userBearer 分支只需编码 tenant header并与 JWT tenant claim 比较，subject 仍来自 JWT。旧格式在这两 GET 直接拒绝，其他 operation 的原参数不随共享 TenantId 被误改。
+
+R61独立审指出默认TextDecoder可能剥除leading BOM的验证缺口；后继 test/unit/billing-identity-header.test.ts 必须对tenant/subject分别参数化leading U+FEFF合法正例，fatal UTF-8保BOM并逐字UTF-8往返（包括EF BB BF），不能把BOM当非法身份或normalize；完整断言按API R59“R61 BOM正向补强”。bad UTF-8、trailing-bit alias和混合大小写rawHeaders重复头负例保持。当前仅收敛设计矩阵，未写实际测试或codec。
+
+当前两GET的x-kokoro-auth-selection已记录闭集machine_markers=x-kokoro-service/x-kokoro-internal-secret/x-kokoro-subject，按header出现而非truthy；service_bearer_selects_machine:true仅指匹配已配置专用服务凭据，不以共享tenant或任意Authorization选机器分支。machine_partial_response:403与machine_to_user_fallback:false固定，其他operation拒此extension。该机器事实/守卫已验，后继HTTP仍须实际实现并验证选择优先级。
+
+### 后继正规生成与closed registry（未实施）
+
+唯一输入为本owner YAML及正式checker；已批准后继scripts/generate-billing-api.ts只调用Hey API的TypeScript＋schemas（type:json）两个官方plugins，无SDK/client。官方输出为src/generated/billing-api/index.ts、types.gen.ts、schemas.gen.ts；scripts/billing-api-artifacts.ts承接sourcecomponent→official export binding的closed registry、provenance与漂移检查，并输出provenance.json。实际确定性生成门确认官方export绑定，不手改输出或另造业务schema；schemas.json不是选定官方产物。
+
+源43个components.schemas与官方schemas导出必须逐原对象语义一致，包括原$ref、约束与唯一x-kokoro-credit-unit metadata；registry完整覆盖且仅覆盖这43个source component，unknown component/export/ref与数量、版本、digest漂移失败封闭。Ajv2020 strict＋formats以 #/components/schemas/Name keys注册原schema对象，不重写ref、不注入第二业务schema；coerceTypes/useDefaults/removeAdditional均false。unitannotation仅注册为获准metadata，不参与业务值校验；精确definition_version/display_unit/micros_per_credit继续由owner checker/provenance锁，不因此放宽其他未知keyword/ref。
+
+Root已接收官方probe候选Nest Fastify adapter12.0.1、Hey API0.99.0、Ajv8.20.0、formats3.0.1；这是probe核验事实，不是本仓已安装/生成/兼容完成证据。后继安装前重新核验实际版本/peer/Node24/许可证，固定manifest/lock后再验frozen install/audit/生成重现/类型编译与registry。当前两个scripts、产物、依赖与HTTP源码仍锁，不新开计划中心或第二runtime。
+
+### 精确后继文件集（机器候选已验；生成/工具/HTTP仍待续授）
+
+下列路径相对绝对仓根 `/Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/apps/kokoro-billing`；新普通文件仅在对应阶段创建，当前不建文件/目录。
+
+| 顺序 | 现文件/目标新文件与唯一责任 |
+|---|---|
+| 1 机器/生成 | 现 contract/openapi/v2/openapi.yaml、contract/README.md、scripts/openapi-v2-target.ts、test/contract/openapi-v2-target.test.ts；新 scripts/generate-billing-api.ts 与 scripts/billing-api-artifacts.ts（生成编排/摘要漂移），新只读 src/generated/billing-api/index.ts、types.gen.ts、schemas.gen.ts（官方两个plugins输出）及provenance.json。closed registry/provenance由上述两个ordinary scripts承接，export绑定须由真实确定性生成门确认，不手造空产物。原 v1 不在此机器片提前删除。 |
+| 2 adapter/工具 | 现 package.json/pnpm-lock.yaml，仅文档已选择的 Nest Fastify adapter、仅TypeScript＋schemas（type:json）plugins的Hey API、Ajv2020/formats 直接依赖及实际固定版本。2026-09-13旧报告不是当前兼容证据，安装前重新官方核验、frozen install/audit/生成重现与编译；本轮不安装。 |
+| 3 tests RED | 现 test/unit/billing-auth.test.ts 与上述契约测试；新 test/unit/billing-identity-header.test.ts、test/http/credit-read.test.ts、test/integration/credit-read-http.test.ts。现契约206项已验；后继auth/codec/HTTP先用存在入口取得可编译行为RED；专用 codec 导出未具备时不通过 missing import造 RED。adapter 已获准后，Nest TestingModule 使用现 DatabaseModule/CreditModule/真实fixture，未注册 Controller 的实际404只记注册 RED。 |
+| 4 HTTP source | 现 src/modules/credit/credit.module.ts；新同目录 credit-read.controller.ts、credit-read.mapper.ts、credit-read.query.ts；现 src/infrastructure/auth/billing-auth.ts、src/config/runtime-config.ts；新同 auth 目录 billing-auth.types.ts、billing-identity-header.ts（按 Root 已采纳 u1 目标，仍待源码续授），新 src/http/billing-http.module.ts、billing-personal.guard.ts、billing-error.filter.ts。模块只装配框架 schema/auth/context，未引入第二业务 owner；Guard provider与严格配置由明确 imports/exports 注册。 |
+| 4 必要机械提取 | 现 src/interfaces/http/server.ts 仅 auth type import迁移，现 bootstrap/create-billing-runtime.ts 如需仅认证类型/配置迁移；旧 writer/route行为保持。没有具体依赖差异时不修改这些文件；不从 infrastructure/auth 反向 import旧 server。 |
+| 5 完整 C3 | 后继新 src/app.module.ts 与现 src/main.ts、src/bootstrap/create-billing-runtime.ts、三个 scripts/process-payment-events.ts / process-execution-events.ts / expire-credit-holds.ts、scripts/seed-billing.ts 统一 Nest 生命周期；旧 server/factory实现替换删除、v1 OpenAPI及verify-openapi旧分支删除。完整其他能力与有效旧测试承接、drain/初始化失败清理、全部 source/dist operation通过后才切main；旧业务目录具体删集另按用途审，不授整目录盲删。 |
+
+已发布 CreditService/Repository/types/error/public、cursor与 read/原write测试、canonical SQL/Prisma 保持冻结；只读 HTTP mapper不增第二 wire DTO，运行 schema/type/provenance从 owner YAML单向正规生成。HTTP错误Filter按稳定 typed code映射，不看message；响应schema失败为安全500，不把内部账务对象直接JSON化。BFF/Web/Agent消费者源码、admin grant、admission/IAM执行授权/计价/结算/释放/支付皆不在这两个GET切片。完整 C3未完不发布可部署 runtime。
+
+---
+
 ## R43-WIN06：Credit 本人钱包与 ledger 只读组件设计门
 
 ### R52 当前身份容量修复候选（纯门通过，待 Root 冻结复验）

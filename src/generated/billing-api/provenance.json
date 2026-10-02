@@ -1,0 +1,85 @@
+{
+  "owner": "@kokoro/billing",
+  "source": {
+    "path": "contract/openapi/v2/openapi.yaml",
+    "version": "2.0.2",
+    "bytes": 105571,
+    "sha256": "2cd4c37df514ef58f33a6e80c027d708c06e04f4813b99fa11eb8ac3d5eee826"
+  },
+  "generator": {
+    "package": "@hey-api/openapi-ts",
+    "version": "0.99.0",
+    "plugins": [
+      { "name": "@hey-api/typescript" },
+      { "name": "@hey-api/schemas", "type": "json" }
+    ],
+    "import_file_extension": ".js",
+    "formatter": {
+      "package": "prettier",
+      "version": "3.9.6",
+      "config": ".prettierrc.json",
+      "ignore_path": ".prettierignore",
+      "editorconfig": false
+    },
+    "typescript_version": "6.0.3"
+  },
+  "schema_bindings": {
+    "Admission": "AdmissionSchema",
+    "AdmissionCaptureRequest": "AdmissionCaptureRequestSchema",
+    "AdmissionCreateRequest": "AdmissionCreateRequestSchema",
+    "AdmissionReleaseRequest": "AdmissionReleaseRequestSchema",
+    "AdmissionResponse": "AdmissionResponseSchema",
+    "AlipayWebhookForm": "AlipayWebhookFormSchema",
+    "BillingSubject": "BillingSubjectSchema",
+    "CatalogItem": "CatalogItemSchema",
+    "CatalogResponse": "CatalogResponseSchema",
+    "Checkout": "CheckoutSchema",
+    "CheckoutCreateRequest": "CheckoutCreateRequestSchema",
+    "CheckoutResponse": "CheckoutResponseSchema",
+    "CreditAccount": "CreditAccountSchema",
+    "CreditAccountResponse": "CreditAccountResponseSchema",
+    "CreditLedgerResponse": "CreditLedgerResponseSchema",
+    "CreditMicros": "CreditMicrosSchema",
+    "CurrencyCode": "CurrencyCodeSchema",
+    "DecimalInteger": "DecimalIntegerSchema",
+    "ErrorResponse": "ErrorResponseSchema",
+    "ExecutionEvent": "ExecutionEventSchema",
+    "ExecutionEventRequest": "ExecutionEventRequestSchema",
+    "ExecutionEventResponse": "ExecutionEventResponseSchema",
+    "ExpireCreditHoldsRequest": "ExpireCreditHoldsRequestSchema",
+    "ExpireCreditHoldsResponse": "ExpireCreditHoldsResponseSchema",
+    "ExpireCreditHoldsResult": "ExpireCreditHoldsResultSchema",
+    "HealthResponse": "HealthResponseSchema",
+    "LedgerEntry": "LedgerEntrySchema",
+    "NonNegativeCreditMicros": "NonNegativeCreditMicrosSchema",
+    "NonNegativeDecimal": "NonNegativeDecimalSchema",
+    "Page": "PageSchema",
+    "PositiveDecimal": "PositiveDecimalSchema",
+    "ProviderJsonPayload": "ProviderJsonPayloadSchema",
+    "ReadyResponse": "ReadyResponseSchema",
+    "Refund": "RefundSchema",
+    "RefundCreateRequest": "RefundCreateRequestSchema",
+    "RefundResponse": "RefundResponseSchema",
+    "Settlement": "SettlementSchema",
+    "SettlementCreateRequest": "SettlementCreateRequestSchema",
+    "SettlementResponse": "SettlementResponseSchema",
+    "Subscription": "SubscriptionSchema",
+    "SubscriptionsResponse": "SubscriptionsResponseSchema",
+    "UtcInstant": "UtcInstantSchema",
+    "Uuid": "UuidSchema"
+  },
+  "outputs": {
+    "index.ts": {
+      "bytes": 4087,
+      "sha256": "50c06874e38499692f64e0df97a79c3f57433ffd1c26e0c8fdf1b544e8df0b43"
+    },
+    "types.gen.ts": {
+      "bytes": 27836,
+      "sha256": "f7aad54c4bda9f62cf6754d45f73054d509b6d6f3750aa3513b963c04d6300fc"
+    },
+    "schemas.gen.ts": {
+      "bytes": 22980,
+      "sha256": "bc30fb0942af1489b40d7afd3d9416e2bc22de8324d45605499211f69a435e76"
+    }
+  }
+}

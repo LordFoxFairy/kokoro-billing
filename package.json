@@ -28,10 +28,13 @@
     "dev": "tsx src/main.ts",
     "start": "node dist/src/main.js",
     "format": "prettier --config .prettierrc.json --ignore-path .prettierignore --no-editorconfig --write \"{src,test,scripts}/**/*.{ts,mts,cts,tsx,js,mjs,cjs,json,yaml,yml}\" \"*.{ts,mts,cts,tsx,mjs,json,yaml,yml}\" \".github/**/*.{ts,mts,cts,tsx,js,mjs,cjs,json,yaml,yml}\" \".prettierrc.json\"",
-    "format:check": "prettier --config .prettierrc.json --ignore-path .prettierignore --no-editorconfig --check \"{src,test,scripts}/**/*.{ts,mts,cts,tsx,js,mjs,cjs,json,yaml,yml}\" \"*.{ts,mts,cts,tsx,mjs,json,yaml,yml}\" \".github/**/*.{ts,mts,cts,tsx,js,mjs,cjs,json,yaml,yml}\" \".prettierrc.json\""
+    "format:check": "prettier --config .prettierrc.json --ignore-path .prettierignore --no-editorconfig --check \"{src,test,scripts}/**/*.{ts,mts,cts,tsx,js,mjs,cjs,json,yaml,yml}\" \"*.{ts,mts,cts,tsx,mjs,json,yaml,yml}\" \".github/**/*.{ts,mts,cts,tsx,js,mjs,cjs,json,yaml,yml}\" \".prettierrc.json\"",
+    "contract:generate": "tsx scripts/generate-billing-api.ts",
+    "contract:generated:check": "tsx scripts/generate-billing-api.ts --check"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@hey-api/openapi-ts": "0.99.0",
     "@nestjs/testing": "12.0.1",
     "@types/node": "24.13.3",
     "@types/pg": "8.23.1",

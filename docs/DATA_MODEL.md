@@ -1,3 +1,37 @@
+## R59：本人读取 HTTP 数据边界（零DDL；R66机器候选已验）
+
+R67 当前生成候选（2026-10-02）：按 Root docs/task.md 已审范围实施两个普通 scripts，官方 Hey API 0.99.0 的 TypeScript＋schemas(json) 两插件生成 index.ts/types.gen.ts/schemas.gen.ts，closed binding/provenance 输出 provenance.json；没有 SDK/client 或手改官方产物。43 原 schema/$ref/单位 metadata 语义、双次全字节一致与只读漂移门已实测通过；原206契约全文保持，仅EOF追加33项，完整29文件804pass/0fail/0skip，15.31s。format、两noEmit编译、contract:check 17+24、sql:check、frozen install 与 generated check 均exit0。本片尚未验收：官方 types.gen.ts:19 的 CreditMicros & NonNegativeDecimal 触发现有 typed-lint 重复交叉类型规则（exit1）；audit exit1，基线6high/5moderate，当前9high/5moderate，新增3high来自生成器固定 js-yaml4.2.0。未手改生成物、放宽门禁或升级既有依赖；Root 后续裁决与独立复验待进行。下列 R59/R66“未生成/工具冻结/Phase A”是前序阶段记录，不覆盖本段当前状态；HTTP/runtime、Nest adapter/Ajv、SQL/Prisma、赠送/计价/支付、其他owner与Git/资源边界仍保持，未发布或启动服务。
+
+Billing main 156451051f6ee47ba9b128f481f96094bfb9f731已发布Credit本人read组件，历史真PG证据保持。当前工作树experimental2.0.2 source/checker候选已由Root R66在Node24实测29 files、771passed/0fail/0skip（含206契约，不重复累计）、format/lint/两noEmit编译门exit0，12.42s；Sol三机器反向字节审0P0/P1/P2，日志 /tmp/kokoro-billing-r66-root-machine-green.log。候选尚未提交发布、生成或注册正式HTTP，机器治理通过不等于运行认证通过。本Phase A仅README/四R59前缀；canonical database/schema.sql、Prisma/generated、查询、identityDigest、旧writer、第五IMPLEMENTATION_PLAN与历史正文不改。HTTP装配/完整C3未激活，不宣称单库组合或收费链通过。
+
+### 唯一查询与零GET writer
+
+Guard先取得受信semantic tenant+本人subject，Controller只调用已发布CreditService.getMyAccount/listMyLedger；同DatabaseModule client、mandatory CreditRepository、TransactionService.readOnlySnapshot。getMyAccount返回null由HTTP转404，disabled仍可读。列表用同tenant+subject找本人账户，再绑定cursor.account与真实journal boundary；完整高水位历史SUM和负累计/非法row/wrong-tenant child失败封闭不在HTTP重写。账户投影与ledger历史累计的语义不同，mapper不按当前余额修正行balance_after。
+
+GET不ensure/refresh/cache，不创建account/receipt/key/audit/outbox，不更新generation/updated_at或修复损坏历史；无账户404，不是首次读自动赠送。高水位/末行范围、规范decimal→BigInt、固定identityDigest/2048限额沿已发布codec，Date/BIGINT仅在纯wire映射输出UTC Z/十进制string。UUID账户绑定不是授权；错tenant/subject cursor在事务前拒绝，错account/boundary不作他人查找。
+
+### semantic身份与wire表示必须分开
+
+SQL VARCHAR(191)/VARCHAR(255)与已发布codec身份按Unicode code point计数；非空、拒NUL/孤立surrogate，不UTF-16 .length、trim/NFC/剥BOM或缩ASCII域。Root R61已裁定ASCII header目标，完整算法以API_CONTRACT R59为唯一规范：所有身份 `u1.` + 无padding base64url(UTF-8)，tenant wire<=1022、subject<=1363，fatal/canonical decode后再核191/255语义。仅覆盖两本人GET；当前experimental2.0.2 machine/checker候选已Root771纯门/独立0审，专属参数/profile/auth-selection已记录；运行源码未改、新wire未发布/生成/HTTP，其他operation参数保持，不dual-read旧raw wire。
+
+后继unit的tenant/subject两组leading U+FEFF合法正例按API R59明确参数化：U+FEFF是身份的有效首codepoint并计入191/255域，UTF-8首EF BB BF原字节必须保留，fatal解码+重编码逐字相等；默认剥BOM或误拒均应被正例捕获。不是新增数据库规则，不改identityDigest，不把BOM删去再查另一个主体；现bad UTF-8/canonical trailing bits/重复rawHeaders负例保持，实际tests/source仍未写。
+
+decode结果才是JWT tenant绑定/BFF delegated context、查询参数与identityDigest输入；不把u1.字串写入tenant_id/subject_id、不把encoded长度误当身份长度，不hashencoded header，不创建身份映射表或cursor持久表。完整191/255四字节身份通过ASCII header传输的真HTTP往返须另验，组件191/255测试不替代header能力证明。身份header编码没有签名意义，BFF凭据或合法JWT验证独立成立，body/query不能选择本人。
+
+### 后继只读生成边界（未实施）
+
+后继正式生成方案与TECH/API当前段一致：只用官方TypeScript＋schemas（type:json）plugins，无SDK/client，产物index.ts/types.gen.ts/schemas.gen.ts及provenance.json。43个原component/$ref/单位metadata逐对象语义保持，sourcecomponent→official export closed registry/provenance由已批准两个ordinary scripts承接；Ajv2020 strict按 #/components/schemas/Name keys注册原对象，unknown/ref拒绝、no-coerce/default/remove。unitannotation仅metadata且owner checker/provenance锁，不新增业务schema/数据库事实。候选版本不等于已安装，安装前重新核验；当前未生成/HTTP。
+
+### 事务、失败恢复与独立验证
+
+后继真HTTP fixture只复用已有PostgreSQL，Root创建/清理本run owned canonical参照库；worker不启动共享服务或reset数据。实际GET前后比较account/grant/hold/allocation/journal/receipt/key/audit/outbox与generation/updated_at；无账户、disabled、空页、正常两页、foreign/非法cursor、坏query、损坏child/负累计、数据库故障及预算超时都覆盖。SQL观察必须证明401/403/query/foreignidentity预检零账务调用，成功读READ ONLY REPEATABLE READ，深层异常结束事务后可正常读取；不能用HTTP double或资源skip当集成。
+
+HTTP Filter按CreditError/稳定数据库错误类型及SQLSTATE映射现machine400/404/500/503，不泄露row/SQL/token/message；完整因果错误保留在安全结构化日志，未知错误仍500，不假修复/重试GET写入。真实schema fresh/catalog/生成drift与既有111写读回归保持门禁，不重复设计余额或改SQL预算。
+
+当前Prisma/installer仍public-only，正式单库owner schema组合由后继独立数据切片闭合，本HTTP D0不扩大其结论。无新表/索引/view/租户映射/Redisnamespace/事务/Pool，数据库role/部署不在本片。admin grant的权限/target映射/reason与实际额度、正式admission/执行证据/settlement/release皆独立门，不能从两个GET资格推导写入批准。完整C3唯一Nest main与旧writer删除条件见TECHNICAL_DESIGN R59，未承接的旧有效写职责不在此读片误删。
+
+---
+
 ## R43-WIN06：Credit 本人读取与 ledger 分页数据设计门（零DDL）
 
 ### R52 当前 identityDigest 方案（零 DDL，资源复验待 Root）

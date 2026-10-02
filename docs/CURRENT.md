@@ -1,3 +1,37 @@
+## R71：生成质量门修复候选（2026-10-02，待 Root 审查/集成复验）
+
+Billing main 基线仍 `156451051f6ee47ba9b128f481f96094bfb9f731`。按 Root R71 窄授，只修改现 pnpm-workspace.yaml/pnpm-lock.yaml、eslint.config.mjs、typed-lint.test.ts EOF 和 TECHNICAL_DESIGN/CURRENT 当前事实前缀。R67 官方生成实现/四产物和其他业务、机器/SQL/HTTP/资源/Git 边界冻结；下方 R67 的两项待裁决与旧“未生成”描述保留为历史，不代表本次候选状态。
+
+依赖：只追加父选择器 `"@hey-api/json-schema-ref-parser@1.4.4>js-yaml": 4.3.2`，原四 override、全部其他依赖版本/importer/settings 保持。锁文件仅更换 js-yaml 4.2.0→4.3.2/integrity 及 parser 依赖边，438 packages/438 snapshots 不变；frozen install exit0，generator→parser 与 generator→shared→parser 两条实际解析都是 4.3.2。[pnpm 官方选择器](https://pnpm.io/settings/dependency-resolution#overrides)、[4.3.2 官方 metadata](https://registry.npmjs.org/js-yaml/4.3.2) 已于 2026-10-02 核验；MIT、现 load/CJS/ESM API 和 argparse 依赖保持，Node24.20.0 满足现 generator/parser 引擎。完整选型/兼容证据及退出路径见本次 TECHNICAL_DESIGN 前缀。
+
+安全差量：三份 [官方 GHSA-52cp-r559-cp3m](https://github.com/advisories/GHSA-52cp-r559-cp3m)、[GHSA-5p4m-2wfm-xmqj](https://github.com/advisories/GHSA-5p4m-2wfm-xmqj)、[GHSA-2883-xcg3-v3hh](https://github.com/advisories/GHSA-2883-xcg3-v3hh) 的 4.x 修复下界分别 4.3.0/4.3.1/4.3.2，未选择仍有第三项风险的 4.3.1。实际 `pnpm audit --json` exit1：R67 新增三 js-yaml high/IDs1123911、1138115、1193727 及其他 js-yaml advisory 已消失，9high/5moderate→6high/5moderate，0critical；既存 fastify/fast-uri/brace-expansion 风险保持，未称全量 GREEN、release 或完整 Billing 完成。原始审计输出 `/tmp/kokoro-billing-r71-audit.json`。
+
+Lint：按 [官方 ignoreIntersections/ignoreUnions 选项](https://typescript-eslint.io/rules/no-duplicate-type-constituents/#options)，只对正式 `src/generated/billing-api/types.gen.ts` 的 duplicate rule 设置 `[error,{ignoreIntersections:true,ignoreUnions:false}]`，不关闭规则/目录忽略/自动修复。不新增 custom resolver，不改 schema/正式生成物；handwritten intersection、其他 generated 文件 intersection、目标 union 与其他 typed unsafe 仍 error。真实有效配置和 lintText 边界先 RED 2failed/23passed，再 GREEN 25passed/0failed/0skip；原3742bytes测试全文保持，EOF追加20项。父 override 等上游固定修复版并完整复验后移除；profile 等上游正式可靠去重、原事实与全部门验收后移除，不回退漏洞版或手改生成物。
+
+本次实际纯门：Node24.20.0/pnpm11.25.0，format:check/lint/两noEmit编译/contract:check17routes＋24operations/sql:check均exit0；完整29files 824passed/0failed/0skip，16.13s（原804＋新20，239契约包含在内）。前后 generated check exit0，两次真实 contract:generate 后四产物所有字节/hash完全保持R67。原59354bytes R67契约全文和33条断言、YAML43schema/24operations/单位metadata、checker、manifest、两scripts、API/DATA/第五PLAN与本节之前TECH/CURRENT完整原文锁定。未运行刷新Prisma的wrapper、真实integration/schema/smoke/source-dist运行，不拿历史PG证据冒充本次通过；既有Redis故障负例对127.0.0.1:1的ECONNREFUSED输出属于纯门预期故障路径，不启动共享服务。
+
+交付仍未提交，由Root做唯一Git/index与当前冻结复验、独立审查；不改HTTP/Nest/Ajv/业务source/真实PG/Redis/provider/赠送/计价/支付/consumer。后续owner：Root/Billing处理既存审计风险和下一阶段授权；本片只关闭新增依赖差量及官方allOf lint候选门，不宣称最终验收。
+
+## R59：本人读取 HTTP D0（R66机器候选已验；文档/生成/HTTP分阶段）
+
+R67 当前生成候选（2026-10-02）：按 Root docs/task.md 已审范围实施两个普通 scripts，官方 Hey API 0.99.0 的 TypeScript＋schemas(json) 两插件生成 index.ts/types.gen.ts/schemas.gen.ts，closed binding/provenance 输出 provenance.json；没有 SDK/client 或手改官方产物。43 原 schema/$ref/单位 metadata 语义、双次全字节一致与只读漂移门已实测通过；原206契约全文保持，仅EOF追加33项，完整29文件804pass/0fail/0skip，15.31s。format、两noEmit编译、contract:check 17+24、sql:check、frozen install 与 generated check 均exit0。本片尚未验收：官方 types.gen.ts:19 的 CreditMicros & NonNegativeDecimal 触发现有 typed-lint 重复交叉类型规则（exit1）；audit exit1，基线6high/5moderate，当前9high/5moderate，新增3high来自生成器固定 js-yaml4.2.0。未手改生成物、放宽门禁或升级既有依赖；Root 后续裁决与独立复验待进行。下列 R59/R66“未生成/工具冻结/Phase A”是前序阶段记录，不覆盖本段当前状态；HTTP/runtime、Nest adapter/Ajv、SQL/Prisma、赠送/计价/支付、其他owner与Git/资源边界仍保持，未发布或启动服务。
+
+Billing main 156451051f6ee47ba9b128f481f96094bfb9f731已发布本人read组件，历史111真PG/637纯门及14file0审保持；HTTP仍旧Fastify/pg。当前工作树experimental2.0.2 source/checker候选已由Root R66在Node24实测29 files、771passed/0fail/0skip（含206契约，不重复累计）、format/lint/两noEmit编译门exit0，12.42s；Sol三机器反向字节审0P0/P1/P2，日志 /tmp/kokoro-billing-r66-root-machine-green.log。候选尚未提交发布、生成或注册正式HTTP，机器治理通过不等于运行认证通过。两GET机器候选已含独立JWT OR五因素、u1/专属参数/profile/no-store及auth-selection。Phase A只改contract README和四R59当前前缀，三机器/source/tests/SQL/generated/deps/Git/资源、历史正文与第五IMPLEMENTATION_PLAN锁；本窗口没有启动HTTP/PG/Redis或入账。
+
+Root已定：BFF本人委派五认证因素、web-bff固定、subject mandatory、机器partial不降级JWT、显式凭据匹配；独立userBearer必须验证issuer/audience/tenant。本人subject来自IAM SessionAuthorization -> BFF已验证RequestContext，不来自body/query/cursor或service actor。Controller只复用已发布CreditService、同Repository/DatabaseModule/只读RR，GET不创建/refresh/audit/receipt；closedquery、精确BigInt/UTC、现400/401/403/404/500/503、request-id/no-store及owner schema校验已经三面对齐成后继目标，尚不是HTTP实现/通过证据。
+
+Root R61已裁定新wire：Node raw header不覆盖任意Unicode，两本人GET的canonical目标为两本人GET全身份统一 `u1.` + 无padding base64url(UTF-8)，包括ASCII；fatal/canonical decode后核tenant191/subject255 code point、拒空/NUL/孤立surrogate，无trim/NFC/BOM剥除/raw双读。wire最大1022/1363 ASCII字符，cursor2048与identityDigest不变。API R59精确限定两operation的PersonalTenantId/PersonalSubjectId参数、profile/五security因素、no-store header；目标experimental2.0.2及仅BFF两读adapter消费范围均已裁定；当前machine/checker已为experimental2.0.2已验候选；wire未提交发布/生成，consumer和HTTP源码未改；机器治理不替代runtime实现，下一步为正式生成续授。
+
+后继正规生成（未实施）：后继正式生成方案与TECH/API当前段一致：只用官方TypeScript＋schemas（type:json）plugins，无SDK/client，产物index.ts/types.gen.ts/schemas.gen.ts及provenance.json。43个原component/$ref/单位metadata逐对象语义保持，sourcecomponent→official export closed registry/provenance由已批准两个ordinary scripts承接；Ajv2020 strict按 #/components/schemas/Name keys注册原对象，unknown/ref拒绝、no-coerce/default/remove。unitannotation仅metadata且owner checker/provenance锁，不新增业务schema/数据库事实。候选版本不等于已安装，安装前重新核验；当前未生成/HTTP。
+
+后继顺序/文件集在TECH R59同一表：Root机器候选771纯门与独立0审已完成 -> 本Phase A provenance/四面事实对齐与独立审 -> 正规生成及安装前重新核验工具 -> 实际Nest两读注册/身份/精确wire RED -> 窄HTTP GREEN/Root真PG source-dist零写 -> 完整C3统一main/worker/seed、全部operation和旧v1/pg writer删除 -> owner发布后BFF/Web串行消费。不新wallet模块、不旧server v2 alias/第二长期运行链，不提前切main。admin赠送/IAM管理员target/reason/实际额度、admission/执行证据/预占结算释放及支付另门，没有免费/充值成功/1.4生效声明。
+
+历史R61四D0初审0P0/1P1/1P2已后续返修0审。BOM合法正向矩阵仍属于后继真实codec测试：tenant/subject leading U+FEFF、fatal保BOM、EF BB BF/原字节往返及bad UTF-8/trailing bits/重复头负例保持。R64 auth-selection P1已由Root206/771实测及Sol三hash0P0/P1/P2关闭，限机器事实；不宣称HTTP实际认证或BOM codec已通过。
+
+本Phase A只验五文档精确diff/body/hash与contract:check，实际结果由冻结报告给出；本窗口不重复Root771或执行HTTP/integration/build/schema/smoke，不把历史111当本HTTP通过。Root独占集成/Git/资源。下方R56/R52/R43是既有组件证据及阶段记录，正文不重写。
+
+---
+
 ## R56 Root 本人账户/流水读取组件验收
 
 Root在本切片冻结源上执行credit-read及原credit-metering真实PostgreSQL测试111passed/0failed/0skipped；全部unit/contract/architecture637passed/0failed/0skipped，format/lint/typecheck/build exit0。独立14文件审P0/P1/P2均0。日志/tmp/kokoro-billing-r55-root-read-write-green.log与/tmp/kokoro-billing-r55-root-full-pure.log，fixture inventory为空。

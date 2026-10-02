@@ -1,3 +1,74 @@
+## R59：本人读取 HTTP 与受信委派 D0（R66机器候选已验；未发布/生成/HTTP）
+
+R67 当前生成候选（2026-10-02）：按 Root docs/task.md 已审范围实施两个普通 scripts，官方 Hey API 0.99.0 的 TypeScript＋schemas(json) 两插件生成 index.ts/types.gen.ts/schemas.gen.ts，closed binding/provenance 输出 provenance.json；没有 SDK/client 或手改官方产物。43 原 schema/$ref/单位 metadata 语义、双次全字节一致与只读漂移门已实测通过；原206契约全文保持，仅EOF追加33项，完整29文件804pass/0fail/0skip，15.31s。format、两noEmit编译、contract:check 17+24、sql:check、frozen install 与 generated check 均exit0。本片尚未验收：官方 types.gen.ts:19 的 CreditMicros & NonNegativeDecimal 触发现有 typed-lint 重复交叉类型规则（exit1）；audit exit1，基线6high/5moderate，当前9high/5moderate，新增3high来自生成器固定 js-yaml4.2.0。未手改生成物、放宽门禁或升级既有依赖；Root 后续裁决与独立复验待进行。下列 R59/R66“未生成/工具冻结/Phase A”是前序阶段记录，不覆盖本段当前状态；HTTP/runtime、Nest adapter/Ajv、SQL/Prisma、赠送/计价/支付、其他owner与Git/资源边界仍保持，未发布或启动服务。
+
+Billing main 156451051f6ee47ba9b128f481f96094bfb9f731仅已发布本人read组件。当前唯一v2 YAML候选为2.0.2/24operations/24paths，两GET已声明独立JWT OR完整BFF五因素、u1/profile/auth-selection与no-store；正式Nest HTTP尚未注册。当前工作树experimental2.0.2 source/checker候选已由Root R66在Node24实测29 files、771passed/0fail/0skip（含206契约，不重复累计）、format/lint/两noEmit编译门exit0，12.42s；Sol三机器反向字节审0P0/P1/P2，日志 /tmp/kokoro-billing-r66-root-machine-green.log。候选尚未提交发布、生成或注册正式HTTP，机器治理通过不等于运行认证通过。本Phase A只对齐README provenance和四R59当前前缀；以下codec/auth为后继runtime须承接的规则，历史正文原样保留，不把admin草稿当运行权限。
+
+### 两种明确身份分支
+
+GET /v2/billing/me/credit-account 与 GET /v2/billing/me/credit-ledger 仍 internal-owner/read-only，无客户端account/subject selector。当前两operation机器候选的x-kokoro-permission为authenticated-user-or-web-bff，security按OR：①tenantContext+userBearer；②tenantContext+serviceCaller+internalSecret+serviceBearer+subjectContext五项AND。复用现securityScheme，不增加IAM权限，不使任意内部service获得本人代理资格；service固定web-bff，subject mandatory。
+
+委派主体来源：IAM已发布SessionAuthorization可信response tenant_id/user_id -> BFF SessionAdmissionClient -> RequestContext.identity.namespace/userId -> 本人adapter构造tenant/subject。Billing认证BFF机器凭据后使用这组委派主体，不从body/query/cursor或服务principal的actor/sub借用本人身份。BFF过滤浏览器输入身份头且不转发用户Bearer；Billing service token及internal secret分别显式配置，缺失启动拒绝，没有凭据fallback。
+
+机器专有标记或已配置service credential出现即要求完整五因素；缺失因素/错service/坏token/缺或空subject不得降级userBearer，统一403 billing.forbidden且零账务调用；完整机器认证后存在但编码/语义非法的身份头为400 billing.invalid_request，同样零账务调用。共同tenant header或Authorization本身不把合法JWT误分类为机器。仅无机器标记的userBearer分支验证IAM JWT issuer、固定audience、时效及tenant claim与已解码tenant header一致，subject来自验证后的sub；缺/无效JWT为401 billing.unauthenticated，已认证但tenant禁止为403。开发raw internal-header路径不进入正式runtime。
+
+当前两GET的x-kokoro-auth-selection已记录闭集machine_markers=x-kokoro-service/x-kokoro-internal-secret/x-kokoro-subject，按header出现而非truthy；service_bearer_selects_machine:true仅指匹配已配置专用服务凭据，不以共享tenant或任意Authorization选机器分支。machine_partial_response:403与machine_to_user_fallback:false固定，其他operation拒此extension。该机器事实/守卫已验，后继HTTP仍须实际实现并验证选择优先级。
+
+### 已裁定 canonical header profile：personal-identity-u1（R66机器已验；codec/HTTP待实施）
+
+不把任意Unicode写入Node raw header。Root R61裁定这两个GET使用现header名，但所有身份都统一编码：`u1.` + base64url(UTF-8(identity))，无padding；ASCII身份也编码。只接受该格式，不raw/percent双读，不decodeURIComponent、不猜格式；其他operation的旧TenantId参数不跟随变更。对比percent UTF-8编码可行但最大域更长；u1有明确版本前缀、ASCII wire及较小界限。当前source/checker已承接该profile及experimental2.0.2，经Root771纯门/独立0审；该wire未发布/生成，运行codec/认证与HTTP未实施，机器治理通过不等于运行验收。
+
+| 层 | 精确规则 |
+|---|---|
+| semantic身份 | tenant 1..191、subject 1..255个Unicode code point，拒NUL与孤立surrogate；不NFC/trim/剥BOM，不缩ASCII/UUID域。身份前后空格或不同规范化字节保持不同，不由transport修正。 |
+| encode | 先验证semantic域，逐身份UTF-8编码，再无padding base64url，最后加literal u1.；service、secret、token头不做此身份编码。 |
+| wire | 单个ASCII字符串，body alphabet仅A–Z/a–z/0–9/_/-；拒空body、padding、空白、percent、未知前缀、重复header（按rawHeaders计数/大小写无关）、数组或逗号合并值。 |
+| decode | 检查wire限额及前缀/字母表，base64url解码并重新编码严格相等（拒noncanonical trailing bits）；fatal UTF-8，保留BOM而非隐式剥除；再验证code point/NUL/surrogate；UTF-8往返字节必须一致。验证后才构造受信context或调用Credit。 |
+| wire限额 | tenant最大764 UTF-8 bytes，base64url最多1019，加u1.共1022字符；subject最大1020 bytes，base64url1360，加前缀共1363。最小一个UTF-8 byte为u1.加两字符，共5。191/255是decoded semantic长度，不是encoded header的JS length。 |
+| 无变动 | cursor仍<=2048原始字符；账号UUID、BIGINT上界、identityDigest算法和读取权限不变。digest从decoded身份重算，绝不hash u1.header字串充当本人身份。 |
+
+固定示例：tenant-a -> `u1.dGVuYW50LWE`，subject-a -> `u1.c3ViamVjdC1h`。不把此编码当签名/加密，机器认证/JWT仍独立必需。
+
+当前已验machine候选精准变更仅两GET：用新components.parameters.PersonalTenantId替代两处共享TenantId ref（同header name，required，min5/max1022），新增PersonalSubjectId header参数（min5/max1363，在通用参数层optional、BFF分支mandatory，userBearer不使用它）；描述固定web-bff与u1 profile，记录两operation的 `x-kokoro-identity-transport: personal-identity-u1`，补五因素security/permission及guard断言。原TenantId/其他operation字段不改；security的subjectContext同header名，profile和必填由operation约束。参数/guard非法一致，未认证不通过参数探测获得subject。当前machine/checker为experimental2.0.2已验候选，未提交发布；本Phase A不再修改机器或运行源码。
+
+consumer影响严格owner-first：Billing机器源及正式generated/provenance固定commit+digest -> BFF本人两读adapter编码已IAM验证context并固定Billing凭据 -> BFF public投影 -> Web同源adapter。不全局修改BFF ownerIdentityHeaders或其他owner请求，不拿用户body生成delegated subject；userBearer合法客户端也需采用已发布的tenant u1参数。没有编码fallback或旧两读wire兼容。
+
+### 严格GET输入、响应和错误
+
+账户GET仅允许空query；ledger query只有limit/cursor，各出现最多一次。limit省略50；HTTP字符串必须规范正十进制并落1..100，再转换为Service number；空、0、101、01、指数/小数/符号/空白、数组与重复query拒绝，不Zod全局coerce/clamp。cursor省略是首屏，显式空/非单string/>2048非法；不trim、不改token。GET body非空拒绝，不从body/header自报account/subject或重写服务输入。身份先验证，随后query/cursor预检；foreign identity cursor在SQL前拒绝，账号/实际boundary绑定仍由已发布owner内部执行。
+
+Controller只调用CreditService.getMyAccount(context)或listMyLedger(context,page)，不ensure/refresh/write/cache。钱包null转404，disabled照常只读；有钱包无journal为items=[]/page.next_cursor=null，没钱包不是假empty。成功只按源CreditAccountResponse/CreditLedgerResponse：credit_account_id/status/available_micros/held_micros；ledger items的journal_id/sequence/delta_micros/balance_after_micros/source_kind/source_ref/created_at与page.next_cursor。BigInt全为精确decimal string、Date为ISO UTC Z，不Number/浮点、不第二手写DTO、不旧entries/extra/meta envelope。signed delta及>2^53精度沿已发布组件；next cursor原样由codec产生。
+
+| 状态 | 唯一现machine code / retryable | 映射/副作用 |
+|---|---|---|
+| 200 | 源成功schema | 本人钱包/页，GET零事实写入；不receipt/replayed/Location。 |
+| 400 | billing.invalid_request / false | strict query、非法identity wire（在有效认证后）、CREDIT_INVALID_QUERY/CREDIT_INVALID_CURSOR；不泄露cursor或他人账号存在。认证credential/主体绑定失败仍按401/403，不变成授权。 |
+| 401 | billing.unauthenticated / false | userBearer缺失/验证失败，零账务调用。 |
+| 403 | billing.forbidden / false | BFF认证因素缺失/机器凭据错误/subject缺或空、caller不匹配、认证tenant禁止，零账务调用，不降级。 |
+| 404 | billing.not_found / false | 本人钱包不存在/CREDIT_ACCOUNT_NOT_FOUND，不临时建钱包。 |
+| 500 | billing.internal_error / false | CREDIT_READ_CORRUPT、响应schema失败或内部不变量，安全信息，不返回SQL/原row/driver message。 |
+| 503 | billing.dependency_unavailable / true | typed数据库不可用/只读预算超时等依赖失败；按稳定code/类型/SQLSTATE封闭映射，不按message猜测、不把任何错误都归503。 |
+
+两现GET未声明504；要新增需owner另改机器，不在Filter自行发明状态。所有success/error（包括早期401/403、404/405路由错误）统一x-request-id与Cache-Control:no-store；request ID来自受控middleware，非法/多值ID拒绝或重建按唯一框架规则，不发旧x-kokoro-request-id或body meta.request_id。每个响应通过owner正规生成schema校验，拒未知字段/错误retryable/非UTC/丢精度。两GET机器候选已补七状态no-store header引用；实际HTTP含早期/路由错误的输出仍待实现，其他operation的header保持。
+
+### 后继正规生成与closed registry（未实施）
+
+唯一输入为本owner YAML及正式checker；已批准后继scripts/generate-billing-api.ts只调用Hey API的TypeScript＋schemas（type:json）两个官方plugins，无SDK/client。官方输出为src/generated/billing-api/index.ts、types.gen.ts、schemas.gen.ts；scripts/billing-api-artifacts.ts承接sourcecomponent→official export binding的closed registry、provenance与漂移检查，并输出provenance.json。实际确定性生成门确认官方export绑定，不手改输出或另造业务schema；schemas.json不是选定官方产物。
+
+源43个components.schemas与官方schemas导出必须逐原对象语义一致，包括原$ref、约束与唯一x-kokoro-credit-unit metadata；registry完整覆盖且仅覆盖这43个source component，unknown component/export/ref与数量、版本、digest漂移失败封闭。Ajv2020 strict＋formats以 #/components/schemas/Name keys注册原schema对象，不重写ref、不注入第二业务schema；coerceTypes/useDefaults/removeAdditional均false。unitannotation仅注册为获准metadata，不参与业务值校验；精确definition_version/display_unit/micros_per_credit继续由owner checker/provenance锁，不因此放宽其他未知keyword/ref。
+
+Root已接收官方probe候选Nest Fastify adapter12.0.1、Hey API0.99.0、Ajv8.20.0、formats3.0.1；这是probe核验事实，不是本仓已安装/生成/兼容完成证据。后继安装前重新核验实际版本/peer/Node24/许可证，固定manifest/lock后再验frozen install/audit/生成重现/类型编译与registry。当前两个scripts、产物、依赖与HTTP源码仍锁，不新开计划中心或第二runtime。
+
+### 后继精确阶段与断言
+
+文件集与目录比较按TECHNICAL_DESIGN R59表，machine/test/checker/generated同一owner一次审查，不复制API到Root/BFF。先验证five-factor正/负控制、已裁定canonical u1最大191/255四字节往返/字节界限、无padding/别名/坏UTF8/NUL/surrogate/重复头、JWT tenant mismatch/时效/audience、partial不降级，再测真实Nest两路注册/严格query/准确wire与全部错误。认证合法控制必须先过，避免所有负例只因404/缺凭据未到校验。
+
+R61独立审的BOM正向补强固定在后继 `test/unit/billing-identity-header.test.ts`（当前不写测试）：参数化分别以tenantId和subjectId为leading U+FEFF合法身份，其他identity保持合法控制；两例都必须成功编码/解码，decoded string保留首个U+FEFF且逐code point等于原值，decoded UTF-8 bytes逐字等于原Buffer（以EF BB BF开头），再次encode所得u1 wire与原wire完全相同。fatal UTF-8且保BOM是同一断言：使用TextDecoder时显式fatal:true、ignoreBOM:true（保留BOM，不是默认剥除），BOM计入191/255 codepoint上限；不得因首字符U+FEFF误拒/strip/normalize。对应输入可为tenant `\uFEFFtenant-a`、subject `\uFEFFsubject-a`，分别参数化，不是只有无BOM ASCII控制。继续保留bad UTF-8拒绝、canonical trailing-bit alias拒绝，以及rawHeaders中x-kokoro-subject/X-Kokoro-Subject混合大小写重复头拒绝，并各自先过合法原wire控制；新增正例不替代这些负例。
+
+真实PG使用现canonical fixture与生产CreditModule/DatabaseModule/RR，覆盖不存在钱包零创建、跨tenant/subject/account、深层损坏/timeout安全错误、所有事实前后相等、事务恢复；source与dist都验。旧target-v1/其他HTTP有效行为由完整C3承接后再删除旧入口，不skip覆盖。两个GET检查点不等于完整24-operation runtime、赠送/admission/settlement/release或收费用户旅程。u1/profile/auth-selection的experimental2.0.2 machine/checker候选已Root771纯门/独立0审；本Phase A对齐provenance后待正式生成与HTTP源码续授，wire未提交发布，不提前激活runtime。
+
+---
+
 ## R43-WIN06：本人钱包/ledger API 承接设计门（不改机器事实源）
 
 ### R52 当前 cursor 承接（内部修复，未发布 HTTP）

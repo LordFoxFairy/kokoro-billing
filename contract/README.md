@@ -1,3 +1,9 @@
+## R66 当前机器候选状态
+
+R67 当前生成候选：两个 scripts 与官方三个 TS 产物＋provenance.json 已实际生成；43 schema 原语义、双次一致与只读 drift 检查通过。Hey API0.99.0 精确依赖及 frozen install 已落本候选；未安装 Nest adapter/Ajv runtime。完整804纯项通过，但官方 types.gen.ts:19 的重复交叉类型 typed-lint exit1，audit 比原基线新增 js-yaml4.2.0 三项 high；保持原产物/门禁，Root 裁决、复验和发布待进行。下文 Phase A 的“未生成/不安装”是 R66 前序记录；机器2.0.2/version/digest、旧v1/runtime和历史正文不改，本片不是HTTP或消费链验收。
+
+当前工作树experimental2.0.2 source/checker承接两本人GET的u1/独立JWT OR五因素/auth-selection/专属参数与no-store。Root Node24全29files771pure（含206契约）/format/lint/两noEmit编译门已真实通过，Sol三机器反向字节审0P0/P1/P2；候选尚未提交发布、生成或接入正式HTTP。旧v1/runtime、其他22operation及Credit单位保持。下方2.0.1 Credit单位段和595/72数字为既有切片历史证据，不冒充本HTTP验收；正式生成/closed registry方案见四现R59当前前缀，本Phase A不安装工具或造产物。
+
 # kokoro-billing contract governance
 
 Target canonical machine source：[`openapi/v2/openapi.yaml`](openapi/v2/openapi.yaml)；当前尚未切换的Fastify运行时继续由字节不变的[`openapi/v1/openapi.yaml`](openapi/v1/openapi.yaml)校验route parity。人类语义见
@@ -31,7 +37,7 @@ Browser 仍通过 Web/BFF 访问。
 
 ## Version
 
-**Version:** 目标OpenAPI `info.version=2.0.1`、格式3.1.0，业务route位于`/v2/**`且在runtime/consumer切换前为experimental；当前运行时artifact仍为1.0.0与`/v1/**`。`/healthz`、`/readyz` 与 `/metrics` 是有意
+**Version:** 目标OpenAPI `info.version=2.0.2`、格式3.1.0，业务route位于`/v2/**`且在runtime/consumer切换前为experimental；当前运行时artifact仍为1.0.0与`/v1/**`。`/healthz`、`/readyz` 与 `/metrics` 是有意
 不带版本的运行端点。`package.json` 的 `0.1.0` 是 private implementation version，不替代 wire version。
 
 V1 内只接受 backward-compatible 变更；仅修改 `info.version` 不能使 breaking change 兼容。
@@ -83,7 +89,7 @@ form-body `sign`/`sign_type=RSA2` 由 `x-kokoro-provider-signatures` 区分；fi
 `contract/openapi/v2/openapi.yaml`，当前目标source SHA-256：
 
 ```text
-f632ddec7b4a8528fcb325ef45f63bd2e37a05319f3505581a9515332cccf16e
+2cd4c37df514ef58f33a6e80c027d708c06e04f4813b99fa11eb8ac3d5eee826
 ```
 
 当前未切换v1的固定SHA-256仍为`58fbe4fea083ba12e0db23f49e995b96500d01af0013febf40eba3093510ef63`；M1b不修改其字节。

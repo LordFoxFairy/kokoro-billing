@@ -114,3 +114,107 @@ describe("required fixture values", () => {
       expect(assertDefined(value)).toBe(value);
   });
 });
+
+describe("R71 official generated type lint boundary", () => {
+  const generatedTypes = "src/generated/billing-api/types.gen.ts";
+  const duplicateRule = "@typescript-eslint/no-duplicate-type-constituents";
+  const duplicatedIntersection = [
+    "export type AliasA = string;",
+    "export type AliasB = string;",
+    "export type Intersection = AliasA & AliasB;",
+  ].join("\n");
+  const duplicatedUnion = [
+    "export type AliasA = string;",
+    "export type AliasB = string;",
+    "export type Union = AliasA | AliasB;",
+  ].join("\n");
+  const strictPaths = [
+    "src/main.ts",
+    "scripts/prisma-process.ts",
+    "test/architecture/typed-lint.test.ts",
+    "src/generated/billing-api/index.ts",
+    "src/generated/billing-api/schemas.gen.ts",
+  ] as const;
+  const lintMessages = async (source: string, path: string) => {
+    const results = await eslint.lintText(source, { filePath: resolve(path) });
+    const messages = results.flatMap((result) => result.messages);
+    expect(messages.some((message) => message.fatal)).toBe(false);
+    return messages;
+  };
+
+  it("keeps the real effective rule error and scopes only the official types file", async () => {
+    const generatedConfig: unknown = await eslint.calculateConfigForFile(
+      resolve(generatedTypes),
+    );
+    expect(generatedConfig).toMatchObject({
+      rules: {
+        [duplicateRule]: [
+          2,
+          { ignoreIntersections: true, ignoreUnions: false },
+        ],
+        "@typescript-eslint/no-unsafe-assignment": [2],
+        "@typescript-eslint/no-unsafe-call": [2],
+        "@typescript-eslint/no-unsafe-member-access": [2],
+      },
+    });
+    for (const path of strictPaths) {
+      const config: unknown = await eslint.calculateConfigForFile(
+        resolve(path),
+      );
+      expect(config).toMatchObject({ rules: { [duplicateRule]: [2] } });
+    }
+  });
+
+  it("permits redundant allOf aliases only in official generated types", async () => {
+    expect(await lintMessages(safeFixture, generatedTypes)).toEqual([]);
+    expect(await lintMessages(duplicatedIntersection, generatedTypes)).toEqual(
+      [],
+    );
+  });
+
+  it.each(strictPaths)(
+    "still rejects duplicate intersections in %s",
+    async (path) => {
+      expect(await lintMessages(safeFixture, path)).toEqual([]);
+      expect(await lintMessages(duplicatedIntersection, path)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            ruleId: duplicateRule,
+            severity: 2,
+          }),
+        ]),
+      );
+    },
+  );
+
+  it("still rejects duplicate unions in official generated types", async () => {
+    expect(await lintMessages(safeFixture, generatedTypes)).toEqual([]);
+    expect(await lintMessages(duplicatedUnion, generatedTypes)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          ruleId: duplicateRule,
+          severity: 2,
+        }),
+      ]),
+    );
+  });
+
+  it.each([
+    ...regressions,
+    ["no-explicit-any", "export type Unsafe = any;"],
+  ] as const)(
+    "still rejects %s in official generated types",
+    async (rule, source) => {
+      expect(await lintMessages(safeFixture, generatedTypes)).toEqual([]);
+      const messages = await lintMessages(source, generatedTypes);
+      expect(messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            ruleId: "@typescript-eslint/" + rule,
+            severity: 2,
+          }),
+        ]),
+      );
+    },
+  );
+});

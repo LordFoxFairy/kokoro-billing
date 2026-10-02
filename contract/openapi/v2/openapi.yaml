@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Billing Internal Owner API
-  version: 2.0.1
+  version: 2.0.2
   description: Experimental clean-slate target contract; not deployed.
 servers:
   - url: https://billing.internal
@@ -180,18 +180,41 @@ paths:
       x-kokoro-visibility: internal-owner
       x-kokoro-stability: experimental
       x-kokoro-idempotency: read-only
-      x-kokoro-permission: authenticated-user
+      x-kokoro-permission: authenticated-user-or-web-bff
+      x-kokoro-identity-transport: personal-identity-u1
+      x-kokoro-auth-selection:
+        machine_markers:
+          - x-kokoro-service
+          - x-kokoro-internal-secret
+          - x-kokoro-subject
+        service_bearer_selects_machine: true
+        machine_partial_response: 403
+        machine_to_user_fallback: false
       security:
         - tenantContext: []
           userBearer: []
+        - serviceCaller: []
+          internalSecret: []
+          serviceBearer: []
+          tenantContext: []
+          subjectContext: []
       parameters:
-        - $ref: "#/components/parameters/TenantId"
+        - $ref: "#/components/parameters/PersonalTenantId"
+        - $ref: "#/components/parameters/PersonalSubjectId"
+        - name: x-kokoro-service
+          in: header
+          required: false
+          schema:
+            type: string
+            const: web-bff
       responses:
         "200":
           description: Success
           headers:
             x-request-id:
               $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
           content:
             application/json:
               schema:
@@ -201,6 +224,8 @@ paths:
           headers:
             x-request-id:
               $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
           x-kokoro-errors:
             - code: billing.invalid_request
               retryable: false
@@ -213,6 +238,8 @@ paths:
           headers:
             x-request-id:
               $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
           x-kokoro-errors:
             - code: billing.unauthenticated
               retryable: false
@@ -225,6 +252,8 @@ paths:
           headers:
             x-request-id:
               $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
           x-kokoro-errors:
             - code: billing.forbidden
               retryable: false
@@ -237,6 +266,8 @@ paths:
           headers:
             x-request-id:
               $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
           x-kokoro-errors:
             - code: billing.not_found
               retryable: false
@@ -249,6 +280,8 @@ paths:
           headers:
             x-request-id:
               $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
           x-kokoro-errors:
             - code: billing.internal_error
               retryable: false
@@ -261,6 +294,8 @@ paths:
           headers:
             x-request-id:
               $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
           x-kokoro-errors:
             - code: billing.dependency_unavailable
               retryable: true
@@ -275,12 +310,33 @@ paths:
       x-kokoro-visibility: internal-owner
       x-kokoro-stability: experimental
       x-kokoro-idempotency: read-only
-      x-kokoro-permission: authenticated-user
+      x-kokoro-permission: authenticated-user-or-web-bff
+      x-kokoro-identity-transport: personal-identity-u1
+      x-kokoro-auth-selection:
+        machine_markers:
+          - x-kokoro-service
+          - x-kokoro-internal-secret
+          - x-kokoro-subject
+        service_bearer_selects_machine: true
+        machine_partial_response: 403
+        machine_to_user_fallback: false
       security:
         - tenantContext: []
           userBearer: []
+        - serviceCaller: []
+          internalSecret: []
+          serviceBearer: []
+          tenantContext: []
+          subjectContext: []
       parameters:
-        - $ref: "#/components/parameters/TenantId"
+        - $ref: "#/components/parameters/PersonalTenantId"
+        - $ref: "#/components/parameters/PersonalSubjectId"
+        - name: x-kokoro-service
+          in: header
+          required: false
+          schema:
+            type: string
+            const: web-bff
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/Cursor"
       responses:
@@ -289,6 +345,8 @@ paths:
           headers:
             x-request-id:
               $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
           content:
             application/json:
               schema:
@@ -298,6 +356,8 @@ paths:
           headers:
             x-request-id:
               $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
           x-kokoro-errors:
             - code: billing.invalid_request
               retryable: false
@@ -310,6 +370,8 @@ paths:
           headers:
             x-request-id:
               $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
           x-kokoro-errors:
             - code: billing.unauthenticated
               retryable: false
@@ -322,6 +384,8 @@ paths:
           headers:
             x-request-id:
               $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
           x-kokoro-errors:
             - code: billing.forbidden
               retryable: false
@@ -334,6 +398,8 @@ paths:
           headers:
             x-request-id:
               $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
           x-kokoro-errors:
             - code: billing.not_found
               retryable: false
@@ -346,6 +412,8 @@ paths:
           headers:
             x-request-id:
               $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
           x-kokoro-errors:
             - code: billing.internal_error
               retryable: false
@@ -358,6 +426,8 @@ paths:
           headers:
             x-request-id:
               $ref: "#/components/headers/RequestId"
+            cache-control:
+              $ref: "#/components/headers/CacheControlNoStore"
           x-kokoro-errors:
             - code: billing.dependency_unavailable
               retryable: true
@@ -2377,6 +2447,10 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 components:
   headers:
+    CacheControlNoStore:
+      schema:
+        type: string
+        const: no-store
     RequestId:
       required: true
       schema:
@@ -2389,6 +2463,24 @@ components:
         type: string
         format: uri-reference
   parameters:
+    PersonalTenantId:
+      name: x-kokoro-tenant-id
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 5
+        maxLength: 1022
+        pattern: '^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])'
+    PersonalSubjectId:
+      name: x-kokoro-subject
+      in: header
+      required: false
+      schema:
+        type: string
+        minLength: 5
+        maxLength: 1363
+        pattern: '^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])'
     TenantId:
       name: x-kokoro-tenant-id
       in: header

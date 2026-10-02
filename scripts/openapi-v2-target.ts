@@ -41,8 +41,8 @@ const expectedPermissionByOperation = new Map<string, string>([
   ["getReadiness", "none"],
   ["getMetrics", "none"],
   ["getCatalog", "authenticated-user-or-web-bff"],
-  ["getMyCreditAccount", "authenticated-user"],
-  ["getMyCreditLedger", "authenticated-user"],
+  ["getMyCreditAccount", "authenticated-user-or-web-bff"],
+  ["getMyCreditLedger", "authenticated-user-or-web-bff"],
   ["getMySubscriptions", "authenticated-user"],
   ["createAdmission", "agent-model-studio-service"],
   ["getAdmission", "agent-model-studio-service"],
@@ -133,6 +133,231 @@ const hasExactRefs = (value: unknown, refs: readonly string[]): boolean =>
     const node = object(item);
     return hasExactKeys(node, ["$ref"]) && node?.$ref === refs[index];
   });
+
+const personalReadKeys = [
+  "get /v2/billing/me/credit-account",
+  "get /v2/billing/me/credit-ledger",
+] as const;
+const personalIdentityPattern =
+  "^u1\\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\\s\\S])";
+const matchesContractValue = (value: unknown, expected: unknown): boolean => {
+  if (Array.isArray(expected))
+    return (
+      Array.isArray(value) &&
+      value.length === expected.length &&
+      expected.every((item, index) => matchesContractValue(value[index], item))
+    );
+  const expectedObject = object(expected);
+  if (!expectedObject) return value === expected;
+  const actual = object(value);
+  return (
+    hasExactKeys(actual, Object.keys(expectedObject)) &&
+    Object.entries(expectedObject).every(([key, item]) =>
+      matchesContractValue(actual?.[key], item),
+    )
+  );
+};
+
+function validatePersonalReads(
+  root: JsonObject,
+  operations: ReadonlyMap<string, JsonObject>,
+  errors: string[],
+): void {
+  const components = object(root.components);
+  const parameters = object(components?.parameters);
+  const headers = object(components?.headers);
+  for (const [name, header, required, maxLength] of [
+    ["PersonalTenantId", "x-kokoro-tenant-id", true, 1022],
+    ["PersonalSubjectId", "x-kokoro-subject", false, 1363],
+  ] as const) {
+    if (
+      !matchesContractValue(parameters?.[name], {
+        name: header,
+        in: "header",
+        required,
+        schema: {
+          type: "string",
+          minLength: 5,
+          maxLength,
+          pattern: personalIdentityPattern,
+        },
+      })
+    )
+      errors.push(
+        "personal read " + name + " must use exact canonical u1 bounds",
+      );
+  }
+  if (
+    !matchesContractValue(parameters?.TenantId, {
+      name: "x-kokoro-tenant-id",
+      in: "header",
+      required: true,
+      schema: { type: "string", minLength: 1, maxLength: 191 },
+    })
+  )
+    errors.push("personal read must preserve the shared raw TenantId");
+  for (const [name, expected] of [
+    [
+      "Limit",
+      {
+        name: "limit",
+        in: "query",
+        required: false,
+        schema: { type: "integer", minimum: 1, maximum: 100, default: 50 },
+      },
+    ],
+    [
+      "Cursor",
+      {
+        name: "cursor",
+        in: "query",
+        required: false,
+        schema: { type: "string", minLength: 1, maxLength: 2048 },
+      },
+    ],
+  ] as const)
+    if (!matchesContractValue(parameters?.[name], expected))
+      errors.push(
+        "personal read must preserve " + name + " paging constraints",
+      );
+  if (
+    !matchesContractValue(headers?.CacheControlNoStore, {
+      schema: { type: "string", const: "no-store" },
+    })
+  )
+    errors.push("personal read CacheControlNoStore must be immutable no-store");
+  if (
+    !matchesContractValue(headers?.RequestId, {
+      required: true,
+      schema: { type: "string", minLength: 1, maxLength: 255 },
+    })
+  )
+    errors.push("personal read must preserve the shared RequestId header");
+  const statuses = ["200", "400", "401", "403", "404", "500", "503"];
+  const errorSemantics: Record<string, readonly [string, boolean]> = {
+    "400": ["billing.invalid_request", false],
+    "401": ["billing.unauthenticated", false],
+    "403": ["billing.forbidden", false],
+    "404": ["billing.not_found", false],
+    "500": ["billing.internal_error", false],
+    "503": ["billing.dependency_unavailable", true],
+  };
+  for (const [key, operation] of operations) {
+    if (!personalReadKeys.some((personalKey) => personalKey === key)) {
+      if (Object.hasOwn(operation, "x-kokoro-identity-transport"))
+        errors.push(key + " must not declare the personal identity profile");
+      if (Object.hasOwn(operation, "x-kokoro-auth-selection"))
+        errors.push(key + " must not declare personal auth selection");
+      continue;
+    }
+    if (
+      !matchesContractValue(operation["x-kokoro-auth-selection"], {
+        machine_markers: [
+          "x-kokoro-service",
+          "x-kokoro-internal-secret",
+          "x-kokoro-subject",
+        ],
+        service_bearer_selects_machine: true,
+        machine_partial_response: 403,
+        machine_to_user_fallback: false,
+      })
+    )
+      errors.push(key + " must declare exact personal auth selection");
+    if (operation["x-kokoro-identity-transport"] !== "personal-identity-u1")
+      errors.push(key + " must declare personal-identity-u1");
+    if (operation["x-kokoro-idempotency"] !== "read-only")
+      errors.push(key + " must remain read-only");
+    if (Object.hasOwn(operation, "requestBody"))
+      errors.push(key + " must not accept a GET request body");
+    const expectedParameters = [
+      { $ref: "#/components/parameters/PersonalTenantId" },
+      { $ref: "#/components/parameters/PersonalSubjectId" },
+      {
+        name: "x-kokoro-service",
+        in: "header",
+        required: false,
+        schema: { type: "string", const: "web-bff" },
+      },
+      ...(key.endsWith("credit-ledger")
+        ? [
+            { $ref: "#/components/parameters/Limit" },
+            { $ref: "#/components/parameters/Cursor" },
+          ]
+        : []),
+    ];
+    const actualParameters = operation.parameters;
+    if (
+      !Array.isArray(actualParameters) ||
+      actualParameters.length !== expectedParameters.length ||
+      !expectedParameters.every((expected) =>
+        actualParameters.some((parameter) =>
+          matchesContractValue(parameter, expected),
+        ),
+      )
+    )
+      errors.push(key + " must use the closed personal read parameters");
+    const security = operation.security;
+    if (
+      !Array.isArray(security) ||
+      security.some((branch) => {
+        const factors = object(branch);
+        return (
+          !factors ||
+          Object.values(factors).some(
+            (scopes) => !Array.isArray(scopes) || scopes.length !== 0,
+          )
+        );
+      })
+    )
+      errors.push(key + " security factors must have empty scopes");
+    const responses = object(operation.responses);
+    if (!hasExactKeys(responses, statuses))
+      errors.push(
+        key + " must preserve the seven personal read response statuses",
+      );
+    for (const status of statuses) {
+      const response = object(responses?.[status]);
+      if (
+        !matchesContractValue(response?.headers, {
+          "x-request-id": { $ref: "#/components/headers/RequestId" },
+          "cache-control": { $ref: "#/components/headers/CacheControlNoStore" },
+        })
+      )
+        errors.push(
+          key + " " + status + " requires exact request-ID and no-store refs",
+        );
+      const successSchema = key.endsWith("credit-account")
+        ? "CreditAccountResponse"
+        : "CreditLedgerResponse";
+      if (
+        !matchesContractValue(response?.content, {
+          "application/json": {
+            schema: {
+              $ref:
+                "#/components/schemas/" +
+                (status === "200" ? successSchema : "ErrorResponse"),
+            },
+          },
+        })
+      )
+        errors.push(
+          key + " " + status + " must preserve its safe response schema ref",
+        );
+      const semantics = errorSemantics[status];
+      if (
+        semantics &&
+        !matchesContractValue(response?.["x-kokoro-errors"], [
+          { code: semantics[0], retryable: semantics[1] },
+        ])
+      )
+        errors.push(
+          key + " " + status + " must preserve exact error semantics",
+        );
+      if (status === "200" && Object.hasOwn(response ?? {}, "x-kokoro-errors"))
+        errors.push(key + " success must not declare error semantics");
+    }
+  }
+}
 
 function validateCreditUnit(root: JsonObject, errors: string[]): void {
   const schemas = object(object(root.components)?.schemas) ?? {};
@@ -234,8 +459,8 @@ export function validateV2OpenApi(document: unknown): string[] {
   if (!root) return ["document must be an object"];
   const errors: string[] = [];
   if (root.openapi !== "3.1.0") errors.push("openapi must be 3.1.0");
-  if (object(root.info)?.version !== "2.0.1")
-    errors.push("info.version must be 2.0.1");
+  if (object(root.info)?.version !== "2.0.2")
+    errors.push("info.version must be 2.0.2");
   validateCreditUnit(root, errors);
   const paths = object(root.paths) ?? {};
   const actual = new Map<string, JsonObject>();
@@ -353,8 +578,19 @@ export function validateV2OpenApi(document: unknown): string[] {
         ["internalSecret", "serviceBearer", "serviceCaller", "tenantContext"],
       ],
     ],
-    ["get /v2/billing/me/credit-account", [["tenantContext", "userBearer"]]],
-    ["get /v2/billing/me/credit-ledger", [["tenantContext", "userBearer"]]],
+    ...personalReadKeys.map((key): [string, readonly (readonly string[])[]] => [
+      key,
+      [
+        ["tenantContext", "userBearer"],
+        [
+          "internalSecret",
+          "serviceBearer",
+          "serviceCaller",
+          "subjectContext",
+          "tenantContext",
+        ],
+      ],
+    ]),
     ["get /v2/billing/me/subscriptions", [["tenantContext", "userBearer"]]],
     [
       "post /v2/billing/checkouts",
@@ -423,6 +659,7 @@ export function validateV2OpenApi(document: unknown): string[] {
     if (JSON.stringify(normalized) !== JSON.stringify(wanted))
       errors.push(`${key} has incomplete authentication factors`);
   }
+  validatePersonalReads(root, actual, errors);
   for (const [key, operation] of actual) {
     const path = key.slice(key.indexOf(" ") + 1);
     const names = [...path.matchAll(/\{([^}]+)\}/gu)].map((match) => match[1]);
