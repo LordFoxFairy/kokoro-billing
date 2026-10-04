@@ -335,6 +335,52 @@ model billing_feature_price_revision {
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model billing_metering_rate {
+  id                         String  @id @db.Uuid
+  tenant_id                  String  @db.VarChar(191)
+  revision                   BigInt
+  ordinal                    Int     @db.SmallInt
+  provider_ref               String  @db.VarChar(255)
+  environment                String  @db.VarChar(255)
+  pricing_account_ref        String  @db.VarChar(255)
+  model_ref                  String  @db.VarChar(255)
+  model_version              String  @db.VarChar(255)
+  bucket                     String  @db.VarChar(128)
+  unit                       String  @db.VarChar(128)
+  applicability_kind         String  @db.VarChar(16)
+  dimension                  String? @db.VarChar(128)
+  applicability_unit         String? @db.VarChar(128)
+  lower_inclusive            BigInt?
+  upper_exclusive            BigInt?
+  currency_code              String  @db.Char(3)
+  minor_per_unit_numerator   Decimal @db.Decimal(78, 0)
+  minor_per_unit_denominator Decimal @db.Decimal(78, 0)
+  business_key_digest        String  @db.Char(64)
+
+  @@unique([tenant_id, revision, business_key_digest], map: "uq_billing_metering_rate_business_key")
+  @@unique([tenant_id, revision, ordinal], map: "uq_billing_metering_rate_ordinal")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model billing_metering_rate_revision {
+  id                      String   @id @db.Uuid
+  tenant_id               String   @db.VarChar(191)
+  revision                BigInt
+  schema_version          Int
+  effective_from          DateTime @db.Timestamptz(3)
+  source_ref              String   @db.VarChar(255)
+  verified_at             DateTime @db.Timestamptz(3)
+  profile_version         String   @db.VarChar(255)
+  profile_artifact_digest String   @db.Char(64)
+  content_digest          String   @db.Char(64)
+  rate_count              Int      @db.SmallInt
+  published_at            DateTime @db.Timestamptz(3)
+
+  @@unique([tenant_id, revision], map: "uq_billing_metering_rate_revision_number")
+  @@index([tenant_id, effective_from(sort: Desc), revision(sort: Desc)], map: "ix_billing_metering_rate_revision_effective")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model billing_offer {
   id         String   @id @db.Uuid
   tenant_id  String   @db.VarChar(191)

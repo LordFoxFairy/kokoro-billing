@@ -1,3 +1,70 @@
+## R228 本地源码交付（2026-10-04）
+
+本次本地提交交付已审查的 rate-only module-private publication、两张 canonical 表及正规派生、纯 codec 和相应测试。Root R227 最终 107 项真实 PostgreSQL 与 1361 项辅助门通过，两个真实故障已修复，publication 源码与当前证据独审均 0P0/P1/P2。该结果只覆盖本切片；未推送或启用用户组合，HTTP、policy、Admission、实际用量与积分/用户整链仍开放。下方 R227/R223 是实现前后时间点记录，不作为当前“尚无源码”的结论。
+
+本次仅接收 R227 证据与 R223 rate-only 设计前缀及原 HEAD 正文；其他既有未交接文档修改仍完整保留于工作树，不夹带入本提交。
+
+## R227：Rate publication 持久化候选的实际证据（2026-10-04）
+
+Root 最终验证绑定冻结候选而非当前 main 提交：`/var/folders/gn/wbk8wfbd047_wvwkwtyn331r0000gn/T/kokoro-r227-billing-final-lrk72u3z/manifest.json`。10 个终态步骤全部 exit 0；9 个真实 PostgreSQL 文件共 107 通过（含 14 个 publication 用例），39 个纯测试/契约/架构/HTTP 文件共 1361 通过。正规 Prisma 派生、source、owned 数据库回收及邻库集合均保持；最终独审 `/tmp/r227-billing-publication-final-review.md` 为 0P0/P1/P2。候选仍未提交、未推送、未启用现有用户组合。
+R226 的两张 rate canonical 表和四个窄索引未再改变。R227 候选在单事务内写 revision header、1..64 ordinary rows、command receipt/key 与 audit；audit `resource_id` 实际保存 `billing_metering_rate_revision.id` UUID，业务 revision仍为正 BIGINT。严格 reread重算完整 business-key digest/canonical content；`NUMERIC(78,0)` 通过 Prisma `Decimal.toFixed(0)`恢复精确普通十进制字符串，合法 78 位值不会科学记数化或转成 JavaScript number。
+
+真实 PostgreSQL 已覆盖最大五个255四字节 Unicode binding、255 profile、range lower=MAX_BIGINT/open upper、互质 NUMERIC78、64行、并发/replay/corruption/rollback。本片没有 policy/snapshot/Admission/usage settlement 表变更，没有真实采购价或余额动作。14 个 publication 用例仍不是完整数据生命周期验收。
+
+---
+
+## R223：rate publication 两表canonical（2026-10-04）
+
+基线 Billing main `87cbe82f2f028fb0ba37a03e2a8d27848677299b`；本节替代上一版R222前缀并冻结rate-only首片。下方R201及更早正文保持逐字历史，不代表本片已实现。当前未改source、SQL、tests、generated、contract、package/lock、价格、资源或Git。
+
+首片只新增下列两表；不新增policy表、snapshot或trigger。所有字段`NOT NULL`除明确nullable applicability列。
+
+### `billing_metering_rate_revision`
+
+| 字段 | PostgreSQL类型 / 约束 |
+|---|---|
+| `id` | `UUID PRIMARY KEY` |
+| `tenant_id` | `VARCHAR(191)`，非空文本 |
+| `revision` | `BIGINT`，`CHECK (revision > 0)` |
+| `schema_version` | `INTEGER`，`CHECK (schema_version = 1)` |
+| `effective_from` | `TIMESTAMPTZ(3)`，canonical draft instant |
+| `source_ref` | `VARCHAR(255)`，非空文本 |
+| `verified_at` | `TIMESTAMPTZ(3)`，canonical draft instant |
+| `profile_version` | `VARCHAR(255)`，非空文本 |
+| `profile_artifact_digest` | `CHAR(64)`，lowercase hex CHECK |
+| `content_digest` | `CHAR(64)`，lowercase hex CHECK |
+| `rate_count` | `SMALLINT`，`CHECK (rate_count BETWEEN 1 AND 64)` |
+| `published_at` | `TIMESTAMPTZ(3)`，同事务唯一DB instant |
+
+`UNIQUE (tenant_id, revision)`；effectivity index精确为`(tenant_id, effective_from DESC, revision DESC)`。同effective instant允许，后继以revision DESC决胜。generation在tenant+rate advisory xact lock内`COALESCE(MAX(revision),0)+1`，正BIGINT溢出fail closed。
+
+### `billing_metering_rate`
+
+| 字段 | PostgreSQL类型 / 约束 |
+|---|---|
+| `id` | `UUID PRIMARY KEY` |
+| `tenant_id` | `VARCHAR(191)`，非空文本 |
+| `revision` | `BIGINT`，`CHECK (revision > 0)` |
+| `ordinal` | `SMALLINT`，`CHECK (ordinal BETWEEN 0 AND 63)` |
+| `provider_ref`,`environment`,`pricing_account_ref`,`model_ref`,`model_version` | 各`VARCHAR(255)`，非空文本 |
+| `bucket`,`unit` | 各`VARCHAR(128)`，满足codec business-key字符闭集 |
+| `applicability_kind` | `VARCHAR(16)`，`CHECK IN ('all','range')` |
+| `dimension`,`applicability_unit` | `VARCHAR(128) NULL`，range时满足business-key，all时NULL |
+| `lower_inclusive`,`upper_exclusive` | `BIGINT NULL`；range时lower非负，upper可NULL且若非NULL须`upper > lower`；all时均NULL |
+| `currency_code` | `CHAR(3)`，`CHECK ~ '^[A-Z]{3}$'` |
+| `minor_per_unit_numerator`,`minor_per_unit_denominator` | `NUMERIC(78,0)`；numerator>=0，denominator>0 |
+| `business_key_digest` | `CHAR(64)`，lowercase hex CHECK；由下述domain-separated完整业务键确定性计算 |
+
+`UNIQUE (tenant_id, revision, ordinal)`及`UNIQUE (tenant_id, revision, business_key_digest)`；不建立五个最长Unicode binding字段组成的宽btree或未经查询证明的lookup index。摘要算法固定为SHA-256 UTF-8 JSON tuple：`["kokoro.billing.metering.rate.key.v1",providerRef,environment,pricingAccountRef,modelRef,modelVersion,bucket,unit,applicabilityTuple]`，tuple序与现canonical key一致；`applicabilityTuple`为`["all"]`或`["range",dimension,unit,lowerInclusive,upperExclusive]`。currency和minor-per-unit不入键，因此同business key换价格仍是重复。
+
+每revision最多64行，所有读取只按`tenant_id, revision, ordinal`全量有序读取；repository私有helper重算每行完整tuple及digest。摘要相同但完整tuple不同视为hash collision并fail closed，绝不当作同一业务键或静默去重。shape CHECK保证all/range nullable组合；完整parent、`rate_count`、排序、无重复/重叠、单binding currency及有理数约分由同事务writer写后strict canonical reread验证，项目不新增FK。
+
+header、1..64 rates、receipt、audit/result同一root transaction。replay按ordinal读取且重建现codec canonical bytes，逐字段/条数/digest不一致即corrupt。application不提供update/delete；raw SQL物理禁改机制需另D0/ADR，不偷加trigger。
+
+`effective_from`允许过去/未来/与`published_at`同instant；publication不做active选择。现legacy `billing_feature_price*`仍由旧runtime使用但新publisher不读；Admission snapshot切换后立即删除legacy caller/table，不保双读。正规派生闭集仍为`database/generated/{schema.prisma,provenance.json}`及clean `src/generated/prisma/**`实际diff。
+
+---
+
 ## R201-Admission-D0：fresh canonical Admission / snapshot / 四状态（2026-10-04）
 
 本地唯一机器wire现为breaking `3.0.0-experimental.3`机器契约及其正规生成物，但尚未发布、部署或被runtime消费：所有v2 command body删除`producer`并由受信service context派生，Admission身份删除无owner事实的`execution_id`，`invocation_id`收敛为唯一`request_ref`，不保alias/兼容双轨。

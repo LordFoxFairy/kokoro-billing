@@ -1,3 +1,39 @@
+## R228 本地源码交付（2026-10-04）
+
+本次本地提交交付已审查的 rate-only module-private publication、两张 canonical 表及正规派生、纯 codec 和相应测试。Root R227 最终 107 项真实 PostgreSQL 与 1361 项辅助门通过，两个真实故障已修复，publication 源码与当前证据独审均 0P0/P1/P2。该结果只覆盖本切片；未推送或启用用户组合，HTTP、policy、Admission、实际用量与积分/用户整链仍开放。下方 R227/R223 是实现前后时间点记录，不作为当前“尚无源码”的结论。
+
+本次仅接收 R227 证据与 R223 rate-only 设计前缀及原 HEAD 正文；其他既有未交接文档修改仍完整保留于工作树，不夹带入本提交。
+
+## R227：module-private Rate publication 当前契约证据（2026-10-04）
+
+Root 最终验证绑定冻结候选而非当前 main 提交：`/var/folders/gn/wbk8wfbd047_wvwkwtyn331r0000gn/T/kokoro-r227-billing-final-lrk72u3z/manifest.json`。10 个终态步骤全部 exit 0；9 个真实 PostgreSQL 文件共 107 通过（含 14 个 publication 用例），39 个纯测试/契约/架构/HTTP 文件共 1361 通过。正规 Prisma 派生、source、owned 数据库回收及邻库集合均保持；最终独审 `/tmp/r227-billing-publication-final-review.md` 为 0P0/P1/P2。候选仍未提交、未推送、未启用现有用户组合。
+当前候选只具备 Billing 模块内部 `publishRate(context, command)`，没有新增 HTTP route、OpenAPI operation、public export 或跨仓 artifact。成功永久结果仍严格只有 `schemaVersion`、`kind`、`tenantId`、`revision`、`contentDigest`、`publishedAt`、`effectiveFrom` 七字段；audit 关联内部 header UUID，不改变结果 wire。五个 publication 错误码及固定安全消息保持。
+
+原 key与同 identity 新 key的永久 replay、command drift、receipt/result 损坏及 canonical ordinary drift已由真实 PostgreSQL覆盖。14 个业务用例不证明 HTTP、真实网络 ACK 丢失、policy、quote/Admission、实际费用或用户页面；本片不发布价格，也不改变余额。
+
+---
+
+## R223：rate publication module-private contract（2026-10-04）
+
+基线 Billing main `87cbe82f2f028fb0ba37a03e2a8d27848677299b`；本节替代上一版R222前缀并冻结rate-only首片。下方R201及更早正文保持逐字历史，不代表本片已实现。当前未改source、SQL、tests、generated、contract、package/lock、价格、资源或Git。
+
+唯一调用签名：
+
+```text
+publishRate(
+  context: BillingAdminContext | null,
+  command: MeteringPublicationCommand<MeteringRateRevisionDraft>
+) -> MeteringPricingPublicationResultV1
+```
+
+在任何codec/transaction/receipt/SQL之前要求`context.role == billing.admin`、context/command/draft三个tenant完全相等且`context.operatorId == command.actorId`；否则`METERING_PUBLICATION_FORBIDDEN`。context只来自现`createBillingAuth.admin`。provider为module-private，不从`metering.public.ts`导出、无HTTP route/OpenAPI、无新scope/header。
+
+`MeteringPricingPublicationResultV1` closed字段：`schemaVersion=1`、`kind=rate`、`tenantId`、positive decimal BIGINT `revision`、canonical lowercase SHA-256 `contentDigest`、DB UTC millisecond `publishedAt`、canonical draft `effectiveFrom`。永久canonical bytes不含replayed、draft、tariff、价格计算、Admission或费用。
+
+稳定错误闭集为`METERING_PUBLICATION_FORBIDDEN|CONFLICT|CORRUPT|REVISION_EXHAUSTED|UNAVAILABLE`，固定安全消息；本片不新增HTTP status映射。同identity/digest换key返回同一永久结果；任何identity/key/digest漂移冲突。内部business-key digest只用于持久索引，永不替代完整ordinary key比较；摘要collision fail closed且不暴露为API字段。policy publication与Agent reader均不在本契约；缺真实价格不得由本边界解释为0/free。
+
+---
+
 ## R201-Admission-D0：create/capture/release 信任与状态契约（2026-10-04）
 
 本地唯一机器wire现为breaking `3.0.0-experimental.3`机器契约及其正规生成物，但尚未发布、部署或被runtime消费：所有v2 command body删除`producer`并由受信service context派生，Admission身份删除无owner事实的`execution_id`，`invocation_id`收敛为唯一`request_ref`，不保alias/兼容双轨。

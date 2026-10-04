@@ -1,3 +1,29 @@
+## R228 本地源码交付（2026-10-04）
+
+本次本地提交交付已审查的 rate-only module-private publication、两张 canonical 表及正规派生、纯 codec 和相应测试。Root R227 最终 107 项真实 PostgreSQL 与 1361 项辅助门通过，两个真实故障已修复，publication 源码与当前证据独审均 0P0/P1/P2。该结果只覆盖本切片；未推送或启用用户组合，HTTP、policy、Admission、实际用量与积分/用户整链仍开放。下方 R227/R223 是实现前后时间点记录，不作为当前“尚无源码”的结论。
+
+本次仅接收 R227 证据与 R223 rate-only 设计前缀及原 HEAD 正文；其他既有未交接文档修改仍完整保留于工作树，不夹带入本提交。
+
+## R227：Rate publication 候选已通过最终单仓门，待 Root 提交（2026-10-04）
+
+Root 最终验证绑定冻结候选而非当前 main 提交：`/var/folders/gn/wbk8wfbd047_wvwkwtyn331r0000gn/T/kokoro-r227-billing-final-lrk72u3z/manifest.json`。10 个终态步骤全部 exit 0；9 个真实 PostgreSQL 文件共 107 通过（含 14 个 publication 用例），39 个纯测试/契约/架构/HTTP 文件共 1361 通过。正规 Prisma 派生、source、owned 数据库回收及邻库集合均保持；最终独审 `/tmp/r227-billing-publication-final-review.md` 为 0P0/P1/P2。候选仍未提交、未推送、未启用现有用户组合。
+有限完成：module-private rate publisher、两表ordinary持久化、永久receipt/key replay、audit、严格canonical reread和七字段结果；真实14个publication用例包含最大Unicode/BIGINT/NUMERIC78/64行、并发、漂移、损坏及rollback。最终两个真实P1修复为 audit关联header UUID，以及NUMERIC78用`Decimal.toFixed(0)`精确读回。
+
+边界保持：候选未提交；无HTTP/public export、真实COMMIT网络ACK注入、policy、quote/active selection、Admission、hold/余额、actual usage/settlement、Agent或UI。14例不代表完整publication矩阵，更不代表收费或用户旅程完成；没有新增或改变任何采购价、销售倍率、Credit换算或余额。
+
+---
+
+## R223：rate publication D0修复候选（2026-10-04）
+
+基线 Billing main `87cbe82f2f028fb0ba37a03e2a8d27848677299b`；本节替代上一版R222前缀并冻结rate-only首片。下方R201及更早正文保持逐字历史，不代表本片已实现。当前未改source、SQL、tests、generated、contract、package/lock、价格、资源或Git。
+
+- 已关闭R222审查的两P1与P2设计歧义：revision为tenant+kind锁内MAX+1正BIGINT、溢出fail closed；一次DB publishedAt；draft effectiveFrom允许过去/未来/同instant，后继按effective DESC/revision DESC。
+- 唯一caller为现`BillingAdminContext`/`createBillingAuth.admin`；首片`publishRate`在任何codec/DB前严格核role、三个tenant和operator/actor。provider仅module-private，不export、不接HTTP。
+- 首片只rate两表和三个普通publication文件；结果/错误closed名称已冻结。Root真实PG已证明合法5100-byte Unicode业务键不能建宽btree，故改为domain-separated `business_key_digest`唯一索引并全量full-key复核/collision fail closed；不改pure codec。policy artifact/ref、policy表与正控仍OPEN；无trigger、默认价、采购价、Agent字段或public operation。
+- 当前仅五D0前缀，source/SQL/tests/generated均未实现或验证。后继Root tests-first/真PG/clean generation后才可称publication slice通过；3310及费用链未消费。
+
+---
+
 ## R78 Root 验收：正式本人读 HTTP 组件（2026-10-02）
 
 本切片 source/测试/依赖自洽22路径：R77冻结20与已审R73manifest/lock2。独立source审0P0/P1/P2。Root fresh Node24 pure 34文件1038pass/0fail/0skip19.26s，/tmp/kokoro-billing-r77-root-pure.log；真实Nest/Prisma/PG本人读9pass/0fail/0skip2.11s，/tmp/kokoro-billing-r77-root-real-pg.log，owner临时数据库全部回收/无他库删除/tracked不变。Root format/lint/typecheck/build/sql/contract/generated漂移实际exit0，/tmp/kokoro-billing-r78-root-offline.log；原失败与skip历史保留。两GET closed输入、可信双认证/u1完整身份、零GET写入、BigInt精度/私有边界/typed错误由本组件验证。

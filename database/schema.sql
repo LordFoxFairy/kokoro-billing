@@ -713,3 +713,96 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_billing_outbox_payment_aggregate
 CREATE INDEX IF NOT EXISTS ix_billing_outbox_dispatch
   ON billing_outbox (next_attempt_at, id)
   WHERE completed_at IS NULL AND dead_lettered_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS billing_metering_rate_revision (
+  id UUID NOT NULL PRIMARY KEY,
+  tenant_id VARCHAR(191) NOT NULL,
+  revision BIGINT NOT NULL,
+  schema_version INTEGER NOT NULL,
+  effective_from TIMESTAMPTZ(3) NOT NULL,
+  source_ref VARCHAR(255) NOT NULL,
+  verified_at TIMESTAMPTZ(3) NOT NULL,
+  profile_version VARCHAR(255) NOT NULL,
+  profile_artifact_digest CHAR(64) NOT NULL,
+  content_digest CHAR(64) NOT NULL,
+  rate_count SMALLINT NOT NULL,
+  published_at TIMESTAMPTZ(3) NOT NULL,
+  CONSTRAINT ck_billing_metering_rate_revision_number CHECK (revision > 0),
+  CONSTRAINT ck_billing_metering_rate_revision_schema CHECK (schema_version = 1),
+  CONSTRAINT ck_billing_metering_rate_revision_content_digest CHECK (content_digest ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT ck_billing_metering_rate_revision_count CHECK (rate_count BETWEEN 1 AND 64),
+  CONSTRAINT ck_billing_metering_rate_revision_profile_digest CHECK (profile_artifact_digest ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT ck_billing_metering_rate_revision_text CHECK (
+    char_length(source_ref) BETWEEN 1 AND 255
+    AND char_length(profile_version) BETWEEN 1 AND 255
+  )
+);
+
+CREATE TABLE IF NOT EXISTS billing_metering_rate (
+  id UUID NOT NULL PRIMARY KEY,
+  tenant_id VARCHAR(191) NOT NULL,
+  revision BIGINT NOT NULL,
+  ordinal SMALLINT NOT NULL,
+  provider_ref VARCHAR(255) NOT NULL,
+  environment VARCHAR(255) NOT NULL,
+  pricing_account_ref VARCHAR(255) NOT NULL,
+  model_ref VARCHAR(255) NOT NULL,
+  model_version VARCHAR(255) NOT NULL,
+  bucket VARCHAR(128) NOT NULL,
+  unit VARCHAR(128) NOT NULL,
+  applicability_kind VARCHAR(16) NOT NULL,
+  dimension VARCHAR(128) NULL,
+  applicability_unit VARCHAR(128) NULL,
+  lower_inclusive BIGINT NULL,
+  upper_exclusive BIGINT NULL,
+  currency_code CHAR(3) NOT NULL,
+  minor_per_unit_numerator NUMERIC(78,0) NOT NULL,
+  minor_per_unit_denominator NUMERIC(78,0) NOT NULL,
+  business_key_digest CHAR(64) NOT NULL,
+  CONSTRAINT ck_billing_metering_rate_revision CHECK (revision > 0),
+  CONSTRAINT ck_billing_metering_rate_ordinal CHECK (ordinal BETWEEN 0 AND 63),
+  CONSTRAINT ck_billing_metering_rate_business_keys CHECK (
+    char_length(provider_ref) BETWEEN 1 AND 255
+    AND char_length(environment) BETWEEN 1 AND 255
+    AND char_length(pricing_account_ref) BETWEEN 1 AND 255
+    AND char_length(model_ref) BETWEEN 1 AND 255
+    AND char_length(model_version) BETWEEN 1 AND 255
+    AND bucket ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+    AND unit ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+  ),
+  CONSTRAINT ck_billing_metering_rate_applicability CHECK (
+    (
+      applicability_kind = 'all'
+      AND dimension IS NULL
+      AND applicability_unit IS NULL
+      AND lower_inclusive IS NULL
+      AND upper_exclusive IS NULL
+    )
+    OR
+    (
+      applicability_kind = 'range'
+      AND dimension IS NOT NULL
+      AND dimension ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+      AND applicability_unit IS NOT NULL
+      AND applicability_unit ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+      AND lower_inclusive IS NOT NULL
+      AND lower_inclusive >= 0
+      AND (upper_exclusive IS NULL OR upper_exclusive > lower_inclusive)
+    )
+  ),
+  CONSTRAINT ck_billing_metering_rate_currency CHECK (currency_code ~ '^[A-Z]{3}$'),
+  CONSTRAINT ck_billing_metering_rate_price CHECK (
+    minor_per_unit_numerator >= 0
+    AND minor_per_unit_denominator > 0
+  ),
+  CONSTRAINT ck_billing_metering_rate_business_key_digest CHECK (business_key_digest ~ '^[0-9a-f]{64}$')
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_billing_metering_rate_revision_number
+  ON billing_metering_rate_revision (tenant_id, revision);
+CREATE INDEX IF NOT EXISTS ix_billing_metering_rate_revision_effective
+  ON billing_metering_rate_revision (tenant_id, effective_from DESC, revision DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_billing_metering_rate_ordinal
+  ON billing_metering_rate (tenant_id, revision, ordinal);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_billing_metering_rate_business_key
+  ON billing_metering_rate (tenant_id, revision, business_key_digest);

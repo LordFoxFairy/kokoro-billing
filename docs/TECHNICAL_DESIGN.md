@@ -1,3 +1,48 @@
+## R228 本地源码交付（2026-10-04）
+
+本次本地提交交付已审查的 rate-only module-private publication、两张 canonical 表及正规派生、纯 codec 和相应测试。Root R227 最终 107 项真实 PostgreSQL 与 1361 项辅助门通过，两个真实故障已修复，publication 源码与当前证据独审均 0P0/P1/P2。该结果只覆盖本切片；未推送或启用用户组合，HTTP、policy、Admission、实际用量与积分/用户整链仍开放。下方 R227/R223 是实现前后时间点记录，不作为当前“尚无源码”的结论。
+
+本次仅接收 R227 证据与 R223 rate-only 设计前缀及原 HEAD 正文；其他既有未交接文档修改仍完整保留于工作树，不夹带入本提交。
+
+## R227：Rate publication 有限实现与最终验证证据（2026-10-04）
+
+Root 最终验证绑定冻结候选而非当前 main 提交：`/var/folders/gn/wbk8wfbd047_wvwkwtyn331r0000gn/T/kokoro-r227-billing-final-lrk72u3z/manifest.json`。10 个终态步骤全部 exit 0；9 个真实 PostgreSQL 文件共 107 通过（含 14 个 publication 用例），39 个纯测试/契约/架构/HTTP 文件共 1361 通过。正规 Prisma 派生、source、owned 数据库回收及邻库集合均保持；最终独审 `/tmp/r227-billing-publication-final-review.md` 为 0P0/P1/P2。候选仍未提交、未推送、未启用现有用户组合。
+本片实现并验证的是 module-private `publishRate`：可信 `BillingAdminContext` 在 codec/SQL 前完成 role、tenant、operator 绑定；一个 root transaction 内完成永久 receipt/key、tenant rate generation lock、正 BIGINT revision、一次数据库毫秒时间、1..64 ordinary rate、audit 与七字段 closed result；原 key/新 key重放均严格回读 header、ordinary key/digest 与完整 canonical draft/result。无 HTTP/public facade。
+
+真实验证中关闭两个 P1：audit 的 `resource_id` 必须关联 rate revision header UUID，不能写业务 revision 字符串；Prisma `Decimal` 对 `NUMERIC(78,0)` 的 reread 必须用 `toFixed(0)` 得到完整整数，不能让 `toString()` 科学记数进入 canonical codec。后者不转 `Number`、不改变输入 codec、SQL 或全局 Decimal 配置。
+
+14 个 publication 用例覆盖授权前零 SQL、正向/64 行/Unicode+BIGINT+NUMERIC78 range、永久重放、并发、漂移、receipt 损坏、ordinary 腐化与事务回滚；它不是完整 publication 矩阵。真实 HTTP、真实 COMMIT 网络 ACK 丢失、policy publication、active selection/quote、Admission、资金、Agent 与 UI 均未实现或验收；现调用者丢返回后的 receipt replay不冒充网络故障注入。
+
+---
+
+## R223：immutable rate publication 首片设计门（2026-10-04）
+
+基线 Billing main `87cbe82f2f028fb0ba37a03e2a8d27848677299b`；本节替代上一版R222前缀并冻结rate-only首片。下方R201及更早正文保持逐字历史，不代表本片已实现。当前未改source、SQL、tests、generated、contract、package/lock、价格、资源或Git。
+
+### 唯一边界与授权
+
+首片只实现Billing Metering内部rate publication，不实现policy正控、选择/报价、Admission/snapshot、hold、capture/release/settlement或public HTTP。采用三个普通文件：`metering-pricing-publication.service.ts`、`metering-pricing-revision.repository.ts`、`metering-pricing-publication-result-codec.ts`；窄改现`metering.module.ts`和`metering.error.ts`。provider保持module-private，**不从`metering.public.ts`导出**，也不接现admin HTTP。真实系统测试从compiled module取得provider，不冒充正式admin入口已接。
+
+唯一现可信principal是`src/infrastructure/auth/billing-auth.types.ts`的`BillingAdminContext`，由`createBillingAuth(...).admin`产生。本片方法精确为`publishRate(context: BillingAdminContext | null, command: MeteringPublicationCommand<MeteringRateRevisionDraft>)`。进入codec、`runRoot`、receipt、advisory lock或任何SQL前必须依次核：context非null、`role === "billing.admin"`、`context.tenantId === command.tenantId === command.draft.tenantId`、`context.operatorId === command.actorId`；任一失败抛`METERING_PUBLICATION_FORBIDDEN`且零DB调用。本片不新增IAM scope、header、可信标记或第二admin context。
+
+### 事务、revision、时间与replay
+
+授权及pure canonical encoding后进入一次`TransactionService.runRoot`，复用现`CommandReceiptRepository`与`AuditAppender`。同tenant+`rate`取得`pg_advisory_xact_lock(hashtextextended('metering:pricing-generation:rate:' || tenantId,0))`；锁内读取该tenant已提交`MAX(revision)`，checked `+1`分配正`BIGINT`。无行从1开始；MAX为9223372036854775807时抛`METERING_PUBLICATION_REVISION_EXHAUSTED`并整组rollback。
+
+同一事务只读取一次DB `CURRENT_TIMESTAMP(3)`作为`publishedAt`；`effectiveFrom`逐字来自已校验canonical draft，允许过去、未来、等于published instant，也允许同tenant多个revision使用相同effective instant。后继选择使用`effective_from <= db_now ORDER BY effective_from DESC, revision DESC`唯一决胜，但本片不实现选择。
+
+永久closed结果由`metering-pricing-publication-result-codec.ts`唯一拥有，类型名`MeteringPricingPublicationResultV1`，字段恰为`schemaVersion: 1`、`kind: "rate"`、`tenantId`、正十进制`revision`、lowercase SHA-256 `contentDigest`、DB UTC `publishedAt`和draft UTC `effectiveFrom`；`replayed`不进永久bytes。command仍用现`metering.publish_rate_revision`、`general/internal`编码。相同identity/digest换合法key exact replay；key/identity/digest drift抛`METERING_PUBLICATION_CONFLICT`且零新增事实。repository私有persistence helper另计算rate业务键摘要：SHA-256(UTF-8 JSON tuple)，tuple固定为`["kokoro.billing.metering.rate.key.v1",providerRef,environment,pricingAccountRef,modelRef,modelVersion,bucket,unit,applicabilityTuple]`，其中applicability为`["all"]`或`["range",dimension,unit,lowerInclusive,upperExclusive]`；不含currency或rate。摘要只缩窄索引，不隐藏原ordinary字段。replay须按tenant/revision/ordinal读取最多64行，重建full key、摘要、canonical draft/digest/result；同摘要但full key不同视为collision并fail closed。缺行、额外行或字段漂移抛`METERING_PUBLICATION_CORRUPT`，不返回receipt JSON掩盖DB事实。现pure codec保持不改。
+
+本片新增错误闭集仅：`METERING_PUBLICATION_FORBIDDEN`、`METERING_PUBLICATION_CONFLICT`、`METERING_PUBLICATION_CORRUPT`、`METERING_PUBLICATION_REVISION_EXHAUSTED`、`METERING_PUBLICATION_UNAVAILABLE`；均使用固定安全文本，不含draft、价格、token或SQL。后者用于本地事务/receipt不可用的稳定内部失败，不新增HTTP映射。
+
+application是唯一writer且repository无update/delete；不新增trigger/role框架。rate publication不依赖Agent。Admission需等待Root另批Agent technical preauthorization bound→Billing grant→post-grant dispatch permit正式artifact/facade；Billing不在本片定义Agent字段。policy维持成本倍率`7/5 = 1.4`与failed/cancelled actual-only、unknown不猜，但其Billing-owned机器artifact/ref仍OPEN，所以首片没有policy table、service正控或magic fixture。
+
+### 精确实现/生成边界
+
+可实施写集为上述三个新文件、现`metering.module.ts`/`metering.error.ts`、`database/schema.sql`、现schema/architecture测试和一个真实PG publication测试。`metering.public.ts`、OpenAPI、API generated、package/lock、legacy quote、Agent均冻结。正规`pnpm prisma:refresh`唯一从`database/schema.sql`生成`database/generated/{schema.prisma,provenance.json}`与`src/generated/prisma/**`；最终仅接收clean generation实际diff，不手改。
+
+---
+
 ## R201-Admission-D0：正式逐 attempt Admission 与 immutable quote（2026-10-04）
 
 基线 Billing `76da5a895d7dbbc26a305b268bfeacfb0ebf737b`。本地唯一机器wire现为 `3.0.0-experimental.3` 机器契约及其正规生成物，但尚未发布、部署或被runtime消费；`database/schema.sql`、Prisma生成物、旧 application Admission 和现 quantity=1 Metering writer仍是旧形状，与该机器契约**不同构**。本节确定 fresh-only 目标，不宣称源码、SQL、route、pricing发布或资金链已经实现。R201 authorizer只完成事务外IAM观察，不能单独创建Admission。

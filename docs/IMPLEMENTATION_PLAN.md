@@ -1,3 +1,30 @@
+## R228 本地源码交付（2026-10-04）
+
+本次本地提交交付已审查的 rate-only module-private publication、两张 canonical 表及正规派生、纯 codec 和相应测试。Root R227 最终 107 项真实 PostgreSQL 与 1361 项辅助门通过，两个真实故障已修复，publication 源码与当前证据独审均 0P0/P1/P2。该结果只覆盖本切片；未推送或启用用户组合，HTTP、policy、Admission、实际用量与积分/用户整链仍开放。下方 R227/R223 是实现前后时间点记录，不作为当前“尚无源码”的结论。
+
+本次仅接收 R227 证据与 R223 rate-only 设计前缀及原 HEAD 正文；其他既有未交接文档修改仍完整保留于工作树，不夹带入本提交。
+
+## R227：Rate publication 首片候选交付状态（2026-10-04）
+
+Root 最终验证绑定冻结候选而非当前 main 提交：`/var/folders/gn/wbk8wfbd047_wvwkwtyn331r0000gn/T/kokoro-r227-billing-final-lrk72u3z/manifest.json`。10 个终态步骤全部 exit 0；9 个真实 PostgreSQL 文件共 107 通过（含 14 个 publication 用例），39 个纯测试/契约/架构/HTTP 文件共 1361 通过。正规 Prisma 派生、source、owned 数据库回收及邻库集合均保持；最终独审 `/tmp/r227-billing-publication-final-review.md` 为 0P0/P1/P2。候选仍未提交、未推送、未启用现有用户组合。
+本片已完成并通过 Root 单仓候选门：三份普通 publication source、Metering module/error 窄改、rate schema/正规 Prisma派生及同一 integration 文件。两个真实 P1（audit UUID 关联、NUMERIC78 精确 reread）均已修复并进入最终 14 用例。该状态为“待 Root 接收/提交”，不等于远端发布或产品闭环。
+
+后继仍按依赖推进：Root核五文档旧suffix与候选文件后集成；另片实现/验证 HTTP admin入口（若正式裁决需要）、真实COMMIT网络ACK、policy publication与选择/quote；再依赖正式Agent owner artifacts进入Admission、hold、actual usage settlement/release及UI。不得用本片14例填造价格、Credit换算、免费路径或缩减原验收范围。
+
+---
+
+## R223：rate-only publication tests-first（2026-10-04）
+
+基线 Billing main `87cbe82f2f028fb0ba37a03e2a8d27848677299b`；本节替代上一版R222前缀并冻结rate-only首片。下方R201及更早正文保持逐字历史，不代表本片已实现。当前未改source、SQL、tests、generated、contract、package/lock、价格、资源或Git。
+
+1. 先冻结tests：result codec/error闭集；`BillingAdminContext|null`的null、role、tenant/operator/draft mismatch全部在零DB前拒绝；module provider可取但public export/HTTP不存在。
+2. 真PG RED：同tenant两连接在`tenant+rate`advisory锁下产生revision 1/2；BIGINT MAX溢出零写；一次DB `publishedAt`；过去/未来/相同effective instant原值保留并证明后继排序index；5×255最大合法Unicode key可插入且无宽btree，domain-separated business-key digest重复拒绝、人工collision full-key fail closed；exact replay/drift/corruption；各phase rollback与commit ACK lost；跨tenant；无真实rate不免费。
+3. GREEN仅三个新普通文件、现module/error、两canonical表及必要现tests。复用TransactionService/CommandReceipt/Audit；`metering.public.ts`、policy、HTTP、Agent、Admission和legacy quote冻结。
+4. Root在owned clean PG执行`pnpm prisma:refresh`，只接收`database/generated/{schema.prisma,provenance.json}`与`src/generated/prisma/**`实际diff；随后schema/catalog/architecture/真实PG与完整Billing门。
+5. policy正控等Root批准Billing-owned actual-only机器artifact/ref后另片。Admission再等待正式Agent preauthorization-bound/post-grant-permit合同并切snapshot；随后删除legacy fixed-price path。publication通过不等于报价、授权或收费。
+
+---
+
 # Billing TypeScript / Prisma 规范化任务板
 
 更新：2026-09-12（技术方案收敛与连续实施准备）。唯一任务板；总范围是 Billing 工程收敛，不把第一轮审计视为整仓完成。

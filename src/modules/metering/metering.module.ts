@@ -1,10 +1,14 @@
 import { Module } from "@nestjs/common";
 import type { DynamicModule } from "@nestjs/common";
 import { TransactionService } from "../../database/transaction.service.js";
+import { AuditAppender } from "../../database/audit-appender.js";
+import { CommandReceiptRepository } from "../../database/command-receipt.repository.js";
 import { CreditModule } from "../credit/credit.public.js";
 import { CreditEffects } from "../credit/credit.public.js";
 import { MeteringRepository } from "./metering.repository.js";
 import { MeteringService } from "./metering.service.js";
+import { MeteringPricingPublicationService } from "./metering-pricing-publication.service.js";
+import { MeteringPricingRevisionRepository } from "./metering-pricing-revision.repository.js";
 import { IamBillingAuthorizationClient } from "./iam-billing-authorization.client.js";
 import {
   IAM_BILLING_AUTHORIZATION_OPTIONS,
@@ -30,6 +34,33 @@ import {
         repository: MeteringRepository,
         credit: CreditEffects,
       ) => new MeteringService(transactions, repository, credit),
+    },
+    {
+      provide: MeteringPricingRevisionRepository,
+      inject: [TransactionService],
+      useFactory: (transactions: TransactionService) =>
+        new MeteringPricingRevisionRepository(transactions),
+    },
+    {
+      provide: MeteringPricingPublicationService,
+      inject: [
+        TransactionService,
+        CommandReceiptRepository,
+        AuditAppender,
+        MeteringPricingRevisionRepository,
+      ],
+      useFactory: (
+        transactions: TransactionService,
+        receipts: CommandReceiptRepository,
+        audit: AuditAppender,
+        repository: MeteringPricingRevisionRepository,
+      ) =>
+        new MeteringPricingPublicationService(
+          transactions,
+          receipts,
+          audit,
+          repository,
+        ),
     },
   ],
   exports: [MeteringService],

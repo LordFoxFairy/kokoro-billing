@@ -68,7 +68,7 @@ integration("generated Prisma Client", () => {
             "utf8",
           )
         ).match(/^model /gmu),
-      ).toHaveLength(32);
+      ).toHaveLength(34);
 
       const schemaPath = resolve(
         actualRoot,
