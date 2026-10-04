@@ -462,8 +462,8 @@ export function validateV2OpenApi(document: unknown): string[] {
   if (!root) return ["document must be an object"];
   const errors: string[] = [];
   if (root.openapi !== "3.1.0") errors.push("openapi must be 3.1.0");
-  if (object(root.info)?.version !== "3.0.0-experimental.2")
-    errors.push("info.version must be 3.0.0-experimental.2");
+  if (object(root.info)?.version !== "3.0.0-experimental.3")
+    errors.push("info.version must be 3.0.0-experimental.3");
   validateCreditUnit(root, errors);
   const paths = object(root.paths) ?? {};
   const actual = new Map<string, JsonObject>();
@@ -698,13 +698,7 @@ export function validateV2OpenApi(document: unknown): string[] {
     if (object(schema)?.additionalProperties !== false)
       errors.push(`${name} must reject unknown properties`);
   };
-  const attemptIdentity = [
-    "producer",
-    "run_id",
-    "execution_id",
-    "call_id",
-    "attempt_id",
-  ] as const;
+  const attemptIdentity = ["run_id", "call_id", "attempt_id"] as const;
   const evidenceIdentity = [
     "evidence_schema_version",
     "evidence_ref",
@@ -713,10 +707,8 @@ export function validateV2OpenApi(document: unknown): string[] {
     "evidence_digest",
   ] as const;
   exactRequired("AdmissionCreateRequest", [
-    "producer",
     "run_id",
-    "execution_id",
-    "invocation_id",
+    "request_ref",
     "call_id",
     "attempt_id",
     "attempt_ordinal",
@@ -741,7 +733,10 @@ export function validateV2OpenApi(document: unknown): string[] {
   ]);
   exactRequired("ExecutionEventRequest", [
     "event_id",
-    ...attemptIdentity,
+    "run_id",
+    "request_ref",
+    "call_id",
+    "attempt_id",
     "event_type",
     "occurred_at",
     ...evidenceIdentity,
@@ -750,8 +745,7 @@ export function validateV2OpenApi(document: unknown): string[] {
     "admission_id",
     "producer",
     "run_id",
-    "execution_id",
-    "invocation_id",
+    "request_ref",
     "call_id",
     "attempt_id",
     "attempt_ordinal",
@@ -783,7 +777,11 @@ export function validateV2OpenApi(document: unknown): string[] {
   exactRequired("ExecutionEvent", [
     "execution_event_id",
     "event_id",
-    ...attemptIdentity,
+    "producer",
+    "run_id",
+    "request_ref",
+    "call_id",
+    "attempt_id",
     ...evidenceIdentity,
     "status",
     "charge_status",
@@ -823,10 +821,8 @@ export function validateV2OpenApi(document: unknown): string[] {
       "AdmissionCreateRequest billing_subject must be a closed attribution",
     );
   for (const required of [
-    "producer",
     "run_id",
-    "execution_id",
-    "invocation_id",
+    "request_ref",
     "call_id",
     "attempt_id",
     "attempt_ordinal",
@@ -856,9 +852,7 @@ export function validateV2OpenApi(document: unknown): string[] {
         errors.push(`${name} must not accept ${forbidden}`);
     }
     for (const required of [
-      "producer",
       "run_id",
-      "execution_id",
       "call_id",
       "attempt_id",
       "evidence_schema_version",
@@ -869,6 +863,41 @@ export function validateV2OpenApi(document: unknown): string[] {
     ]) {
       if (!command[required]) errors.push(`${name} requires ${required}`);
     }
+  }
+  const commandBodies = [
+    "AdmissionCreateRequest",
+    "AdmissionCaptureRequest",
+    "AdmissionReleaseRequest",
+    "ExecutionEventRequest",
+  ] as const;
+  for (const name of commandBodies) {
+    const command = schemaProperties(root, name);
+    if (command.producer)
+      errors.push(`${name} must derive producer from trusted context`);
+  }
+  for (const name of [
+    ...commandBodies,
+    "Admission",
+    "ExecutionEvent",
+  ] as const) {
+    const schema = schemaProperties(root, name);
+    if (schema.execution_id)
+      errors.push(`${name} must not define unowned execution_id`);
+    if (schema.invocation_id)
+      errors.push(`${name} must use request_ref without invocation alias`);
+  }
+  for (const name of [
+    "AdmissionCreateRequest",
+    "ExecutionEventRequest",
+    "Admission",
+    "ExecutionEvent",
+  ] as const) {
+    const requestRef = object(schemaProperties(root, name).request_ref);
+    if (
+      JSON.stringify(requestRef) !==
+      JSON.stringify({ type: "string", minLength: 1, maxLength: 255 })
+    )
+      errors.push(`${name} must define its exact Agent request_ref`);
   }
   const capture = schemaProperties(root, "AdmissionCaptureRequest");
   const release = schemaProperties(root, "AdmissionReleaseRequest");

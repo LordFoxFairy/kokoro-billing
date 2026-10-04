@@ -8,10 +8,10 @@ states; they are not interchangeable versions of one deployed surface.
 | State           | Machine source                                       | Operations | Transport                                 | Artifact status                                              |
 | --------------- | ---------------------------------------------------- | ---------: | ----------------------------------------- | ------------------------------------------------------------ |
 | Current runtime | [`openapi/v1/openapi.yaml`](openapi/v1/openapi.yaml) |         17 | existing `/v1/**` plus unversioned probes | `stable`, used for current Fastify route parity              |
-| Target          | [`openapi/v2/openapi.yaml`](openapi/v2/openapi.yaml) |         24 | `/v2/**` plus unversioned probes          | `3.0.0-experimental.2`, not published, deployed, or consumed |
+| Target          | [`openapi/v2/openapi.yaml`](openapi/v2/openapi.yaml) |         24 | `/v2/**` plus unversioned probes          | `3.0.0-experimental.3`, not published, deployed, or consumed |
 
 The target artifact SemVer and the HTTP transport prefix are independent. The
-breaking clean-slate artifact is `3.0.0-experimental.2`; its routes intentionally
+breaking clean-slate artifact is `3.0.0-experimental.3`; its routes intentionally
 remain under `/v2`. The private package version is not a wire version. Human
 semantics live in [`../docs/API_CONTRACT.md`](../docs/API_CONTRACT.md), which is
 not a second editable field-level contract.
@@ -20,7 +20,7 @@ Current source digests:
 
 ```text
 openapi/v1/openapi.yaml  58fbe4fea083ba12e0db23f49e995b96500d01af0013febf40eba3093510ef63
-openapi/v2/openapi.yaml  7d63133656a99a536bdae22c02b3a6796f80f12f42e44bdcdbdd338024010494
+openapi/v2/openapi.yaml  ecaceefd3fd09d5106b364593dd513506622ca011bb0436b74f0928ffd8dcf00
 ```
 
 Historical candidate narratives and old validation counts are available in Git
@@ -41,10 +41,12 @@ authority.
 Every operation declares exact owner, visibility, stability, idempotency, and
 permission extensions. Tenant, actor, service identity, and payment authority
 come from authenticated transport context. Request bodies do not self-report a
-payer, trusted subject, final charge, price, rate, multiplier, or settlement
-amount for model usage. Browser traffic continues through Web and BFF; an IAM
-user/BFF authentication alternative does not make this an externally public
-contract.
+payer, trusted producer, trusted subject, final charge, price, rate, multiplier,
+or settlement amount for model usage. Durable Admission and ExecutionEvent
+representations retain the server-derived producer for audit and replay; it is
+not accepted from command bodies. Browser traffic continues through Web and
+BFF; an IAM user/BFF authentication alternative does not make this an externally
+public contract.
 
 ## Target per-attempt usage contract
 

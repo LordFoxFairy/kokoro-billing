@@ -1,3 +1,63 @@
+## R201-Admission-D0：fresh canonical Admission / snapshot / 四状态（2026-10-04）
+
+本地唯一机器wire现为breaking `3.0.0-experimental.3`机器契约及其正规生成物，但尚未发布、部署或被runtime消费：所有v2 command body删除`producer`并由受信service context派生，Admission身份删除无owner事实的`execution_id`，`invocation_id`收敛为唯一`request_ref`，不保alias/兼容双轨。
+
+该wire变更只编辑唯一机器源`contract/openapi/v2/openapi.yaml`；validator不生成schema，四个`src/generated/billing-api`产物由正规生成链读取YAML后重建。DATA不复制wire字段定义，也不把生成物或validator当数据事实源。
+
+基线 Billing `76da5a895d7dbbc26a305b268bfeacfb0ebf737b`。当前`database/schema.sql`是唯一canonical，但现`billing_admission`、feature-price、usage/settlement与本地`3.0.0-experimental.3`机器契约不同构；本节定义后继fresh replacement，不是DDL已落地。无migration、compat view、双写或旧数据导入。
+
+### 目标表与生命周期
+
+| 表 | 稳定普通列与生命周期 |
+|---|---|
+| `billing_metering_rate_revision` | id/tenant/revision/effective_from/published_at/source_ref/source_verified_at/content_digest/actor audit ref；完整版本append-only。 |
+| `billing_metering_rate` | revision、provider/environment/pricing_account_ref/model/version、usage_profile version/digest、normalization version/digest、category/unit/tier boundaries、currency、约分rate numerator/denominator；随revision一次插入，键与范围唯一。 |
+| `billing_metering_policy_revision` | id/tenant/revision/effective/published、multiplier 7/5、currency→Credit-micros约分换算、rounding_version、quote_validity_ms、failure-policy ref、digest；未决policy不可用于quote。 |
+| `billing_metering_snapshot` | id/tenant、rate/policy revision、planned/actual binding refs+digests、usage profile version/schema digest/owner manifest aggregate、execution bound ref/digest/artifact version/valid_until、normalization/rounding/currency、bounded category count/detail schema version+digest、authorized_micros、valid_until、created_at；immutable。只有bounded tariff明细可strict JSONB，identity/版本/金额/查询字段必须普通列。 |
+| replacement `billing_admission` | id/tenant/payer、subject kind/ref、trusted service producer/run/request_ref/call/attempt/ordinal/feature、四独立状态、snapshot/hold、全部profile/binding/bound refs+digests、authorized_micros、valid_until、created/updated与必要reconcile generation/due；不存token/decision_ref/raw owner payload。 |
+| replacement `billing_usage_event` | immutable sealed Agent evidence identity/version/ref/event/revision/digest、同attempt/admission/snapshot/binding、strict normalized actual quantities与exact procurement result；unknown不以0替代。 |
+| replacement `billing_usage_settlement` | 每attempt唯一成功结算：usage/admission/snapshot/hold、actual cost/sales/conversion摘要、charge/released micros、rounding version、Credit journal/result refs、created_at；append-only。 |
+| `billing_command_receipt` + key binding | namespace=admission；create identity为完整attempt，capture/release identity为Admission+evidence/basis；key永久绑定原receipt。结果codec版本化。 |
+| Credit既有表 | account仍tenant+payer user唯一；hold/allocation/account变化由Credit writer完成。Admission只保存opaque hold id并同事务核tenant/account/payer/amount。 |
+
+删除旧Admission字段`surface/meter_kind/requested_model_tier/pricing_revision_id/feature_price_id/quantity/mode/service_receipt/idempotency_key`及旧single status；删除`billing_feature_price_revision`/`billing_feature_price`与旧quote访问。payer普通列保存IAM已验user，不代表caller可写。旧application Admission DTO/repository随writer切片删除。
+
+### 约束、identity 与有效期
+
+- Admission业务UNIQUE为`tenant_id + server-derived producer + run_id + call_id + attempt_id`；attempt ordinal/request_ref等仍由receipt payload digest防漂移。旧tenant+invocation唯一删除。
+- 四状态各有闭集CHECK及跨列CHECK：started只配authorized；captured/partially_captured要求sealed_known与settlement；released只配confirmed not_dispatched或已结算remainder；unknown/pending_review不得有成功settlement终态。复杂transition仍由锁内service验证，不假装CHECK能代替状态机。
+- snapshot/admission/usage/settlement所有digest为64 lowercase hex；usage profile version/digest固定owner artifact；refs 1..255 Unicode scalar，call/attempt/本地资源UUID。所有金额非负int64；精确比率是`NUMERIC(78,0)`分子/正分母并在应用验证gcd=1。
+- rate/policy按tenant+revision唯一；tariff key覆盖技术binding/category/unit/tier且发布事务检查范围不重叠。无default tariff。新quote仅选published且`effective_from<=db_now`的唯一版本。
+- snapshot `valid_until=min(execution_bound_valid_until, db_now + policy.quote_validity_ms)`且必须大于db_now；其中execution-bound有效期只能来自Agent明确冻结的bound授权有效期，绝不读取或推断System内部route cache TTL。当前System resolve没有context window，Agent model配置也没有可信max output，因此finite bound仍是正式producer实现依赖，本文不宣称已经可生成。Admission复制同一瞬时点便于查询但写入时逐值相等；expiry只阻止未提交create/dispatch，不改已提交authorization_status，也不是自动release依据。
+- snapshot/Admission/usage/settlement引用无FK，由同一tenant锁内逐项读取和比较；跨owner只存已验证opaque ref/digest，不跨库SQL。
+- snapshot、rate/policy、usage、settlement、receipt/key、Admission identity在承担计费/replay期间无自动TTL/软删除；pending/unknown/dead-letter不清理。
+
+usage profile当前owner机器身份固定为version `1.0.0`、schema digest `eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0`、manifest aggregate `ecd30d1908f410eed29181c9f52669f824312bf3a2e3874153d990b95fe58b91`。planned/execution-bound reader尚无发布artifact，所以canonical成功fixture不得先插入伪ref/digest；待Agent owner发布后，snapshot普通列固定其artifact version/commit/digest并验证canonical bytes，绝不保存Billing自造JSON作为替代。
+
+### 事务与访问路径
+
+Create外部IAM/Agent验证不在事务；进入事务后锁序：command key/attempt identity advisory locks → existing Admission identity → published rate/policy → snapshot → Credit account/grants/hold/allocation → Admission/audit/receipt result。首次全部同commit；replay只读校验原snapshot/result并可新增同identity的新key binding，不更新价格/hold/timestamps。SQL异常或codec错误整组rollback。
+
+Capture/Release分别先在事务外读取strict Agent artifact，再在本地按receipt/evidence identity → Admission → snapshot → Credit account/hold/allocation → usage/settlement/journal → Admission/audit/result锁序提交。相同evidence只产生一次账务效果；unknown observation可持久成明确待核状态，但不得写成功settlement或释放hold。commit ACK unknown用原identity查永久结果，不按新rate重算。
+
+实际索引只支持：Admission完整identity与tenant+id；published/effective rate/policy选择；tariff精确匹配；snapshot tenant+id；Admission next_reconcile due的partial索引；usage evidence seal与attempt唯一；settlement admission/usage/hold唯一。token、raw payload、完整JSON和credential不索引。
+
+### fresh schema 与真实PG门
+
+后继SQL片必须同步`database/schema.sql`、正规Prisma schema/client生成物、schema checker/catalog expectations及DATA/API/TECH对应prefix；fresh安装到Root自有Billing owner schema并证明邻owner schema不变。真实PG矩阵：
+
+- IAM/Agent/rate/policy/payer负例六类事实零差量；
+- 成功create的receipt/snapshot/account/hold/allocation/Admission原子可见；
+- 同key、换key同attempt、payload/payer漂移及两连接锁图；
+- quote/execution-bound临界expiry使用DB时钟；
+- 每个深层insert/codec/余额故障全rollback，后续连接可用；
+- commit ACK lost后原key恢复恰一snapshot/hold；
+- capture/release的known actual、confirmed zero、unknown不释放、重复evidence与settlement/journal唯一。
+
+下一最小writer集以TECH本轮清单为准。没有固定Agent usage artifact与planned/execution-bound正式reader、没有published rate/policy合法数据时，成功Admission fixture不得用mock/default构造；只可保留明确业务RED。
+
+---
+
 ## R201-Bill-authorizer-D0：authorizer 零持久化边界（2026-10-04）
 
 基线 Billing `26aeec6c596a5454874aa5a41bbc12c46240d02f`。本片不修改 canonical SQL、Prisma、表、索引、transaction或generated。IAM authorizer是目标Metering模块的事务外owner-client；不是Repository、数据库模型、authorization cache或Admission writer。

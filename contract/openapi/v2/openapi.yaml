@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Billing Internal Owner API
-  version: 3.0.0-experimental.2
+  version: 3.0.0-experimental.3
   description: Experimental clean-slate target contract; not deployed.
 servers:
   - url: https://billing.internal
@@ -2918,10 +2918,8 @@ components:
       type: object
       additionalProperties: false
       required:
-        - producer
         - run_id
-        - execution_id
-        - invocation_id
+        - request_ref
         - call_id
         - attempt_id
         - attempt_ordinal
@@ -2934,10 +2932,8 @@ components:
         - execution_bound_ref
         - execution_bound_digest
       properties:
-        producer: { type: string, minLength: 1, maxLength: 128 }
         run_id: { type: string, minLength: 1, maxLength: 255 }
-        execution_id: { type: string, minLength: 1, maxLength: 255 }
-        invocation_id: { type: string, minLength: 1, maxLength: 255 }
+        request_ref: { type: string, minLength: 1, maxLength: 255 }
         call_id: { type: string, format: uuid }
         attempt_id: { type: string, format: uuid }
         attempt_ordinal: { $ref: "#/components/schemas/PositiveDecimal" }
@@ -2963,9 +2959,7 @@ components:
       type: object
       additionalProperties: false
       required:
-        - producer
         - run_id
-        - execution_id
         - call_id
         - attempt_id
         - evidence_schema_version
@@ -2974,9 +2968,7 @@ components:
         - evidence_revision
         - evidence_digest
       properties:
-        producer: { type: string, minLength: 1, maxLength: 128 }
         run_id: { type: string, minLength: 1, maxLength: 255 }
-        execution_id: { type: string, minLength: 1, maxLength: 255 }
         call_id: { type: string, format: uuid }
         attempt_id: { type: string, format: uuid }
         evidence_schema_version: { type: string, const: 1.0.0 }
@@ -2988,9 +2980,7 @@ components:
       type: object
       additionalProperties: false
       required:
-        - producer
         - run_id
-        - execution_id
         - call_id
         - attempt_id
         - release_basis
@@ -3001,9 +2991,7 @@ components:
         - evidence_digest
         - reason
       properties:
-        producer: { type: string, minLength: 1, maxLength: 128 }
         run_id: { type: string, minLength: 1, maxLength: 255 }
-        execution_id: { type: string, minLength: 1, maxLength: 255 }
         call_id: { type: string, format: uuid }
         attempt_id: { type: string, format: uuid }
         release_basis:
@@ -3030,8 +3018,7 @@ components:
         - admission_id
         - producer
         - run_id
-        - execution_id
-        - invocation_id
+        - request_ref
         - call_id
         - attempt_id
         - attempt_ordinal
@@ -3063,8 +3050,7 @@ components:
         admission_id: { $ref: "#/components/schemas/Uuid" }
         producer: { type: string, minLength: 1, maxLength: 128 }
         run_id: { type: string, minLength: 1, maxLength: 255 }
-        execution_id: { type: string, minLength: 1, maxLength: 255 }
-        invocation_id: { type: string, minLength: 1, maxLength: 255 }
+        request_ref: { type: string, minLength: 1, maxLength: 255 }
         call_id: { type: string, format: uuid }
         attempt_id: { type: string, format: uuid }
         attempt_ordinal: { $ref: "#/components/schemas/PositiveDecimal" }
@@ -3125,9 +3111,8 @@ components:
       additionalProperties: false
       required:
         - event_id
-        - producer
         - run_id
-        - execution_id
+        - request_ref
         - call_id
         - attempt_id
         - event_type
@@ -3139,9 +3124,8 @@ components:
         - evidence_digest
       properties:
         event_id: { type: string, minLength: 1, maxLength: 255 }
-        producer: { type: string, minLength: 1, maxLength: 128 }
         run_id: { type: string, minLength: 1, maxLength: 255 }
-        execution_id: { type: string, minLength: 1, maxLength: 255 }
+        request_ref: { type: string, minLength: 1, maxLength: 255 }
         call_id: { type: string, format: uuid }
         attempt_id: { type: string, format: uuid }
         event_type: { type: string, enum: [model_usage_evidence.sealed] }
@@ -3159,7 +3143,7 @@ components:
         - event_id
         - producer
         - run_id
-        - execution_id
+        - request_ref
         - call_id
         - attempt_id
         - evidence_schema_version
@@ -3179,7 +3163,7 @@ components:
         event_id: { type: string, minLength: 1, maxLength: 255 }
         producer: { type: string, minLength: 1, maxLength: 128 }
         run_id: { type: string, minLength: 1, maxLength: 255 }
-        execution_id: { type: string, minLength: 1, maxLength: 255 }
+        request_ref: { type: string, minLength: 1, maxLength: 255 }
         call_id: { type: string, format: uuid }
         attempt_id: { type: string, format: uuid }
         evidence_schema_version: { type: string, const: 1.0.0 }

@@ -396,10 +396,8 @@ export const AdmissionCreateRequestSchema = {
   type: "object",
   additionalProperties: false,
   required: [
-    "producer",
     "run_id",
-    "execution_id",
-    "invocation_id",
+    "request_ref",
     "call_id",
     "attempt_id",
     "attempt_ordinal",
@@ -413,22 +411,12 @@ export const AdmissionCreateRequestSchema = {
     "execution_bound_digest",
   ],
   properties: {
-    producer: {
-      type: "string",
-      minLength: 1,
-      maxLength: 128,
-    },
     run_id: {
       type: "string",
       minLength: 1,
       maxLength: 255,
     },
-    execution_id: {
-      type: "string",
-      minLength: 1,
-      maxLength: 255,
-    },
-    invocation_id: {
+    request_ref: {
       type: "string",
       minLength: 1,
       maxLength: 255,
@@ -498,9 +486,7 @@ export const AdmissionCaptureRequestSchema = {
   type: "object",
   additionalProperties: false,
   required: [
-    "producer",
     "run_id",
-    "execution_id",
     "call_id",
     "attempt_id",
     "evidence_schema_version",
@@ -510,17 +496,7 @@ export const AdmissionCaptureRequestSchema = {
     "evidence_digest",
   ],
   properties: {
-    producer: {
-      type: "string",
-      minLength: 1,
-      maxLength: 128,
-    },
     run_id: {
-      type: "string",
-      minLength: 1,
-      maxLength: 255,
-    },
-    execution_id: {
       type: "string",
       minLength: 1,
       maxLength: 255,
@@ -560,9 +536,7 @@ export const AdmissionReleaseRequestSchema = {
   type: "object",
   additionalProperties: false,
   required: [
-    "producer",
     "run_id",
-    "execution_id",
     "call_id",
     "attempt_id",
     "release_basis",
@@ -574,17 +548,7 @@ export const AdmissionReleaseRequestSchema = {
     "reason",
   ],
   properties: {
-    producer: {
-      type: "string",
-      minLength: 1,
-      maxLength: 128,
-    },
     run_id: {
-      type: "string",
-      minLength: 1,
-      maxLength: 255,
-    },
-    execution_id: {
       type: "string",
       minLength: 1,
       maxLength: 255,
@@ -652,8 +616,7 @@ export const AdmissionSchema = {
     "admission_id",
     "producer",
     "run_id",
-    "execution_id",
-    "invocation_id",
+    "request_ref",
     "call_id",
     "attempt_id",
     "attempt_ordinal",
@@ -696,12 +659,7 @@ export const AdmissionSchema = {
       minLength: 1,
       maxLength: 255,
     },
-    execution_id: {
-      type: "string",
-      minLength: 1,
-      maxLength: 255,
-    },
-    invocation_id: {
+    request_ref: {
       type: "string",
       minLength: 1,
       maxLength: 255,
@@ -837,9 +795,8 @@ export const ExecutionEventRequestSchema = {
   additionalProperties: false,
   required: [
     "event_id",
-    "producer",
     "run_id",
-    "execution_id",
+    "request_ref",
     "call_id",
     "attempt_id",
     "event_type",
@@ -856,17 +813,12 @@ export const ExecutionEventRequestSchema = {
       minLength: 1,
       maxLength: 255,
     },
-    producer: {
-      type: "string",
-      minLength: 1,
-      maxLength: 128,
-    },
     run_id: {
       type: "string",
       minLength: 1,
       maxLength: 255,
     },
-    execution_id: {
+    request_ref: {
       type: "string",
       minLength: 1,
       maxLength: 255,
@@ -917,7 +869,7 @@ export const ExecutionEventSchema = {
     "event_id",
     "producer",
     "run_id",
-    "execution_id",
+    "request_ref",
     "call_id",
     "attempt_id",
     "evidence_schema_version",
@@ -952,7 +904,7 @@ export const ExecutionEventSchema = {
       minLength: 1,
       maxLength: 255,
     },
-    execution_id: {
+    request_ref: {
       type: "string",
       minLength: 1,
       maxLength: 255,

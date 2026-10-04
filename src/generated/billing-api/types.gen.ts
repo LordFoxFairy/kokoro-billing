@@ -128,10 +128,8 @@ export type SubscriptionsResponse = {
 };
 
 export type AdmissionCreateRequest = {
-  producer: string;
   run_id: string;
-  execution_id: string;
-  invocation_id: string;
+  request_ref: string;
   call_id: string;
   attempt_id: string;
   attempt_ordinal: PositiveDecimal;
@@ -149,9 +147,7 @@ export type AdmissionCreateRequest = {
 };
 
 export type AdmissionCaptureRequest = {
-  producer: string;
   run_id: string;
-  execution_id: string;
   call_id: string;
   attempt_id: string;
   evidence_schema_version: "1.0.0";
@@ -162,9 +158,7 @@ export type AdmissionCaptureRequest = {
 };
 
 export type AdmissionReleaseRequest = {
-  producer: string;
   run_id: string;
-  execution_id: string;
   call_id: string;
   attempt_id: string;
   release_basis: "not_dispatched" | "settled_remainder";
@@ -180,8 +174,7 @@ export type Admission = {
   admission_id: Uuid;
   producer: string;
   run_id: string;
-  execution_id: string;
-  invocation_id: string;
+  request_ref: string;
   call_id: string;
   attempt_id: string;
   attempt_ordinal: PositiveDecimal;
@@ -224,9 +217,8 @@ export type AdmissionResponse = {
 
 export type ExecutionEventRequest = {
   event_id: string;
-  producer: string;
   run_id: string;
-  execution_id: string;
+  request_ref: string;
   call_id: string;
   attempt_id: string;
   event_type: "model_usage_evidence.sealed";
@@ -243,7 +235,7 @@ export type ExecutionEvent = {
   event_id: string;
   producer: string;
   run_id: string;
-  execution_id: string;
+  request_ref: string;
   call_id: string;
   attempt_id: string;
   evidence_schema_version: "1.0.0";

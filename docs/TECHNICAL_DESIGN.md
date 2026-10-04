@@ -1,3 +1,69 @@
+## R201-Admission-D0：正式逐 attempt Admission 与 immutable quote（2026-10-04）
+
+基线 Billing `76da5a895d7dbbc26a305b268bfeacfb0ebf737b`。本地唯一机器wire现为 `3.0.0-experimental.3` 机器契约及其正规生成物，但尚未发布、部署或被runtime消费；`database/schema.sql`、Prisma生成物、旧 application Admission 和现 quantity=1 Metering writer仍是旧形状，与该机器契约**不同构**。本节确定 fresh-only 目标，不宣称源码、SQL、route、pricing发布或资金链已经实现。R201 authorizer只完成事务外IAM观察，不能单独创建Admission。
+
+目标机器契约的唯一可编辑wire源是`contract/openapi/v2/openapi.yaml`。`scripts/openapi-v2-target.ts`只校验该源的闭集规则；`scripts/generate-billing-api.ts`读取并快照YAML，再通过固定Hey API工具链生成`src/generated/billing-api/{index.ts,types.gen.ts,schemas.gen.ts,provenance.json}`，这些输出不得手改。`3.0.0-experimental.3`删除所有v2 command body的`producer`，由受信service context派生；Admission身份删除无owner事实的`execution_id`，并把旧`invocation_id`收敛为Agent authorization request已经冻结的唯一`request_ref`，不保alias或兼容双轨。
+
+### §8 放置表与采用方案
+
+| 项 | 当前决定 |
+|---|---|
+| Owner | Billing `modules/metering`唯一写 Admission、rate/policy/snapshot/usage/settlement；Credit唯一写账户、grant、hold/allocation/journal；IAM唯一给当前`credit.consume`决定；Agent唯一给 planned binding、execution bound和strict usage evidence。 |
+| 当前事实 | `MeteringModule.register`只导出authorizer；`BillingHttpModule`只装personal Credit reads。现`billing_admission`缺attempt identity、四状态和snapshot字段；旧`application/metering/BillingAdmissionService`接收caller payer与generic receipt；现`MeteringRepository.quote`只做quantity=1 feature price。 |
+| 目标职责 | `AdmissionCreateService`先在事务外验证IAM及Agent owner artifacts，再在一个Billing root transaction内锁永久command identity、选择已发布rate/policy、创建immutable snapshot、锁IAM payer现有Credit账户并reserve、写Admission/result。Capture/Release各自复用同Admission锁和strict Agent evidence，不接开放usage或caller amount。 |
+| 采用位置 | `src/modules/metering/admission-create.{types,codec,service}.ts`与`admission.repository.ts`；既有`metering.module.ts/public.ts`装配。rate/policy读取与snapshot计算留在Metering具名repository/纯pricing模块；Credit只经`credit.public.ts`的transaction-required能力。HTTP controller/guard在现Nest HTTP边界，生成schema仍唯一wire parser。 |
+| 淘汰位置 | 删除旧`src/application/metering/services/billing-admission-service.ts`及其`ports/metering-repository.ts`中Admission旧接口、对应旧repository/tests；删除fixed feature-price Admission路径。不建adapter/alias/双写，不长期保留static MeteringModule作为无IAM兼容入口；personal Credit reads由独立CreditModule继续启动。 |
+| 粒度 | create编排、strict result codec、SQL repository与pricing snapshot各一变化原因；不建通用UoW/CQRS/BaseRepository。capture/release/evidence在create GREEN后独立切片，但使用同一四状态和表，不造第二Admission。 |
+| 依赖 | 允许：owner SDK/artifact的固定root facade、TransactionService、CommandReceiptRepository、Credit public effects、generated Billing schemas。禁止：IAM/Agent sibling源码或数据库、旧Fastify/pg、caller payer、provider网络入事务、generic JSON evidence、第二DTO真源。 |
+| 数据/API | SQL普通列保存所有稳定identity、digest、状态、金额、版本、有效期；仅bounded tariff明细可用strict versioned JSONB，且其digest/条数/金额摘要另有普通列。token、owner raw payload/credential不落库。 |
+| 删除项 | 同片删旧Admission字段`surface/meter_kind/requested_model_tier/pricing_revision_id/feature_price_id/quantity/mode/service_receipt/idempotency_key`及旧feature-price访问；永久key只在command key binding，业务identity只在receipt+Admission unique。无迁移/compat view。 |
+| 验证 | contract/generated闭集、fresh schema/drift、真实PG双连接锁图/rollback/lost-ACK、正式IAM+Agent owner readers+Nest compiled HTTP；完整format/lint/types/test/build/sql/contract/generated。 |
+
+### 可验证 owner closure 与报价来源
+
+Create进入任何Billing事务前必须完成三个独立验证：
+
+1. IAM authorizer返回当前`payerUserId`，tenant和user subject绑定已闭合；失败零SQL。
+2. `usage_profile_version=1.0.0`与contract固定digest逐字相等，并由Billing固定的Agent usage schema artifact/package provenance验证；只比较请求字符串不算验证。现owner事实是Agent `contract/usage/v1/manifest.json` 的`artifact_version=1.0.0`、`contract/usage/v1/schema.json` SHA-256=`eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0`、manifest aggregate=`ecd30d1908f410eed29181c9f52669f824312bf3a2e3874153d990b95fe58b91`。后继须由Agent正规pack/consumer pin提供schema/codec；Billing不得相对import Python generated文件或复制一份可编辑定义。该artifact提供strict usage category/unit/互斥与normalization输入schema。
+3. planned binding与execution bound通过Agent正式受认证read facade按ref读取canonical immutable bytes，校验digest、tenant/run/request_ref/call/attempt、受信service producer、revision/seal、允许的provider/model/pricing account、每类别有限上界和`valid_until`全部与create tuple一致。两个reader共享一次总deadline/AbortSignal、无自动重试；缺接口、unknown、过期、unsealed或digest漂移均fail closed且零SQL。请求自报ref+digest本身不构成许可。
+
+System planned route不替代Agent实际绑定。当前usage/v1 owner artifact已有上述机器事实，但 **planned binding / execution bound 的受认证read facade及execution-bound机器artifact尚无已发布消费身份**；这是成功create的显式release blocker，不是允许先写Admission的待办。Agent owner必须先发布closed response（含canonical bytes/digest与上述tuple/bound/expiry）及固定version/commit/direct/archive digest，Billing再通过独立依赖卡pin root facade。此前真实非零Admission保持业务RED；本仓不得用mock quote、hard-code provider价、可信header或“以后再核”绕过。
+
+Billing transaction使用数据库时钟选择同tenant、已published且`effective_from <= db_now`的唯一rate revision和policy revision。rate包含与已验actual binding、usage profile category/unit、tier完全匹配的有限tariff；policy包含倍率`7/5`、显式currency→Credit-micros换算、normalization version/digest、rounding version与quote validity规则。缺项、重复/重叠tariff、未决policy或币种不一致均rollback；无default/catch-all/旧feature price fallback。
+
+Snapshot冻结rate/policy revision、匹配tariff ordinary refs、planned/actual binding与execution-bound/profile digests、各类别有限上界、精确有理数输入、`authorized_micros`和`valid_until=min(execution_bound.valid_until, policy quote deadline)`。每attempt最终上界按固定normalization后总和、乘7/5和换算、最后只ceil一次且int64有界；0仍0。稳定identity/金额/版本不藏JSONB。snapshot一旦提交永不按新rate/policy重算。
+
+### 四状态与动作
+
+四列独立：`authorization_status`（首次dispatch决定）、`dispatch_status`、`evidence_status`、`charge_status`。禁止单一`status`覆盖四生命周期。
+
+- Create成功：`authorized / not_dispatched / awaiting / pending_evidence`；active hold与snapshot同提交。IAM deny/expired/unknown不持久化Admission。
+- Agent可信started观察只能把同attempt `not_dispatched -> started`，且要求authorization仍authorized；乱序/漂移进入`dispatch_status=unknown`并保留hold待核，不猜未调用。
+- Capture读取sealed strict evidence。完整known actual usage可令`evidence_status=sealed_known`并按snapshot自算actual-only charge；一次事务capture应收、release确定余量、写usage/settlement，`charge_status=captured`或`partially_captured`。sealed unknown/incomplete为`sealed_unknown`或`invalid`，charge为`pending_review/unknown`，不得猜0、成功settlement或提前release。
+- Release只接受typed basis：可信`not_dispatched`证明确认未调用，或已成功settlement的确定remainder。前者保持`dispatch_status=not_dispatched`、`evidence_status=awaiting`并令`charge_status=released`；后者不改已sealed evidence，charge保`partially_captured`或`captured`的实际结果。started但无完整evidence、unknown、过期本身都不是释放依据。
+- authorization_status不是墙钟动态字段；已创建后IAM token过期不改原首次决定。重放仍先做当前IAM授权来决定调用者能否读取原结果，但不换payer/snapshot/状态。
+
+### 唯一事务与恢复
+
+顺序固定：事务外IAM+Agent验证 → `runRoot` → command key/attempt identity锁 → Admission identity → db-now rate/policy → snapshot → payer Credit account/grants/hold → Admission/audit/result。Command identity是tenant+server-derived producer+run+call+attempt；request_ref、ordinal与其余bound输入进入payload digest；idempotency key只绑定同一永久receipt。相同identity换key且digest一致恢复原result，不重新验证价格或建hold；digest/payer/binding漂移409。两连接同key或不同key同attempt均只有一套snapshot/hold/Admission。
+
+任一SQL/codec/余额/期限错误整事务rollback，不留下processing receipt。commit ACK丢失以原key+identity重新完成当前外部授权，再读取永久receipt；未知commit不得删除/释放hold或new key重试另一attempt。取消发生在owner calls阶段为零SQL；进入本地事务后由transaction rollback，commit unknown仍走上述恢复。shutdown停止新请求、abort外部calls并有界drain本地事务，不清永久事实。
+
+### 下一最小可实施精确文件集
+
+第一片只做create canonical/core，不mount capture/release：
+
+- contract/check（仅发现当前exp.2与本D0不一致才改）：`contract/openapi/v2/openapi.yaml`、`scripts/openapi-v2-target.ts`、现两个Admission contract tests、正规四generated/provenance；
+- canonical：`database/schema.sql`、正规`database/generated/schema.prisma`与`src/generated/prisma/**`、现SQL/schema architecture tests；
+- Metering：新`admission-create.types.ts`、`admission-create.codec.ts`、`admission-create.service.ts`、`admission.repository.ts`、具名rate/policy/snapshot repository或扩现同职责文件、`metering.module.ts`、`metering.public.ts`、必要closed errors；
+- Credit：优先现public API；若缺“现有payer账户+reserve”具名transaction-required能力，只窄改`credit.public.ts/service.ts/repository.ts`及邻测试；
+- owner consumers：只使用已发布Agent root artifact/facade；package/lock/vendor/provenance需另卡固定，不相对import；
+- tests：create unit/contract/architecture、真实PG integration与正式IAM+Agent+Nest system case；同片删除旧application Admission path及引用。
+
+真实系统RED必须证明：当前合法contract request在owner验证后仍因canonical/route缺失而失败，并观察Admission、snapshot、receipt/key、account、hold/allocation、journal/audit/outbox全零；不能用404/import/fixture错误当RED。GREEN矩阵至少覆盖allow成功、四subject、缺/过期owner artifacts、无rate/policy、无/disabled/不足payer账户、同key/同attempt并发、payload/payer漂移、深层rollback、caller cancel和commit ACK丢失。Capture/release后继RED另覆盖started+unknown不释放、known失败/取消按actual usage结算、not_dispatched释放和重复evidence恰一次效果。
+
+---
+
 ## R201-Bill-authorizer-D0：目标 Nest IAM authorizer seam（2026-10-04）
 
 基线 Billing `26aeec6c596a5454874aa5a41bbc12c46240d02f`。本节只收敛下一片 `@kokoro/iam-client` authorizer 的职责与 Nest 装配；当前未修改源码、SQL、机器契约、金额算法或运行进程，也不表示 Admission、hold 或收费成功。R199 固定的 IAM `0.7.0` artifact 与 [ADR-0004](ADR/0004-iam-sdk-artifact-consumption.md) 保持唯一消费输入。

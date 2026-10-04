@@ -1,3 +1,54 @@
+## R201-Admission-D0：create/capture/release 信任与状态契约（2026-10-04）
+
+本地唯一机器wire现为breaking `3.0.0-experimental.3`机器契约及其正规生成物，但尚未发布、部署或被runtime消费：所有v2 command body删除`producer`并由受信service context派生，Admission身份删除无owner事实的`execution_id`，`invocation_id`收敛为唯一`request_ref`，不保alias/兼容双轨。
+
+唯一可编辑机器wire源是`contract/openapi/v2/openapi.yaml`。`scripts/openapi-v2-target.ts`只负责闭集validate/assert；`scripts/generate-billing-api.ts`读取YAML并由固定Hey API工具链生成`src/generated/billing-api/{index.ts,types.gen.ts,schemas.gen.ts,provenance.json}`。validator与四个只读产物都不是第二份可编辑schema。
+
+基线 Billing `76da5a895d7dbbc26a305b268bfeacfb0ebf737b`。唯一可编辑机器源为`contract/openapi/v2/openapi.yaml`中的`3.0.0-experimental.3`机器契约；当前route未mount、canonical未同构。本节解释该机器契约字段的唯一业务含义，不复制第二JSON Schema，也不把文档或本地契约当作已发布事实。
+
+### Create
+
+受信service guard提供tenant/caller/permission，header提供idempotency key与ConsumptionToken；body只用现closed `AdmissionCreateRequest`。`payer_ref`、金额、rate、multiplier、usage、provider价与authorization status一律不可自报。
+
+在任何SQL前，Billing必须：
+
+1. 用IAM owner facade验证ConsumptionToken并得到同tenant user payer；user subject ref必须同payer，其他三kind只归因。
+2. 把固定`usage_profile_version=1.0.0`与固定digest交给Agent owner `contract/usage/v1/manifest.json`所发布artifact codec验证；schema digest固定为`eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0`、manifest aggregate固定为`ecd30d1908f410eed29181c9f52669f824312bf3a2e3874153d990b95fe58b91`，而非只比请求字符串。
+3. 通过Agent受认证owner reader按`planned_binding_ref`和`execution_bound_ref`读取immutable canonical artifact，重算digest并核tenant/trusted service producer/run/request_ref/call/attempt、实际provider/model/pricing account、有限usage上界、seal/revision和`valid_until`。ref/digest自报不单独构成许可。
+
+当前Agent尚未发布planned binding / execution bound的受认证read facade与execution-bound机器artifact，所以成功create必须保持阻断；不得以usage/v1 schema、request ref/digest或System planned route代替。任一owner失败/过期/unknown/abort/timeout为稳定4xx/503且账务零写，不建立“待以后核”的Admission。owner calls共享有界deadline且不自动重试。成功后本地同事务从已发布rate/policy算immutable snapshot并reserve IAM payer现有Credit账户；201只在receipt/snapshot/hold/Admission同commit后返回。
+
+Create成功representation固定为：`authorization_status=authorized`、`dispatch_status=not_dispatched`、`evidence_status=awaiting`、`charge_status=pending_evidence`。`authorized_micros/snapshot_id/digest/rate_revision_id/policy_revision_id/normalization_version/digest/rounding_version/currency_code/valid_until`全部来自Billing owner快照；planned/profile/bound refs与digests逐字回显已验证值。`hold_id`仅在需预占时非null；合法零费用仍需snapshot和永久Admission，不能走免费fallback。
+
+identity是tenant+trusted service producer+run+call+attempt；producer只由service guard派生，不出现在command body。attempt ordinal/request_ref/binding/profile/bound/payer/subject/feature进入payload digest；无owner事实的execution_id删除，invocation_id不保留alias，只使用Agent authorization-request artifact已经冻结的request_ref。同key同digest重放原201 representation；新key同identity同digest也恢复原结果；任一漂移409且零第二效果。每次重放先重新IAM授权调用者，旧allow不缓存；授权成功后的replay不重定价、不换payer/hold。
+
+### Dispatch / Capture / Release
+
+`authorization_status`记录首次dispatch决定，不按墙钟重新过期；规则`dispatch_status=started => authorization_status=authorized`始终成立。可信Agent dispatch observation才能将not_dispatched推进started；矛盾或不可证观察为unknown，不能解释成未调用。
+
+Capture body只接受现`AdmissionCaptureRequest`的strict evidence identity。Billing按固定Agent evidence artifact/owner reader读取sealed canonical bytes并核schema version/ref/event/revision/digest及完整attempt/binding；caller不能提交usage JSON、actualMicros、provider ref或generic receipt。`sealed_known`按snapshot规范化并结算已核实actual usage；成功同事务写usage、Credit capture/确定remainder release、settlement和Admission。`sealed_unknown/invalid`只进入`pending_review/unknown`，不生成成功settlement、不猜零、不释放unknown hold。失败/取消也只按已核实actual usage收费，符合ADR-033 actual-only。
+
+Release body只接受现typed evidence identity和`release_basis=not_dispatched|settled_remainder`。`not_dispatched`需要owner证明从未开始；`settled_remainder`需要同Admission已完成known settlement。仅expiry、timeout、failed/cancelled标签、缺evidence或started/unknown不能授权释放。重复capture/release按永久receipt和evidence/Admission identity重放，不能以不同key产生第二journal/settlement/release。
+
+四状态合法结果：
+
+| 动作 | authorization | dispatch | evidence | charge |
+|---|---|---|---|---|
+| create success | authorized | not_dispatched | awaiting | pending_evidence |
+| started, awaiting evidence | authorized | started | awaiting | pending_evidence |
+| known evidence fully charged | authorized | started | sealed_known | captured |
+| known evidence charge + confirmed remainder | authorized | started | sealed_known | partially_captured |
+| confirmed never dispatched release | authorized | not_dispatched | awaiting | released |
+| incomplete/unknown/invalid evidence | authorized | started或unknown | sealed_unknown或invalid | pending_review或unknown |
+
+HTTP GET读取当前durable representation；POST重放返回原command result，不能把当前GET状态冒充原ACK。commit ACK丢失用原Location/key/identity恢复，unknown不开放另一个attempt绕过。稳定错误须区分invalid、unauthenticated/forbidden、not found、idempotency conflict、owner dependency unavailable、pricing unavailable/expired、payer unavailable/insufficient、evidence invalid/unknown；精确code先改唯一machine ErrorCode再实现controller，不能私造文本映射。
+
+### 下一系统门
+
+正式IAM host + 正式Agent artifact/read facade + compiled Nest Billing +真实PG，逐例比较Admission/snapshot/receipt/key/account/hold/allocation/journal/usage/settlement/audit/outbox。Create RED为合法请求通过wire/auth后因当前owner/canonical实现缺失而业务失败并零差量，不是404/import。GREEN必须覆盖撤权重放、四subject、artifact digest/tuple/expiry漂移、rate/policy缺失、并发同attempt、取消与lost ACK；Capture/Release GREEN必须覆盖known failed/cancel实际量、confirmed zero、unknown不释放与exact replay。
+
+---
+
 ## R201-Bill-authorizer-D0：IAM 消费授权的内部调用边界（2026-10-04）
 
 基线 Billing `26aeec6c596a5454874aa5a41bbc12c46240d02f`。本节不改 `3.0.0-experimental.2` OpenAPI；`x-billing-consumption-token`与closed `billing_subject`仍是未来目标Admission HTTP的唯一机器事实。当前目标route/runtime尚未mount，authorizer A只建立内部owner-client seam，不用404或SDK import作为业务RED，也不宣称Admission/hold/费用链可用。

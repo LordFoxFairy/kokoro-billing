@@ -37,7 +37,7 @@ describe("Billing v2 target OpenAPI", () => {
   it("publishes the complete target major contract with fully resolved refs", async () => {
     const document = await readContract();
     expect(() => assertV2OpenApi(document)).not.toThrow();
-    expect(record(document.info).version).toBe("3.0.0-experimental.2");
+    expect(record(document.info).version).toBe("3.0.0-experimental.3");
     const operationCount = Object.values(record(document.paths)).reduce<number>(
       (count, path) =>
         count +
@@ -49,16 +49,71 @@ describe("Billing v2 target OpenAPI", () => {
     expect(operationCount).toBe(24);
   });
 
+  it("publishes the clean-slate admission identity correction as experimental.3", async () => {
+    const document = await readContract();
+    expect(record(document.info).version).toBe("3.0.0-experimental.3");
+  });
+
+  it("uses only trusted producer context and the Agent request reference for admission identity", async () => {
+    const document = await readContract();
+    const schemas = record(record(document.components).schemas);
+    const required = (name: string): unknown[] =>
+      record(schemas[name]).required as unknown[];
+    const properties = (name: string): JsonObject =>
+      schemaProperties(document, name);
+
+    expect(required("AdmissionCreateRequest")).toEqual([
+      "run_id",
+      "request_ref",
+      "call_id",
+      "attempt_id",
+      "attempt_ordinal",
+      "feature_key",
+      "billing_subject",
+      "planned_binding_ref",
+      "planned_binding_digest",
+      "usage_profile_version",
+      "usage_profile_digest",
+      "execution_bound_ref",
+      "execution_bound_digest",
+    ]);
+    expect(record(properties("AdmissionCreateRequest").request_ref)).toEqual({
+      type: "string",
+      minLength: 1,
+      maxLength: 255,
+    });
+
+    for (const schemaName of [
+      "AdmissionCreateRequest",
+      "AdmissionCaptureRequest",
+      "AdmissionReleaseRequest",
+      "ExecutionEventRequest",
+    ]) {
+      expect(properties(schemaName)).not.toHaveProperty("producer");
+    }
+    for (const schemaName of [
+      "AdmissionCreateRequest",
+      "AdmissionCaptureRequest",
+      "AdmissionReleaseRequest",
+      "ExecutionEventRequest",
+      "Admission",
+      "ExecutionEvent",
+    ]) {
+      expect(properties(schemaName)).not.toHaveProperty("execution_id");
+      expect(properties(schemaName)).not.toHaveProperty("invocation_id");
+    }
+    expect(required("Admission")).toContain("request_ref");
+    expect(properties("Admission")).toHaveProperty("producer");
+  });
+
   it("publishes closed per-attempt admission and strict evidence commands", async () => {
     const document = await readContract();
     const required = (name: string) =>
       record(record(record(document.components).schemas)[name]).required;
     const properties = (name: string) => schemaProperties(document, name);
     expect(required("AdmissionCreateRequest")).toEqual([
-      "producer",
       "run_id",
-      "execution_id",
-      "invocation_id",
+      "request_ref",
       "call_id",
       "attempt_id",
       "attempt_ordinal",
@@ -75,9 +130,7 @@ describe("Billing v2 target OpenAPI", () => {
       "billing_subject",
     );
     expect(required("AdmissionCaptureRequest")).toEqual([
-      "producer",
       "run_id",
-      "execution_id",
       "call_id",
       "attempt_id",
       "evidence_schema_version",
@@ -90,9 +143,7 @@ describe("Billing v2 target OpenAPI", () => {
       "service_receipt",
     );
     expect(required("AdmissionReleaseRequest")).toEqual([
-      "producer",
       "run_id",
-      "execution_id",
       "call_id",
       "attempt_id",
       "release_basis",
@@ -170,6 +221,40 @@ describe("Billing v2 target OpenAPI", () => {
         };
       }),
     ).toContain("AdmissionCaptureRequest must not accept service_receipt");
+    for (const [schemaName, field, diagnostic] of [
+      [
+        "AdmissionCreateRequest",
+        "producer",
+        "AdmissionCreateRequest must derive producer from trusted context",
+      ],
+      [
+        "AdmissionCaptureRequest",
+        "execution_id",
+        "AdmissionCaptureRequest must not define unowned execution_id",
+      ],
+      [
+        "Admission",
+        "invocation_id",
+        "Admission must use request_ref without invocation alias",
+      ],
+    ] as const) {
+      expect(
+        mutate(document, (copy) => {
+          schemaProperties(copy, schemaName)[field] = {
+            type: "string",
+            minLength: 1,
+            maxLength: 255,
+          };
+        }),
+      ).toContain(diagnostic);
+    }
+    expect(
+      mutate(document, (copy) => {
+        delete schemaProperties(copy, "AdmissionCreateRequest").request_ref;
+      }),
+    ).toContain(
+      "AdmissionCreateRequest must define its exact Agent request_ref",
+    );
     expect(
       mutate(document, (copy) => {
         record(
@@ -259,10 +344,8 @@ describe("Billing v2 target OpenAPI", () => {
     );
     expect(validate).toBeDefined();
     const request = {
-      producer: "kokoro-agent",
       run_id: "run-admission-control",
-      execution_id: "execution-admission-control",
-      invocation_id: "invocation-admission-control",
+      request_ref: "request-admission-control",
       call_id: "22222222-2222-4222-8222-222222222222",
       attempt_id: "33333333-3333-4333-8333-333333333333",
       attempt_ordinal: "1",
@@ -954,7 +1037,7 @@ const personalResponse = (
 // It changes only the approved two-read slice; it is not a replacement checker.
 const withApprovedPersonalReads = (document: JsonObject): JsonObject => {
   const copy = clone(document);
-  record(copy.info).version = "3.0.0-experimental.2";
+  record(copy.info).version = "3.0.0-experimental.3";
   const components = record(copy.components);
   for (const [
     name,
@@ -1030,9 +1113,9 @@ const stableContractJson = (value: unknown): unknown => {
 };
 
 describe("R61 personal-read source contract target", () => {
-  it("publishes the approved experimental 3.0.0-experimental.2 target independently of other fields", async () => {
+  it("publishes the approved experimental 3.0.0-experimental.3 target independently of other fields", async () => {
     expect(record((await readContract()).info).version).toBe(
-      "3.0.0-experimental.2",
+      "3.0.0-experimental.3",
     );
   });
 
@@ -1260,7 +1343,7 @@ describe("R61 personal-read source contract target", () => {
       createHash("sha256")
         .update(JSON.stringify(stableContractJson(projection)))
         .digest("hex"),
-    ).toBe("a803f7626525f0073dfcca0b6f8a1f976018aa8cae2ddadfd946295e0882d422");
+    ).toBe("3e846a6a39a69b0dfe7186c6de496f27d902f53a494625abf1954fa1da874892");
     const count = Object.values(record(document.paths)).reduce<number>(
       (total, item) =>
         total +
@@ -1749,7 +1832,7 @@ describe("R67 generated schema semantics and provenance", () => {
       );
     }
     const provenance = validProvenance();
-    expect(provenance.source.version).toBe("3.0.0-experimental.2");
+    expect(provenance.source.version).toBe("3.0.0-experimental.3");
     expect(provenance.source.sha256).toBe(
       createHash("sha256").update(sourceText).digest("hex"),
     );
