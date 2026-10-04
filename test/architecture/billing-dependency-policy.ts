@@ -144,6 +144,15 @@ const inCycle = (
     (group) => group.includes(edge.source) && group.includes(edge.target),
   );
 
+const approvedIamClientEdge = (edge: DependencyEdge) =>
+  edge.source === "src/modules/metering/iam-billing-authorization.client.ts" &&
+  edge.target === "@kokoro/iam-client" &&
+  edge.kind === "value" &&
+  edge.form === "import" &&
+  edge.symbols.length === 2 &&
+  edge.symbols.includes("IamClient") &&
+  edge.symbols.includes("IamClientError");
+
 function exposesPersistence(
   graph: DependencyGraph,
   edge: DependencyEdge,
@@ -201,6 +210,13 @@ export function checkBillingDependencies(
       !approvedTransportErrorEdge(edge)
     )
       report("production-prisma");
+    if (
+      (edge.target === "@kokoro/iam-client" ||
+        edge.target.startsWith("@kokoro/iam-client/") ||
+        edge.target.includes("kokoro-iam")) &&
+      !approvedIamClientEdge(edge)
+    )
+      report("iam-client-edge");
     if (
       (edge.target === "node:module" || edge.target === "module") &&
       edge.symbols.some((symbol) =>
@@ -263,6 +279,25 @@ export function checkBillingDependencies(
       (inCycle(edge, graph.cycles.all) && !(registered && edge.kind === "type"))
     )
       report("type-cycle-debt");
+  }
+  const iamClientSource =
+    "src/modules/metering/iam-billing-authorization.client.ts";
+  if (
+    graph.nodes.includes(iamClientSource) &&
+    graph.edges.filter(approvedIamClientEdge).length !== 1
+  ) {
+    const edge = graph.edges.find(
+      (candidate) =>
+        candidate.source === iamClientSource &&
+        candidate.target.includes("kokoro-iam"),
+    );
+    diagnostics.push({
+      code: "iam-client-edge",
+      source: iamClientSource,
+      target: "@kokoro/iam-client",
+      kind: edge?.kind ?? "unknown",
+      location: edge?.location ?? { line: 1, column: 1 },
+    });
   }
   for (const binding of graph.exports) {
     const origin = binding.origin;

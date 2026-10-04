@@ -380,6 +380,59 @@ describe("Billing dependency policy", () => {
       );
   });
 
+  it("allows exactly one package-root IAM SDK production edge", () => {
+    const client = "src/modules/metering/iam-billing-authorization.client.ts";
+    expect(
+      checkBillingDependencies(
+        graph({
+          [client]:
+            "import { IamClient, IamClientError } from '@kokoro/iam-client'; void IamClient; void IamClientError;",
+        }),
+      ),
+    ).toEqual([]);
+    for (const [source, statement] of [
+      [
+        "src/modules/metering/other.ts",
+        "import { IamClient, IamClientError } from '@kokoro/iam-client';",
+      ],
+      [client, "import { IamClient } from '@kokoro/iam-client';"],
+      [
+        client,
+        "import { IamClient, IamClientError, IamResponse } from '@kokoro/iam-client';",
+      ],
+      [client, "import { IamClient } from '@kokoro/iam-client/dist/index.js';"],
+    ] as const)
+      expectPolicy({ [source]: statement }, "iam-client-edge");
+    expect(
+      graph({
+        [client]:
+          "import { IamClient } from '../../../kokoro-iam/sdk/index.js';",
+      }).diagnostics.map((item) => item.code),
+    ).toContain("unresolved-import");
+    expect(
+      checkBillingDependencies(
+        graph({ [client]: "export const missingSdkEdge = true;" }),
+      ).map((item) => item.code),
+    ).toContain("iam-client-edge");
+  });
+
+  it("keeps exactly one IAM SDK edge in the full production graph", async () => {
+    const actual = await readBillingDependencyGraph();
+    expect(
+      actual.edges.filter(
+        (edge) =>
+          edge.source ===
+            "src/modules/metering/iam-billing-authorization.client.ts" &&
+          edge.target === "@kokoro/iam-client" &&
+          edge.kind === "value" &&
+          edge.form === "import" &&
+          edge.symbols.length === 2 &&
+          edge.symbols.includes("IamClient") &&
+          edge.symbols.includes("IamClientError"),
+      ),
+    ).toHaveLength(1);
+  });
+
   it("reports value/type/all SCCs including self loops and mixed cycles", () => {
     const value = graph({
       "src/a.ts": "import './b.js';",

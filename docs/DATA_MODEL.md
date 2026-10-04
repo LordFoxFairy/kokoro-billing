@@ -1,3 +1,14 @@
+## R201-Bill-authorizer-D0：authorizer 零持久化边界（2026-10-04）
+
+基线 Billing `26aeec6c596a5454874aa5a41bbc12c46240d02f`。本片不修改 canonical SQL、Prisma、表、索引、transaction或generated。IAM authorizer是目标Metering模块的事务外owner-client；不是Repository、数据库模型、authorization cache或Admission writer。
+
+ConsumptionToken、IAM tenant-machine bearer、session/client、`decision_ref`、`expires_at`及owner错误details都不得进入SQL、command receipt/key、admission、hold/allocation、audit、outbox、日志或metrics label。`IamBillingAuthorizationError`也只含固定安全message、闭集code和retryable，不保留owner cause/details。authorizer success只在当前调用栈产生冻结的本人`payerUserId`观察；后继Admission在独立本地根事务中持久payer与原`billing_subject`归因。project/organization/service ref不得成为Credit account selector，user ref必须与payer一致。
+
+调用顺序仍固定为：受信service tenant → 事务外IAM有界验证/binding/expiry → 才允许本地receipt/key、pricing snapshot、本人account/hold与Admission同事务。任何IAM拒绝、畸形、mismatch、到达时过期、429/503/timeout/network/abort或shutdown迟到response都必须发生在`TransactionService.runRoot`之前，因此authorizer A本身无需也不得访问Prisma。相同Billing key重放也先重新验证，旧IAM观察不持久、不缓存。
+
+真实PG零写验收属于后继Admission组合：每个IAM负例前后比较admission、hold/allocation、receipt/key、audit、outbox完全无差量；allow后本地事务失败也不得缓存allow或生成第二hold。当前canonical是否完整支持experimental 3.0 attempt identity、snapshot与payer关系须在Admission写片前另核；旧v1 `payer_ref`/fixed-price表与writer不作为fallback，本D0不为通过门禁增加空表或兼容列。
+
+---
 ## R199-Bill-IAM-D0：消费授权的数据边界（2026-10-04，零DDL）
 
 基线 Billing main `364f4ba182922f8e370b874fa64ad100c6f10106`。本节不修改canonical SQL、Prisma生成物、表、列、索引或事务；只固定后继adapter进入持久边界前后的唯一事实。Billing `3.0.0-experimental.2` 已要求closed `billing_subject`，但runtime尚未实现，机器契约通过不代表数据链可用。

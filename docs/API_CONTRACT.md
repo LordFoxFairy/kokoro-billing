@@ -1,3 +1,18 @@
+## R201-Bill-authorizer-D0：IAM 消费授权的内部调用边界（2026-10-04）
+
+基线 Billing `26aeec6c596a5454874aa5a41bbc12c46240d02f`。本节不改 `3.0.0-experimental.2` OpenAPI；`x-billing-consumption-token`与closed `billing_subject`仍是未来目标Admission HTTP的唯一机器事实。当前目标route/runtime尚未mount，authorizer A只建立内部owner-client seam，不用404或SDK import作为业务RED，也不宣称Admission/hold/费用链可用。
+
+authorizer内部方法接收受信tenant、`billing_subject`、原样ConsumptionToken、requestId和AbortSignal。配置中的IAM tenant-machine bearer只用于SDK调用方认证；它与user ConsumptionToken不可互换。唯一调用为package-root `IamClient.verifyBillingAuthorization({accessToken: consumptionToken}, {requestId, deadlineMs, signal})`，固定不自动重试。禁止deep import、第二fetch、第二IAM wire type、JWT解析或将HTTP Request对象泄漏到业务Service。
+
+返回只暴露冻结的`payerUserId`给后继Admission编排。success仍需检查IAM strict body、tenant一致、所有owner identity非空、`expires_at`严格UTC且到达时未过期；payer只能是IAM user。user attribution必须ref等于该user；project/organization/service attribution不改变payer、不给项目/组织/服务钱包授权。`decision_ref`、session/client和expiry只用于本次观察，不是grant、receipt identity、缓存键或持久字段。
+
+稳定边界类为`IamBillingAuthorizationError`，code精确闭集为`AUTHORIZATION_INVALID | DENIED | UNAVAILABLE | BINDING_MISMATCH | EXPIRED | ABORTED | SHUTTING_DOWN`。SDK request/API400→INVALID；契约有效401/403/409→DENIED；429/5xx、network/timeout/response schema拒绝/未知→UNAVAILABLE；通过SDK strict response后的tenant/user/identity mismatch→BINDING_MISMATCH；其expiry非本仓严格UTC瞬时点或到达时过期→EXPIRED；caller/shutdown abort分别优先→ABORTED/SHUTTING_DOWN。仅UNAVAILABLE带`retryable:true`，含义只是上层可让用户以同一业务命令重新提交，不触发client自动重试，也不表示退款、免费或已知零消耗；类仅含固定安全message/code/retryable，不保存owner details/body/cause/token。相同Billing key重放仍先做一次当前授权，再进入本地永久receipt；撤权不能靠旧allow恢复成功。
+
+production源码唯一SDK edge为`iam-billing-authorization.client.ts`从`@kokoro/iam-client` package root value-import恰好`IamClient`和`IamClientError`；任何第二consumer、deep/generated/sibling/workspace/link入口或module/options/error直连SDK均违反architecture contract。
+
+正式IAM sandbox验收必须通过owner HTTP和真实签发凭据完成allow、caller scope/profile、user audience/expiry、tenant status/membership及503/timeout/abort；物理请求数为一。Billing binding负例覆盖tenant mismatch、user subject mismatch与到达时过期；非user三种归因正控都得到同一IAM user payer。日志/异常断言不得出现两种token或IAM details。该门只验证authorizer；真实PG六类零差量、Admission并发/ACK重放、pricing/hold及Agent evidence另属后继组合门。
+
+---
 ## R199-Bill-IAM-D0：本人消费授权消费契约（2026-10-04）
 
 基线 Billing main `364f4ba182922f8e370b874fa64ad100c6f10106`。当前唯一目标机器源仍是本仓 `contract/openapi/v2/openapi.yaml` 的 `3.0.0-experimental.2`：`POST /v2/internal/billing/admissions`要求`x-billing-consumption-token`，`AdmissionCreateRequest` required `billing_subject`，其inline closed形状为`kind=user|project|organization|service`与`ref` 1..255；`payer_ref`、价格与用量不由body自报。本节解释消费与绑定，不复制第二份IAM或Billing字段schema。
