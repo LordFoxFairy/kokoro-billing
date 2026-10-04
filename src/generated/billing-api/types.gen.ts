@@ -136,6 +136,10 @@ export type AdmissionCreateRequest = {
   attempt_id: string;
   attempt_ordinal: PositiveDecimal;
   feature_key: string;
+  billing_subject: {
+    kind: "user" | "project" | "organization" | "service";
+    ref: string;
+  };
   planned_binding_ref: string;
   planned_binding_digest: string;
   usage_profile_version: "1.0.0";

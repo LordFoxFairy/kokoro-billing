@@ -404,6 +404,7 @@ export const AdmissionCreateRequestSchema = {
     "attempt_id",
     "attempt_ordinal",
     "feature_key",
+    "billing_subject",
     "planned_binding_ref",
     "planned_binding_digest",
     "usage_profile_version",
@@ -447,6 +448,22 @@ export const AdmissionCreateRequestSchema = {
       type: "string",
       minLength: 1,
       maxLength: 128,
+    },
+    billing_subject: {
+      type: "object",
+      additionalProperties: false,
+      required: ["kind", "ref"],
+      properties: {
+        kind: {
+          type: "string",
+          enum: ["user", "project", "organization", "service"],
+        },
+        ref: {
+          type: "string",
+          minLength: 1,
+          maxLength: 255,
+        },
+      },
     },
     planned_binding_ref: {
       type: "string",

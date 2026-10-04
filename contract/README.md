@@ -5,13 +5,13 @@
 Billing owns both machine sources in this directory. They describe two distinct
 states; they are not interchangeable versions of one deployed surface.
 
-| State | Machine source | Operations | Transport | Artifact status |
-| --- | --- | ---: | --- | --- |
-| Current runtime | [`openapi/v1/openapi.yaml`](openapi/v1/openapi.yaml) | 17 | existing `/v1/**` plus unversioned probes | `stable`, used for current Fastify route parity |
-| Target | [`openapi/v2/openapi.yaml`](openapi/v2/openapi.yaml) | 24 | `/v2/**` plus unversioned probes | `3.0.0-experimental.1`, not published, deployed, or consumed |
+| State           | Machine source                                       | Operations | Transport                                 | Artifact status                                              |
+| --------------- | ---------------------------------------------------- | ---------: | ----------------------------------------- | ------------------------------------------------------------ |
+| Current runtime | [`openapi/v1/openapi.yaml`](openapi/v1/openapi.yaml) |         17 | existing `/v1/**` plus unversioned probes | `stable`, used for current Fastify route parity              |
+| Target          | [`openapi/v2/openapi.yaml`](openapi/v2/openapi.yaml) |         24 | `/v2/**` plus unversioned probes          | `3.0.0-experimental.2`, not published, deployed, or consumed |
 
 The target artifact SemVer and the HTTP transport prefix are independent. The
-breaking clean-slate artifact is `3.0.0-experimental.1`; its routes intentionally
+breaking clean-slate artifact is `3.0.0-experimental.2`; its routes intentionally
 remain under `/v2`. The private package version is not a wire version. Human
 semantics live in [`../docs/API_CONTRACT.md`](../docs/API_CONTRACT.md), which is
 not a second editable field-level contract.
@@ -20,7 +20,7 @@ Current source digests:
 
 ```text
 openapi/v1/openapi.yaml  58fbe4fea083ba12e0db23f49e995b96500d01af0013febf40eba3093510ef63
-openapi/v2/openapi.yaml  abcd509c3924dea7f32b16149af3354c299ae54eacb92dd5894f2c0e6efd7f4d
+openapi/v2/openapi.yaml  7d63133656a99a536bdae22c02b3a6796f80f12f42e44bdcdbdd338024010494
 ```
 
 Historical candidate narratives and old validation counts are available in Git

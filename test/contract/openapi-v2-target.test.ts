@@ -1,5 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { Ajv2020 } from "ajv/dist/2020.js";
+import formatsModule from "ajv-formats";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import {
@@ -35,7 +37,7 @@ describe("Billing v2 target OpenAPI", () => {
   it("publishes the complete target major contract with fully resolved refs", async () => {
     const document = await readContract();
     expect(() => assertV2OpenApi(document)).not.toThrow();
-    expect(record(document.info).version).toBe("3.0.0-experimental.1");
+    expect(record(document.info).version).toBe("3.0.0-experimental.2");
     const operationCount = Object.values(record(document.paths)).reduce<number>(
       (count, path) =>
         count +
@@ -61,6 +63,7 @@ describe("Billing v2 target OpenAPI", () => {
       "attempt_id",
       "attempt_ordinal",
       "feature_key",
+      "billing_subject",
       "planned_binding_ref",
       "planned_binding_digest",
       "usage_profile_version",
@@ -68,7 +71,7 @@ describe("Billing v2 target OpenAPI", () => {
       "execution_bound_ref",
       "execution_bound_digest",
     ]);
-    expect(properties("AdmissionCreateRequest")).not.toHaveProperty(
+    expect(properties("AdmissionCreateRequest")).toHaveProperty(
       "billing_subject",
     );
     expect(required("AdmissionCaptureRequest")).toEqual([
@@ -233,6 +236,92 @@ describe("Billing v2 target OpenAPI", () => {
     ).toContain("AdmissionReleaseRequest must use proof-bound release bases");
   });
 
+  it("requires a closed billing subject on a complete admission request", async () => {
+    const document = await readContract();
+    const ajv = new Ajv2020({
+      strict: true,
+      coerceTypes: false,
+      useDefaults: false,
+      removeAdditional: false,
+    });
+    formatsModule.default(ajv);
+    ajv.addKeyword({
+      keyword: "x-kokoro-credit-unit",
+      schemaType: "object",
+      valid: true,
+    });
+    for (const [name, schema] of Object.entries(
+      record(record(document.components).schemas),
+    ))
+      ajv.addSchema(record(schema), `#/components/schemas/${name}`);
+    const validate = ajv.getSchema(
+      "#/components/schemas/AdmissionCreateRequest",
+    );
+    expect(validate).toBeDefined();
+    const request = {
+      producer: "kokoro-agent",
+      run_id: "run-admission-control",
+      execution_id: "execution-admission-control",
+      invocation_id: "invocation-admission-control",
+      call_id: "22222222-2222-4222-8222-222222222222",
+      attempt_id: "33333333-3333-4333-8333-333333333333",
+      attempt_ordinal: "1",
+      feature_key: "model-inference",
+      billing_subject: { kind: "user", ref: "user-admission-control" },
+      planned_binding_ref: "planned-binding-admission-control",
+      planned_binding_digest: "a".repeat(64),
+      usage_profile_version: "1.0.0",
+      usage_profile_digest:
+        "eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0",
+      execution_bound_ref: "execution-bound-admission-control",
+      execution_bound_digest: "b".repeat(64),
+    };
+    expect(validate?.(request), JSON.stringify(validate?.errors)).toBe(true);
+    for (const billingSubject of [
+      { kind: "project", ref: "project-admission-control" },
+      { kind: "organization", ref: "organization-admission-control" },
+      { kind: "service", ref: "x".repeat(255) },
+    ]) {
+      expect(
+        validate?.({ ...request, billing_subject: billingSubject }),
+        JSON.stringify(validate?.errors),
+      ).toBe(true);
+    }
+    const withoutBillingSubject = Object.fromEntries(
+      Object.entries(request).filter(([name]) => name !== "billing_subject"),
+    );
+    expect(validate?.(withoutBillingSubject)).toBe(false);
+    expect(validate?.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          keyword: "required",
+          params: { missingProperty: "billing_subject" },
+        }),
+      ]),
+    );
+    expect(validate?.({ ...request, payer_ref: "caller-selected-payer" })).toBe(
+      false,
+    );
+    expect(validate?.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ keyword: "additionalProperties" }),
+      ]),
+    );
+    for (const billingSubject of [
+      { ref: "user-admission-control" },
+      { kind: "user" },
+      { kind: "account", ref: "user-admission-control" },
+      { kind: "user", ref: "" },
+      { kind: "user", ref: "x".repeat(256) },
+      { kind: "user", ref: "user-admission-control", payer: "hidden" },
+    ]) {
+      expect(
+        validate?.({ ...request, billing_subject: billingSubject }),
+        JSON.stringify(validate?.errors),
+      ).toBe(false);
+    }
+  });
+
   it("uses owner-generated UUID resources while external identities remain opaque", async () => {
     const document = await readContract();
     for (const [schema, id] of [
@@ -263,7 +352,7 @@ describe("Billing v2 target OpenAPI", () => {
   it("does not accept caller authority, payer, quote, or local settlement identity", async () => {
     const document = await readContract();
     const admission = schemaProperties(document, "AdmissionCreateRequest");
-    expect(admission).not.toHaveProperty("billing_subject");
+    expect(admission).toHaveProperty("billing_subject");
     expect(admission).not.toHaveProperty("payer_ref");
     expect(admission).not.toHaveProperty("amount_micros");
     expect(record(admission.feature_key).maxLength).toBe(128);
@@ -865,7 +954,7 @@ const personalResponse = (
 // It changes only the approved two-read slice; it is not a replacement checker.
 const withApprovedPersonalReads = (document: JsonObject): JsonObject => {
   const copy = clone(document);
-  record(copy.info).version = "3.0.0-experimental.1";
+  record(copy.info).version = "3.0.0-experimental.2";
   const components = record(copy.components);
   for (const [
     name,
@@ -941,9 +1030,9 @@ const stableContractJson = (value: unknown): unknown => {
 };
 
 describe("R61 personal-read source contract target", () => {
-  it("publishes the approved experimental 3.0.0-experimental.1 target independently of other fields", async () => {
+  it("publishes the approved experimental 3.0.0-experimental.2 target independently of other fields", async () => {
     expect(record((await readContract()).info).version).toBe(
-      "3.0.0-experimental.1",
+      "3.0.0-experimental.2",
     );
   });
 
@@ -1171,7 +1260,7 @@ describe("R61 personal-read source contract target", () => {
       createHash("sha256")
         .update(JSON.stringify(stableContractJson(projection)))
         .digest("hex"),
-    ).toBe("79a3a918041eb3afd48f5f98ef090738529333b9a74af9403f8485d6895b3d5a");
+    ).toBe("a803f7626525f0073dfcca0b6f8a1f976018aa8cae2ddadfd946295e0882d422");
     const count = Object.values(record(document.paths)).reduce<number>(
       (total, item) =>
         total +
@@ -1660,7 +1749,7 @@ describe("R67 generated schema semantics and provenance", () => {
       );
     }
     const provenance = validProvenance();
-    expect(provenance.source.version).toBe("3.0.0-experimental.1");
+    expect(provenance.source.version).toBe("3.0.0-experimental.2");
     expect(provenance.source.sha256).toBe(
       createHash("sha256").update(sourceText).digest("hex"),
     );

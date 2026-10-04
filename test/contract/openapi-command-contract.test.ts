@@ -207,11 +207,27 @@ describe("Billing v2 per-attempt command contract", () => {
     );
     const components = recordSchema.parse(document.components);
     const schemas = recordSchema.parse(components.schemas);
+    const create = recordSchema.parse(schemas.AdmissionCreateRequest);
     const capture = recordSchema.parse(schemas.AdmissionCaptureRequest);
     const release = recordSchema.parse(schemas.AdmissionReleaseRequest);
     const event = recordSchema.parse(schemas.ExecutionEventRequest);
     const admission = recordSchema.parse(schemas.Admission);
     const durableEvent = recordSchema.parse(schemas.ExecutionEvent);
+    const createProperties = recordSchema.parse(create.properties);
+    expect(create.required).toContain("billing_subject");
+    expect(createProperties).not.toHaveProperty("payer_ref");
+    expect(recordSchema.parse(createProperties.billing_subject)).toMatchObject({
+      type: "object",
+      additionalProperties: false,
+      required: ["kind", "ref"],
+      properties: {
+        kind: {
+          type: "string",
+          enum: ["user", "project", "organization", "service"],
+        },
+        ref: { type: "string", minLength: 1, maxLength: 255 },
+      },
+    });
     expect(capture.additionalProperties).toBe(false);
     expect(recordSchema.parse(capture.properties)).not.toHaveProperty(
       "service_receipt",

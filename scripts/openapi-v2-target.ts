@@ -462,8 +462,8 @@ export function validateV2OpenApi(document: unknown): string[] {
   if (!root) return ["document must be an object"];
   const errors: string[] = [];
   if (root.openapi !== "3.1.0") errors.push("openapi must be 3.1.0");
-  if (object(root.info)?.version !== "3.0.0-experimental.1")
-    errors.push("info.version must be 3.0.0-experimental.1");
+  if (object(root.info)?.version !== "3.0.0-experimental.2")
+    errors.push("info.version must be 3.0.0-experimental.2");
   validateCreditUnit(root, errors);
   const paths = object(root.paths) ?? {};
   const actual = new Map<string, JsonObject>();
@@ -721,6 +721,7 @@ export function validateV2OpenApi(document: unknown): string[] {
     "attempt_id",
     "attempt_ordinal",
     "feature_key",
+    "billing_subject",
     "planned_binding_ref",
     "planned_binding_digest",
     "usage_profile_version",
@@ -795,7 +796,6 @@ export function validateV2OpenApi(document: unknown): string[] {
   const admission = schemaProperties(root, "AdmissionCreateRequest");
   for (const forbidden of [
     "payer_ref",
-    "billing_subject",
     "amount_micros",
     "rate",
     "multiplier",
@@ -804,6 +804,24 @@ export function validateV2OpenApi(document: unknown): string[] {
     if (admission[forbidden])
       errors.push(`AdmissionCreateRequest must not accept ${forbidden}`);
   }
+  if (
+    JSON.stringify(object(admission.billing_subject)) !==
+    JSON.stringify({
+      type: "object",
+      additionalProperties: false,
+      required: ["kind", "ref"],
+      properties: {
+        kind: {
+          type: "string",
+          enum: ["user", "project", "organization", "service"],
+        },
+        ref: { type: "string", minLength: 1, maxLength: 255 },
+      },
+    })
+  )
+    errors.push(
+      "AdmissionCreateRequest billing_subject must be a closed attribution",
+    );
   for (const required of [
     "producer",
     "run_id",

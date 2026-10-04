@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Billing Internal Owner API
-  version: 3.0.0-experimental.1
+  version: 3.0.0-experimental.2
   description: Experimental clean-slate target contract; not deployed.
 servers:
   - url: https://billing.internal
@@ -2926,6 +2926,7 @@ components:
         - attempt_id
         - attempt_ordinal
         - feature_key
+        - billing_subject
         - planned_binding_ref
         - planned_binding_digest
         - usage_profile_version
@@ -2941,6 +2942,15 @@ components:
         attempt_id: { type: string, format: uuid }
         attempt_ordinal: { $ref: "#/components/schemas/PositiveDecimal" }
         feature_key: { type: string, minLength: 1, maxLength: 128 }
+        billing_subject:
+          type: object
+          additionalProperties: false
+          required: [kind, ref]
+          properties:
+            kind:
+              type: string
+              enum: [user, project, organization, service]
+            ref: { type: string, minLength: 1, maxLength: 255 }
         planned_binding_ref: { type: string, minLength: 1, maxLength: 255 }
         planned_binding_digest: { type: string, pattern: "^[0-9a-f]{64}$" }
         usage_profile_version: { type: string, const: 1.0.0 }
