@@ -15,6 +15,9 @@ importers:
 
   .:
     dependencies:
+      '@kokoro/iam-client':
+        specifier: file:vendor/iam/kokoro-iam-client-0.7.0.tgz
+        version: file:vendor/iam/kokoro-iam-client-0.7.0.tgz
       '@nestjs/common':
         specifier: 12.0.1
         version: 12.0.1(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
@@ -420,6 +423,11 @@ packages:
 
   '@keyv/serialize@1.1.1':
     resolution: {integrity: sha512-dXn3FZhPv0US+7dtJsIi2R+c7qWYiReoEh5zUntWCf4oSpMNib8FDhSoed6m3QyZdx5hK7iLFkYk3rNxwt8vTA==}
+
+  '@kokoro/iam-client@file:vendor/iam/kokoro-iam-client-0.7.0.tgz':
+    resolution: {integrity: sha512-oopYAYcVK0izx1zv4cdO68mGBq9biDRIh4j5kJMmEKxYFN54GP5IcyCqNZlH97pg/lphezhv0ZTT6fDvaFyF3g==, tarball: file:vendor/iam/kokoro-iam-client-0.7.0.tgz}
+    version: 0.7.0
+    engines: {node: '>=24 <25'}
 
   '@lukeed/csprng@1.1.0':
     resolution: {integrity: sha512-Z7C/xXCiGWsg0KuKsHTKJxbWhpI3Vs5GwLfOean7MGyVFGqdRgBbAjOCh6u4bbjPc/8MJ2pZmK/0DLdCbivLDA==}
@@ -2141,6 +2149,9 @@ packages:
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
+  zod@4.5.4:
+    resolution: {integrity: sha512-sC95tT5iHHH9gtpj6A81kh+NEaRAUFN+qlUPDUbRfOMvNf5QCBqsb3WgvnpVtK5Y+4UfA6KqufotuTvMGiTlsA==}
+
 snapshots:
 
   '@borewit/text-codec@0.2.2': {}
@@ -2404,6 +2415,10 @@ snapshots:
       keyv: 5.6.0
 
   '@keyv/serialize@1.1.1': {}
+
+  '@kokoro/iam-client@file:vendor/iam/kokoro-iam-client-0.7.0.tgz':
+    dependencies:
+      zod: 4.5.4
 
   '@lukeed/csprng@1.1.0': {}
 
@@ -4022,3 +4037,5 @@ snapshots:
       graphmatch: 1.1.1
 
   zod@3.25.76: {}
+
+  zod@4.5.4: {}

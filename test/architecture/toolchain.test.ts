@@ -65,6 +65,8 @@ const required = [
 ] as const;
 const approvedImage =
   "node:24.20.0-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e";
+const iamClientName = "@kokoro/iam-client";
+const iamClientArtifact = "file:vendor/iam/kokoro-iam-client-0.7.0.tgz";
 
 function fail(code: string): never {
   throw new Error(code);
@@ -86,11 +88,18 @@ function checkManifest(manifestInput: unknown, lockInput: unknown): void {
   for (const groupName of ["dependencies", "devDependencies"] as const) {
     const group = manifest[groupName];
     for (const [name, version] of Object.entries(group)) {
+      const locked = importer[groupName][name];
+      if (!locked) fail(`lock-missing:${name}`);
+      if (name === iamClientName && groupName === "dependencies") {
+        if (version !== iamClientArtifact) fail(`manifest-exact:${name}`);
+        if (locked.specifier !== iamClientArtifact)
+          fail(`lock-specifier:${name}`);
+        if (locked.version !== iamClientArtifact) fail(`lock-version:${name}`);
+        continue;
+      }
       if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u.test(version)) {
         fail(`manifest-exact:${name}`);
       }
-      const locked = importer[groupName][name];
-      if (!locked) fail(`lock-missing:${name}`);
       if (locked.specifier !== version) fail(`lock-specifier:${name}`);
       if (locked.version.split("(")[0] !== version)
         fail(`lock-version:${name}`);
@@ -204,6 +213,20 @@ const importerFixture = {
   devDependencies: lockGroup(manifestFixture.devDependencies),
 };
 const lockFixture = { importers: { ".": importerFixture } };
+const artifactManifestFixture = {
+  ...manifestFixture,
+  dependencies: {
+    ...manifestFixture.dependencies,
+    [iamClientName]: iamClientArtifact,
+  },
+};
+const artifactImporterFixture = {
+  ...importerFixture,
+  dependencies: lockGroup(artifactManifestFixture.dependencies),
+};
+const artifactLockFixture = {
+  importers: { ".": artifactImporterFixture },
+};
 const pnpmStep = {
   uses: "pnpm/action-setup@fixture",
   with: { version: "11.25.0" },
@@ -353,6 +376,73 @@ describe("toolchain governance", () => {
     expect(() =>
       checkManifest(manifestFixture, { importers: { ".": null } }),
     ).toThrow(new Error("lock-shape"));
+  });
+
+  it("allows only the named IAM artifact in main dependencies", () => {
+    expect(() =>
+      checkManifest(artifactManifestFixture, artifactLockFixture),
+    ).not.toThrow();
+
+    for (const [manifest, code] of [
+      [
+        {
+          ...artifactManifestFixture,
+          dependencies: {
+            ...artifactManifestFixture.dependencies,
+            [iamClientName]: "file:vendor/iam/wrong.tgz",
+          },
+        },
+        `manifest-exact:${iamClientName}`,
+      ],
+      [
+        {
+          ...manifestFixture,
+          devDependencies: {
+            ...manifestFixture.devDependencies,
+            [iamClientName]: iamClientArtifact,
+          },
+        },
+        `manifest-exact:${iamClientName}`,
+      ],
+      [
+        {
+          ...artifactManifestFixture,
+          dependencies: {
+            ...artifactManifestFixture.dependencies,
+            "@kokoro/iam-client-shadow": iamClientArtifact,
+          },
+        },
+        "manifest-exact:@kokoro/iam-client-shadow",
+      ],
+    ] as const) {
+      const matchingLock = {
+        importers: {
+          ".": {
+            dependencies: lockGroup(manifest.dependencies),
+            devDependencies: lockGroup(manifest.devDependencies),
+          },
+        },
+      };
+      expect(() => checkManifest(manifest, matchingLock)).toThrow(
+        new Error(code),
+      );
+    }
+
+    const wrongLockVersion = {
+      ...artifactImporterFixture,
+      dependencies: {
+        ...artifactImporterFixture.dependencies,
+        [iamClientName]: {
+          specifier: iamClientArtifact,
+          version: "0.7.0",
+        },
+      },
+    };
+    expect(() =>
+      checkManifest(artifactManifestFixture, {
+        importers: { ".": wrongLockVersion },
+      }),
+    ).toThrow(new Error(`lock-version:${iamClientName}`));
   });
 
   it.each([

@@ -1,3 +1,21 @@
+## R199-Bill-IAM-D0：消费授权的数据边界（2026-10-04，零DDL）
+
+基线 Billing main `364f4ba182922f8e370b874fa64ad100c6f10106`。本节不修改canonical SQL、Prisma生成物、表、列、索引或事务；只固定后继adapter进入持久边界前后的唯一事实。Billing `3.0.0-experimental.2` 已要求closed `billing_subject`，但runtime尚未实现，机器契约通过不代表数据链可用。
+
+IAM `verifyBillingAuthorization`返回的是一次当前事实观察。ConsumptionToken、IAM session/client、`expires_at`和`decision_ref`均不进入Billing数据库、receipt、audit payload或日志，不新建authorization/cache/session表。Billing只在事务外校验该观察，并把允许结果的user作为现有/目标admission的payer事实；受信tenant必须相等。`billing_subject_kind/ref`继续是使用归因：user ref必须等于payer user；project/organization/service ref不选择账户、不证明资源归属，也不产生项目/组织钱包。
+
+准入顺序固定为：入站service认证与tenant → IAM有界在线验证/expiry与subject绑定 → 本地receipt/key/admission identity → pricing snapshot → Credit account/grants/hold/allocation → admission/audit/result同事务。IAM失败、timeout、abort、429/503、unknown、过期或绑定不一致时事务不得开始，admission/hold/receipt/audit/outbox均零写。没有跨owner事务；收到allow后本地事务失败只按Billing原identity安全重试，不删除或补偿IAM Audit，也不缓存allow。
+
+Billing重放先重新核当前调用主体，再在本地锁内读取永久receipt/admission；旧`decision_ref`不能授权重放，不同user/tenant不能读取原结果。持久payer和subject必须与同一admission、Credit account及hold关系一致；无FK目标仍由Repository在同锁序逐项核对。后继删除caller-supplied `payer_ref`选择路径，不增加兼容列、fallback或双写。
+
+ADR-033已裁决失败/取消actual-only：已核实非零usage按冻结snapshot结算；确认未调用为零费用并释放可确认未使用预占；unknown继续保持待核查/恢复，不能存成零usage、成功settlement或已释放终态。这替代下方历史“失败政策未定/等待用户”的当前态表述，但不填造采购费率、现金换算、税费或Agent证据。
+
+后继真实PG RED/GREEN必须在正式IAM HTTP allow前后观察数据库：allow且绑定合法才可进入准入事务；caller/user/tenant/expiry/subject/503/timeout各负控均比较admission、hold/allocation、receipt/key、audit/outbox全表零差量。并发同key同user只有一个hold；撤权后重放不绕过IAM；project/organization/service归因仍只锁本人payer账户。SDK/HTTP正控不代替PG事务、strict Agent evidence或真实非零费用链。
+
+owner SDK pin只属于构建依赖/provenance，不成为数据库模型：现 `file:vendor/iam/kokoro-iam-client-0.7.0.tgz` 固定IAM commit `0537b2d033d273f0ef7f5017502ba20e8571aba8`、contract path/version/direct digest与archive SHA-256 `c988e5bd3b234aae0085fced5fcd629bcb3feb3d0fe5ebb5d1a384e44e77c014`，manifest/lock及内外provenance由ADR-0004与architecture gate绑定。禁止把`/tmp`路径、sibling workspace/link或IAM schema复制进canonical数据面；artifact存在不新增授权表，也不证明adapter、在线授权或账务已实现。
+
+---
+
 ## R59：本人读取 HTTP 数据边界（零DDL；R66机器候选已验）
 
 R67 当前生成候选（2026-10-02）：按 Root docs/task.md 已审范围实施两个普通 scripts，官方 Hey API 0.99.0 的 TypeScript＋schemas(json) 两插件生成 index.ts/types.gen.ts/schemas.gen.ts，closed binding/provenance 输出 provenance.json；没有 SDK/client 或手改官方产物。43 原 schema/$ref/单位 metadata 语义、双次全字节一致与只读漂移门已实测通过；原206契约全文保持，仅EOF追加33项，完整29文件804pass/0fail/0skip，15.31s。format、两noEmit编译、contract:check 17+24、sql:check、frozen install 与 generated check 均exit0。本片尚未验收：官方 types.gen.ts:19 的 CreditMicros & NonNegativeDecimal 触发现有 typed-lint 重复交叉类型规则（exit1）；audit exit1，基线6high/5moderate，当前9high/5moderate，新增3high来自生成器固定 js-yaml4.2.0。未手改生成物、放宽门禁或升级既有依赖；Root 后续裁决与独立复验待进行。下列 R59/R66“未生成/工具冻结/Phase A”是前序阶段记录，不覆盖本段当前状态；HTTP/runtime、Nest adapter/Ajv、SQL/Prisma、赠送/计价/支付、其他owner与Git/资源边界仍保持，未发布或启动服务。

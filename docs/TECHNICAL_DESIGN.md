@@ -1,3 +1,36 @@
+## R199-Bill-IAM-D0：本人消费授权 adapter 实施门（2026-10-04）
+
+基线 Billing main `364f4ba182922f8e370b874fa64ad100c6f10106`。本节及 [ADR-0004](ADR/0004-iam-sdk-artifact-consumption.md) 已把 IAM owner SDK 固定为本仓只读构建制品；adapter、运行源码、SQL、机器契约与服务装配仍未实现或修改。下方历史中“失败/取消收费政策待用户决定”和“必须先上公网 Registry 才能开发”的表述已被 Root ADR-033 当前裁决及现 owner pack 机制替代，不再作为实施阻塞。
+
+### 当前事实与放置表
+
+| 项 | R199 决定 |
+| --- | --- |
+| Owner | IAM 唯一判断当前用户是否获准 `credit.consume`；Billing Metering 唯一选择本人 payer、建立 admission/hold 并结算。IAM allow 不是余额、赠送、预占或扣款成功。 |
+| 当前事实 | IAM clean commit `0537b2d033d273f0ef7f5017502ba20e8571aba8` 已有 `@kokoro/iam-client` `0.7.0` package-root facade `verifyBillingAuthorization({ accessToken }, options)`；owner OpenAPI path `contract/openapi/iam.internal.v1.json`、version `0.7.0`、direct SHA-256 `c8d7af8a365ad5d13eaabccf7f31133e0918ef198bdc3e7c790d90933eae91b2`。Billing `3.0.0-experimental.2` 的 `AdmissionCreateRequest` 已 required inline closed `billing_subject`，但 route/runtime/adapter 尚未实现。 |
+| 采用位置 | 后继只在现 `src/modules/metering/` 新建一个普通 `iam-billing-authorization.client.ts`，从 package root import owner facade；由现 `metering.module.ts` 单例装配，并由目标 admission orchestration 在任何 Billing transaction 前调用。它只负责调用、Billing tenant/subject/expiry绑定及稳定错误映射。 |
+| 淘汰位置 | 不放 `src/infrastructure/auth/`（该目录拥有 Billing 入站认证），不建通用 IAM/authorization framework、BaseClient、第二 SDK、JWT parser、手写 IAM DTO/fetch wrapper，也不接旧 Fastify/pg runtime。 |
+| 粒度 | 一个 adapter 文件足够承接一个外部 owner client 的变化原因；请求/响应 wire 和 transport 已由 IAM SDK拥有。若后继 admission orchestration 尚无合适现文件，须另经放置门，不在本 D0 预建空层。 |
+| 依赖 | 已以 `file:vendor/iam/kokoro-iam-client-0.7.0.tgz` 固定 `@kokoro/iam-client` 根入口，archive SHA-256 为 `c988e5bd3b234aae0085fced5fcd629bcb3feb3d0fe5ebb5d1a384e44e77c014`；manifest、pnpm lock、内外 provenance 与 architecture gate 同时绑定。禁止 sibling相对源码、workspace/link、deep import `sdk/src/api`、IAM数据库/Prisma或复制JWT规则，也不提交 `/tmp` 绝对 `file:`。公网 Registry不是研发硬前置。 |
+| 数据/API | `x-billing-consumption-token`只在调用内存中交给 facade；不写SQL、receipt、日志、metrics label或错误details。IAM allow返回的tenant必须等于受信调用tenant，payer只取IAM user；`billing_subject.kind=user`时ref必须等于该user，project/organization/service ref仅作使用归因，绝不授权扣另一钱包。 |
+| 删除项 | 实现时删除 admission 对 caller `payer_ref` 的信任路径；不保留fallback、双读、第二授权缓存或本地JWT验证。旧runtime整体删除仍归既定C3，不由本片抢改。 |
+
+### 调用、预算与失败语义
+
+IAM网络调用位于任何 Billing transaction/receipt/hold 之前。每次新准入只调用一次，消费Billing总deadline与AbortSignal；SDK保持`retryEligible=false`，Billing不在429、503、timeout、断连或提交未知后自动重发一个新授权决定。shutdown/revoke须取消在途调用。收到strict成功响应后仍检查`expires_at`在接收时有效、tenant/user绑定无漂移，之后才进入本地根事务；任一拒绝、过期、畸形、依赖失败或unknown均fail closed并保持账务零写。
+
+相同Billing idempotency key重放仍先核当前调用主体；不能拿旧`decision_ref`或旧allow绕过撤权。`decision_ref`只供安全关联，不是可重放凭据，也不持久化为第二授权事实。授权观察与本地事务没有跨owner原子性；Billing持久的payer/admission身份继续由自身事务与永久receipt约束。
+
+owner制品现已固定package `0.7.0`、owner commit `0537b2d033d273f0ef7f5017502ba20e8571aba8`、OpenAPI path/version/direct digest及archive digest `c988e5bd3b234aae0085fced5fcd629bcb3feb3d0fe5ebb5d1a384e44e77c014`。IAM `sdk:pack`要求clean committed tree并生成包含source/contract/generator/lock/runtime的provenance；Billing保留原tgz与完全相同的sidecar，具体升级、单版本删除和许可边界由ADR-0004约束。该制品固定只解除构建输入阻塞，不声称adapter、在线授权或账务实施。
+
+### 已裁决的失败/取消规则与验证
+
+失败、取消、部分输出只结算已核实实际消耗并释放可确认未使用的预占；确认未调用不扣，unknown继续待核实。该actual-only规则已由ADR-033接受，不再等待用户答复；它不允许把unknown猜成零，也不让IAM allow替代Agent strict evidence或最终结算。
+
+后继最小测试写集：adapter unit覆盖单次调用、deadline/abort、strict错误映射和敏感值不外泄；architecture覆盖仅根入口、无deep/sibling import；真实IAM HTTP integration覆盖allow、caller scope/profile拒绝、user audience/expiry、tenant/membership/Tenant状态与503/unknown，并断言所有拒绝均零admission/hold/receipt；Billing binding覆盖tenant mismatch、user subject mismatch、project/organization/service只归因及response到达时过期。真实RED oracle是当前Billing无dependency/adapter且admission仍可在未调用IAM时进入transaction；import/404/fixture错误不算业务RED。Root最终IAM→Billing两进程组合与真实PG零写另验，不用SDK计数冒收费链。
+
+---
+
 ## R71：正式生成质量门窄修复候选（2026-10-02，待 Root 集成验收）
 
 归属：Billing 现有 owner contract 的生成工具与质量门；只扩展现有 workspace/lock、ESLint 配置、typed-lint EOF 测试和本节事实前缀，不新增业务模块、writer、schema、API 或运行进程。基线仍 main `156451051f6ee47ba9b128f481f96094bfb9f731`；R67 生成实现和四个正式产物冻结不改，Root 负责审查、复验与提交。以下为 R71 当前候选；下方 R67 的 lint/audit 待裁决及更早“未生成”描述保留为前序记录，不覆盖本节。

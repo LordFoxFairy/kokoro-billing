@@ -1,3 +1,21 @@
+## R199-Bill-IAM-D0：本人消费授权消费契约（2026-10-04）
+
+基线 Billing main `364f4ba182922f8e370b874fa64ad100c6f10106`。当前唯一目标机器源仍是本仓 `contract/openapi/v2/openapi.yaml` 的 `3.0.0-experimental.2`：`POST /v2/internal/billing/admissions`要求`x-billing-consumption-token`，`AdmissionCreateRequest` required `billing_subject`，其inline closed形状为`kind=user|project|organization|service`与`ref` 1..255；`payer_ref`、价格与用量不由body自报。本节解释消费与绑定，不复制第二份IAM或Billing字段schema。
+
+Billing已按 [ADR-0004](ADR/0004-iam-sdk-artifact-consumption.md) 将IAM owner package-root facade固定为`file:vendor/iam/kokoro-iam-client-0.7.0.tgz`，调用面仍只有`verifyBillingAuthorization({ accessToken }, options)`。pin绑定owner commit `0537b2d033d273f0ef7f5017502ba20e8571aba8`、机器源path/version/direct SHA-256 `c8d7af8a365ad5d13eaabccf7f31133e0918ef198bdc3e7c790d90933eae91b2`及archive SHA-256 `c988e5bd3b234aae0085fced5fcd629bcb3feb3d0fe5ebb5d1a384e44e77c014`；manifest、lock和内外provenance已有architecture gate。不得deep-import generated API、复制IAM请求/响应DTO、解析JWT或手写第二fetch client。公网Registry不是前置；固定artifact本身不表示adapter、在线授权或账务已实现。
+
+请求的受信tenant来自Billing已认证service context，不来自body/header自报subject。ConsumptionToken原样且仅在内存交给IAM facade；IAM允许结果的tenant必须与受信tenant相等，payer固定为允许结果的user。`billing_subject`是使用归因而不是付款授权：kind=user时ref必须等于该user；kind=project/organization/service时ref不改变payer、不证明资源归属或授权扣项目/组织/服务钱包。任何caller不能用归因ref选择他人钱包。
+
+IAM调用在任何Billing transaction、idempotency receipt、admission或hold写入前完成，使用一次有界总deadline与AbortSignal，不自动重试429/503/timeout/network/unknown。success到达后Billing仍检查owner strict response、expiry尚有效及tenant/user/subject绑定；失败、拒绝、过期、mismatch或依赖unknown全部fail closed且零账务I/O。token不写日志、SQL、receipt、audit payload、metrics label或安全错误details；IAM错误不原样透传。`decision_ref`只用于请求关联，不是付款凭据、缓存键或可重放授权。
+
+相同Billing idempotency key的重放仍先执行当前IAM授权；撤权后不能靠旧receipt返回成功给不同/失效主体。通过授权后才由Billing永久command identity/receipt恢复自身首次结果，且不得产生第二hold。capture/release不重新要求另一个当前用户token，而按原admission durable payer、受信执行身份与strict evidence恢复。
+
+ADR-033已接受actual-only：失败、取消或部分输出只按已核实实际消耗结算，确认未调用不扣，释放可确认未使用预占；unknown待核实且不得猜零/免费/全额释放。此规则不由ConsumptionToken或HTTP响应成功与否推导，最终收费仍要求Agent strict evidence、冻结费率与Billing事务。
+
+真实契约验收必须让正式IAM HTTP process处理owner生成的machine/user token：allow正控；caller scope/profile、user audience/expiry、tenant/membership/Tenant状态负控；503/commit unknown/timeout；Billing tenant与kind=user ref mismatch；project/organization/service归因不换payer。每个拒绝断言零admission/hold/receipt，且一次调用无自动重试。loopback故障peer可补截断/timeout，但不能替代真实owner正控，也不能把SDK方法成功冒充admission或收费成功。
+
+---
+
 ## R59：本人读取 HTTP 与受信委派 D0（R66机器候选已验；未发布/生成/HTTP）
 
 R67 当前生成候选（2026-10-02）：按 Root docs/task.md 已审范围实施两个普通 scripts，官方 Hey API 0.99.0 的 TypeScript＋schemas(json) 两插件生成 index.ts/types.gen.ts/schemas.gen.ts，closed binding/provenance 输出 provenance.json；没有 SDK/client 或手改官方产物。43 原 schema/$ref/单位 metadata 语义、双次全字节一致与只读漂移门已实测通过；原206契约全文保持，仅EOF追加33项，完整29文件804pass/0fail/0skip，15.31s。format、两noEmit编译、contract:check 17+24、sql:check、frozen install 与 generated check 均exit0。本片尚未验收：官方 types.gen.ts:19 的 CreditMicros & NonNegativeDecimal 触发现有 typed-lint 重复交叉类型规则（exit1）；audit exit1，基线6high/5moderate，当前9high/5moderate，新增3high来自生成器固定 js-yaml4.2.0。未手改生成物、放宽门禁或升级既有依赖；Root 后续裁决与独立复验待进行。下列 R59/R66“未生成/工具冻结/Phase A”是前序阶段记录，不覆盖本段当前状态；HTTP/runtime、Nest adapter/Ajv、SQL/Prisma、赠送/计价/支付、其他owner与Git/资源边界仍保持，未发布或启动服务。
