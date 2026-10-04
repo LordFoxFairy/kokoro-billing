@@ -26,7 +26,6 @@ export type {
   AdmissionReleaseRequest,
   AdmissionResponse,
   AlipayWebhookForm,
-  BillingSubject,
   CaptureAdmissionData,
   CaptureAdmissionError,
   CaptureAdmissionErrors,

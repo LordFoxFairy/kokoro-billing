@@ -35,7 +35,7 @@ describe("Billing v2 target OpenAPI", () => {
   it("publishes the complete target major contract with fully resolved refs", async () => {
     const document = await readContract();
     expect(() => assertV2OpenApi(document)).not.toThrow();
-    expect(record(document.info).version).toBe("2.0.2");
+    expect(record(document.info).version).toBe("3.0.0-experimental.1");
     const operationCount = Object.values(record(document.paths)).reduce<number>(
       (count, path) =>
         count +
@@ -45,6 +45,192 @@ describe("Billing v2 target OpenAPI", () => {
       0,
     );
     expect(operationCount).toBe(24);
+  });
+
+  it("publishes closed per-attempt admission and strict evidence commands", async () => {
+    const document = await readContract();
+    const required = (name: string) =>
+      record(record(record(document.components).schemas)[name]).required;
+    const properties = (name: string) => schemaProperties(document, name);
+    expect(required("AdmissionCreateRequest")).toEqual([
+      "producer",
+      "run_id",
+      "execution_id",
+      "invocation_id",
+      "call_id",
+      "attempt_id",
+      "attempt_ordinal",
+      "feature_key",
+      "planned_binding_ref",
+      "planned_binding_digest",
+      "usage_profile_version",
+      "usage_profile_digest",
+      "execution_bound_ref",
+      "execution_bound_digest",
+    ]);
+    expect(properties("AdmissionCreateRequest")).not.toHaveProperty(
+      "billing_subject",
+    );
+    expect(required("AdmissionCaptureRequest")).toEqual([
+      "producer",
+      "run_id",
+      "execution_id",
+      "call_id",
+      "attempt_id",
+      "evidence_schema_version",
+      "evidence_ref",
+      "evidence_event_id",
+      "evidence_revision",
+      "evidence_digest",
+    ]);
+    expect(properties("AdmissionCaptureRequest")).not.toHaveProperty(
+      "service_receipt",
+    );
+    expect(required("AdmissionReleaseRequest")).toEqual([
+      "producer",
+      "run_id",
+      "execution_id",
+      "call_id",
+      "attempt_id",
+      "release_basis",
+      "evidence_schema_version",
+      "evidence_ref",
+      "evidence_event_id",
+      "evidence_revision",
+      "evidence_digest",
+      "reason",
+    ]);
+    expect(
+      record(properties("AdmissionReleaseRequest").release_basis).enum,
+    ).toEqual(["not_dispatched", "settled_remainder"]);
+    expect(record(properties("ExecutionEventRequest").event_type).enum).toEqual(
+      ["model_usage_evidence.sealed"],
+    );
+    expect(record(properties("Admission").charge_status).enum).toEqual([
+      "pending_evidence",
+      "pending_review",
+      "partially_captured",
+      "captured",
+      "released",
+      "unknown",
+      "rejected",
+    ]);
+    expect(record(properties("Admission").authorization_status).enum).toEqual([
+      "authorized",
+      "denied",
+      "expired",
+      "unknown",
+    ]);
+    expect(record(properties("Admission").dispatch_status).enum).toEqual([
+      "awaiting",
+      "not_dispatched",
+      "started",
+      "unknown",
+    ]);
+    const admissionSchema = record(
+      record(record(document.components).schemas).Admission,
+    );
+    expect(admissionSchema.if).toEqual({
+      required: ["dispatch_status"],
+      properties: { dispatch_status: { const: "started" } },
+    });
+    expect(admissionSchema.then).toEqual({
+      required: ["authorization_status"],
+      properties: { authorization_status: { const: "authorized" } },
+    });
+    expect(
+      record(properties("AdmissionCreateRequest").usage_profile_digest).const,
+    ).toBe("eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0");
+    for (const field of [
+      "usage_profile_version",
+      "usage_profile_digest",
+      "execution_bound_ref",
+      "execution_bound_digest",
+    ]) {
+      expect(required("Admission")).toContain(field);
+      expect(properties("Admission")).toHaveProperty(field);
+    }
+    for (const field of [
+      "evidence_schema_version",
+      "evidence_ref",
+      "evidence_event_id",
+      "evidence_revision",
+      "evidence_digest",
+    ]) {
+      expect(required("ExecutionEvent")).toContain(field);
+      expect(properties("ExecutionEvent")).toHaveProperty(field);
+    }
+    expect(
+      mutate(document, (copy) => {
+        schemaProperties(copy, "AdmissionCaptureRequest").service_receipt = {
+          type: "object",
+        };
+      }),
+    ).toContain("AdmissionCaptureRequest must not accept service_receipt");
+    expect(
+      mutate(document, (copy) => {
+        record(
+          record(record(copy.components).schemas).AdmissionCaptureRequest,
+        ).required = ["producer"];
+      }),
+    ).toContain(
+      "AdmissionCaptureRequest must define its exact required identity",
+    );
+    expect(
+      mutate(document, (copy) => {
+        record(
+          schemaProperties(copy, "ExecutionEventRequest")
+            .evidence_schema_version,
+        ).const = "2.0.0";
+      }),
+    ).toContain("strict evidence command must pin Agent usage 1.0.0");
+    expect(
+      mutate(document, (copy) => {
+        record(
+          schemaProperties(copy, "AdmissionCreateRequest").usage_profile_digest,
+        ).const = "0".repeat(64);
+      }),
+    ).toContain("AdmissionCreateRequest must pin Agent usage schema digest");
+    expect(
+      mutate(document, (copy) => {
+        record(schemaProperties(copy, "Admission").dispatch_status).enum = [
+          "authorized",
+          "denied",
+          "expired",
+          "unknown",
+        ];
+      }),
+    ).toContain("Admission dispatch status must preserve execution knowledge");
+    expect(
+      mutate(document, (copy) => {
+        delete record(record(record(copy.components).schemas).Admission).then;
+      }),
+    ).toContain("Admission dispatch started must require authorized decision");
+    expect(
+      mutate(document, (copy) => {
+        const schema = record(
+          record(record(copy.components).schemas).Admission,
+        );
+        schema.required = (schema.required as unknown[]).filter(
+          (field) => field !== "execution_bound_digest",
+        );
+      }),
+    ).toContain("Admission must define its exact required identity");
+    expect(
+      mutate(document, (copy) => {
+        record(schemaProperties(copy, "Admission").authorization_status).enum =
+          ["authorized", "not_dispatched"];
+      }),
+    ).toContain(
+      "Admission authorization status must be independent of dispatch",
+    );
+    expect(
+      mutate(document, (copy) => {
+        record(
+          schemaProperties(copy, "AdmissionReleaseRequest").release_basis,
+        ).enum = ["timeout"];
+      }),
+    ).toContain("AdmissionReleaseRequest must use proof-bound release bases");
   });
 
   it("uses owner-generated UUID resources while external identities remain opaque", async () => {
@@ -77,14 +263,11 @@ describe("Billing v2 target OpenAPI", () => {
   it("does not accept caller authority, payer, quote, or local settlement identity", async () => {
     const document = await readContract();
     const admission = schemaProperties(document, "AdmissionCreateRequest");
-    expect(admission).toHaveProperty("billing_subject");
+    expect(admission).not.toHaveProperty("billing_subject");
     expect(admission).not.toHaveProperty("payer_ref");
+    expect(admission).not.toHaveProperty("amount_micros");
     expect(record(admission.feature_key).maxLength).toBe(128);
-    expect(record(admission.meter_kind).enum).toEqual([
-      "model_invocation",
-      "feature",
-      "studio_job",
-    ]);
+    expect(record(admission.usage_profile_version).const).toBe("1.0.0");
     const checkout = schemaProperties(document, "CheckoutCreateRequest");
     expect(Object.keys(checkout)).toEqual(["offer_revision_id"]);
     const settlement = schemaProperties(document, "SettlementCreateRequest");
@@ -682,7 +865,7 @@ const personalResponse = (
 // It changes only the approved two-read slice; it is not a replacement checker.
 const withApprovedPersonalReads = (document: JsonObject): JsonObject => {
   const copy = clone(document);
-  record(copy.info).version = "2.0.2";
+  record(copy.info).version = "3.0.0-experimental.1";
   const components = record(copy.components);
   for (const [
     name,
@@ -758,8 +941,10 @@ const stableContractJson = (value: unknown): unknown => {
 };
 
 describe("R61 personal-read source contract target", () => {
-  it("publishes the approved experimental 2.0.2 target independently of other fields", async () => {
-    expect(record((await readContract()).info).version).toBe("2.0.2");
+  it("publishes the approved experimental 3.0.0-experimental.1 target independently of other fields", async () => {
+    expect(record((await readContract()).info).version).toBe(
+      "3.0.0-experimental.1",
+    );
   });
 
   for (const path of personalReadPaths) {
@@ -986,7 +1171,7 @@ describe("R61 personal-read source contract target", () => {
       createHash("sha256")
         .update(JSON.stringify(stableContractJson(projection)))
         .digest("hex"),
-    ).toBe("58723403229da6d719ae0f3175ef79a6848c0209e14648f5656b37457e0123c6");
+    ).toBe("79a3a918041eb3afd48f5f98ef090738529333b9a74af9403f8485d6895b3d5a");
     const count = Object.values(record(document.paths)).reduce<number>(
       (total, item) =>
         total +
@@ -1457,13 +1642,13 @@ describe("R67 generated schema semantics and provenance", () => {
   const input = () => ({ sourceText, officialFiles });
   const validProvenance = () => artifacts.createBillingApiProvenance(input());
 
-  it("exports exactly the 43 original objects with unchanged refs and unit metadata", async () => {
+  it("exports the exact clean-slate schema set with closed refs and unit metadata", async () => {
     const schemas = contractSchemas(record(parse(sourceText) as unknown));
     const exports: unknown = await import(
       pathToFileURL(join(directory, "schemas.gen.ts")).href
     );
     const schemaExports = record(exports);
-    expect(Object.keys(schemas)).toHaveLength(43);
+    expect(Object.keys(schemas)).toHaveLength(42);
     expect(Object.keys(schemaExports).sort()).toEqual(
       Object.keys(schemas)
         .map((name) => name + "Schema")
@@ -1475,7 +1660,7 @@ describe("R67 generated schema semantics and provenance", () => {
       );
     }
     const provenance = validProvenance();
-    expect(provenance.source.version).toBe("2.0.2");
+    expect(provenance.source.version).toBe("3.0.0-experimental.1");
     expect(provenance.source.sha256).toBe(
       createHash("sha256").update(sourceText).digest("hex"),
     );

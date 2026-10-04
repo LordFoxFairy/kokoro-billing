@@ -45,7 +45,6 @@ const componentNames = [
   "HealthResponse",
   "ReadyResponse",
   "Page",
-  "BillingSubject",
   "CatalogItem",
   "CatalogResponse",
   "CreditAccount",

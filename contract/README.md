@@ -1,135 +1,225 @@
-## R66 当前机器候选状态
-
-R67 当前生成候选：两个 scripts 与官方三个 TS 产物＋provenance.json 已实际生成；43 schema 原语义、双次一致与只读 drift 检查通过。Hey API0.99.0 精确依赖及 frozen install 已落本候选；未安装 Nest adapter/Ajv runtime。完整804纯项通过，但官方 types.gen.ts:19 的重复交叉类型 typed-lint exit1，audit 比原基线新增 js-yaml4.2.0 三项 high；保持原产物/门禁，Root 裁决、复验和发布待进行。下文 Phase A 的“未生成/不安装”是 R66 前序记录；机器2.0.2/version/digest、旧v1/runtime和历史正文不改，本片不是HTTP或消费链验收。
-
-当前工作树experimental2.0.2 source/checker承接两本人GET的u1/独立JWT OR五因素/auth-selection/专属参数与no-store。Root Node24全29files771pure（含206契约）/format/lint/两noEmit编译门已真实通过，Sol三机器反向字节审0P0/P1/P2；候选尚未提交发布、生成或接入正式HTTP。旧v1/runtime、其他22operation及Credit单位保持。下方2.0.1 Credit单位段和595/72数字为既有切片历史证据，不冒充本HTTP验收；正式生成/closed registry方案见四现R59当前前缀，本Phase A不安装工具或造产物。
-
 # kokoro-billing contract governance
 
-Target canonical machine source：[`openapi/v2/openapi.yaml`](openapi/v2/openapi.yaml)；当前尚未切换的Fastify运行时继续由字节不变的[`openapi/v1/openapi.yaml`](openapi/v1/openapi.yaml)校验route parity。人类语义见
-[`../docs/API_CONTRACT.md`](../docs/API_CONTRACT.md)，它不构成第二份字段级 contract。
+## Current and target artifacts
 
-## Owner
+Billing owns both machine sources in this directory. They describe two distinct
+states; they are not interchangeable versions of one deployed surface.
 
-**Owner:** `kokoro-billing`。
+| State | Machine source | Operations | Transport | Artifact status |
+| --- | --- | ---: | --- | --- |
+| Current runtime | [`openapi/v1/openapi.yaml`](openapi/v1/openapi.yaml) | 17 | existing `/v1/**` plus unversioned probes | `stable`, used for current Fastify route parity |
+| Target | [`openapi/v2/openapi.yaml`](openapi/v2/openapi.yaml) | 24 | `/v2/**` plus unversioned probes | `3.0.0-experimental.1`, not published, deployed, or consumed |
 
-本契约只描述 Billing 拥有的 health/readiness/metrics、storefront owner route、credit/subscription read、checkout、
-admission/execution、settlement/refund、expiry command、admin refund 与 provider webhook。它不定义 BFF public Product API、
-IAM identity、Agent Run、Scheduler schedule 或任何其他仓库的数据库模型。
+The target artifact SemVer and the HTTP transport prefix are independent. The
+breaking clean-slate artifact is `3.0.0-experimental.1`; its routes intentionally
+remain under `/v2`. The private package version is not a wire version. Human
+semantics live in [`../docs/API_CONTRACT.md`](../docs/API_CONTRACT.md), which is
+not a second editable field-level contract.
 
-## Visibility
+Current source digests:
 
-**Visibility:** `internal-owner`。
+```text
+openapi/v1/openapi.yaml  58fbe4fea083ba12e0db23f49e995b96500d01af0013febf40eba3093510ef63
+openapi/v2/openapi.yaml  abcd509c3924dea7f32b16149af3354c299ae54eacb92dd5894f2c0e6efd7f4d
+```
 
-目标24个operation与当前17个operation均为 `internal-owner`，只供受信 service、deployment probe/scraper、admin gateway 或已验证 payment
-provider 使用。Storefront route 的 IAM user/BFF alternative 不使本契约成为 Root Developer API 的 `public` surface；
-Browser 仍通过 Web/BFF 访问。
+Historical candidate narratives and old validation counts are available in Git
+history and the owner [`../docs/CURRENT.md`](../docs/CURRENT.md). They are not
+current generation or runtime evidence.
 
-每个 operation 声明：
+## Owner, visibility, and authority
 
-| Extension | 当前值 |
-|---|---|
-| `x-kokoro-owner` | `kokoro-billing` |
-| `x-kokoro-visibility` | `internal-owner` |
-| `x-kokoro-stability` | v1 `stable`；v2 `experimental` |
-| `x-kokoro-idempotency` | `inherent`、`read-only`、`required` 或 `provider-event-id` |
-| `x-kokoro-permission` | 与当前 route auth/allow-list 对齐的精确值 |
+**Owner:** `kokoro-billing`. **Visibility:** `internal-owner`.
 
-## Version
+The contract covers Billing health/readiness/metrics, storefront reads,
+Credit/subscription reads, checkout, per-attempt admission and execution
+evidence ingress, settlement/refund, hold expiry, admin refund, and payment
+provider webhooks. It does not define the BFF public Product API, IAM identity,
+Agent Run, Scheduler schedules, another owner's database model, or browser
+authority.
 
-**Version:** 目标OpenAPI `info.version=2.0.2`、格式3.1.0，业务route位于`/v2/**`且在runtime/consumer切换前为experimental；当前运行时artifact仍为1.0.0与`/v1/**`。`/healthz`、`/readyz` 与 `/metrics` 是有意
-不带版本的运行端点。`package.json` 的 `0.1.0` 是 private implementation version，不替代 wire version。
+Every operation declares exact owner, visibility, stability, idempotency, and
+permission extensions. Tenant, actor, service identity, and payment authority
+come from authenticated transport context. Request bodies do not self-report a
+payer, trusted subject, final charge, price, rate, multiplier, or settlement
+amount for model usage. Browser traffic continues through Web and BFF; an IAM
+user/BFF authentication alternative does not make this an externally public
+contract.
 
-V1 内只接受 backward-compatible 变更；仅修改 `info.version` 不能使 breaking change 兼容。
+## Target per-attempt usage contract
 
-## Credit unit metadata（2.0.1 source candidate）
+The target Admission and Execution shapes bind one physical model attempt. The
+identity includes the run/call/attempt lineage, immutable planned binding and
+execution bound, and a reference to the Agent-owned strict usage artifact.
+Billing pins that artifact rather than copying its schema:
 
-唯一机器定义在 `components.schemas.CreditMicros.x-kokoro-credit-unit`：definition_version=1、display_unit=credit、micros_per_credit="1000000"（string）。CreditMicros 复用 DecimalInteger，NonNegativeCreditMicros 复用 CreditMicros 与 NonNegativeDecimal；metadata 仅出现一处，七 Credit 字段引用专 schema。现金 amount_minor、ledger sequence、原整数约束及全部24 operation保持；无新增 response metadata/查询、浮点 credit、SQL数据换算、现金兑换率或grant额度。
+```text
+Agent artifact version: 1.0.0
+Agent usage schema SHA-256: eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0
+```
 
-本切片仅交付仍 experimental 的 source/validator：Root 已独立复验72项契约、595项纯测试及引用位置 probe，并获独立审查；383项资源测试跳过。v2 runtime、单位生成 client、BFF/Web消费者尚未切换。`contract:check` 和契约负例只验证 source/validator，不证明上述运行链。后继从包含此source的 immutable commit、version与完整SHA256提取 metadata，经 BFF 正式发布方向生成只读消费 artifact；缺失/多份/类型值/版本/digest漂移均拒绝，不回落旧10^4或另一手写配置。Hey API目标并非当前已安装生成器，不假定它会自动保留 extension。本片不创建生成器/依赖/产物或第二可编辑contract。
+Durable Admission representations echo the usage artifact identity and
+execution-bound reference/digest so an original-key replay or GET can verify
+the same immutable admission. Capture, release, and execution-event commands
+carry a closed evidence identity; they do not embed arbitrary usage bytes or a
+generic service receipt. A `202` execution-event response acknowledges only a
+durable inbox representation, never provider success or settlement.
 
-## Generation
+Authorization knowledge and dispatch knowledge are separate:
 
-**Generation:** 当前 OpenAPI YAML 由 Billing owner 在本仓直接维护和 review，不从 TypeScript/Zod 生成。当前没有
-Billing HTTP client/server 或 Credit 单位生成 artifact，也没有 contract generation script；已有 Prisma 生成物属于独立数据库链路。
+- `authorization_status`: `authorized | denied | expired | unknown`;
+- `dispatch_status`: `awaiting | not_dispatched | started | unknown`.
+
+`authorization_status` records the owner decision at the attempt's first
+dispatch admission; it is not recalculated from wall-clock time. A durable
+`started` dispatch requires `authorized`. Once dispatch legally starts, passing
+`valid_until` does not rewrite that decision to `expired`, prove that the
+provider stopped, or authorize release. Unknown dispatch remains unknown; it is
+not inferred as `not_dispatched`.
+
+Missing, incomplete, unsupported, or binding-mismatched evidence remains
+pending or under review. It is never guessed as zero. Release is restricted to
+final proof of `not_dispatched` or a verified settled remainder; timeout,
+cancellation, lease expiry, request failure, and wall-clock expiry alone are
+not release authority. Billing remains the sole owner of rate revisions,
+pricing snapshots, normalization/rounding, Credit holds, charges, releases,
+ledger effects, and reconciliation.
+
+## Credit and amount rules
+
+The target machine definition for Credit is
+`components.schemas.CreditMicros.x-kokoro-credit-unit`:
+
+```text
+definition_version = 1
+display_unit = credit
+micros_per_credit = "1000000"
+```
+
+`CreditMicros` is a decimal integer string and `NonNegativeCreditMicros`
+combines that unit with the nonnegative constraint. Cash `amount_minor`, ledger
+sequence values, and provider currency remain separate facts. This metadata is
+not a cash exchange rate, a grant amount, or permission for callers to compute
+charges. Billing computes monetary and Credit effects from immutable owner
+revisions with integer/exact arithmetic; consumers display owner results.
+
+## Generation and read-only outputs
+
+`contract/openapi/v2/openapi.yaml` is the only editable target machine source.
+The pinned local toolchain is:
+
+```text
+@hey-api/openapi-ts 0.99.0
+Prettier 3.9.6
+TypeScript 6.0.3
+```
+
+Generate and verify with:
+
+```bash
+pnpm contract:generate
+pnpm contract:generated:check
+```
+
+The generator writes exactly four read-only files under
+`src/generated/billing-api/`:
+
+```text
+index.ts
+types.gen.ts
+schemas.gen.ts
+provenance.json
+```
+
+`provenance.json` records the source path, artifact version, source bytes and
+SHA-256, pinned generator/formatter/TypeScript versions, the complete schema
+binding map, and output hashes. Generation occurs in a temporary directory;
+check mode regenerates there and requires byte equality. The artifact verifier
+parses generated schema literals without executing generated code, rejects
+unknown/duplicate/nonliteral exports, rejects foreign destination files, and
+requires the source component set and local `$ref` graph to be closed.
+
+The target currently contains 42 schema components. The present personal HTTP
+bootstrap uses Ajv 8.20.0 with ajv-formats 3.0.1 and compiles the exact
+42-component generated registry. It rejects missing, extra, duplicate-target,
+or uncompiled bindings and keeps coercion, defaults, and removal of additional
+properties disabled. This bootstrap evidence does not mean the 24 target v2
+operations are implemented.
+
+Generated files are never edited by hand. A source change must regenerate all
+affected outputs and update this README's target digest in the same reviewed
+slice. `pnpm contract:generated:check` is the drift gate; a TypeScript compile
+or schema-count assertion alone is not generation proof.
+
+## Validation
+
+Run:
 
 ```bash
 pnpm contract:check
+pnpm contract:generated:check
 ```
 
-该命令保留v1的17条真实runtime parity，并独立校验v2的24条目标operation、全部本地`$ref`、唯一operationId、tenant/request ID/execution-event 边界、capture/release/settlement/expiry command body、
-Idempotency-Key、execution-event 409、Redis degraded readiness、production webhook provider/signature location、全部 operation metadata 与 Fastify route parity。
-HTTP runtime 仍由手写 Zod/mapper 实现；生成物若未来引入，
-只能从本 source 生成到明确的 read-only directory，并在同一 commit 校验 drift。
+`contract:check` preserves exact parity for the current 17-operation v1
+runtime and independently verifies the target 24-operation v2 source. Target
+checks cover OpenAPI syntax, local references, operation IDs and governance,
+tenant/request identity, permission and idempotency metadata, closed command
+and response shapes, explicit errors, webhook signature/ACK differences,
+strict Agent artifact identity, immutable Admission/evidence references,
+unknown-state preservation, and the `started => authorized` rule.
 
-## Breaking policy
+These checks do not prove target controller/service/repository behavior,
+PostgreSQL transactions, provider behavior, or a consumer rollout. Full owner
+verification also runs formatting, lint, type checking, build, SQL checks, and
+tests; skipped resource tests remain skipped evidence rather than integration
+success.
 
-**Breaking policy:** 以下变化不得在 V1 原位进行：删除/重命名 path、method、header、request/response/error 字段，收紧已接受约束，
-改变 auth/tenant/idempotency/cursor 语义，或改变 governance extension 含义。Breaking change 需要新 major API version、owner
-review、consumer migration、并行窗口与明确退役条件。
+## Idempotency, errors, and breaking changes
 
-兼容性流程：
+Commands use their declared stable business identity and required
+`Idempotency-Key` or provider event identity. Same-key/same-body replay must
+return the original durable representation; identity, binding, or digest drift
+is a conflict. Lost acknowledgements recover through the original key or the
+declared GET resource, not a new command identity. Tenant-invisible resources
+remain nondisclosing, and stable error codes—not exception text—form the error
+contract.
 
-1. 与最后发布的 immutable contract artifact 比较；
-2. 先改 Billing owner source；
-3. 运行 syntax/governance/route/transport checks；
-4. 同 commit 更新实现、测试和人类策略文档；
-5. 发布固定 commit/tag + digest；
-6. consumer 显式升级并运行 integration/smoke。
+Breaking changes include removing or renaming routes, methods, headers,
+request/response/error fields; tightening accepted values; changing authority,
+tenant, idempotency, cursor, state, or unit semantics; and changing governance
+extensions. They require a new owner artifact version and a coordinated
+consumer cutover. This clean-slate target does not add compatibility aliases,
+fallback DTOs, or a second editable schema. Git preserves history.
 
-当前没有 automated historical OpenAPI breaking-diff tool；review 与版本纪律仍是缺口，governance-key 检查不能替代 semantic
-compatibility comparison。
+## Publication and consumer workflow
 
-当前 webhook machine contract 只包含 `stripe|alipay|wechat`。Stripe/WeChat 的 header security scheme 与 Alipay 的
-form-body `sign`/`sign_type=RSA2` 由 `x-kokoro-provider-signatures` 区分；fixture `mockSignature` 不属于生产 contract。
-
-## Provenance
-
-**Provenance:** repository `https://github.com/LordFoxFairy/kokoro-billing`，source path
-`contract/openapi/v2/openapi.yaml`，当前目标source SHA-256：
-
-```text
-2cd4c37df514ef58f33a6e80c027d708c06e04f4813b99fa11eb8ac3d5eee826
-```
-
-当前未切换v1的固定SHA-256仍为`58fbe4fea083ba12e0db23f49e995b96500d01af0013febf40eba3093510ef63`；M1b不修改其字节。
-
-复核：
-
-```bash
-shasum -a 256 contract/openapi/v2/openapi.yaml
-git rev-parse HEAD
-```
-
-Digest 只标识当前 contract bytes；consumer 还必须记录包含它的 immutable Git commit/tag。当前没有机器可读 provenance manifest，
-也没有独立 contract artifact publish job。修改 source 时必须同步更新本节 digest；`pnpm contract:check` 会阻止 digest 漂移。
-
-## Consumer workflow
-
-Consumer 固定以下 tuple：
+A consumer pins this tuple:
 
 ```text
 repository
-git commit or immutable tag
+immutable commit or tag
 source path
 OpenAPI info.version
 SHA-256
 ```
 
-升级步骤：
+The consumer verifies the digest, generates or updates its own read-only
+artifact, reviews permissions/tenant/idempotency/errors/timeouts, and runs
+contract plus integration/smoke tests. It must not import Billing ORM/SQL types
+or copy an editable Billing schema. BFF publishes only its own public
+projection; it does not republish this internal contract unchanged.
 
-1. 获取 Billing 发布的固定 artifact/commit，不跟随 mutable branch；
-2. 校验 SHA-256 与 `info.version`；
-3. 生成或更新 consumer-local read-only client/type；不得复制手写 DTO 或导入 Billing repository/Schema；
-4. 审查 operation permission、tenant、Idempotency-Key、error code、cursor 与 timeout；
-5. 运行 consumer contract test、Billing integration 与端到端 smoke；
-6. 保留 rollback 所需的前一固定 artifact，直到 rollout 与账务 reconciliation 完成。
+The current target has not been published or pinned by Agent. Still open are:
 
-BFF 只将 Billing 数据投影到自己的 public Product API，不得把本 internal contract 原样发布；Agent/Model/Scheduler 只消费各自
-allow-list 内的 operation。
+- Billing Admission/Execution controllers, services, repositories, schema,
+  workers, bounded recovery, and amount transactions;
+- real PostgreSQL concurrency/rollback/idempotency and lost-ACK recovery;
+- an Agent-owned authenticated evidence read/delivery seam and Billing pin;
+- Agent authorize → dispatch → evidence ACK wiring;
+- actual-only capture/release, unknown recovery, ledger/reconciliation, real
+  provider evidence, and browser/user journeys;
+- immutable contract publication and coordinated consumer upgrade.
 
-## Validation scope and gaps
-
-当前 `contract:check` 能证明v1运行route parity，以及v2 YAML可解析、本地ref闭合、24条operation治理、typed command/resource结果、唯一Execution 202、201/202 Location、UUID/opaque边界、request-id与caller authority禁用字段、provider ACK差异；它不能证明v2与尚未切换的运行时
-Zod逐字段相等。runtime parity、consumer pin与真实provider sandbox仍需在后续实现切片闭合，详见
-[`../docs/CURRENT.md`](../docs/CURRENT.md)。
+Until those owner slices pass, the target artifact and generated registry are
+machine-contract candidates, not evidence that a new Billing API or charging
+flow is live.

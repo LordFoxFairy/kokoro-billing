@@ -51,11 +51,6 @@ export type Page = {
   next_cursor: string | null;
 };
 
-export type BillingSubject = {
-  kind: "user" | "project" | "organization" | "service";
-  ref: string;
-};
-
 export type CatalogItem = {
   offer_revision_id: Uuid;
   name: string;
@@ -133,49 +128,88 @@ export type SubscriptionsResponse = {
 };
 
 export type AdmissionCreateRequest = {
-  invocation_id: string;
+  producer: string;
+  run_id: string;
   execution_id: string;
-  billing_subject: BillingSubject;
-  surface: string;
+  invocation_id: string;
+  call_id: string;
+  attempt_id: string;
+  attempt_ordinal: PositiveDecimal;
   feature_key: string;
-  meter_kind: "model_invocation" | "feature" | "studio_job";
-  requested_model_tier?: string;
+  planned_binding_ref: string;
+  planned_binding_digest: string;
+  usage_profile_version: "1.0.0";
+  usage_profile_digest: "eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0";
+  execution_bound_ref: string;
+  execution_bound_digest: string;
 };
 
 export type AdmissionCaptureRequest = {
-  invocation_id: string;
+  producer: string;
+  run_id: string;
   execution_id: string;
-  accepted_provider_ref: string;
-  accepted_at: UtcInstant;
-  service_receipt: {
-    [key: string]: unknown;
-  };
-  receipt_schema_version: string;
+  call_id: string;
+  attempt_id: string;
+  evidence_schema_version: "1.0.0";
+  evidence_ref: string;
+  evidence_event_id: string;
+  evidence_revision: PositiveDecimal;
+  evidence_digest: string;
 };
 
 export type AdmissionReleaseRequest = {
-  invocation_id: string;
+  producer: string;
+  run_id: string;
+  execution_id: string;
+  call_id: string;
+  attempt_id: string;
+  release_basis: "not_dispatched" | "settled_remainder";
+  evidence_schema_version: "1.0.0";
+  evidence_ref: string;
+  evidence_event_id: string;
+  evidence_revision: PositiveDecimal;
+  evidence_digest: string;
   reason: string;
-  service_receipt?: {
-    [key: string]: unknown;
-  } | null;
 };
 
 export type Admission = {
   admission_id: Uuid;
-  invocation_id: string;
+  producer: string;
+  run_id: string;
   execution_id: string;
-  billing_subject: BillingSubject;
+  invocation_id: string;
+  call_id: string;
+  attempt_id: string;
+  attempt_ordinal: PositiveDecimal;
   feature_key: string;
-  mode: "included" | "credit" | "rejected";
-  status: "created" | "held" | "captured" | "released" | "unknown" | "rejected";
+  authorization_status: "authorized" | "denied" | "expired" | "unknown";
+  dispatch_status: "awaiting" | "not_dispatched" | "started" | "unknown";
+  evidence_status: "awaiting" | "sealed_known" | "sealed_unknown" | "invalid";
+  charge_status:
+    | "pending_evidence"
+    | "pending_review"
+    | "partially_captured"
+    | "captured"
+    | "released"
+    | "unknown"
+    | "rejected";
   authorized_micros: NonNegativeCreditMicros;
-  pricing_revision_id: Uuid;
-  feature_price_id: Uuid;
-  pricing_snapshot_digest: string;
+  snapshot_id: Uuid;
+  snapshot_digest: string;
+  rate_revision_id: Uuid;
+  policy_revision_id: Uuid;
+  normalization_version: string;
+  normalization_digest: string;
+  rounding_version: string;
+  currency_code: CurrencyCode;
+  valid_until: UtcInstant;
+  planned_binding_ref: string;
+  planned_binding_digest: string;
+  usage_profile_version: "1.0.0";
+  usage_profile_digest: "eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0";
+  execution_bound_ref: string;
+  execution_bound_digest: string;
   hold_id: string | null;
-  accepted_provider_ref: string | null;
-  accepted_at: string | null;
   created_at: UtcInstant;
   updated_at: UtcInstant;
 };
@@ -186,27 +220,42 @@ export type AdmissionResponse = {
 
 export type ExecutionEventRequest = {
   event_id: string;
+  producer: string;
+  run_id: string;
   execution_id: string;
-  invocation_id: string;
-  event_type:
-    | "execution.waiting"
-    | "execution.accepted"
-    | "execution.rejected"
-    | "execution.failed"
-    | "execution.unknown";
+  call_id: string;
+  attempt_id: string;
+  event_type: "model_usage_evidence.sealed";
   occurred_at: UtcInstant;
-  receipt_schema_version: string;
-  receipt: {
-    [key: string]: unknown;
-  };
+  evidence_schema_version: "1.0.0";
+  evidence_ref: string;
+  evidence_event_id: string;
+  evidence_revision: PositiveDecimal;
+  evidence_digest: string;
 };
 
 export type ExecutionEvent = {
   execution_event_id: Uuid;
   event_id: string;
+  producer: string;
+  run_id: string;
   execution_id: string;
-  invocation_id: string;
-  status: "received" | "processed" | "failed";
+  call_id: string;
+  attempt_id: string;
+  evidence_schema_version: "1.0.0";
+  evidence_ref: string;
+  evidence_event_id: string;
+  evidence_revision: PositiveDecimal;
+  evidence_digest: string;
+  status: "received" | "processing" | "processed" | "failed" | "unknown";
+  charge_status:
+    | "pending_evidence"
+    | "pending_review"
+    | "partially_captured"
+    | "captured"
+    | "released"
+    | "unknown"
+    | "rejected";
   attempts: number;
   dead_lettered_at: string | null;
   last_error_code: string | null;

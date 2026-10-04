@@ -98,7 +98,7 @@ export class BillingHttpModule implements NestModule {
               Object.entries(generatedSchemas),
             );
             if (
-              bindings.length !== 43 ||
+              bindings.length !== 42 ||
               exports.size !== bindings.length ||
               new Set(bindings.map(([, exported]) => exported)).size !==
                 exports.size

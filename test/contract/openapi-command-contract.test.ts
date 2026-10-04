@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import { z } from "zod";
+import { Ajv2020 } from "ajv/dist/2020.js";
+import formatsModule from "ajv-formats";
 
 const recordSchema = z.record(z.string(), z.unknown());
 const openApiSchema = z
@@ -17,7 +19,7 @@ const openApiSchema = z
   })
   .passthrough();
 
-const readContract = async () =>
+const readV1Contract = async () =>
   openApiSchema.parse(
     parse(
       await readFile(
@@ -37,7 +39,7 @@ const operation = (
 
 describe("Billing command OpenAPI contract", () => {
   it("keeps admission command bodies and execution conflict status aligned with runtime", async () => {
-    const document = await readContract();
+    const document = await readV1Contract();
     expect(
       operation(
         document,
@@ -103,7 +105,7 @@ describe("Billing command OpenAPI contract", () => {
   });
 
   it("defines exact request bodies for durable settlement and expiry commands", async () => {
-    const document = await readContract();
+    const document = await readV1Contract();
     expect(
       operation(document, "/v1/internal/payment/settlements/accept")
         .requestBody,
@@ -143,7 +145,7 @@ describe("Billing command OpenAPI contract", () => {
   });
 
   it("documents only production webhook providers and the Alipay form-body signature", async () => {
-    const document = await readContract();
+    const document = await readV1Contract();
     const webhook = operation(document, "/v1/webhooks/payment/{provider}");
     const parameters = z.array(recordSchema).parse(webhook.parameters);
     const provider = parameters.find(
@@ -191,4 +193,136 @@ describe("Billing command OpenAPI contract", () => {
       recordSchema.parse(recordSchema.parse(alipay.properties).sign_type).enum,
     ).toEqual(["RSA2"]);
   });
+});
+
+describe("Billing v2 per-attempt command contract", () => {
+  it("removes generic receipts and freezes strict Agent evidence identity", async () => {
+    const document = recordSchema.parse(
+      parse(
+        await readFile(
+          join(process.cwd(), "contract/openapi/v2/openapi.yaml"),
+          "utf8",
+        ),
+      ),
+    );
+    const components = recordSchema.parse(document.components);
+    const schemas = recordSchema.parse(components.schemas);
+    const capture = recordSchema.parse(schemas.AdmissionCaptureRequest);
+    const release = recordSchema.parse(schemas.AdmissionReleaseRequest);
+    const event = recordSchema.parse(schemas.ExecutionEventRequest);
+    const admission = recordSchema.parse(schemas.Admission);
+    const durableEvent = recordSchema.parse(schemas.ExecutionEvent);
+    expect(capture.additionalProperties).toBe(false);
+    expect(recordSchema.parse(capture.properties)).not.toHaveProperty(
+      "service_receipt",
+    );
+    expect(recordSchema.parse(release.properties)).not.toHaveProperty(
+      "service_receipt",
+    );
+    expect(recordSchema.parse(event.properties)).not.toHaveProperty("receipt");
+    expect(
+      recordSchema.parse(
+        recordSchema.parse(event.properties).evidence_schema_version,
+      ).const,
+    ).toBe("1.0.0");
+    expect(recordSchema.parse(admission.properties)).toMatchObject({
+      usage_profile_version: { const: "1.0.0" },
+      usage_profile_digest: {
+        const:
+          "eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0",
+      },
+      authorization_status: {
+        enum: ["authorized", "denied", "expired", "unknown"],
+      },
+      dispatch_status: {
+        enum: ["awaiting", "not_dispatched", "started", "unknown"],
+      },
+    });
+    expect(recordSchema.parse(durableEvent.properties)).toMatchObject({
+      evidence_schema_version: { const: "1.0.0" },
+      evidence_ref: { type: "string" },
+      evidence_event_id: { type: "string", format: "uuid" },
+      evidence_revision: { $ref: "#/components/schemas/PositiveDecimal" },
+      evidence_digest: { type: "string", pattern: "^[0-9a-f]{64}$" },
+    });
+  });
+
+  it.each(["denied", "expired", "unknown"] as const)(
+    "rejects dispatch started when the durable authorization decision is %s",
+    async (authorizationStatus) => {
+      const document = recordSchema.parse(
+        parse(
+          await readFile(
+            join(process.cwd(), "contract/openapi/v2/openapi.yaml"),
+            "utf8",
+          ),
+        ),
+      );
+      const components = recordSchema.parse(document.components);
+      const schemas = recordSchema.parse(components.schemas);
+      const ajv = new Ajv2020({ strict: true });
+      formatsModule.default(ajv);
+      ajv.addKeyword({
+        keyword: "x-kokoro-credit-unit",
+        schemaType: "object",
+        valid: true,
+      });
+      for (const [name, schema] of Object.entries(schemas))
+        ajv.addSchema(
+          recordSchema.parse(schema),
+          `#/components/schemas/${name}`,
+        );
+      const validate = ajv.getSchema("#/components/schemas/Admission");
+      expect(validate).toBeDefined();
+      const admission = {
+        admission_id: "11111111-1111-4111-8111-111111111111",
+        producer: "kokoro-agent",
+        run_id: "run-1",
+        execution_id: "execution-1",
+        invocation_id: "invocation-1",
+        call_id: "22222222-2222-4222-8222-222222222222",
+        attempt_id: "33333333-3333-4333-8333-333333333333",
+        attempt_ordinal: "1",
+        feature_key: "model.call",
+        authorization_status: authorizationStatus,
+        dispatch_status: "started",
+        evidence_status: "awaiting",
+        charge_status: "pending_evidence",
+        authorized_micros: "1000",
+        snapshot_id: "44444444-4444-4444-8444-444444444444",
+        snapshot_digest: "1".repeat(64),
+        rate_revision_id: "55555555-5555-4555-8555-555555555555",
+        policy_revision_id: "66666666-6666-4666-8666-666666666666",
+        normalization_version: "1.0.0",
+        normalization_digest: "2".repeat(64),
+        rounding_version: "1.0.0",
+        currency_code: "CRD",
+        valid_until: "2026-10-04T12:00:00.000Z",
+        planned_binding_ref: "planned/1",
+        planned_binding_digest: "3".repeat(64),
+        usage_profile_version: "1.0.0",
+        usage_profile_digest:
+          "eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0",
+        execution_bound_ref: "execution-bound/1",
+        execution_bound_digest: "4".repeat(64),
+        hold_id: "77777777-7777-4777-8777-777777777777",
+        created_at: "2026-10-04T11:00:00.000Z",
+        updated_at: "2026-10-04T11:00:00.000Z",
+      };
+      expect(validate?.(admission), JSON.stringify(validate?.errors)).toBe(
+        false,
+      );
+      expect(
+        validate?.({
+          ...admission,
+          authorization_status: "authorized",
+        }),
+        JSON.stringify(validate?.errors),
+      ).toBe(true);
+      expect(
+        validate?.({ ...admission, dispatch_status: "unknown" }),
+        JSON.stringify(validate?.errors),
+      ).toBe(true);
+    },
+  );
 });

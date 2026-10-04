@@ -1,6 +1,9 @@
 type JsonObject = Record<string, unknown>;
 
 const methods = new Set(["get", "post", "put", "patch", "delete"]);
+const AGENT_USAGE_SCHEMA_VERSION = "1.0.0";
+const AGENT_USAGE_SCHEMA_SHA256 =
+  "eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0";
 const expectedOperations = new Map<string, string>([
   ["get /healthz", "getHealth"],
   ["get /readyz", "getReadiness"],
@@ -459,8 +462,8 @@ export function validateV2OpenApi(document: unknown): string[] {
   if (!root) return ["document must be an object"];
   const errors: string[] = [];
   if (root.openapi !== "3.1.0") errors.push("openapi must be 3.1.0");
-  if (object(root.info)?.version !== "2.0.2")
-    errors.push("info.version must be 2.0.2");
+  if (object(root.info)?.version !== "3.0.0-experimental.1")
+    errors.push("info.version must be 3.0.0-experimental.1");
   validateCreditUnit(root, errors);
   const paths = object(root.paths) ?? {};
   const actual = new Map<string, JsonObject>();
@@ -685,11 +688,257 @@ export function validateV2OpenApi(document: unknown): string[] {
     if ("x-kokoro-request-id" in node)
       errors.push(`${path} uses retired request-id header`);
   });
+  const exactRequired = (name: string, expected: readonly string[]) => {
+    const schema = object(object(root.components)?.schemas)?.[name];
+    const required = Array.isArray(object(schema)?.required)
+      ? object(schema)?.required
+      : undefined;
+    if (JSON.stringify(required) !== JSON.stringify(expected))
+      errors.push(`${name} must define its exact required identity`);
+    if (object(schema)?.additionalProperties !== false)
+      errors.push(`${name} must reject unknown properties`);
+  };
+  const attemptIdentity = [
+    "producer",
+    "run_id",
+    "execution_id",
+    "call_id",
+    "attempt_id",
+  ] as const;
+  const evidenceIdentity = [
+    "evidence_schema_version",
+    "evidence_ref",
+    "evidence_event_id",
+    "evidence_revision",
+    "evidence_digest",
+  ] as const;
+  exactRequired("AdmissionCreateRequest", [
+    "producer",
+    "run_id",
+    "execution_id",
+    "invocation_id",
+    "call_id",
+    "attempt_id",
+    "attempt_ordinal",
+    "feature_key",
+    "planned_binding_ref",
+    "planned_binding_digest",
+    "usage_profile_version",
+    "usage_profile_digest",
+    "execution_bound_ref",
+    "execution_bound_digest",
+  ]);
+  exactRequired("AdmissionCaptureRequest", [
+    ...attemptIdentity,
+    ...evidenceIdentity,
+  ]);
+  exactRequired("AdmissionReleaseRequest", [
+    ...attemptIdentity,
+    "release_basis",
+    ...evidenceIdentity,
+    "reason",
+  ]);
+  exactRequired("ExecutionEventRequest", [
+    "event_id",
+    ...attemptIdentity,
+    "event_type",
+    "occurred_at",
+    ...evidenceIdentity,
+  ]);
+  exactRequired("Admission", [
+    "admission_id",
+    "producer",
+    "run_id",
+    "execution_id",
+    "invocation_id",
+    "call_id",
+    "attempt_id",
+    "attempt_ordinal",
+    "feature_key",
+    "authorization_status",
+    "dispatch_status",
+    "evidence_status",
+    "charge_status",
+    "authorized_micros",
+    "snapshot_id",
+    "snapshot_digest",
+    "rate_revision_id",
+    "policy_revision_id",
+    "normalization_version",
+    "normalization_digest",
+    "rounding_version",
+    "currency_code",
+    "valid_until",
+    "planned_binding_ref",
+    "planned_binding_digest",
+    "usage_profile_version",
+    "usage_profile_digest",
+    "execution_bound_ref",
+    "execution_bound_digest",
+    "hold_id",
+    "created_at",
+    "updated_at",
+  ]);
+  exactRequired("ExecutionEvent", [
+    "execution_event_id",
+    "event_id",
+    ...attemptIdentity,
+    ...evidenceIdentity,
+    "status",
+    "charge_status",
+    "attempts",
+    "dead_lettered_at",
+    "last_error_code",
+    "processed_at",
+    "created_at",
+  ]);
   const admission = schemaProperties(root, "AdmissionCreateRequest");
-  if (admission.payer_ref)
-    errors.push("AdmissionCreateRequest must not accept payer_ref");
-  if (!admission.billing_subject)
-    errors.push("AdmissionCreateRequest requires billing_subject attribution");
+  for (const forbidden of [
+    "payer_ref",
+    "billing_subject",
+    "amount_micros",
+    "rate",
+    "multiplier",
+    "service_receipt",
+  ]) {
+    if (admission[forbidden])
+      errors.push(`AdmissionCreateRequest must not accept ${forbidden}`);
+  }
+  for (const required of [
+    "producer",
+    "run_id",
+    "execution_id",
+    "invocation_id",
+    "call_id",
+    "attempt_id",
+    "attempt_ordinal",
+    "planned_binding_ref",
+    "planned_binding_digest",
+    "usage_profile_version",
+    "usage_profile_digest",
+    "execution_bound_ref",
+    "execution_bound_digest",
+  ]) {
+    if (!admission[required])
+      errors.push(`AdmissionCreateRequest requires ${required}`);
+  }
+  for (const name of [
+    "AdmissionCaptureRequest",
+    "AdmissionReleaseRequest",
+    "ExecutionEventRequest",
+  ]) {
+    const command = schemaProperties(root, name);
+    for (const forbidden of [
+      "service_receipt",
+      "receipt",
+      "actual_micros",
+      "usage_bytes",
+    ]) {
+      if (command[forbidden])
+        errors.push(`${name} must not accept ${forbidden}`);
+    }
+    for (const required of [
+      "producer",
+      "run_id",
+      "execution_id",
+      "call_id",
+      "attempt_id",
+      "evidence_schema_version",
+      "evidence_ref",
+      "evidence_event_id",
+      "evidence_revision",
+      "evidence_digest",
+    ]) {
+      if (!command[required]) errors.push(`${name} requires ${required}`);
+    }
+  }
+  const capture = schemaProperties(root, "AdmissionCaptureRequest");
+  const release = schemaProperties(root, "AdmissionReleaseRequest");
+  const execution = schemaProperties(root, "ExecutionEventRequest");
+  const admissionResult = schemaProperties(root, "Admission");
+  if (
+    object(admission.usage_profile_version)?.const !==
+    AGENT_USAGE_SCHEMA_VERSION
+  )
+    errors.push("AdmissionCreateRequest must pin Agent usage 1.0.0");
+  if (
+    object(admission.usage_profile_digest)?.const !== AGENT_USAGE_SCHEMA_SHA256
+  )
+    errors.push("AdmissionCreateRequest must pin Agent usage schema digest");
+  for (const command of [capture, release, execution])
+    if (
+      object(command.evidence_schema_version)?.const !==
+      AGENT_USAGE_SCHEMA_VERSION
+    )
+      errors.push("strict evidence command must pin Agent usage 1.0.0");
+  for (const field of [
+    "usage_profile_version",
+    "usage_profile_digest",
+    "execution_bound_ref",
+    "execution_bound_digest",
+  ])
+    if (!admissionResult[field])
+      errors.push(`Admission must echo immutable ${field}`);
+  if (
+    object(admissionResult.usage_profile_version)?.const !==
+      AGENT_USAGE_SCHEMA_VERSION ||
+    object(admissionResult.usage_profile_digest)?.const !==
+      AGENT_USAGE_SCHEMA_SHA256
+  )
+    errors.push("Admission must echo the pinned Agent usage schema identity");
+  if (
+    JSON.stringify(object(admissionResult.authorization_status)?.enum) !==
+    JSON.stringify(["authorized", "denied", "expired", "unknown"])
+  )
+    errors.push(
+      "Admission authorization status must be independent of dispatch",
+    );
+  if (
+    JSON.stringify(object(admissionResult.dispatch_status)?.enum) !==
+    JSON.stringify(["awaiting", "not_dispatched", "started", "unknown"])
+  )
+    errors.push("Admission dispatch status must preserve execution knowledge");
+  const admissionSchema = object(
+    object(object(root.components)?.schemas)?.Admission,
+  );
+  const startedDispatch = {
+    required: ["dispatch_status"],
+    properties: { dispatch_status: { const: "started" } },
+  };
+  const authorizedDecision = {
+    required: ["authorization_status"],
+    properties: { authorization_status: { const: "authorized" } },
+  };
+  if (
+    JSON.stringify(admissionSchema?.if) !== JSON.stringify(startedDispatch) ||
+    JSON.stringify(admissionSchema?.then) !== JSON.stringify(authorizedDecision)
+  )
+    errors.push("Admission dispatch started must require authorized decision");
+  if (
+    JSON.stringify(object(release.release_basis)?.enum) !==
+    JSON.stringify(["not_dispatched", "settled_remainder"])
+  )
+    errors.push("AdmissionReleaseRequest must use proof-bound release bases");
+  if (
+    JSON.stringify(object(execution.event_type)?.enum) !==
+    JSON.stringify(["model_usage_evidence.sealed"])
+  )
+    errors.push("ExecutionEventRequest must accept only sealed usage evidence");
+  if (
+    JSON.stringify(object(admissionResult.charge_status)?.enum) !==
+    JSON.stringify([
+      "pending_evidence",
+      "pending_review",
+      "partially_captured",
+      "captured",
+      "released",
+      "unknown",
+      "rejected",
+    ])
+  )
+    errors.push(
+      "Admission charge status must preserve actual-only pending states",
+    );
   const checkout = schemaProperties(root, "CheckoutCreateRequest");
   for (const key of [
     "amount_minor",
@@ -763,7 +1012,7 @@ export function validateV2OpenApi(document: unknown): string[] {
     )
       errors.push(`${name} must reject unknown fields`);
   const requiredNullable = new Map<string, readonly string[]>([
-    ["Admission", ["hold_id", "accepted_provider_ref", "accepted_at"]],
+    ["Admission", ["hold_id"]],
     ["ExecutionEvent", ["dead_lettered_at", "last_error_code", "processed_at"]],
     ["Checkout", ["checkout_url", "provider_session_expires_at"]],
     ["Settlement", ["credit_fulfillment_id", "credit_grant_id"]],

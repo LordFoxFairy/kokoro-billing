@@ -152,23 +152,6 @@ export const PageSchema = {
   },
 } as const;
 
-export const BillingSubjectSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["kind", "ref"],
-  properties: {
-    kind: {
-      type: "string",
-      enum: ["user", "project", "organization", "service"],
-    },
-    ref: {
-      type: "string",
-      minLength: 1,
-      maxLength: 255,
-    },
-  },
-} as const;
-
 export const CatalogItemSchema = {
   type: "object",
   additionalProperties: false,
@@ -413,15 +396,28 @@ export const AdmissionCreateRequestSchema = {
   type: "object",
   additionalProperties: false,
   required: [
-    "invocation_id",
+    "producer",
+    "run_id",
     "execution_id",
-    "billing_subject",
-    "surface",
+    "invocation_id",
+    "call_id",
+    "attempt_id",
+    "attempt_ordinal",
     "feature_key",
-    "meter_kind",
+    "planned_binding_ref",
+    "planned_binding_digest",
+    "usage_profile_version",
+    "usage_profile_digest",
+    "execution_bound_ref",
+    "execution_bound_digest",
   ],
   properties: {
-    invocation_id: {
+    producer: {
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+    },
+    run_id: {
       type: "string",
       minLength: 1,
       maxLength: 255,
@@ -431,27 +427,52 @@ export const AdmissionCreateRequestSchema = {
       minLength: 1,
       maxLength: 255,
     },
-    billing_subject: {
-      $ref: "#/components/schemas/BillingSubject",
-    },
-    surface: {
+    invocation_id: {
       type: "string",
       minLength: 1,
-      maxLength: 128,
+      maxLength: 255,
+    },
+    call_id: {
+      type: "string",
+      format: "uuid",
+    },
+    attempt_id: {
+      type: "string",
+      format: "uuid",
+    },
+    attempt_ordinal: {
+      $ref: "#/components/schemas/PositiveDecimal",
     },
     feature_key: {
       type: "string",
       minLength: 1,
       maxLength: 128,
     },
-    meter_kind: {
-      type: "string",
-      enum: ["model_invocation", "feature", "studio_job"],
-    },
-    requested_model_tier: {
+    planned_binding_ref: {
       type: "string",
       minLength: 1,
-      maxLength: 128,
+      maxLength: 255,
+    },
+    planned_binding_digest: {
+      type: "string",
+      pattern: "^[0-9a-f]{64}$",
+    },
+    usage_profile_version: {
+      type: "string",
+      const: "1.0.0",
+    },
+    usage_profile_digest: {
+      type: "string",
+      const: "eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0",
+    },
+    execution_bound_ref: {
+      type: "string",
+      minLength: 1,
+      maxLength: 255,
+    },
+    execution_bound_digest: {
+      type: "string",
+      pattern: "^[0-9a-f]{64}$",
     },
   },
 } as const;
@@ -460,15 +481,24 @@ export const AdmissionCaptureRequestSchema = {
   type: "object",
   additionalProperties: false,
   required: [
-    "invocation_id",
+    "producer",
+    "run_id",
     "execution_id",
-    "accepted_provider_ref",
-    "accepted_at",
-    "service_receipt",
-    "receipt_schema_version",
+    "call_id",
+    "attempt_id",
+    "evidence_schema_version",
+    "evidence_ref",
+    "evidence_event_id",
+    "evidence_revision",
+    "evidence_digest",
   ],
   properties: {
-    invocation_id: {
+    producer: {
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+    },
+    run_id: {
       type: "string",
       minLength: 1,
       maxLength: 255,
@@ -478,22 +508,33 @@ export const AdmissionCaptureRequestSchema = {
       minLength: 1,
       maxLength: 255,
     },
-    accepted_provider_ref: {
+    call_id: {
+      type: "string",
+      format: "uuid",
+    },
+    attempt_id: {
+      type: "string",
+      format: "uuid",
+    },
+    evidence_schema_version: {
+      type: "string",
+      const: "1.0.0",
+    },
+    evidence_ref: {
       type: "string",
       minLength: 1,
       maxLength: 255,
     },
-    accepted_at: {
-      $ref: "#/components/schemas/UtcInstant",
-    },
-    service_receipt: {
-      type: "object",
-      additionalProperties: true,
-    },
-    receipt_schema_version: {
+    evidence_event_id: {
       type: "string",
-      minLength: 1,
-      maxLength: 32,
+      format: "uuid",
+    },
+    evidence_revision: {
+      $ref: "#/components/schemas/PositiveDecimal",
+    },
+    evidence_digest: {
+      type: "string",
+      pattern: "^[0-9a-f]{64}$",
     },
   },
 } as const;
@@ -501,51 +542,27 @@ export const AdmissionCaptureRequestSchema = {
 export const AdmissionReleaseRequestSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["invocation_id", "reason"],
-  properties: {
-    invocation_id: {
-      type: "string",
-      minLength: 1,
-      maxLength: 255,
-    },
-    reason: {
-      type: "string",
-      minLength: 1,
-      maxLength: 255,
-    },
-    service_receipt: {
-      type: ["object", "null"],
-      additionalProperties: true,
-    },
-  },
-} as const;
-
-export const AdmissionSchema = {
-  type: "object",
-  additionalProperties: false,
   required: [
-    "admission_id",
-    "invocation_id",
+    "producer",
+    "run_id",
     "execution_id",
-    "billing_subject",
-    "feature_key",
-    "mode",
-    "status",
-    "authorized_micros",
-    "pricing_revision_id",
-    "feature_price_id",
-    "pricing_snapshot_digest",
-    "hold_id",
-    "accepted_provider_ref",
-    "accepted_at",
-    "created_at",
-    "updated_at",
+    "call_id",
+    "attempt_id",
+    "release_basis",
+    "evidence_schema_version",
+    "evidence_ref",
+    "evidence_event_id",
+    "evidence_revision",
+    "evidence_digest",
+    "reason",
   ],
   properties: {
-    admission_id: {
-      $ref: "#/components/schemas/Uuid",
+    producer: {
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
     },
-    invocation_id: {
+    run_id: {
       type: "string",
       minLength: 1,
       maxLength: 255,
@@ -555,47 +572,228 @@ export const AdmissionSchema = {
       minLength: 1,
       maxLength: 255,
     },
-    billing_subject: {
-      $ref: "#/components/schemas/BillingSubject",
+    call_id: {
+      type: "string",
+      format: "uuid",
+    },
+    attempt_id: {
+      type: "string",
+      format: "uuid",
+    },
+    release_basis: {
+      type: "string",
+      enum: ["not_dispatched", "settled_remainder"],
+    },
+    evidence_schema_version: {
+      type: "string",
+      const: "1.0.0",
+    },
+    evidence_ref: {
+      type: "string",
+      minLength: 1,
+      maxLength: 255,
+    },
+    evidence_event_id: {
+      type: "string",
+      format: "uuid",
+    },
+    evidence_revision: {
+      $ref: "#/components/schemas/PositiveDecimal",
+    },
+    evidence_digest: {
+      type: "string",
+      pattern: "^[0-9a-f]{64}$",
+    },
+    reason: {
+      type: "string",
+      minLength: 1,
+      maxLength: 255,
+    },
+  },
+} as const;
+
+export const AdmissionSchema = {
+  type: "object",
+  additionalProperties: false,
+  if: {
+    required: ["dispatch_status"],
+    properties: {
+      dispatch_status: {
+        const: "started",
+      },
+    },
+  },
+  then: {
+    required: ["authorization_status"],
+    properties: {
+      authorization_status: {
+        const: "authorized",
+      },
+    },
+  },
+  required: [
+    "admission_id",
+    "producer",
+    "run_id",
+    "execution_id",
+    "invocation_id",
+    "call_id",
+    "attempt_id",
+    "attempt_ordinal",
+    "feature_key",
+    "authorization_status",
+    "dispatch_status",
+    "evidence_status",
+    "charge_status",
+    "authorized_micros",
+    "snapshot_id",
+    "snapshot_digest",
+    "rate_revision_id",
+    "policy_revision_id",
+    "normalization_version",
+    "normalization_digest",
+    "rounding_version",
+    "currency_code",
+    "valid_until",
+    "planned_binding_ref",
+    "planned_binding_digest",
+    "usage_profile_version",
+    "usage_profile_digest",
+    "execution_bound_ref",
+    "execution_bound_digest",
+    "hold_id",
+    "created_at",
+    "updated_at",
+  ],
+  properties: {
+    admission_id: {
+      $ref: "#/components/schemas/Uuid",
+    },
+    producer: {
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+    },
+    run_id: {
+      type: "string",
+      minLength: 1,
+      maxLength: 255,
+    },
+    execution_id: {
+      type: "string",
+      minLength: 1,
+      maxLength: 255,
+    },
+    invocation_id: {
+      type: "string",
+      minLength: 1,
+      maxLength: 255,
+    },
+    call_id: {
+      type: "string",
+      format: "uuid",
+    },
+    attempt_id: {
+      type: "string",
+      format: "uuid",
+    },
+    attempt_ordinal: {
+      $ref: "#/components/schemas/PositiveDecimal",
     },
     feature_key: {
       type: "string",
       minLength: 1,
       maxLength: 128,
     },
-    mode: {
+    authorization_status: {
       type: "string",
-      enum: ["included", "credit", "rejected"],
+      enum: ["authorized", "denied", "expired", "unknown"],
     },
-    status: {
+    dispatch_status: {
       type: "string",
-      enum: ["created", "held", "captured", "released", "unknown", "rejected"],
+      enum: ["awaiting", "not_dispatched", "started", "unknown"],
+    },
+    evidence_status: {
+      type: "string",
+      enum: ["awaiting", "sealed_known", "sealed_unknown", "invalid"],
+    },
+    charge_status: {
+      type: "string",
+      enum: [
+        "pending_evidence",
+        "pending_review",
+        "partially_captured",
+        "captured",
+        "released",
+        "unknown",
+        "rejected",
+      ],
     },
     authorized_micros: {
       $ref: "#/components/schemas/NonNegativeCreditMicros",
     },
-    pricing_revision_id: {
+    snapshot_id: {
       $ref: "#/components/schemas/Uuid",
     },
-    feature_price_id: {
+    snapshot_digest: {
+      type: "string",
+      pattern: "^[0-9a-f]{64}$",
+    },
+    rate_revision_id: {
       $ref: "#/components/schemas/Uuid",
     },
-    pricing_snapshot_digest: {
+    policy_revision_id: {
+      $ref: "#/components/schemas/Uuid",
+    },
+    normalization_version: {
+      type: "string",
+      minLength: 1,
+      maxLength: 32,
+    },
+    normalization_digest: {
+      type: "string",
+      pattern: "^[0-9a-f]{64}$",
+    },
+    rounding_version: {
+      type: "string",
+      minLength: 1,
+      maxLength: 32,
+    },
+    currency_code: {
+      $ref: "#/components/schemas/CurrencyCode",
+    },
+    valid_until: {
+      $ref: "#/components/schemas/UtcInstant",
+    },
+    planned_binding_ref: {
+      type: "string",
+      minLength: 1,
+      maxLength: 255,
+    },
+    planned_binding_digest: {
+      type: "string",
+      pattern: "^[0-9a-f]{64}$",
+    },
+    usage_profile_version: {
+      type: "string",
+      const: "1.0.0",
+    },
+    usage_profile_digest: {
+      type: "string",
+      const: "eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0",
+    },
+    execution_bound_ref: {
+      type: "string",
+      minLength: 1,
+      maxLength: 255,
+    },
+    execution_bound_digest: {
       type: "string",
       pattern: "^[0-9a-f]{64}$",
     },
     hold_id: {
       type: ["string", "null"],
       format: "uuid",
-    },
-    accepted_provider_ref: {
-      type: ["string", "null"],
-      maxLength: 255,
-    },
-    accepted_at: {
-      type: ["string", "null"],
-      format: "date-time",
-      pattern: "Z$",
     },
     created_at: {
       $ref: "#/components/schemas/UtcInstant",
@@ -622,15 +820,31 @@ export const ExecutionEventRequestSchema = {
   additionalProperties: false,
   required: [
     "event_id",
+    "producer",
+    "run_id",
     "execution_id",
-    "invocation_id",
+    "call_id",
+    "attempt_id",
     "event_type",
     "occurred_at",
-    "receipt_schema_version",
-    "receipt",
+    "evidence_schema_version",
+    "evidence_ref",
+    "evidence_event_id",
+    "evidence_revision",
+    "evidence_digest",
   ],
   properties: {
     event_id: {
+      type: "string",
+      minLength: 1,
+      maxLength: 255,
+    },
+    producer: {
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+    },
+    run_id: {
       type: "string",
       minLength: 1,
       maxLength: 255,
@@ -640,32 +854,40 @@ export const ExecutionEventRequestSchema = {
       minLength: 1,
       maxLength: 255,
     },
-    invocation_id: {
+    call_id: {
       type: "string",
-      minLength: 1,
-      maxLength: 255,
+      format: "uuid",
+    },
+    attempt_id: {
+      type: "string",
+      format: "uuid",
     },
     event_type: {
       type: "string",
-      enum: [
-        "execution.waiting",
-        "execution.accepted",
-        "execution.rejected",
-        "execution.failed",
-        "execution.unknown",
-      ],
+      enum: ["model_usage_evidence.sealed"],
     },
     occurred_at: {
       $ref: "#/components/schemas/UtcInstant",
     },
-    receipt_schema_version: {
+    evidence_schema_version: {
+      type: "string",
+      const: "1.0.0",
+    },
+    evidence_ref: {
       type: "string",
       minLength: 1,
-      maxLength: 32,
+      maxLength: 255,
     },
-    receipt: {
-      type: "object",
-      additionalProperties: true,
+    evidence_event_id: {
+      type: "string",
+      format: "uuid",
+    },
+    evidence_revision: {
+      $ref: "#/components/schemas/PositiveDecimal",
+    },
+    evidence_digest: {
+      type: "string",
+      pattern: "^[0-9a-f]{64}$",
     },
   },
 } as const;
@@ -676,9 +898,18 @@ export const ExecutionEventSchema = {
   required: [
     "execution_event_id",
     "event_id",
+    "producer",
+    "run_id",
     "execution_id",
-    "invocation_id",
+    "call_id",
+    "attempt_id",
+    "evidence_schema_version",
+    "evidence_ref",
+    "evidence_event_id",
+    "evidence_revision",
+    "evidence_digest",
     "status",
+    "charge_status",
     "attempts",
     "dead_lettered_at",
     "last_error_code",
@@ -694,19 +925,64 @@ export const ExecutionEventSchema = {
       minLength: 1,
       maxLength: 255,
     },
+    producer: {
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+    },
+    run_id: {
+      type: "string",
+      minLength: 1,
+      maxLength: 255,
+    },
     execution_id: {
       type: "string",
       minLength: 1,
       maxLength: 255,
     },
-    invocation_id: {
+    call_id: {
+      type: "string",
+      format: "uuid",
+    },
+    attempt_id: {
+      type: "string",
+      format: "uuid",
+    },
+    evidence_schema_version: {
+      type: "string",
+      const: "1.0.0",
+    },
+    evidence_ref: {
       type: "string",
       minLength: 1,
       maxLength: 255,
     },
+    evidence_event_id: {
+      type: "string",
+      format: "uuid",
+    },
+    evidence_revision: {
+      $ref: "#/components/schemas/PositiveDecimal",
+    },
+    evidence_digest: {
+      type: "string",
+      pattern: "^[0-9a-f]{64}$",
+    },
     status: {
       type: "string",
-      enum: ["received", "processed", "failed"],
+      enum: ["received", "processing", "processed", "failed", "unknown"],
+    },
+    charge_status: {
+      type: "string",
+      enum: [
+        "pending_evidence",
+        "pending_review",
+        "partially_captured",
+        "captured",
+        "released",
+        "unknown",
+        "rejected",
+      ],
     },
     attempts: {
       type: "integer",

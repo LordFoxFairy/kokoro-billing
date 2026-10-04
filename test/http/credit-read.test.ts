@@ -336,8 +336,8 @@ describe("R74 production personal Credit HTTP", () => {
       .setExpirationTime(patch.expires ?? Math.floor(Date.now() / 1000) + 300)
       .sign(privateKey);
   }
-  it("compiles the closed 43-schema registry, rejects mutation/coercion and unknown UTC/nonnullable fields", () => {
-    expect(schemas.names).toHaveLength(43);
+  it("compiles the closed 42-schema registry, rejects mutation/coercion and unknown UTC/nonnullable fields", () => {
+    expect(schemas.names).toHaveLength(42);
     const valid = {
       data: {
         credit_account_id: snapshot.id,
