@@ -1,3 +1,12 @@
+## R255：单库 owner schema 契约边界（2026-10-05）
+
+本节是实现前设计门。目标只改变 Billing 的物理 PostgreSQL namespace：连接 URL 必须恰有一个 `schema=kokoro_billing`，缺省、`public`、其他值、重复参数以及 `options`/`search_path` 注入在任何业务 SQL 前稳定拒绝；所有 runtime transaction 使用 `kokoro_billing,pg_catalog`，不接受 `public` fallback。
+
+该变化不新增或修改 HTTP/RPC/event wire、权限、tenant/actor来源、幂等 key、receipt representation、余额、倍率、费用或错误契约。installer 是 owner-local fresh install 工具而非公开 API 或 migration：仅空 `kokoro_billing` 可安装，非空 owner schema fail closed；邻 owner schema 不属于其查询或响应事实。服务重启读取既有 Billing schema，不触发隐式重装。
+
+契约验证覆盖有效 exact URL、缺失/错误/重复 schema 与 options 注入负控，并证明同库邻 owner 存在时原公开和内部 Billing 行为、幂等 replay 及错误闭集保持。无 OpenAPI、generated API client 或跨仓 contract 变化。
+
+---
 ## R243验证快照：API边界（2026-10-05）
 
 本切片冻结候选记录 `billing_metering_policy_revision` 的 19 列普通列、canonical 35 表与 SQL SHA-256 `926787608b9ce0faafb6cdb754df3a28407f1e271d4d00bdad6c342db1ab0c0d`，正常 Prisma 派生保持对齐。验证证据为 117 项真实 PostgreSQL、1,361 项辅助检查及 11 门（manifest `/var/folders/gn/wbk8wfbd047_wvwkwtyn331r0000gn/T/kokoro-r243-billing-policy-full-ic4dfmc6/manifest.json`）。新的 policy publication/joint selection→quote→逐attempt许可→预占/实际用量结算释放/流水用户旅程尚未接通；现阶段只覆盖 SQL 持久化前置，不新增 API。既有旧组件的存在不计为这条新链通过。验证基线为 `e5d83db0` + 本切片冻结候选；本记录不证明 Git 发布、当前 3310 运行组合或费用整链。

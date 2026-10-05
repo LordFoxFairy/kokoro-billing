@@ -1,3 +1,20 @@
+## R255：单库 Billing owner schema 技术设计门（2026-10-05）
+
+本节只批准下一实现片，不表示源码、安装、迁移或真实 PostgreSQL 已完成。当前 installer、Prisma transaction 与 legacy PostgreSQL connection 对 `public`、任意 schema 和 fallback 的处理不一致，并以整库空白作为 fresh install 前提，阻断同一数据库内按 owner schema 组合。
+
+目标唯一 schema 为 `kokoro_billing`。所有入口要求 URL **恰有一个** `schema=kokoro_billing`；缺省、`public`、其他 schema、重复参数及 `options`/`search_path` 注入均须在业务 SQL 前拒绝。installer 只创建、检查并安装空的 `kokoro_billing`，事务 `search_path` 固定为 `kokoro_billing,pg_catalog`，不含 `public`；runtime config、Prisma、TransactionService 与 legacy connection 使用同一规则且无 fallback。installer 不是 migration：owner schema 非空时 fail closed，正常服务重启不重复安装。
+
+### §8 放置与依赖
+
+采用现有连接与安装边界，而非给 `database/schema.sql` 的 32 张表及全部业务 SQL 机械添加限定名。后继源码候选严格为 `scripts/canonical-schema.ts`、`scripts/canonical-reference.ts`、`scripts/schema-verification.ts`、`src/config/runtime-config.ts`、`src/database/prisma.service.ts`、`src/database/transaction.service.ts`、`src/infrastructure/postgres/connection.ts`；不新增 installer 框架、role、多库、fallback 或兼容层。未证明需要时，`scripts/apply-schema.ts`、`scripts/schema-database-session.ts` 与 canonical SQL 保持不变。
+
+调用方向仍只访问 Billing 事实。installer 的空判与 catalog 检查仅限 `kokoro_billing`，不得扫描或读取邻 owner 的业务对象；runtime 不解析邻 schema。开发组合继续使用同一数据库与同一凭据，本片不设计 production role、GRANT 或运维迁移。
+
+生成方向保持唯一：canonical SQL 经 owner-schema reference database 生成/校验 `database/generated/schema.prisma`、provenance 与 `src/generated/prisma/**`；只有实际生成差异才更新派生物。表、列、索引、约束、事务、receipt、余额、倍率和费用语义均不改变。
+
+真实 PostgreSQL 验收须在含另一 owner schema/table/type/function 的数据库中安装，证明只新增 Billing owner 对象且邻 owner catalog 前后相同；重复 installer 对非空 owner schema 零修改拒绝，服务重启与现 receipt/idempotency 重放无第二账务效果。缺失/错误/重复 schema 和 options 注入均先 SQL 拒绝；三种 runtime 路径的有效 search path 精确一致，业务测试与无跨 owner schema 引用门同时通过。
+
+---
 ## R243验证快照：policy持久化前置（2026-10-05）
 
 本切片冻结候选记录 `billing_metering_policy_revision` 的 19 列普通列、canonical 35 表与 SQL SHA-256 `926787608b9ce0faafb6cdb754df3a28407f1e271d4d00bdad6c342db1ab0c0d`，正常 Prisma 派生保持对齐。验证证据为 117 项真实 PostgreSQL、1,361 项辅助检查及 11 门（manifest `/var/folders/gn/wbk8wfbd047_wvwkwtyn331r0000gn/T/kokoro-r243-billing-policy-full-ic4dfmc6/manifest.json`）。这只是 SQL 持久化前置；新的 policy publication/joint selection→quote→逐attempt许可→预占/实际用量结算释放/流水用户旅程尚未接通。既有旧组件的存在不计为这条新链通过。验证基线为 `e5d83db0` + 本切片冻结候选；本记录不证明 Git 发布、当前 3310 运行组合或费用整链。

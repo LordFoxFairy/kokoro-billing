@@ -1,3 +1,12 @@
+## R255：`kokoro_billing` owner schema 数据设计门（2026-10-05）
+
+当前 canonical DDL 是未限定对象名，实际安装位置由 session `search_path` 决定；现 installer 却固定 `public` 并要求整个数据库无用户对象，runtime 的 Prisma/Transaction/legacy connection 又有不一致的 public 或任意 schema 行为。目标由既有连接与安装边界把唯一物理 namespace 固定为 `kokoro_billing`：URL 不允许省略 schema，事务只设 `kokoro_billing,pg_catalog`，不含 `public`。
+
+installer 只创建/验证 `kokoro_billing` 并只判断该 owner schema 是否为空；邻 owner schema、table、type、function 不参与空判且不得被扫描或读取。非空 `kokoro_billing` 拒绝安装且零修改，installer 不承担 migration。canonical SQL 中表、列、索引、约束与所有账务事实保持不变；本片无数据搬迁、双写、alias、兼容读取、新 role 或跨 owner SQL。
+
+正规派生链仍为 canonical SQL → owner-schema reference → `database/generated/schema.prisma`/provenance → `src/generated/prisma/**`，只接收工具产生的实际差异，不手改生成物。真实单库验收先保存邻 owner catalog，安装后证明 Billing 对象仅位于 `kokoro_billing` 且邻对象逐字保持；再覆盖非空拒绝、正常重启、receipt/idempotency replay、三 runtime search path、错误 schema/options 先 SQL 拒绝及源码无跨 owner schema 引用。该门不改变余额、Credit、计量、价格或收费语义。
+
+---
 ## R243验证快照：canonical持久化前置（2026-10-05）
 
 本切片冻结候选记录 `billing_metering_policy_revision` 的 19 列普通列、canonical 35 表与 SQL SHA-256 `926787608b9ce0faafb6cdb754df3a28407f1e271d4d00bdad6c342db1ab0c0d`，正常 Prisma 派生保持对齐。验证证据为 117 项真实 PostgreSQL、1,361 项辅助检查及 11 门（manifest `/var/folders/gn/wbk8wfbd047_wvwkwtyn331r0000gn/T/kokoro-r243-billing-policy-full-ic4dfmc6/manifest.json`）。这里只记录 SQL 持久化前置；新的 policy publication/joint selection→quote→逐attempt许可→预占/实际用量结算释放/流水用户旅程尚未接通。既有旧组件的存在不计为这条新链通过。验证基线为 `e5d83db0` + 本切片冻结候选；本记录不证明 Git 发布、当前 3310 运行组合或费用整链。
