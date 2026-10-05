@@ -19,9 +19,16 @@ not a second editable field-level contract.
 Current source digests:
 
 ```text
-openapi/v1/openapi.yaml  58fbe4fea083ba12e0db23f49e995b96500d01af0013febf40eba3093510ef63
+openapi/v1/openapi.yaml  fbe34c188cf4a9f08955e4b94ceab40d63a41156a3106fae6ab939a4190612b7
 openapi/v2/openapi.yaml  ecaceefd3fd09d5106b364593dd513506622ca011bb0436b74f0928ffd8dcf00
 ```
+
+The current v1 source contains an authentication-breaking replacement that is
+not deployed: its two security
+descriptions identify IAM EdDSA/JWKS `user_delegated` tokens, the namespaced
+tenant claim, fixed Billing resource audience, and complete Billing scope
+profile. The digest above is the direct SHA-256 of that source; this edit does
+not claim generated-artifact publication or runtime rollout.
 
 Historical candidate narratives and old validation counts are available in Git
 history and the owner [`../docs/CURRENT.md`](../docs/CURRENT.md). They are not

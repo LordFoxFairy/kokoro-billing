@@ -17,14 +17,14 @@ afterEach(async () => {
 });
 
 describe("billing production authentication adapter", () => {
-  it("verifies RS256 IAM sessions from the IAM JWKS and binds the tenant header to the token", async () => {
-    const { privateKey, publicKey } = await generateKeyPair("RS256");
+  it("verifies EdDSA IAM Billing profiles and binds the tenant header to the token", async () => {
+    const { privateKey, publicKey } = await generateKeyPair("EdDSA");
     const jwk = await exportJWK(publicKey);
     const server = createServer((_request, response) => {
       response.setHeader("content-type", "application/json");
       response.end(
         JSON.stringify({
-          keys: [{ ...jwk, kid: "billing-test-key", alg: "RS256", use: "sig" }],
+          keys: [{ ...jwk, kid: "billing-test-key", alg: "EdDSA" }],
         }),
       );
     });
@@ -35,10 +35,17 @@ describe("billing production authentication adapter", () => {
     const address = server.address();
     if (address === null || typeof address === "string")
       throw new Error("test server did not bind");
-    const token = await new SignJWT({ tenant_id: "site-1" })
-      .setProtectedHeader({ alg: "RS256", kid: "billing-test-key", typ: "JWT" })
+    const token = await new SignJWT({
+      sid: "session-1",
+      client_id: "web-client",
+      scope: "billing:credit.consume",
+      "https://kokoro.dev/token_kind": "user_delegated",
+      "https://kokoro.dev/tenant_id": "site-1",
+    })
+      .setProtectedHeader({ alg: "EdDSA", kid: "billing-test-key", typ: "JWT" })
       .setSubject("team-1")
-      .setIssuer("kokoro-iam")
+      .setIssuer("https://iam.example.test/iam")
+      .setAudience("https://kokoro.dev/resources/billing")
       .setIssuedAt()
       .setExpirationTime("5 minutes")
       .sign(privateKey);
@@ -48,7 +55,8 @@ describe("billing production authentication adapter", () => {
       bffServiceToken: "bff-bearer",
       operatorProxySecret: "operator-secret",
       jwksUrl: `http://127.0.0.1:${address.port}/.well-known/jwks.json`,
-      issuer: "kokoro-iam",
+      issuer: "https://iam.example.test/iam",
+      audience: "https://kokoro.dev/resources/billing",
     });
 
     const valid = await auth.user({
@@ -234,7 +242,11 @@ import { decodeJwt } from "jose";
 type R73JwtInput = Readonly<{
   subject: string;
   issuer?: string;
-  audience?: string;
+  audience?: string | string[];
+  scope?: string;
+  kind?: string;
+  tenant?: string;
+  plainTenantOnly?: boolean;
   expiresAt?: number;
 }>;
 
@@ -243,13 +255,13 @@ async function withR73VerifiedUser(
     authenticate: (input: R73JwtInput) => Promise<unknown>,
   ) => Promise<void>,
 ): Promise<void> {
-  const { privateKey, publicKey } = await generateKeyPair("RS256");
+  const { privateKey, publicKey } = await generateKeyPair("EdDSA");
   const jwk = await exportJWK(publicKey);
   const jwksServer = createServer((_request, response) => {
     response.setHeader("content-type", "application/json");
     response.end(
       JSON.stringify({
-        keys: [{ ...jwk, kid: "r73-local-jwks", alg: "RS256", use: "sig" }],
+        keys: [{ ...jwk, kid: "r73-local-jwks", alg: "EdDSA" }],
       }),
     );
   });
@@ -265,8 +277,8 @@ async function withR73VerifiedUser(
     internalServiceSecret: "r73-fixture-service-secret",
     bffServiceToken: "r73-fixture-bff-token",
     operatorProxySecret: "r73-fixture-operator-secret",
-    issuer: "r73-fixture-iam",
-    audience: "r73-fixture-billing",
+    issuer: "https://r73-iam.example.test/iam",
+    audience: "https://kokoro.dev/resources/billing",
     jwksUrl: `http://127.0.0.1:${address.port}/.well-known/jwks.json`,
   });
   const requestFixture = Fastify({ logger: false });
@@ -277,11 +289,22 @@ async function withR73VerifiedUser(
   }));
   try {
     await check(async (input) => {
-      const token = await new SignJWT({ tenant_id: "tenant-a" })
-        .setProtectedHeader({ alg: "RS256", kid: "r73-local-jwks", typ: "JWT" })
+      const payload: Record<string, unknown> = {
+        sid: "r73-session",
+        client_id: "r73-web-client",
+        scope: input.scope ?? "billing:credit.consume",
+        "https://kokoro.dev/token_kind": input.kind ?? "user_delegated",
+        "https://kokoro.dev/tenant_id": input.tenant ?? "tenant-a",
+      };
+      if (input.plainTenantOnly === true) {
+        payload.tenant_id = payload["https://kokoro.dev/tenant_id"];
+        delete payload["https://kokoro.dev/tenant_id"];
+      }
+      const token = await new SignJWT(payload)
+        .setProtectedHeader({ alg: "EdDSA", kid: "r73-local-jwks", typ: "JWT" })
         .setSubject(input.subject)
-        .setIssuer(input.issuer ?? "r73-fixture-iam")
-        .setAudience(input.audience ?? "r73-fixture-billing")
+        .setIssuer(input.issuer ?? "https://r73-iam.example.test/iam")
+        .setAudience(input.audience ?? "https://kokoro.dev/resources/billing")
         .setIssuedAt()
         .setExpirationTime(
           input.expiresAt ?? Math.floor(Date.now() / 1000) + 60,
@@ -342,7 +365,7 @@ describe("R73 existing verified JWT subject boundary (not personal HTTP)", () =>
   );
 
   it.each([
-    ["issuer", { issuer: "another-fixture-iam" }],
+    ["issuer", { issuer: "https://another-iam.example.test/iam" }],
     ["audience", { audience: "another-fixture-owner" }],
     ["expiration", { expiresAt: 1 }],
   ] as const)(
@@ -358,6 +381,28 @@ describe("R73 existing verified JWT subject boundary (not personal HTTP)", () =>
       });
     },
   );
+
+  it("accepts the exact OpenID dual-audience profile and rejects legacy plain claims", async () => {
+    await withR73VerifiedUser(async (authenticate) => {
+      const issuer = "https://r73-iam.example.test/iam";
+      expect(
+        await authenticate({
+          subject: "subject-a",
+          scope: "billing:credit.consume openid",
+          audience: [
+            issuer + "/oauth2/userinfo",
+            "https://kokoro.dev/resources/billing",
+          ],
+        }),
+      ).toEqual({ context: { tenantId: "tenant-a", subjectId: "subject-a" } });
+      expect(
+        await authenticate({ subject: "subject-a", plainTenantOnly: true }),
+      ).toEqual({ context: null });
+      expect(
+        await authenticate({ subject: "subject-a", kind: "machine" }),
+      ).toEqual({ context: null });
+    });
+  });
 });
 
 import type { FastifyInstance } from "fastify";
@@ -377,13 +422,13 @@ describe("R74 personal auth selection and u1 boundary", () => {
     const { createBillingPersonalAuth } =
       await import("../../src/infrastructure/auth/billing-auth.js");
     const { default: Fastify } = await import("fastify");
-    const { privateKey, publicKey } = await generateKeyPair("RS256");
+    const { privateKey, publicKey } = await generateKeyPair("EdDSA");
     const jwk = await exportJWK(publicKey);
     const server = createServer((_request, response) => {
       response.setHeader("content-type", "application/json");
       response.end(
         JSON.stringify({
-          keys: [{ ...jwk, kid: "r74-auth", alg: "RS256", use: "sig" }],
+          keys: [{ ...jwk, kid: "r74-auth", alg: "EdDSA" }],
         }),
       );
     });
@@ -394,11 +439,17 @@ describe("R74 personal auth selection and u1 boundary", () => {
     const address = server.address();
     if (address === null || typeof address === "string")
       throw new Error("JWKS fixture not bound");
-    const token = await new SignJWT({ tenant_id: "tenant-a" })
-      .setProtectedHeader({ alg: "RS256", kid: "r74-auth" })
+    const token = await new SignJWT({
+      sid: "r74-session",
+      client_id: "r74-web-client",
+      scope: "billing:credit.consume",
+      "https://kokoro.dev/token_kind": "user_delegated",
+      "https://kokoro.dev/tenant_id": "tenant-a",
+    })
+      .setProtectedHeader({ alg: "EdDSA", kid: "r74-auth" })
       .setSubject("subject-a")
-      .setIssuer("r74-iam")
-      .setAudience("r74-billing")
+      .setIssuer("https://r74-iam.example.test/iam")
+      .setAudience("https://kokoro.dev/resources/billing")
       .setIssuedAt()
       .setExpirationTime("5 minutes")
       .sign(privateKey);
@@ -408,8 +459,8 @@ describe("R74 personal auth selection and u1 boundary", () => {
       bffServiceToken: serviceToken,
       operatorProxySecret: "r74-fixture-operator-secret-0000000001",
       jwksUrl: `http://127.0.0.1:${address.port}/jwks`,
-      issuer: "r74-iam",
-      audience: "r74-billing",
+      issuer: "https://r74-iam.example.test/iam",
+      audience: "https://kokoro.dev/resources/billing",
     });
     const app = Fastify({ logger: false });
     app.get("/__r74_personal_auth_probe", async (request, reply) => {

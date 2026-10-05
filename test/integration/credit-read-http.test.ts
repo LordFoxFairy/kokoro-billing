@@ -1,5 +1,7 @@
 import "reflect-metadata";
 import { randomUUID } from "node:crypto";
+import { createServer, type Server } from "node:http";
+import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import { Test } from "@nestjs/testing";
 import { FastifyAdapter } from "@nestjs/platform-fastify";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
@@ -32,6 +34,8 @@ describe.skipIf(adminUrl === undefined)(
     let app: NestFastifyApplication;
     let credit: CreditService;
     let schemas: BillingSchemaValidator;
+    let jwksServer: Server;
+    let signingKey: Awaited<ReturnType<typeof generateKeyPair>>["privateKey"];
     const accountPath = "/v2/billing/me/credit-account";
     const ledgerPath = "/v2/billing/me/credit-ledger";
     const profile = {
@@ -39,12 +43,11 @@ describe.skipIf(adminUrl === undefined)(
       internalServiceSecret: "r74-http-pg-service-secret-0000000001",
       bffServiceToken: "r74-http-pg-bff-bearer-token-00000001",
       operatorProxySecret: "r74-http-pg-operator-secret-000000001",
-      // Machine-only fixture deliberately performs no JWKS fetch.
-      jwksUrl: "http://127.0.0.1:1/unused-machine-jwks",
-      issuer: "r74-local-iam",
-      audience: "r74-local-billing",
+      jwksUrl: "",
+      issuer: "https://iam.example.test/iam",
+      audience: "https://kokoro.dev/resources/billing",
     };
-    const own = (subject = randomUUID()): CreditReadContext => ({
+    const own = (subject: string = randomUUID()): CreditReadContext => ({
       tenantId: "r74-owner-http",
       subjectId: subject,
     });
@@ -61,6 +64,31 @@ describe.skipIf(adminUrl === undefined)(
     beforeAll(async () => {
       if (adminUrl === undefined)
         throw new Error("Root must provide SCHEMA_ADMIN_URL");
+      const keys = await generateKeyPair("EdDSA");
+      signingKey = keys.privateKey;
+      const jwk = await exportJWK(keys.publicKey);
+      jwksServer = createServer((request, response) => {
+        if (request.method !== "GET" || request.url !== "/iam/jwks") {
+          response.writeHead(404).end();
+          return;
+        }
+        response.writeHead(200, { "content-type": "application/json" }).end(
+          JSON.stringify({
+            keys: [{ ...jwk, kid: "r255-iam-ed25519", alg: "EdDSA" }],
+          }),
+        );
+      });
+      await new Promise<void>((resolve, reject) => {
+        jwksServer.once("error", reject);
+        jwksServer.listen(0, "127.0.0.1", () => {
+          jwksServer.removeListener("error", reject);
+          resolve();
+        });
+      });
+      const address = jwksServer.address();
+      if (address === null || typeof address === "string")
+        throw new Error("JWKS fixture did not bind a TCP port");
+      profile.jwksUrl = `http://127.0.0.1:${address.port}/iam/jwks`;
       fixture = await createPrismaDatabaseFixture(adminUrl);
       expect(new URL(fixture.url).pathname).toMatch(
         /^\/billing_reference_[a-f0-9]{32}$/u,
@@ -82,22 +110,34 @@ describe.skipIf(adminUrl === undefined)(
       try {
         await app?.close();
       } finally {
-        await fixture?.close();
+        try {
+          await fixture?.close();
+        } finally {
+          await new Promise<void>((resolve, reject) => {
+            if (!jwksServer?.listening) {
+              resolve();
+              return;
+            }
+            jwksServer.close((error) =>
+              error === undefined ? resolve() : reject(error),
+            );
+          });
+        }
       }
     });
     const facts = async () => {
       // Observe every canonical table in this fixture's owner-only temporary DB,
       // including non-Credit receipts/payment facts. PG JSON text keeps bigint exact.
       const tables = await fixture.pool.query<{ name: string }>(
-        "SELECT tablename AS name FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename",
+        "SELECT tablename AS name FROM pg_tables WHERE schemaname = 'kokoro_billing' ORDER BY tablename",
       );
-      expect(tables.rows.length).toBeGreaterThan(11);
+      expect(tables.rows).toHaveLength(35);
       return Promise.all(
         tables.rows.map(async ({ name }) => {
           if (!/^[a-z][a-z0-9_]*$/u.test(name))
             throw new Error("Invalid canonical fixture table");
           const rows = await fixture.pool.query<{ row: string }>(
-            `SELECT to_jsonb(t)::text AS row FROM public."${name}" t ORDER BY to_jsonb(t)::text COLLATE "C"`,
+            `SELECT to_jsonb(t)::text AS row FROM kokoro_billing."${name}" t ORDER BY to_jsonb(t)::text COLLATE "C"`,
           );
           return { table: name, rows: rows.rows.map(({ row }) => row) };
         }),
@@ -129,6 +169,200 @@ describe.skipIf(adminUrl === undefined)(
       if (status !== 200)
         schemas.assert("ErrorResponse", response.json<unknown>());
     }
+    const signUser = async (
+      patch: {
+        scope?: string;
+        audience?: string | readonly string[];
+        kind?: string;
+        tenant?: string;
+        omitSid?: boolean;
+        expiresAt?: number;
+        operator?: boolean;
+        cnf?: Readonly<Record<string, string>>;
+        plainTenantOnly?: boolean;
+        notBefore?: number;
+        issuedAt?: number;
+        signingKey?: Awaited<ReturnType<typeof generateKeyPair>>["privateKey"];
+        algorithm?: "EdDSA" | "RS256";
+      } = {},
+    ) => {
+      const payload: Record<string, unknown> = {
+        sid: randomUUID(),
+        client_id: "r255-web-client",
+        scope: patch.scope ?? "billing:credit.consume",
+        "https://kokoro.dev/token_kind": patch.kind ?? "user_delegated",
+        "https://kokoro.dev/tenant_id": patch.tenant ?? "r74-owner-http",
+        ...(patch.operator === undefined
+          ? {}
+          : { "https://kokoro.dev/operator": patch.operator }),
+        ...(patch.cnf === undefined ? {} : { cnf: patch.cnf }),
+      };
+      if (patch.omitSid === true) delete payload.sid;
+      if (patch.plainTenantOnly === true) {
+        payload.tenant_id = payload["https://kokoro.dev/tenant_id"];
+        delete payload["https://kokoro.dev/tenant_id"];
+      }
+      let token = new SignJWT(payload)
+        .setProtectedHeader({
+          alg: patch.algorithm ?? "EdDSA",
+          kid: "r255-iam-ed25519",
+          typ: "JWT",
+        })
+        .setIssuer(profile.issuer)
+        .setAudience(
+          patch.audience === undefined
+            ? profile.audience
+            : typeof patch.audience === "string"
+              ? patch.audience
+              : [...patch.audience],
+        )
+        .setSubject("r255-user")
+        .setIssuedAt(patch.issuedAt)
+        .setExpirationTime(
+          patch.expiresAt ?? Math.floor(Date.now() / 1000) + 300,
+        );
+      if (patch.notBefore !== undefined)
+        token = token.setNotBefore(patch.notBefore);
+      return token.sign(patch.signingKey ?? signingKey);
+    };
+    it("accepts a complete IAM EdDSA user profile without mutating owner facts", async () => {
+      const context = own("r255-user");
+      const result = await seed(context, 321n);
+      const before = await facts();
+      const token = await signUser();
+      const userHeaders = {
+        authorization: `Bearer ${token}`,
+        "x-kokoro-tenant-id": encode(context.tenantId),
+        "x-request-id": "r74-real-pg-1",
+      };
+
+      const account = await app.inject({
+        method: "GET",
+        url: accountPath,
+        headers: userHeaders,
+      });
+      expect(await facts()).toEqual(before);
+      check(account, 200);
+      schemas.assert("CreditAccountResponse", account.json<unknown>());
+      expect(account.json<CreditAccountResponse>().data).toMatchObject({
+        credit_account_id: result.accountId,
+        available_micros: "321",
+      });
+
+      const ledger = await app.inject({
+        method: "GET",
+        url: ledgerPath,
+        headers: userHeaders,
+      });
+      expect(await facts()).toEqual(before);
+      check(ledger, 200);
+      schemas.assert("CreditLedgerResponse", ledger.json<unknown>());
+      expect(ledger.json<CreditLedgerResponse>().data.items).toHaveLength(1);
+    });
+    it("accepts the exact OpenID dual audience in both orders without owner writes", async () => {
+      const context = own("r255-user");
+      await seed(context, 321n);
+      const before = await facts();
+      const userinfo = profile.issuer + "/oauth2/userinfo";
+      for (const audience of [
+        [profile.audience, userinfo],
+        [userinfo, profile.audience],
+      ]) {
+        const response = await app.inject({
+          method: "GET",
+          url: accountPath,
+          headers: {
+            authorization: `Bearer ${await signUser({ scope: "billing:credit.consume openid", audience })}`,
+            "x-kokoro-tenant-id": encode(context.tenantId),
+            "x-request-id": "r74-real-pg-1",
+          },
+        });
+        expect(await facts()).toEqual(before);
+        check(response, 200);
+      }
+    });
+    it.each([
+      ["wrong scope", { scope: "openid" }, "r74-owner-http", 401],
+      [
+        "wrong audience",
+        { audience: "https://kokoro.dev/resources/iam-internal" },
+        "r74-owner-http",
+        401,
+      ],
+      ["machine token kind", { kind: "machine" }, "r74-owner-http", 401],
+      ["operator claim", { operator: true }, "r74-owner-http", 401],
+      [
+        "confirmation claim",
+        { cnf: { jkt: "fixture" } },
+        "r74-owner-http",
+        401,
+      ],
+      [
+        "legacy plain tenant only",
+        { plainTenantOnly: true },
+        "r74-owner-http",
+        401,
+      ],
+      [
+        "OpenID wrong userinfo audience",
+        {
+          scope: "billing:credit.consume openid",
+          audience: [profile.audience, profile.issuer + "/oauth2/wrong"],
+        },
+        "r74-owner-http",
+        401,
+      ],
+      [
+        "future not-before",
+        { notBefore: Math.floor(Date.now() / 1000) + 300 },
+        "r74-owner-http",
+        401,
+      ],
+      [
+        "unsafe issued-at integer",
+        { issuedAt: Number.MAX_SAFE_INTEGER + 1 },
+        "r74-owner-http",
+        401,
+      ],
+      ["missing sid", { omitSid: true }, "r74-owner-http", 401],
+      ["expired token", { expiresAt: 1 }, "r74-owner-http", 401],
+      ["cross-tenant header", {}, "r74-foreign", 403],
+    ] as const)(
+      "rejects a signed IAM profile with %s before owner writes",
+      async (_label, patch, headerTenant, status) => {
+        const context = own("r255-user");
+        await seed(context, 321n);
+        const before = await facts();
+        const response = await app.inject({
+          method: "GET",
+          url: accountPath,
+          headers: {
+            authorization: `Bearer ${await signUser(patch)}`,
+            "x-kokoro-tenant-id": encode(headerTenant),
+            "x-request-id": "r74-real-pg-1",
+          },
+        });
+        expect(await facts()).toEqual(before);
+        check(response, status);
+      },
+    );
+    it("rejects a correctly shaped RSA profile without owner writes", async () => {
+      const context = own("r255-user");
+      await seed(context, 321n);
+      const before = await facts();
+      const rsa = await generateKeyPair("RS256");
+      const response = await app.inject({
+        method: "GET",
+        url: accountPath,
+        headers: {
+          authorization: `Bearer ${await signUser({ algorithm: "RS256", signingKey: rsa.privateKey })}`,
+          "x-kokoro-tenant-id": encode(context.tenantId),
+          "x-request-id": "r74-real-pg-1",
+        },
+      });
+      expect(await facts()).toEqual(before);
+      check(response, 401);
+    });
     it("reads >2^53 bigint and UTC from the real writer/Repository with all facts unchanged", async () => {
       const context = own();
       const result = await seed(context, 9_007_199_254_740_993n);

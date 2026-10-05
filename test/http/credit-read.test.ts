@@ -61,8 +61,8 @@ describe("R73 personal Credit HTTP registration prerequisite only", () => {
             bffServiceToken: "r74-fixture-bff-token-000000000000001",
             operatorProxySecret: "r74-fixture-operator-secret-000000001",
             jwksUrl: "http://127.0.0.1:1/unused-bff-jwks",
-            issuer: "r74-iam",
-            audience: "r74-billing",
+            issuer: "https://r74-iam.example.test/iam",
+            audience: "https://kokoro.dev/resources/billing",
           }),
         ],
         controllers: [R73RegistrationControlController],
@@ -115,7 +115,7 @@ describe("R73 personal Credit HTTP registration prerequisite only", () => {
   );
 });
 
-// R74 full HTTP matrix. JWKS is a local real RS256 fixture; all personal
+// R74 full HTTP matrix. JWKS is a local real EdDSA fixture; all personal
 // requests use the production Controller/Guard/Filter/module, never a fake route.
 describe("R74 production personal Credit HTTP", () => {
   const accountPath = "/v2/billing/me/credit-account";
@@ -127,8 +127,8 @@ describe("R74 production personal Credit HTTP", () => {
     internalServiceSecret: "r74-fixture-service-secret-0000000001",
     bffServiceToken: "r74-fixture-bff-token-000000000000001",
     operatorProxySecret: "r74-fixture-operator-secret-000000001",
-    issuer: "r74-iam",
-    audience: "r74-billing",
+    issuer: "https://r74-iam.example.test/iam",
+    audience: "https://kokoro.dev/resources/billing",
   };
   const machine = (
     tenant = "tenant-a",
@@ -219,14 +219,14 @@ describe("R74 production personal Credit HTTP", () => {
   beforeAll(async () => {
     const { createServer } = await import("node:http");
     const { generateKeyPair, exportJWK } = await import("jose");
-    const keys = await generateKeyPair("RS256");
+    const keys = await generateKeyPair("EdDSA");
     privateKey = keys.privateKey;
     const jwk = await exportJWK(keys.publicKey);
     jwksServer = createServer((_request, response) => {
       response.setHeader("content-type", "application/json");
       response.end(
         JSON.stringify({
-          keys: [{ ...jwk, kid: "r74-http", alg: "RS256", use: "sig" }],
+          keys: [{ ...jwk, kid: "r74-http", alg: "EdDSA" }],
         }),
       );
     });
@@ -322,19 +322,60 @@ describe("R74 production personal Credit HTTP", () => {
       tenant?: string;
       subject?: string;
       issuer?: string;
-      audience?: string;
+      audience?: string | readonly string[];
       expires?: number;
+      scope?: string;
+      kind?: string;
+      omit?: "sid" | "client_id" | "iat" | "scope" | "tenant" | "kind";
+      operator?: boolean;
+      cnf?: Readonly<Record<string, string>>;
+      notBefore?: number;
+      issuedAt?: number;
+      kid?: string;
+      plainTenantOnly?: boolean;
     } = {},
   ) {
     const { SignJWT } = await import("jose");
-    return new SignJWT({ tenant_id: patch.tenant ?? "tenant-a" })
+    const payload: Record<string, unknown> = {
+      sid: "r74-session",
+      client_id: "r74-web-client",
+      scope: patch.scope ?? "billing:credit.consume",
+      "https://kokoro.dev/token_kind": patch.kind ?? "user_delegated",
+      "https://kokoro.dev/tenant_id": patch.tenant ?? "tenant-a",
+      ...(patch.operator === undefined
+        ? {}
+        : { "https://kokoro.dev/operator": patch.operator }),
+      ...(patch.cnf === undefined ? {} : { cnf: patch.cnf }),
+    };
+    if (patch.omit !== undefined) {
+      const claim =
+        patch.omit === "tenant"
+          ? "https://kokoro.dev/tenant_id"
+          : patch.omit === "kind"
+            ? "https://kokoro.dev/token_kind"
+            : patch.omit;
+      delete payload[claim];
+    }
+    if (patch.plainTenantOnly === true) {
+      payload.tenant_id = payload["https://kokoro.dev/tenant_id"];
+      delete payload["https://kokoro.dev/tenant_id"];
+    }
+    let token = new SignJWT(payload)
       .setSubject(patch.subject ?? "subject-a")
-      .setProtectedHeader({ alg: "RS256", kid: "r74-http" })
+      .setProtectedHeader({ alg: "EdDSA", kid: patch.kid ?? "r74-http" })
       .setIssuer(patch.issuer ?? profile.issuer)
-      .setAudience(patch.audience ?? profile.audience)
-      .setIssuedAt()
-      .setExpirationTime(patch.expires ?? Math.floor(Date.now() / 1000) + 300)
-      .sign(privateKey);
+      .setAudience(
+        patch.audience === undefined
+          ? profile.audience
+          : typeof patch.audience === "string"
+            ? patch.audience
+            : [...patch.audience],
+      )
+      .setExpirationTime(patch.expires ?? Math.floor(Date.now() / 1000) + 300);
+    if (patch.omit !== "iat") token = token.setIssuedAt(patch.issuedAt);
+    if (patch.notBefore !== undefined)
+      token = token.setNotBefore(patch.notBefore);
+    return token.sign(privateKey);
   }
   it("compiles the closed 42-schema registry, rejects mutation/coercion and unknown UTC/nonnullable fields", () => {
     expect(schemas.names).toHaveLength(42);
@@ -677,6 +718,163 @@ describe("R74 production personal Credit HTTP", () => {
     );
     noRead();
   });
+  it("accepts the exact OpenID dual audience in either order", async () => {
+    await control();
+    const userinfo = profile.issuer + "/oauth2/userinfo";
+    for (const audience of [
+      [profile.audience, userinfo],
+      [userinfo, profile.audience],
+    ]) {
+      clear();
+      check(
+        await app.inject({
+          method: "GET",
+          url: accountPath,
+          headers: {
+            authorization: `Bearer ${await sign({ scope: "billing:credit.consume openid", audience })}`,
+            "x-kokoro-tenant-id": encode("tenant-a"),
+          },
+        }),
+        200,
+      );
+      expect(reads.getMyAccount).toHaveBeenCalledExactlyOnceWith({
+        tenantId: "tenant-a",
+        subjectId: "subject-a",
+      });
+    }
+  });
+  it.each([
+    ["missing sid", { omit: "sid" }],
+    ["missing client", { omit: "client_id" }],
+    ["missing issued-at", { omit: "iat" }],
+    ["missing scope", { omit: "scope" }],
+    ["missing kind", { omit: "kind" }],
+    ["missing namespaced tenant", { omit: "tenant" }],
+    ["legacy plain tenant only", { plainTenantOnly: true }],
+    ["machine kind", { kind: "machine" }],
+    ["operator claim", { operator: true }],
+    ["confirmation claim", { cnf: { jkt: "fixture" } }],
+    [
+      "duplicate scope",
+      { scope: "billing:credit.consume billing:credit.consume" },
+    ],
+    ["unknown scope", { scope: "billing:credit.consume billing:admin" }],
+    ["OpenID missing userinfo", { scope: "billing:credit.consume openid" }],
+    [
+      "OpenID wrong userinfo",
+      {
+        scope: "billing:credit.consume openid",
+        audience: [profile.audience, profile.issuer + "/oauth2/wrong"],
+      },
+    ],
+    [
+      "OpenID duplicate audience",
+      {
+        scope: "billing:credit.consume openid",
+        audience: [profile.audience, profile.audience],
+      },
+    ],
+    [
+      "OpenID additional audience",
+      {
+        scope: "billing:credit.consume openid",
+        audience: [
+          profile.audience,
+          profile.issuer + "/oauth2/userinfo",
+          "https://kokoro.dev/resources/extra",
+        ],
+      },
+    ],
+    ["future not-before", { notBefore: Math.floor(Date.now() / 1000) + 300 }],
+    ["unsafe expiration", { expires: Number.MAX_SAFE_INTEGER + 1 }],
+    ["unsafe issued-at", { issuedAt: Number.MAX_SAFE_INTEGER + 1 }],
+    ["unsafe not-before", { notBefore: Number.MAX_SAFE_INTEGER + 1 }],
+    ["unknown key", { kid: "r74-unknown" }],
+  ] as const)(
+    "rejects exact-profile case %s before reads",
+    async (_label, patch) => {
+      await control();
+      check(
+        await app.inject({
+          method: "GET",
+          url: accountPath,
+          headers: {
+            authorization: `Bearer ${await sign(patch)}`,
+            "x-kokoro-tenant-id": encode("tenant-a"),
+          },
+        }),
+        401,
+        "billing.unauthenticated",
+      );
+      noRead();
+    },
+  );
+  it.each(["RS256", "wrong EdDSA signature"])(
+    "rejects %s before reads",
+    async (variant) => {
+      await control();
+      const { generateKeyPair, SignJWT } = await import("jose");
+      const algorithm = variant === "RS256" ? "RS256" : "EdDSA";
+      const alternate = await generateKeyPair(algorithm);
+      const token = await new SignJWT({
+        sid: "r74-session",
+        client_id: "r74-web-client",
+        scope: "billing:credit.consume",
+        "https://kokoro.dev/token_kind": "user_delegated",
+        "https://kokoro.dev/tenant_id": "tenant-a",
+      })
+        .setProtectedHeader({ alg: algorithm, kid: "r74-http" })
+        .setIssuer(profile.issuer)
+        .setAudience(profile.audience)
+        .setSubject("subject-a")
+        .setIssuedAt()
+        .setExpirationTime(Math.floor(Date.now() / 1000) + 300)
+        .sign(alternate.privateKey);
+      check(
+        await app.inject({
+          method: "GET",
+          url: accountPath,
+          headers: {
+            authorization: `Bearer ${token}`,
+            "x-kokoro-tenant-id": encode("tenant-a"),
+          },
+        }),
+        401,
+        "billing.unauthenticated",
+      );
+      noRead();
+    },
+  );
+  it("does not fall back from an IAM machine JWT to personal or internal auth", async () => {
+    await control();
+    const authorization = `Bearer ${await sign({ kind: "machine" })}`;
+    check(
+      await app.inject({
+        method: "GET",
+        url: accountPath,
+        headers: { authorization, "x-kokoro-tenant-id": encode("tenant-a") },
+      }),
+      401,
+      "billing.unauthenticated",
+    );
+    noRead();
+    for (const marker of ["", "web-bff"]) {
+      check(
+        await app.inject({
+          method: "GET",
+          url: accountPath,
+          headers: {
+            authorization,
+            "x-kokoro-service": marker,
+            "x-kokoro-tenant-id": encode("tenant-a"),
+          },
+        }),
+        403,
+        "billing.forbidden",
+      );
+      noRead();
+    }
+  });
   it.each([
     { issuer: "wrong" },
     { audience: "wrong" },
@@ -705,9 +903,15 @@ describe("R74 production personal Credit HTTP", () => {
   it("rejects a real signed JWT without expiration rather than accepting an unbounded session", async () => {
     await control();
     const { SignJWT } = await import("jose");
-    const unbounded = await new SignJWT({ tenant_id: "tenant-a" })
+    const unbounded = await new SignJWT({
+      sid: "r74-session",
+      client_id: "r74-web-client",
+      scope: "billing:credit.consume",
+      "https://kokoro.dev/token_kind": "user_delegated",
+      "https://kokoro.dev/tenant_id": "tenant-a",
+    })
       .setSubject("subject-a")
-      .setProtectedHeader({ alg: "RS256", kid: "r74-http" })
+      .setProtectedHeader({ alg: "EdDSA", kid: "r74-http" })
       .setIssuer(profile.issuer)
       .setAudience(profile.audience)
       .sign(privateKey);

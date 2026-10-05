@@ -1,12 +1,11 @@
 import { validateBillingPersonalHttpOptions } from "../../config/runtime-config.js";
 import {
-  assertBillingIdentity,
   decodeBillingIdentityHeader,
   billingHeaderCount,
 } from "./billing-identity-header.js";
 import type { FastifyRequest } from "fastify";
 import { timingSafeEqual } from "node:crypto";
-import { createRemoteJWKSet, jwtVerify } from "jose";
+import { createBillingAccessTokenVerifier } from "./billing-access-token.verifier.js";
 import type {
   BillingAuth,
   BillingAdminContext,
@@ -193,39 +192,23 @@ export const createBillingAuth = (options: BillingAuthOptions): BillingAuth => {
     throw new Error(
       "billing auth misconfiguration: BILLING_AUTH_JWKS_URL is required",
     );
-  const jwks = createRemoteJWKSet(new URL(options.jwksUrl), {
-    cacheMaxAge: 300_000,
-    cooldownDuration: 10_000,
+  if (options.audience === undefined)
+    throw new Error(
+      "billing auth misconfiguration: BILLING_AUTH_JWT_AUDIENCE is required",
+    );
+  const userTokens = createBillingAccessTokenVerifier({
+    jwksUrl: options.jwksUrl,
+    issuer: options.issuer,
+    audience: options.audience,
   });
   return {
     user: async (request) => {
       const token = bearer(request);
       if (token === undefined) return null;
-      try {
-        const verification = await jwtVerify(token, jwks, {
-          algorithms: ["RS256"],
-          issuer: options.issuer,
-          ...(options.audience === undefined
-            ? {}
-            : { audience: options.audience }),
-        });
-        const tenantId =
-          typeof verification.payload.tenant_id === "string"
-            ? tenantValue(verification.payload.tenant_id)
-            : undefined;
-        const subjectId =
-          typeof verification.payload.sub === "string"
-            ? verification.payload.sub
-            : undefined;
-        assertBillingIdentity(subjectId, "subject");
-        return tenantId !== undefined &&
-          subjectId !== undefined &&
-          sameTenant(request, tenantId)
-          ? { tenantId, subjectId }
-          : null;
-      } catch {
-        return null;
-      }
+      const context = await userTokens.verify(token);
+      return context !== null && sameTenant(request, context.tenantId)
+        ? context
+        : null;
     },
     internal: async (request) =>
       Promise.resolve(trustedInternal(request, options.internalServiceSecret)),
@@ -243,10 +226,10 @@ export function createBillingPersonalAuth(
   options: BillingAuthOptions,
 ): BillingPersonalAuth {
   const config = validateBillingPersonalHttpOptions(options);
-  const jwks = createRemoteJWKSet(new URL(config.jwksUrl), {
-    timeoutDuration: 2_000,
-    cacheMaxAge: 300_000,
-    cooldownDuration: 10_000,
+  const userTokens = createBillingAccessTokenVerifier({
+    jwksUrl: config.jwksUrl,
+    issuer: config.issuer,
+    audience: config.audience,
   });
   const single = (request: FastifyRequest, name: string): boolean =>
     typeof request.headers[name] === "string" &&
@@ -304,31 +287,19 @@ export function createBillingPersonalAuth(
       }
       if (token === undefined || !single(request, "authorization"))
         return { ok: false, status: 401 };
-      let tenantId: string;
-      let subjectId: string;
-      try {
-        const { payload } = await jwtVerify(token, jwks, {
-          algorithms: ["RS256"],
-          issuer: config.issuer,
-          audience: config.audience,
-          requiredClaims: ["exp", "sub", "tenant_id"],
-        });
-        assertBillingIdentity(payload.tenant_id, "tenant");
-        assertBillingIdentity(payload.sub, "subject");
-        tenantId = payload.tenant_id;
-        subjectId = payload.sub;
-      } catch {
-        return { ok: false, status: 401 };
-      }
+      const context = await userTokens.verify(token);
+      if (context === null) return { ok: false, status: 401 };
       if (
         request.headers["x-kokoro-tenant-id"] === undefined ||
         request.headers["x-kokoro-tenant-id"] === ""
       )
         return { ok: false, status: 403 };
       try {
-        if (identity(request, "x-kokoro-tenant-id", "tenant") !== tenantId)
+        if (
+          identity(request, "x-kokoro-tenant-id", "tenant") !== context.tenantId
+        )
           return { ok: false, status: 403 };
-        return { ok: true, context: Object.freeze({ tenantId, subjectId }) };
+        return { ok: true, context };
       } catch {
         return { ok: false, status: 400 };
       }

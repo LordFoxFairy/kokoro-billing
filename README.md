@@ -18,25 +18,33 @@ Reconcile 与 Billing command receipt；不拥有 Tenant、Identity、Agent Run�
 - Browser 通过 Web/BFF 调用；BFF、Agent、Model、Studio、Payment worker 与 Scheduler 只能使用 Billing 拥有的协议，
   不读取本仓数据库。
 - Credit 是 Billing 内部 bounded context，不存在独立 Credit writer。
-- 唯一 canonical Schema 是 [`database/schema.sql`](database/schema.sql)；V1 只支持空数据库安装，不维护 migration 链。
+- 唯一 canonical Schema 是 [`database/schema.sql`](database/schema.sql)；installer 只要求同一应用数据库中的
+  `kokoro_billing` owner schema 为空，不扫描或读取相邻 owner schema，也不维护 migration 链。
 
 ## 五分钟启动
 
-要求 Node.js 24.20.0（见仓根 `.node-version`）、`pnpm@11.25.0`，并复用 Root 的 PostgreSQL 与 Redis。Billing 使用独立 PostgreSQL database/schema
-和 Redis logical DB `4`。`engineStrict` 会拒绝不匹配的 Node；安装与验证前切换到仓库固定版本。
+要求 Node.js 24.20.0（见仓根 `.node-version`）、`pnpm@11.25.0`，并复用 Root 的 PostgreSQL 与 Redis。Billing 在共享应用
+database 中只拥有 `kokoro_billing` schema；示例使用共享 Redis logical DB `4`，业务隔离依赖 Billing key namespace，不依赖该 DB 编号。
+`engineStrict` 会拒绝不匹配的 Node；安装与验证前切换到仓库固定版本。
 
 ```bash
-cd /Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/kokoro-billing
+cd /Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/apps/kokoro-billing
 pnpm install --frozen-lockfile
-cp .env.example .env
+cp .env.example .env.local
 ```
 
-将 `.env` 中的 `DATABASE_URL`、`REDIS_URL` 和凭据占位符替换为本地 fixture。`db:apply-schema` 会拒绝已有业务表的
-database，因此只对 Billing 的空 database 执行：
+将 `.env.local` 中的 `DATABASE_URL`、`REDIS_URL` 和凭据占位符替换为本地值。连接 URL 必须显式且仅指定
+`schema=kokoro_billing`；`db:apply-schema` 在该 owner schema 非空时 fail closed，相邻 owner schema 不影响安装：
 
 ```bash
-set -a; source .env; set +a
+set -a; source .env.local; set +a
 pnpm db:apply-schema
+```
+
+首次安装成功后，正常启动只加载同一份显式环境，不重复运行 installer：
+
+```bash
+set -a; source .env.local; set +a
 pnpm dev
 ```
 
@@ -50,7 +58,9 @@ curl --fail http://127.0.0.1:4245/healthz
 curl --fail http://127.0.0.1:4245/readyz
 ```
 
-`BILLING_AUTH_MODE=internal-header` 只用于本地 fixture；`NODE_ENV=production` 强制使用 `jwks`。
+正常开发使用 IAM 的 EdDSA JWKS（`http://127.0.0.1:3310/iam/jwks`）、同源 issuer
+`http://127.0.0.1:3310/iam` 与固定 Billing resource audience。`BILLING_AUTH_MODE=internal-header` 只用于明确的测试 fixture；
+`NODE_ENV=production` 强制使用 `jwks`。
 `/readyz` 只以 PostgreSQL 是否可用决定 200/503；Redis hint 不可用时返回 200 且 `data.dependencies.redis=degraded`。
 
 ## 契约

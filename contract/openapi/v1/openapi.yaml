@@ -468,12 +468,12 @@ components:
       in: header
       name: X-Kokoro-Tenant-Id
       description: Opaque tenant context at most 191 characters; for User routes it
-        must match the IAM JWT tenant_id claim.
+        must match the IAM JWT https://kokoro.dev/tenant_id claim.
     userBearer:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: IAM RS256/JWKS access token.
+      description: IAM EdDSA/JWKS user_delegated access token with the fixed Billing resource audience and complete Billing scope profile.
     serviceCaller:
       type: apiKey
       in: header

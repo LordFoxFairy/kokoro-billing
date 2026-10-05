@@ -1,3 +1,11 @@
+## R255 当前 IAM profile consumer 已源码接收（2026-10-05）
+
+本提交将两个用户JWT入口统一到同一EdDSA/完整IAM Billing profile verifier；tenant仅namespaced、scope与openid/audience精确联动，时间为安全整数。legacy plain tenant header、personal canonical u1、可信BFF机器五因素与HTTP错误边界保持，无RSA/plain alias fallback；SQL/余额/费用规则未改。
+
+Root10843冻结复验：真实PostgreSQL personal HTTP 24/24、纯安全网1395/39，正常v2生成/生成check、types/lint/build/contract/sql/format全0，78库OID/名称集合保持。独立最终审0P0/P1/P2；先前正确profile401、unsafe iat错误200及Root私有runner错误保留历史，不放宽门禁。README/env固定源码日常启动、支付默认后置，v1仅两security描述及source digest收敛。5原mixed正文保留，generated/canonical SQL/lock未改。
+
+这仅为consumer源码与隔离集成验收；local JWKS签名不是正式IAM owner token，正式Billing进程、BFF/browser、用户计费和整个页面均未闭环。Root继续正常运行组合/原3310保数据源码交接及真实用户验收，不用ready或后端门冒成功。Root收据var/dev/r255-billing-auth-final-v2-pg.json。
+
 ## R255 当前 owner-schema 代码切片（2026-10-05）
 
 现 installer、drift catalog、Prisma adapter、事务和既有 SQL pool 统一 `kokoro_billing`；URL 必须仅含一个该 schema，拒绝 options，无 public fallback。fresh install 只核 owner namespace 的完整 PG 目录依赖，非空零变更拒绝；canonical 35 表与 API/资金规则未变。Prisma 由本仓 canonical SQL 正规生成，不手改生成物。
