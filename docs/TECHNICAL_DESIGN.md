@@ -6,7 +6,7 @@
 
 ### §8 放置与依赖
 
-采用现有连接与安装边界，而非给 `database/schema.sql` 的 32 张表及全部业务 SQL 机械添加限定名。后继源码候选严格为 `scripts/canonical-schema.ts`、`scripts/canonical-reference.ts`、`scripts/schema-verification.ts`、`src/config/runtime-config.ts`、`src/database/prisma.service.ts`、`src/database/transaction.service.ts`、`src/infrastructure/postgres/connection.ts`；不新增 installer 框架、role、多库、fallback 或兼容层。未证明需要时，`scripts/apply-schema.ts`、`scripts/schema-database-session.ts` 与 canonical SQL 保持不变。
+采用现有连接与安装边界，而非给 `database/schema.sql` 的 35 张表及全部业务 SQL 机械添加限定名。后继源码候选严格为 `scripts/canonical-schema.ts`、`scripts/canonical-reference.ts`、`scripts/schema-verification.ts`、`src/config/runtime-config.ts`、`src/database/prisma.service.ts`、`src/database/transaction.service.ts`、`src/infrastructure/postgres/connection.ts`；不新增 installer 框架、role、多库、fallback 或兼容层。未证明需要时，`scripts/apply-schema.ts`、`scripts/schema-database-session.ts` 与 canonical SQL 保持不变。
 
 调用方向仍只访问 Billing 事实。installer 的空判与 catalog 检查仅限 `kokoro_billing`，不得扫描或读取邻 owner 的业务对象；runtime 不解析邻 schema。开发组合继续使用同一数据库与同一凭据，本片不设计 production role、GRANT 或运维迁移。
 
