@@ -1,3 +1,21 @@
+## R232：Rate selection 最终 Root 证据与交接状态（2026-10-04）
+
+R231 module-private rate selection 已完成 Root 最终候选验收：真实 RED 1 fail/21 pass 收敛为最小 canonical encode 错误分类后，最终十步骤全部 exit 0；9 个真实 PostgreSQL 文件 115 项、39 个纯门/辅助文件 1361 项通过。manifest：`/var/folders/gn/wbk8wfbd047_wvwkwtyn331r0000gn/T/kokoro-r231-billing-final-qz_5w_d3/manifest.json`；source、derived、owned database collection 保持；独审 `/tmp/r231-billing-selection-final-review.md`：P0=0/P1=0/P2=0。
+
+本段为提交前冻结验收记录；正式交付状态以 Git HEAD 与 Root CURRENT 为准。3310 未启用；该切片没有新增 HTTP/public contract、报价、资金、Admission 或正式收费能力。报价、资金、Admission、formal charging 继续 OPEN。R231/R229 的“下一尚未实现”仅是当时记录，本文不重写历史；本段只补当前验收证据和待集成状态。
+
+---
+## R229 Rate active selection 当前设计状态（2026-10-04）
+
+Billing HEAD仍为 `8f091d40bd3695144861e88159e88d9d767112c1`；R228 rate-only publication已提交，五份既有mixed文档继续保留。本轮只在四份当前文档增加设计前缀，没有源码、测试、SQL、generated、contract、package/lock、资源、Git或资金动作。
+
+Root裁定下一最小实现片为 module-private、仅复用现write transaction的 rate selection：扩展现`MeteringPricingRevisionRepository`复用strict canonical ordinary reread，只新增`metering-pricing-selection.types.ts`与`metering-pricing-selection.service.ts`，并窄改现module/error及真正PG测试。新建独立selection repository方案因会复制row/digest验证而淘汰。`metering.public.ts`与HTTP保持不变。
+
+拟实现语义是同tenant现`requireActiveTransaction(tenant,"write")`内一次DB `CURRENT_TIMESTAMP(3)`，latest effective/revision，先验header/canonical profile再区分合法caller profile不覆盖，完整技术binding逐字匹配；正式all rate可无条件覆盖range observation，range遵循lower-inclusive/upper-exclusive/open-upper。币种只要求selected/full binding单一，不误加整revision单币种；canonical结构重叠为corrupt。重复request strict invalid，每个immutable returned rate唯一映射request且不携带Prisma Date/Decimal。selector不提供`METERING_SELECTION_UNAVAILABLE`，raw DB/transaction异常保持现rollback-only firstCause；typed取消及transaction inactive/mode/tenant错误按既有安全语义传播。未来Admission/application仅在root transaction退出后于真实public边界safe-map未知内部故障；该mapper/HTTP当前未实施。业务输入不是Agent授权；结果不是quote，不计算采购/销售/Credit，不触碰余额。policy倍率/换算/actual-only artifact、joint quote与Agent binding/bound reader仍是Admission前置，后继另片收敛；本片不硬编码`7/5`或改变可调政策决定。
+
+当前状态：**D0候选，尚未独审或获实现准入**。Root后继独审后才可指定真实PG tests-first与准确源码写集；不得使用future import/404/unavailable假reader制造RED。
+
+---
 ## R228 本地源码交付（2026-10-04）
 
 本次本地提交交付已审查的 rate-only module-private publication、两张 canonical 表及正规派生、纯 codec 和相应测试。Root R227 最终 107 项真实 PostgreSQL 与 1361 项辅助门通过，两个真实故障已修复，publication 源码与当前证据独审均 0P0/P1/P2。该结果只覆盖本切片；未推送或启用用户组合，HTTP、policy、Admission、实际用量与积分/用户整链仍开放。下方 R227/R223 是实现前后时间点记录，不作为当前“尚无源码”的结论。

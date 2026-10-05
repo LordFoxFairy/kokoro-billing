@@ -9,6 +9,7 @@ import { MeteringRepository } from "./metering.repository.js";
 import { MeteringService } from "./metering.service.js";
 import { MeteringPricingPublicationService } from "./metering-pricing-publication.service.js";
 import { MeteringPricingRevisionRepository } from "./metering-pricing-revision.repository.js";
+import { MeteringPricingSelectionService } from "./metering-pricing-selection.service.js";
 import { IamBillingAuthorizationClient } from "./iam-billing-authorization.client.js";
 import {
   IAM_BILLING_AUTHORIZATION_OPTIONS,
@@ -61,6 +62,12 @@ import {
           audit,
           repository,
         ),
+    },
+    {
+      provide: MeteringPricingSelectionService,
+      inject: [MeteringPricingRevisionRepository],
+      useFactory: (repository: MeteringPricingRevisionRepository) =>
+        new MeteringPricingSelectionService(repository),
     },
   ],
   exports: [MeteringService],

@@ -2,8 +2,11 @@ import { createHash, randomUUID } from "node:crypto";
 import { Test, type TestingModule } from "@nestjs/testing";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { DatabaseModule } from "../../src/database/database.module.js";
+import { TransactionService } from "../../src/database/transaction.service.js";
 import type { BillingAdminContext } from "../../src/infrastructure/auth/billing-auth.types.js";
 import { MeteringPricingPublicationService } from "../../src/modules/metering/metering-pricing-publication.service.js";
+import { MeteringPricingSelectionService } from "../../src/modules/metering/metering-pricing-selection.service.js";
+import type { MeteringRateSelectionInput } from "../../src/modules/metering/metering-pricing-selection.types.js";
 import { encodeMeteringRateRevisionDraft } from "../../src/modules/metering/metering-pricing-revision-codec.js";
 import type {
   MeteringPublicationCommand,
@@ -1439,5 +1442,439 @@ integration("R227 immutable metering rate publication", () => {
       keys: "0",
       audits: "0",
     });
+  });
+});
+
+integration("R230 active metering rate selection", () => {
+  let fixture: PrismaDatabaseFixture | undefined;
+  let application: TestingModule | undefined;
+  let publisher: MeteringPricingPublicationService;
+  let selector: MeteringPricingSelectionService;
+  let transactions: TransactionService;
+
+  beforeEach(async () => {
+    fixture = await createPrismaDatabaseFixture(assertDefined(adminUrl));
+    application = await Test.createTestingModule({
+      imports: [
+        DatabaseModule.register({ databaseUrl: assertDefined(fixture).url }),
+        MeteringModule,
+      ],
+    }).compile();
+    await application.init();
+    publisher = application.get(MeteringPricingPublicationService);
+    selector = application.get(MeteringPricingSelectionService);
+    transactions = application.get(TransactionService);
+  });
+
+  afterEach(async () => {
+    await application?.close();
+    application = undefined;
+    await fixture?.close();
+    fixture = undefined;
+  });
+
+  const profileRef = {
+    version: "usage-v1",
+    artifactDigest: "a".repeat(64),
+  } as const;
+  const binding = {
+    providerRef: "Provider-A",
+    environment: "Test",
+    pricingAccountRef: "Account-A",
+    modelRef: "Model-A",
+    modelVersion: "V1",
+  } as const;
+  const selection = (
+    overrides: Partial<MeteringRateSelectionInput> = {},
+  ): MeteringRateSelectionInput => ({
+    tenantId: "tenant-selection",
+    profileRef,
+    binding,
+    requests: [
+      {
+        bucket: "Input.Token",
+        unit: "Token",
+        applicability: {
+          kind: "range",
+          dimension: "Size",
+          unit: "Token",
+          value: "10",
+        },
+      },
+      {
+        bucket: "Output.Token",
+        unit: "Token",
+        applicability: {
+          kind: "range",
+          dimension: "Size",
+          unit: "Token",
+          value: "10",
+        },
+      },
+    ],
+    ...overrides,
+  });
+  const publish = async (
+    identity: string,
+    effectiveFrom: string,
+    numerator: string,
+    suppliedRates?: MeteringRateRevisionDraft["rates"],
+    idempotencyKey = `key-${identity}`,
+  ) => {
+    const draft: MeteringRateRevisionDraft = {
+      schemaVersion: "1",
+      tenantId: "tenant-selection",
+      effectiveFrom,
+      sourceRef: "QA synthetic fixture; not a production procurement price",
+      verifiedAt: "2026-10-04T00:00:00.000Z",
+      profileRef,
+      rates: suppliedRates ?? [
+        {
+          ...binding,
+          bucket: "Input.Token",
+          unit: "Token",
+          applicability: { kind: "all" },
+          currencyCode: "USD",
+          minorPerUnit: { numerator, denominator: "1" },
+        },
+        {
+          ...binding,
+          bucket: "Output.Token",
+          unit: "Token",
+          applicability: {
+            kind: "range",
+            dimension: "Size",
+            unit: "Token",
+            lowerInclusive: "10",
+            upperExclusive: null,
+          },
+          currencyCode: "USD",
+          minorPerUnit: {
+            numerator: MAX_NUMERIC_78,
+            denominator: COPRIME_NUMERIC_78,
+          },
+        },
+      ],
+    };
+    return publisher.publishRate(
+      {
+        tenantId: draft.tenantId,
+        operatorId: "operator-selection",
+        role: "billing.admin",
+      },
+      {
+        tenantId: draft.tenantId,
+        actorId: "operator-selection",
+        publicationIdentity: identity,
+        idempotencyKey,
+        reason: "QA synthetic selection",
+        draft,
+      },
+    );
+  };
+  const runSelection = (input = selection()) =>
+    transactions.runRoot(
+      {
+        tenantId: input.tenantId,
+        actorId: "selection-test",
+        operation: "metering.select_rate_revision",
+        mode: "write",
+      },
+      () => selector.selectActiveRates(input),
+    );
+
+  test("selects the latest effective revision by DB time and returns exact immutable all/range rates", async () => {
+    const past = "2026-01-01T00:00:00.000Z";
+    await publish("selection-1", past, "1");
+    await publish("selection-2", past, "2");
+    await publish("selection-future", "2099-01-01T00:00:00.000Z", "3");
+    const before = await assertDefined(fixture).pool.query(
+      `SELECT count(*)::text AS revisions,
+              (SELECT count(*)::text FROM billing_metering_rate) AS rates
+         FROM billing_metering_rate_revision`,
+    );
+    const result = await runSelection();
+    expect(result).toMatchObject({
+      tenantId: "tenant-selection",
+      revision: "2",
+      effectiveFrom: past,
+      currencyCode: "USD",
+    });
+    expect(result.dbNow).toMatch(/\.\d{3}Z$/u);
+    expect(result.rates).toHaveLength(2);
+    expect(result.rates[0]?.rate.applicability).toEqual({ kind: "all" });
+    expect(result.rates[1]?.rate.minorPerUnit).toEqual({
+      numerator: MAX_NUMERIC_78,
+      denominator: COPRIME_NUMERIC_78,
+    });
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(Object.isFrozen(result.rates)).toBe(true);
+    expect(Object.isFrozen(result.rates[1]?.rate.minorPerUnit)).toBe(true);
+    expect(
+      await assertDefined(fixture).pool.query(
+        `SELECT count(*)::text AS revisions,
+                (SELECT count(*)::text FROM billing_metering_rate) AS rates
+           FROM billing_metering_rate_revision`,
+      ),
+    ).toMatchObject({ rows: before.rows });
+  });
+
+  test("fails closed for future-only, tenant, profile, binding, range, and duplicate requests", async () => {
+    await publish("selection-future", "2099-01-01T00:00:00.000Z", "1");
+    await expect(runSelection()).rejects.toMatchObject({
+      code: "METERING_RATE_UNAVAILABLE",
+    });
+    await publish("selection-active", "2026-01-01T00:00:00.000Z", "1");
+    for (const input of [
+      selection({ profileRef: { ...profileRef, version: "other" } }),
+      ...(
+        [
+          "providerRef",
+          "environment",
+          "pricingAccountRef",
+          "modelRef",
+          "modelVersion",
+        ] as const
+      ).map((field) =>
+        selection({ binding: { ...binding, [field]: "Other" } }),
+      ),
+      selection({ tenantId: "other-tenant" }),
+      selection({
+        requests: [
+          {
+            bucket: "Output.Token",
+            unit: "Token",
+            applicability: {
+              kind: "range",
+              dimension: "Size",
+              unit: "Token",
+              value: "9",
+            },
+          },
+        ],
+      }),
+    ])
+      await expect(runSelection(input)).rejects.toMatchObject({
+        code: "METERING_RATE_UNAVAILABLE",
+      });
+    const duplicate = assertDefined(selection().requests[0]);
+    await expect(
+      runSelection(selection({ requests: [duplicate, duplicate] })),
+    ).rejects.toMatchObject({ code: "METERING_SELECTION_INVALID" });
+  });
+
+  test("selects all 64 uniquely requested rates without numeric coercion or new writes", async () => {
+    const rates = Array.from({ length: 64 }, (_, index) => ({
+      ...binding,
+      bucket: `Bucket-${index.toString().padStart(2, "0")}`,
+      unit: "Token",
+      applicability: { kind: "all" as const },
+      currencyCode: "USD",
+      minorPerUnit: {
+        numerator: index === 63 ? MAX_NUMERIC_78 : index.toString(),
+        denominator: index === 63 ? COPRIME_NUMERIC_78 : "1",
+      },
+    }));
+    await publish("selection-64", "2026-01-01T00:00:00.000Z", "1", rates);
+    const requests = rates.map((rate) => ({
+      bucket: rate.bucket,
+      unit: rate.unit,
+      applicability: {
+        kind: "range" as const,
+        dimension: "Size",
+        unit: "Token",
+        value: MAX_BIGINT,
+      },
+    }));
+    const result = await runSelection(selection({ requests }));
+    expect(result.rates).toHaveLength(64);
+    expect(result.rates[63]?.rate.minorPerUnit).toEqual({
+      numerator: MAX_NUMERIC_78,
+      denominator: COPRIME_NUMERIC_78,
+    });
+    expect(new Set(result.rates.map((item) => item.request.bucket)).size).toBe(
+      64,
+    );
+  });
+
+  test("matches published all for an all request and enforces a finite upper-exclusive boundary", async () => {
+    await publish("selection-finite", "2026-01-01T00:00:00.000Z", "1", [
+      {
+        ...binding,
+        bucket: "Input.Token",
+        unit: "Token",
+        applicability: { kind: "all" },
+        currencyCode: "USD",
+        minorPerUnit: { numerator: "1", denominator: "1" },
+      },
+      {
+        ...binding,
+        bucket: "Output.Token",
+        unit: "Token",
+        applicability: {
+          kind: "range",
+          dimension: "Size",
+          unit: "Token",
+          lowerInclusive: "10",
+          upperExclusive: "20",
+        },
+        currencyCode: "USD",
+        minorPerUnit: { numerator: "2", denominator: "1" },
+      },
+    ]);
+    await expect(
+      runSelection(
+        selection({
+          requests: [
+            {
+              bucket: "Input.Token",
+              unit: "Token",
+              applicability: { kind: "all" },
+            },
+            {
+              bucket: "Output.Token",
+              unit: "Token",
+              applicability: {
+                kind: "range",
+                dimension: "Size",
+                unit: "Token",
+                value: "19",
+              },
+            },
+          ],
+        }),
+      ),
+    ).resolves.toMatchObject({
+      rates: [{ rate: { applicability: { kind: "all" } } }, {}],
+    });
+    await expect(
+      runSelection(
+        selection({
+          requests: [
+            {
+              bucket: "Output.Token",
+              unit: "Token",
+              applicability: {
+                kind: "range",
+                dimension: "Size",
+                unit: "Token",
+                value: "20",
+              },
+            },
+          ],
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "METERING_RATE_UNAVAILABLE" });
+  });
+
+  test("requires the exact tenant write transaction and preserves typed transaction failures", async () => {
+    await expect(selector.selectActiveRates(selection())).rejects.toMatchObject(
+      {
+        code: "TRANSACTION_REQUIRED",
+      },
+    );
+    await expect(
+      transactions.runRoot(
+        {
+          tenantId: "tenant-selection",
+          actorId: "selection-test",
+          operation: "metering.select_rate_revision",
+          mode: "readOnlySnapshot",
+        },
+        () => selector.selectActiveRates(selection()),
+      ),
+    ).rejects.toMatchObject({ code: "TRANSACTION_MODE_MISMATCH" });
+    await expect(
+      transactions.runRoot(
+        {
+          tenantId: "other-tenant",
+          actorId: "selection-test",
+          operation: "metering.select_rate_revision",
+          mode: "write",
+        },
+        () => selector.selectActiveRates(selection()),
+      ),
+    ).rejects.toMatchObject({ code: "TRANSACTION_CONTEXT_MISMATCH" });
+  });
+
+  test("classifies persisted canonical drift as corrupt without fallback", async () => {
+    await publish("selection-corrupt", "2026-01-01T00:00:00.000Z", "1");
+    await assertDefined(fixture).pool.query(
+      `UPDATE billing_metering_rate
+          SET minor_per_unit_numerator=8
+        WHERE tenant_id='tenant-selection' AND revision=1 AND ordinal=0`,
+    );
+    await expect(runSelection()).rejects.toMatchObject({
+      code: "METERING_RATE_CORRUPT",
+    });
+  });
+
+  test("classifies codec-invalid persisted drift for selection and both publication replay keys", async () => {
+    await publish("selection-codec-corrupt", "2026-01-01T00:00:00.000Z", "1");
+    await assertDefined(fixture).pool.query(
+      `UPDATE billing_metering_rate
+          SET minor_per_unit_numerator=2,minor_per_unit_denominator=2
+        WHERE tenant_id='tenant-selection' AND revision=1 AND ordinal=0`,
+    );
+    await expect(runSelection()).rejects.toMatchObject({
+      code: "METERING_RATE_CORRUPT",
+    });
+    await expect(
+      publish("selection-codec-corrupt", "2026-01-01T00:00:00.000Z", "1"),
+    ).rejects.toMatchObject({ code: "METERING_PUBLICATION_CORRUPT" });
+    await expect(
+      publish(
+        "selection-codec-corrupt",
+        "2026-01-01T00:00:00.000Z",
+        "1",
+        undefined,
+        "key-selection-codec-corrupt-replay",
+      ),
+    ).rejects.toMatchObject({ code: "METERING_PUBLICATION_CORRUPT" });
+  });
+
+  test("preserves the same raw query first cause, rolls back prior owned writes, and recovers", async () => {
+    await publish("selection-raw-failure", "2026-01-01T00:00:00.000Z", "1");
+    let innerFailure: unknown;
+    const outerFailure = await transactions
+      .runRoot(
+        {
+          tenantId: "tenant-selection",
+          actorId: "selection-test",
+          operation: "metering.select_rate_revision.failure_probe",
+          mode: "write",
+        },
+        async () => {
+          const client = transactions.requireActiveTransaction(
+            "tenant-selection",
+            "write",
+          );
+          await client.billing_metering_rate.update({
+            where: {
+              tenant_id_revision_ordinal: {
+                tenant_id: "tenant-selection",
+                revision: 1n,
+                ordinal: 0,
+              },
+            },
+            data: { minor_per_unit_numerator: "9" },
+          });
+          await client.$executeRawUnsafe(
+            "ALTER TABLE billing_metering_rate_revision RENAME TO billing_metering_rate_revision_failure_probe",
+          );
+          try {
+            await selector.selectActiveRates(selection());
+          } catch (error) {
+            innerFailure = error;
+            throw error;
+          }
+        },
+      )
+      .catch((error: unknown) => error);
+    expect(innerFailure).toBeDefined();
+    expect(outerFailure).toBe(innerFailure);
+    expect(innerFailure).toMatchObject({ code: "P2010" });
+    const restored = await runSelection();
+    expect(restored.rates[0]?.rate.minorPerUnit.numerator).toBe("1");
   });
 });

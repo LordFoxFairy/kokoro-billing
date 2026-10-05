@@ -1,3 +1,49 @@
+## R232：Rate selection 最终交付证据（2026-10-04）
+
+R231 已把 module-private rate selection 的六路径候选收敛为最小 canonical encode 错误分类：Root 真实 RED 1 fail/21 pass 后，窄 catch 仅覆盖纯本地 canonical encode，GREEN 时保留 query/transaction 的原始 firstCause 与 rollback 语义。最终 Root manifest `/var/folders/gn/wbk8wfbd047_wvwkwtyn331r0000gn/T/kokoro-r231-billing-final-qz_5w_d3/manifest.json` 十个步骤全部 exit 0；9 个真实 PostgreSQL 文件 115 项通过，39 个纯门/辅助文件 1361 项通过，source、generated、owned database collection 均保持不变，独审 `/tmp/r231-billing-selection-final-review.md` 为 P0=0/P1=0/P2=0。
+
+该证据只覆盖现有 revision repository 复用、module-private selector、纯 canonical 分类与其真实 PostgreSQL/辅助门；本段为提交前冻结验收记录；正式交付状态以 Git HEAD 与 Root CURRENT 为准。3310 未启用，报价/资金/Admission/正式收费继续 OPEN。R231 原“下一尚未实现”时点仅作历史保留，不改写历史；policy、quote、Admission、funds、formal charging 继续 OPEN。
+
+---
+## R229：事务内 Rate active selection 设计门（2026-10-04）
+
+本节只批准下一片设计，不表示源码、测试、SQL、HTTP、quote、Admission 或资金能力已经实现。基线为 Billing `8f091d40bd3695144861e88159e88d9d767112c1`；R228 已提交的 rate publication 与两张 canonical rate 表保持事实源。现有 `MeteringPricingRevisionRepository` 已拥有 ordinary row 重建、business-key digest 和完整 canonical content 校验，因此 active selection 扩展该 repository；淘汰另建 `metering-pricing-selection.repository.ts` 的方案，避免同一 immutable revision 出现两套 row/digest validation。
+
+### §8 放置表
+
+| 项       | 当前裁决                                                                                                                                                                                                                                                                                                                            |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner    | `kokoro-billing` / `modules/metering`；后继唯一 writer 仍为 Billing 原 owner，Root 审查、资源与 Git。                                                                                                                                                                                                                               |
+| 当前事实 | rate publisher/module-private provider、`billing_metering_rate_revision`/`billing_metering_rate`、纯 pricing arithmetic 已存在；legacy quote 仍读 `billing_feature_price*`，不得复用。没有 active selector、policy publication、joint quote 或 fresh Admission。                                                                    |
+| 目标职责 | 在调用者已经开启的同 tenant `write` transaction 内，以一次 PostgreSQL `CURRENT_TIMESTAMP(3)` 选择 latest effective rate revision，strict 重建完整 ordinary revision，再按受信但**尚未代表 Agent 授权**的 profile、完整技术 binding、bucket/unit 与 applicability observation 得到唯一 rate set。只返回内部 rate match，不计算金额。 |
+| 目录方案 | 采用扩展现 `metering-pricing-revision.repository.ts` 复用 strict reread；淘汰新 selection repository。只新增同目录 `metering-pricing-selection.types.ts`（闭集输入/结果）与 `metering-pricing-selection.service.ts`（事务内编排），不建新目录/模块。                                                                                |
+| 粒度     | repository 继续拥有同一 immutable revision 的读取与完整性验证；service 只负责输入闭集、现write transaction/tenant guard、一次 DB time 与业务错误收敛；types 只承载 selection 生命周期。现 `metering.module.ts` 仅装配 module-private provider。                                                                                     |
+| 依赖     | 允许依赖 TransactionService、现 revision codec/types/repository 与 MeteringError；禁止依赖 legacy quote、Credit、Agent/System DTO、HTTP Request、OpenAPI generated、跨 owner 数据库。不得从 `metering.public.ts` 导出。                                                                                                             |
+| 数据/API | 无 schema、generated、contract、receipt、audit 或selection自身写操作；不发布价格。selector仅复用后继Admission/hold的现write transaction并调用`requireActiveTransaction(tenantId, "write")`，不新增事务API。DB transaction instant只取一次`CURRENT_TIMESTAMP(3)`，不用`Date.now()`；不宣称不同调用间snapshot isolation。             |
+| 删除项   | 本片无可安全删除项；不加 compatibility adapter、fallback/default tariff 或 unavailable 假 reader。legacy 路径待正式 Admission cutover 同片删除。                                                                                                                                                                                    |
+| 验证     | 后继真实 Nest + PostgreSQL 测试覆盖 DB-time/effectivity、tenant/profile/full binding、range边界、canonical/digest/currency/overlap腐化及只读回滚；先写可到达现数据库行为的测试，不以 future import/404/缺 provider 造 RED。                                                                                                         |
+
+拟定内部签名（不是 machine contract）：
+
+```ts
+selectActiveRates(
+  input: MeteringRateSelectionInput,
+): Promise<MeteringRateSelectionResult>
+```
+
+`MeteringRateSelectionInput` closed shape 为 `tenantId`、`profileRef`、完整 `binding`（`providerRef/environment/pricingAccountRef/modelRef/modelVersion`）及 1..64 个 closed `requests`。每个 request 含 `bucket/unit` 与 `applicability` observation：`{kind:"all"}`，或 `{kind:"range",dimension,unit,value}`，其中 value 为 canonical 非负 int64 decimal。它是 Billing 内部匹配输入，不是 Agent owner artifact、execution bound、usage evidence、authorization 或 quote。
+
+Service 先严格校验 closed input，再要求通过现 `requireActiveTransaction(input.tenantId, "write")` 要求当前transaction tenant一致且mode精确为write；repository 在该write transaction内执行一次 `SELECT CURRENT_TIMESTAMP(3)`，选择 `effective_from <= db_now` 且 `(effective_from DESC, revision DESC)` 第一项。随后按 ordinal 读取最多65行，复用 publication strict reconstruction：header/rate_count、连续 ordinal、nullable shape、NUMERIC78普通十进制、business-key digest、完整 canonical JSON/content digest、header↔canonical profile 一致性与 codec 已规定的同完整binding币种一致、无重复/无重叠均须成立；不得新增revision-global单币种约束。整版重建通过后才比较合法 `input.profileRef`：不相等是当前active set不覆盖请求，返回RATE_UNAVAILABLE，不搜索旧revision；只有持久header/canonical内部profile漂移才是CORRUPT。匹配必须逐字比较完整 binding/bucket/unit：published `all` row无条件覆盖该组的all或range request，它是正式ordinary applicability而非fallback；published `range` row仅匹配dimension/unit逐字一致且 `lowerInclusive <= value < upperExclusive` 的range request，`upperExclusive=null` 为开放上界，且不匹配all request。现codec禁止同组all+range及range overlap；绕过canonical导致的结构性多命中是CORRUPT，canonical合法却仍多命中才防御性AMBIGUOUS。每个 request 必须恰好映射一个returned rate；重复input request严格INVALID，不重复匹配或复制结果。
+
+结果 closed shape 只含 `tenantId/dbNow/revisionId/revision/effectiveFrom/contentDigest/profileRef/currencyCode/rates`；`currencyCode`来自所选完整binding，rates按请求顺序一一映射且每项恰好对应唯一request。返回值复制为deep immutable业务对象，时间为canonical UTC字符串、十进制为普通decimal字符串，不保留Prisma `Date`/`Decimal`、row或其它框架对象。零费率是显式发布的 rational `0/positive`，但 selector 不解释为免费、不乘 `7/5`、不做 currency→Credit 换算或余额动作。
+
+selector自身业务错误闭集收缩为 `METERING_SELECTION_INVALID | METERING_RATE_UNAVAILABLE | METERING_RATE_CORRUPT | METERING_RATE_AMBIGUOUS`：input及重复request为INVALID；没有生效revision、请求profile合法不匹配或缺匹配为RATE_UNAVAILABLE；持久header/canonical/digest/同binding currency/结构性重叠漂移为RATE_CORRUPT；canonical合法却仍多匹配为防御性RATE_AMBIGUOUS。selector不catch或包装raw Prisma/PostgreSQL/transaction故障，也不新增`METERING_SELECTION_UNAVAILABLE`承诺；现TransactionService登记的rollback-only firstCause必须原样保留。调用者取消、transaction inactive/mode/tenant mismatch等既有typed错误按现安全语义传播。
+
+raw包内transaction failure仍不得被解释为price=0、fallback或业务RATE_UNAVAILABLE。未来拥有root transaction的Admission/application只能在事务完全退出、firstCause已确定后，于实际public边界把未知内部故障映射为固定安全响应，并保留内部cause；该mapper当前未实现且本片无HTTP，文档不宣称已防止driver细节到达尚不存在的public surface。
+
+后继准确实现范围仅为：新 `metering-pricing-selection.{types,service}.ts`；现 `metering-pricing-revision.repository.ts`、`metering.module.ts`、`metering.error.ts`；现真正 PostgreSQL integration 测试（由Root准入时指定精确文件）。`metering.public.ts`、SQL/generated、OpenAPI、policy、Credit、HTTP、legacy writer和依赖锁均冻结。policy 的倍率可调语义、quote validity、normalization及actual-only artifact/ref另片收敛；本 rate 片不硬编码 `7/5` 或改用户决定。
+
+---
 ## R228 本地源码交付（2026-10-04）
 
 本次本地提交交付已审查的 rate-only module-private publication、两张 canonical 表及正规派生、纯 codec 和相应测试。Root R227 最终 107 项真实 PostgreSQL 与 1361 项辅助门通过，两个真实故障已修复，publication 源码与当前证据独审均 0P0/P1/P2。该结果只覆盖本切片；未推送或启用用户组合，HTTP、policy、Admission、实际用量与积分/用户整链仍开放。下方 R227/R223 是实现前后时间点记录，不作为当前“尚无源码”的结论。
