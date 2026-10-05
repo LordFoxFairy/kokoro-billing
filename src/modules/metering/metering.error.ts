@@ -11,7 +11,9 @@ export class MeteringError extends Error {
       | "METERING_SELECTION_INVALID"
       | "METERING_RATE_UNAVAILABLE"
       | "METERING_RATE_CORRUPT"
-      | "METERING_RATE_AMBIGUOUS",
+      | "METERING_RATE_AMBIGUOUS"
+      | "METERING_POLICY_UNAVAILABLE"
+      | "METERING_POLICY_CORRUPT",
     message: string,
     options?: ErrorOptions,
   ) {

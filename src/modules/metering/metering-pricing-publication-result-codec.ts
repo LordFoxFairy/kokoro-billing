@@ -1,8 +1,10 @@
 import type { ResultCodec } from "../../database/command-receipt.types.js";
 
-export type MeteringPricingPublicationResultV1 = Readonly<{
+export type MeteringPricingPublicationResultV1<
+  Kind extends "rate" | "policy" = "rate",
+> = Readonly<{
   schemaVersion: 1;
-  kind: "rate";
+  kind: Kind;
   tenantId: string;
   revision: string;
   contentDigest: string;
@@ -22,7 +24,10 @@ const fields = [
 const instant =
   /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-5][0-9]\.[0-9]{3}Z$/u;
 
-function decode(value: unknown): MeteringPricingPublicationResultV1 {
+function decode<Kind extends "rate" | "policy">(
+  value: unknown,
+  kind: Kind,
+): MeteringPricingPublicationResultV1<Kind> {
   if (
     value === null ||
     typeof value !== "object" ||
@@ -35,7 +40,7 @@ function decode(value: unknown): MeteringPricingPublicationResultV1 {
   if (
     fields.some((field) => !Object.hasOwn(record, field)) ||
     record.schemaVersion !== 1 ||
-    record.kind !== "rate" ||
+    record.kind !== kind ||
     typeof record.tenantId !== "string" ||
     record.tenantId.length === 0 ||
     typeof record.revision !== "string" ||
@@ -53,7 +58,7 @@ function decode(value: unknown): MeteringPricingPublicationResultV1 {
     throw new TypeError("Invalid metering publication result");
   return {
     schemaVersion: 1,
-    kind: "rate",
+    kind,
     tenantId: record.tenantId,
     revision: record.revision,
     contentDigest: record.contentDigest,
@@ -62,9 +67,13 @@ function decode(value: unknown): MeteringPricingPublicationResultV1 {
   };
 }
 
-export const meteringPricingPublicationResultCodec: ResultCodec<MeteringPricingPublicationResultV1> =
-  Object.freeze({
+export function meteringPricingPublicationResultCodec<
+  Kind extends "rate" | "policy",
+>(kind: Kind): ResultCodec<MeteringPricingPublicationResultV1<Kind>> {
+  return Object.freeze({
     schemaVersion: 1,
-    encode: decode,
-    decode,
+    encode: (value: MeteringPricingPublicationResultV1<Kind>) =>
+      decode(value, kind),
+    decode: (value: unknown) => decode(value, kind),
   });
+}

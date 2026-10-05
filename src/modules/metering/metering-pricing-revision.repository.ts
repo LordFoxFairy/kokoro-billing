@@ -1,15 +1,21 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { TransactionService } from "../../database/transaction.service.js";
-import { encodeMeteringRateRevisionDraft } from "./metering-pricing-revision-codec.js";
+import { assertExecutableMeteringPolicy } from "./metering-policy-artifact.js";
+import {
+  encodeMeteringPolicyRevisionDraft,
+  decodeMeteringPolicyRevisionDraft,
+  encodeMeteringRateRevisionDraft,
+} from "./metering-pricing-revision-codec.js";
 import type {
+  MeteringPolicyRevisionDraft,
   MeteringRateApplicability,
   MeteringRateRevisionDraft,
   MeteringRevisionRate,
 } from "./metering-pricing-revision.types.js";
 import type { MeteringPricingPublicationResultV1 } from "./metering-pricing-publication-result-codec.js";
 import type {
-  MeteringRateSelectionInput,
-  MeteringRateSelectionResult,
+  MeteringPricingSelectionInput,
+  MeteringPricingSelectionResult,
 } from "./metering-pricing-selection.types.js";
 import { MeteringError } from "./metering.error.js";
 
@@ -38,10 +44,11 @@ const keyDigest = (rate: MeteringRevisionRate) =>
     .update(JSON.stringify(keyTuple(rate)), "utf8")
     .digest("hex");
 
-export type MeteringRatePublicationEffect = Readonly<{
-  revisionId: string;
-  result: MeteringPricingPublicationResultV1;
-}>;
+export type MeteringPricingPublicationEffect<Kind extends "rate" | "policy"> =
+  Readonly<{
+    revisionId: string;
+    result: MeteringPricingPublicationResultV1<Kind>;
+  }>;
 
 export class MeteringPricingRevisionRepository {
   constructor(private readonly transactions: TransactionService) {}
@@ -49,7 +56,7 @@ export class MeteringPricingRevisionRepository {
   async publishRate(
     draft: MeteringRateRevisionDraft,
     contentDigest: string,
-  ): Promise<MeteringRatePublicationEffect> {
+  ): Promise<MeteringPricingPublicationEffect<"rate">> {
     const client = this.transactions.requireActiveTransaction(
       draft.tenantId,
       "write",
@@ -174,33 +181,30 @@ export class MeteringPricingRevisionRepository {
       this.#corrupt();
   }
 
-  async selectActiveRates(
-    input: MeteringRateSelectionInput,
-  ): Promise<MeteringRateSelectionResult> {
+  async selectActivePricing(
+    input: MeteringPricingSelectionInput,
+  ): Promise<MeteringPricingSelectionResult> {
     const client = this.transactions.requireActiveTransaction(
       input.tenantId,
       "write",
     );
+    const clocks = await client.$queryRaw<readonly { db_now: Date }[]>`
+      SELECT CURRENT_TIMESTAMP(3) AS db_now`;
+    const dbNow = clocks[0]?.db_now;
+    if (!(dbNow instanceof Date) || !Number.isFinite(dbNow.getTime()))
+      this.#selectionCorrupt();
     const selected = await client.$queryRaw<
-      readonly { db_now: Date; id: string; revision: bigint }[]
+      readonly { id: string; revision: bigint }[]
     >`
-      SELECT CURRENT_TIMESTAMP(3) AS db_now,id,revision
-      FROM billing_metering_rate_revision
-      WHERE tenant_id=${input.tenantId}
-        AND effective_from <= CURRENT_TIMESTAMP(3)
-      ORDER BY effective_from DESC,revision DESC
-      LIMIT 1`;
+      SELECT id,revision FROM billing_metering_rate_revision
+      WHERE tenant_id=${input.tenantId} AND effective_from <= ${dbNow}
+      ORDER BY effective_from DESC,revision DESC LIMIT 1`;
     const active = selected[0];
     if (!active)
       throw new MeteringError(
         "METERING_RATE_UNAVAILABLE",
         "Metering rate is unavailable",
       );
-    if (
-      !(active.db_now instanceof Date) ||
-      !Number.isFinite(active.db_now.getTime())
-    )
-      this.#selectionCorrupt();
     const stored = await this.#readRateRevision(
       input.tenantId,
       active.revision,
@@ -261,9 +265,38 @@ export class MeteringPricingRevisionRepository {
       rates.some((item) => item.rate.currencyCode !== currencyCode)
     )
       this.#selectionCorrupt();
+    const selectedPolicies = await client.$queryRaw<
+      readonly { id: string; revision: bigint }[]
+    >`
+      SELECT id,revision FROM billing_metering_policy_revision
+      WHERE tenant_id=${input.tenantId} AND effective_from <= ${dbNow}
+      ORDER BY effective_from DESC,revision DESC LIMIT 1`;
+    const activePolicy = selectedPolicies[0];
+    if (!activePolicy)
+      throw new MeteringError(
+        "METERING_POLICY_UNAVAILABLE",
+        "Metering policy is unavailable",
+      );
+    const policy = await this.#readPolicyRevision(
+      input.tenantId,
+      activePolicy.revision,
+    );
+    if (policy.revisionId !== activePolicy.id) this.#policyCorrupt();
+    if (
+      policy.draft.profileRef.version !== input.profileRef.version ||
+      policy.draft.profileRef.artifactDigest !==
+        input.profileRef.artifactDigest ||
+      policy.draft.currencyCode !== currencyCode
+    )
+      throw new MeteringError(
+        "METERING_POLICY_UNAVAILABLE",
+        "Metering policy is unavailable",
+      );
+    const failurePolicyRef = policy.draft.failurePolicyRef;
+    if (failurePolicyRef === null) this.#policyCorrupt();
     return Object.freeze({
       tenantId: input.tenantId,
-      dbNow: active.db_now.toISOString(),
+      dbNow: dbNow.toISOString(),
       revisionId: stored.revisionId,
       revision: active.revision.toString(),
       effectiveFrom: stored.draft.effectiveFrom,
@@ -271,7 +304,186 @@ export class MeteringPricingRevisionRepository {
       profileRef: Object.freeze({ ...stored.draft.profileRef }),
       currencyCode,
       rates: Object.freeze(rates),
+      policy: Object.freeze({
+        revisionId: policy.revisionId,
+        revision: activePolicy.revision.toString(),
+        contentDigest: policy.contentDigest,
+        effectiveFrom: policy.draft.effectiveFrom,
+        multiplier: Object.freeze({ ...policy.draft.multiplier }),
+        creditMicrosPerMinor: Object.freeze({
+          ...policy.draft.creditMicrosPerMinor,
+        }),
+        roundingVersion: policy.draft.roundingVersion,
+        failurePolicyRef: Object.freeze({ ...failurePolicyRef }),
+      }),
     });
+  }
+
+  async publishPolicy(
+    draft: MeteringPolicyRevisionDraft,
+    contentDigest: string,
+  ): Promise<MeteringPricingPublicationEffect<"policy">> {
+    const client = this.transactions.requireActiveTransaction(
+      draft.tenantId,
+      "write",
+    );
+    const lock = `metering:pricing-generation:policy:${draft.tenantId}`;
+    await client.$queryRaw`SELECT 1::int AS locked FROM pg_advisory_xact_lock(hashtextextended(${lock}, 0))`;
+    const maxima = await client.$queryRaw<
+      readonly { revision: string | null }[]
+    >`
+      SELECT MAX(revision)::text AS revision FROM billing_metering_policy_revision
+      WHERE tenant_id=${draft.tenantId}`;
+    const previous = maxima[0]?.revision;
+    const revision =
+      previous === null || previous === undefined ? 1n : BigInt(previous) + 1n;
+    if (revision > MAX_REVISION)
+      throw new MeteringError(
+        "METERING_PUBLICATION_REVISION_EXHAUSTED",
+        "Metering publication revision is exhausted",
+      );
+    const clocks = await client.$queryRaw<readonly { published_at: Date }[]>`
+      SELECT CURRENT_TIMESTAMP(3) AS published_at`;
+    const publishedAt = clocks[0]?.published_at;
+    if (
+      !(publishedAt instanceof Date) ||
+      !Number.isFinite(publishedAt.getTime())
+    )
+      throw new MeteringError(
+        "METERING_PUBLICATION_UNAVAILABLE",
+        "Metering publication is unavailable",
+      );
+    const failurePolicyRef = draft.failurePolicyRef;
+    if (failurePolicyRef === null) this.#policyCorrupt();
+    const revisionId = randomUUID();
+    await client.billing_metering_policy_revision.create({
+      data: {
+        id: revisionId,
+        tenant_id: draft.tenantId,
+        revision,
+        schema_version: 1,
+        effective_from: new Date(draft.effectiveFrom),
+        source_ref: draft.sourceRef,
+        verified_at: new Date(draft.verifiedAt),
+        profile_version: draft.profileRef.version,
+        profile_artifact_digest: draft.profileRef.artifactDigest,
+        currency_code: draft.currencyCode,
+        multiplier_numerator: draft.multiplier.numerator,
+        multiplier_denominator: draft.multiplier.denominator,
+        credit_micros_per_minor_numerator: draft.creditMicrosPerMinor.numerator,
+        credit_micros_per_minor_denominator:
+          draft.creditMicrosPerMinor.denominator,
+        rounding_version: draft.roundingVersion,
+        failure_policy_version: failurePolicyRef.version,
+        failure_policy_artifact_digest: failurePolicyRef.artifactDigest,
+        content_digest: contentDigest,
+        published_at: publishedAt,
+      },
+    });
+    return {
+      revisionId,
+      result: {
+        schemaVersion: 1,
+        kind: "policy",
+        tenantId: draft.tenantId,
+        revision: revision.toString(),
+        contentDigest,
+        publishedAt: publishedAt.toISOString(),
+        effectiveFrom: draft.effectiveFrom,
+      },
+    };
+  }
+
+  async assertPolicyPublication(
+    expected: MeteringPricingPublicationResultV1<"policy">,
+    draft: MeteringPolicyRevisionDraft,
+  ): Promise<void> {
+    const encoded = encodeMeteringPolicyRevisionDraft(draft);
+    if (
+      expected.kind !== "policy" ||
+      expected.tenantId !== draft.tenantId ||
+      expected.effectiveFrom !== draft.effectiveFrom ||
+      expected.contentDigest !== encoded.contentDigest
+    )
+      this.#policyCorrupt();
+    const stored = await this.#readPolicyRevision(
+      expected.tenantId,
+      BigInt(expected.revision),
+    );
+    if (
+      stored.contentDigest !== expected.contentDigest ||
+      stored.publishedAt !== expected.publishedAt ||
+      encodeMeteringPolicyRevisionDraft(stored.draft).canonicalJson !==
+        encoded.canonicalJson
+    )
+      this.#policyCorrupt();
+  }
+
+  async #readPolicyRevision(
+    tenantId: string,
+    revision: bigint,
+  ): Promise<
+    Readonly<{
+      revisionId: string;
+      contentDigest: string;
+      publishedAt: string;
+      draft: MeteringPolicyRevisionDraft;
+    }>
+  > {
+    const client = this.transactions.requireActiveTransaction(
+      tenantId,
+      "write",
+    );
+    const row = await client.billing_metering_policy_revision.findUnique({
+      where: { tenant_id_revision: { tenant_id: tenantId, revision } },
+    });
+    if (!row || row.schema_version !== 1) this.#policyCorrupt();
+    // Database failures are outside this catch: preserve transaction firstCause.
+    try {
+      const encoded = encodeMeteringPolicyRevisionDraft({
+        schemaVersion: "1",
+        tenantId,
+        effectiveFrom: row.effective_from.toISOString(),
+        sourceRef: row.source_ref,
+        verifiedAt: row.verified_at.toISOString(),
+        profileRef: {
+          version: row.profile_version,
+          artifactDigest: row.profile_artifact_digest,
+        },
+        currencyCode: row.currency_code,
+        multiplier: {
+          numerator: row.multiplier_numerator.toFixed(0),
+          denominator: row.multiplier_denominator.toFixed(0),
+        },
+        creditMicrosPerMinor: {
+          numerator: row.credit_micros_per_minor_numerator.toFixed(0),
+          denominator: row.credit_micros_per_minor_denominator.toFixed(0),
+        },
+        roundingVersion: row.rounding_version,
+        failurePolicyRef: {
+          version: row.failure_policy_version,
+          artifactDigest: row.failure_policy_artifact_digest,
+        },
+      });
+      const draft = decodeMeteringPolicyRevisionDraft(encoded.canonicalJson);
+      assertExecutableMeteringPolicy(draft);
+      if (encoded.contentDigest !== row.content_digest) this.#policyCorrupt();
+      return {
+        revisionId: row.id,
+        contentDigest: row.content_digest,
+        publishedAt: row.published_at.toISOString(),
+        draft,
+      };
+    } catch {
+      this.#policyCorrupt();
+    }
+  }
+
+  #policyCorrupt(): never {
+    throw new MeteringError(
+      "METERING_POLICY_CORRUPT",
+      "Metering policy is corrupt",
+    );
   }
 
   async #readRateRevision(

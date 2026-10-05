@@ -6,9 +6,13 @@ import { TransactionService } from "../../src/database/transaction.service.js";
 import type { BillingAdminContext } from "../../src/infrastructure/auth/billing-auth.types.js";
 import { MeteringPricingPublicationService } from "../../src/modules/metering/metering-pricing-publication.service.js";
 import { MeteringPricingSelectionService } from "../../src/modules/metering/metering-pricing-selection.service.js";
-import type { MeteringRateSelectionInput } from "../../src/modules/metering/metering-pricing-selection.types.js";
-import { encodeMeteringRateRevisionDraft } from "../../src/modules/metering/metering-pricing-revision-codec.js";
+import type { MeteringPricingSelectionInput } from "../../src/modules/metering/metering-pricing-selection.types.js";
+import {
+  encodeMeteringPolicyRevisionDraft,
+  encodeMeteringRateRevisionDraft,
+} from "../../src/modules/metering/metering-pricing-revision-codec.js";
 import type {
+  MeteringPolicyRevisionDraft,
   MeteringPublicationCommand,
   MeteringRateRevisionDraft,
 } from "../../src/modules/metering/metering-pricing-revision.types.js";
@@ -1464,6 +1468,22 @@ integration("R230 active metering rate selection", () => {
     publisher = application.get(MeteringPricingPublicationService);
     selector = application.get(MeteringPricingSelectionService);
     transactions = application.get(TransactionService);
+    const policyDraft = syntheticPolicy("tenant-selection");
+    await publisher.publishPolicy(
+      {
+        tenantId: policyDraft.tenantId,
+        operatorId: "operator-selection",
+        role: "billing.admin",
+      },
+      {
+        tenantId: policyDraft.tenantId,
+        actorId: "operator-selection",
+        publicationIdentity: "selection-policy",
+        idempotencyKey: "selection-policy",
+        reason: "QA synthetic joint-selection prerequisite",
+        draft: policyDraft,
+      },
+    );
   });
 
   afterEach(async () => {
@@ -1474,8 +1494,9 @@ integration("R230 active metering rate selection", () => {
   });
 
   const profileRef = {
-    version: "usage-v1",
-    artifactDigest: "a".repeat(64),
+    version: "1.0.0",
+    artifactDigest:
+      "ecd30d1908f410eed29181c9f52669f824312bf3a2e3874153d990b95fe58b91",
   } as const;
   const binding = {
     providerRef: "Provider-A",
@@ -1485,8 +1506,8 @@ integration("R230 active metering rate selection", () => {
     modelVersion: "V1",
   } as const;
   const selection = (
-    overrides: Partial<MeteringRateSelectionInput> = {},
-  ): MeteringRateSelectionInput => ({
+    overrides: Partial<MeteringPricingSelectionInput> = {},
+  ): MeteringPricingSelectionInput => ({
     tenantId: "tenant-selection",
     profileRef,
     binding,
@@ -1580,7 +1601,7 @@ integration("R230 active metering rate selection", () => {
         operation: "metering.select_rate_revision",
         mode: "write",
       },
-      () => selector.selectActiveRates(input),
+      () => selector.selectActivePricing(input),
     );
 
   test("selects the latest effective revision by DB time and returns exact immutable all/range rates", async () => {
@@ -1768,11 +1789,11 @@ integration("R230 active metering rate selection", () => {
   });
 
   test("requires the exact tenant write transaction and preserves typed transaction failures", async () => {
-    await expect(selector.selectActiveRates(selection())).rejects.toMatchObject(
-      {
-        code: "TRANSACTION_REQUIRED",
-      },
-    );
+    await expect(
+      selector.selectActivePricing(selection()),
+    ).rejects.toMatchObject({
+      code: "TRANSACTION_REQUIRED",
+    });
     await expect(
       transactions.runRoot(
         {
@@ -1781,7 +1802,7 @@ integration("R230 active metering rate selection", () => {
           operation: "metering.select_rate_revision",
           mode: "readOnlySnapshot",
         },
-        () => selector.selectActiveRates(selection()),
+        () => selector.selectActivePricing(selection()),
       ),
     ).rejects.toMatchObject({ code: "TRANSACTION_MODE_MISMATCH" });
     await expect(
@@ -1792,7 +1813,7 @@ integration("R230 active metering rate selection", () => {
           operation: "metering.select_rate_revision",
           mode: "write",
         },
-        () => selector.selectActiveRates(selection()),
+        () => selector.selectActivePricing(selection()),
       ),
     ).rejects.toMatchObject({ code: "TRANSACTION_CONTEXT_MISMATCH" });
   });
@@ -1863,7 +1884,7 @@ integration("R230 active metering rate selection", () => {
             "ALTER TABLE billing_metering_rate_revision RENAME TO billing_metering_rate_revision_failure_probe",
           );
           try {
-            await selector.selectActiveRates(selection());
+            await selector.selectActivePricing(selection());
           } catch (error) {
             innerFailure = error;
             throw error;
@@ -2267,6 +2288,579 @@ describe.skipIf(adminUrl === undefined)("R241 policy catalog RED", () => {
       policies: [],
       foreignKeys: [],
       routines: [],
+    });
+  });
+});
+
+integration("R243 joint pricing policy absence", () => {
+  let fixture: PrismaDatabaseFixture | undefined;
+  let application: TestingModule | undefined;
+
+  afterEach(async () => {
+    try {
+      await application?.close();
+    } finally {
+      application = undefined;
+      await fixture?.close();
+      fixture = undefined;
+    }
+  });
+
+  test("rejects a published active synthetic rate when no policy is effective", async () => {
+    fixture = await createPrismaDatabaseFixture(assertDefined(adminUrl));
+    application = await Test.createTestingModule({
+      imports: [
+        DatabaseModule.register({ databaseUrl: fixture.url }),
+        MeteringModule,
+      ],
+    }).compile();
+    await application.init();
+    const publisher = application.get(MeteringPricingPublicationService);
+    const selector = application.get(MeteringPricingSelectionService);
+    const transactions = application.get(TransactionService);
+    const tenantId = "tenant-r243-joint-policy-absence";
+    const actorId = "operator-r243-joint-policy-absence";
+    const profileRef = {
+      version: "1.0.0",
+      artifactDigest:
+        "ecd30d1908f410eed29181c9f52669f824312bf3a2e3874153d990b95fe58b91",
+    } as const;
+    const binding = {
+      providerRef: "qa-synthetic-provider",
+      environment: "test",
+      pricingAccountRef: "qa-synthetic-pricing-account",
+      modelRef: "qa-synthetic-model",
+      modelVersion: "qa-v1",
+    } as const;
+    const draft: MeteringRateRevisionDraft = {
+      schemaVersion: "1",
+      tenantId,
+      effectiveFrom: "2026-01-01T00:00:00.000Z",
+      sourceRef: "QA synthetic fixture; not a production procurement price",
+      verifiedAt: "2026-01-01T00:00:00.000Z",
+      profileRef,
+      rates: [
+        {
+          ...binding,
+          bucket: "input",
+          unit: "token",
+          applicability: { kind: "all" },
+          currencyCode: "USD",
+          minorPerUnit: { numerator: "1", denominator: "1000" },
+        },
+      ],
+    };
+    const published = await publisher.publishRate(
+      { tenantId, operatorId: actorId, role: "billing.admin" },
+      {
+        tenantId,
+        actorId,
+        publicationIdentity: "r243-synthetic-active-rate",
+        idempotencyKey: "r243-synthetic-active-rate-key",
+        reason: "QA synthetic joint pricing policy absence",
+        draft,
+      },
+    );
+    expect(published).toMatchObject({
+      kind: "rate",
+      tenantId,
+      revision: "1",
+      contentDigest: encodeMeteringRateRevisionDraft(draft).contentDigest,
+    });
+    const before = await fixture.pool.query(
+      `SELECT count(*)::text AS active_rates,
+              (SELECT count(*)::text FROM billing_metering_policy_revision
+               WHERE tenant_id=$1) AS policies
+         FROM billing_metering_rate_revision
+        WHERE tenant_id=$1 AND effective_from <= CURRENT_TIMESTAMP(3)`,
+      [tenantId],
+    );
+    expect(before.rows).toEqual([{ active_rates: "1", policies: "0" }]);
+    const input: MeteringPricingSelectionInput = {
+      tenantId,
+      profileRef,
+      binding,
+      requests: [
+        { bucket: "input", unit: "token", applicability: { kind: "all" } },
+      ],
+    };
+    await expect(
+      transactions.runRoot(
+        {
+          tenantId,
+          actorId,
+          operation: "metering.select_rate_revision",
+          mode: "write",
+        },
+        () => selector.selectActivePricing(input),
+      ),
+    ).rejects.toMatchObject({ code: "METERING_POLICY_UNAVAILABLE" });
+  });
+});
+
+function syntheticPolicy(
+  tenantId: string,
+  overrides: Partial<MeteringPolicyRevisionDraft> = {},
+): MeteringPolicyRevisionDraft {
+  return {
+    schemaVersion: "1",
+    tenantId,
+    effectiveFrom: "2026-01-01T00:00:00.000Z",
+    sourceRef: "QA synthetic policy; not a production price or conversion",
+    verifiedAt: "2026-01-01T00:00:00.000Z",
+    profileRef: {
+      version: "1.0.0",
+      artifactDigest:
+        "ecd30d1908f410eed29181c9f52669f824312bf3a2e3874153d990b95fe58b91",
+    },
+    currencyCode: "USD",
+    multiplier: { numerator: "7", denominator: "5" },
+    creditMicrosPerMinor: { numerator: "100", denominator: "1" },
+    roundingVersion: "attempt-ceil-v1",
+    failurePolicyRef: {
+      version: "1.0.0",
+      artifactDigest:
+        "8d8dbe5950cfaa7f1383f847ad6e270c62bbd67bf02ea8717ac8d360594cb076",
+    },
+    ...overrides,
+  };
+}
+
+integration("R243 immutable policy publication and joint pricing", () => {
+  let fixture: PrismaDatabaseFixture | undefined;
+  let application: TestingModule | undefined;
+  let publisher: MeteringPricingPublicationService;
+  let selector: MeteringPricingSelectionService;
+  let transactions: TransactionService;
+  const tenantId = "tenant-policy-joint";
+  const actorId = "operator-policy-joint";
+  const context = (): BillingAdminContext => ({
+    tenantId,
+    operatorId: actorId,
+    role: "billing.admin",
+  });
+  const command = (
+    identity = "policy-1",
+    overrides: Partial<MeteringPolicyRevisionDraft> = {},
+    key = identity,
+  ): MeteringPublicationCommand<MeteringPolicyRevisionDraft> => ({
+    tenantId,
+    actorId,
+    publicationIdentity: identity,
+    idempotencyKey: key,
+    reason: "QA synthetic policy publication",
+    draft: syntheticPolicy(tenantId, overrides),
+  });
+  const pool = () => assertDefined(fixture).pool;
+  const counts = async () =>
+    (
+      await pool().query<{
+        policies: string;
+        receipts: string;
+        keys: string;
+        audits: string;
+      }>(`SELECT
+    (SELECT count(*)::text FROM billing_metering_policy_revision) AS policies,
+    (SELECT count(*)::text FROM billing_command_receipt WHERE command_name='metering.publish_policy_revision') AS receipts,
+    (SELECT count(*)::text FROM billing_command_key_binding WHERE command_name='metering.publish_policy_revision') AS keys,
+    (SELECT count(*)::text FROM billing_audit_event WHERE action='metering.publish_policy_revision') AS audits`)
+    ).rows;
+  const binding = {
+    providerRef: "provider-qa",
+    environment: "test",
+    pricingAccountRef: "qa-account",
+    modelRef: "qa-model",
+    modelVersion: "qa-v1",
+  } as const;
+  const publishRate = async (
+    identity = "joint-rate",
+    effectiveFrom = "2026-01-01T00:00:00.000Z",
+  ) =>
+    publisher.publishRate(context(), {
+      tenantId,
+      actorId,
+      publicationIdentity: identity,
+      idempotencyKey: identity,
+      reason: "QA synthetic rate",
+      draft: {
+        schemaVersion: "1",
+        tenantId,
+        effectiveFrom,
+        sourceRef: "QA synthetic rate; not production",
+        verifiedAt: "2026-01-01T00:00:00.000Z",
+        profileRef: syntheticPolicy(tenantId).profileRef,
+        rates: [
+          {
+            ...binding,
+            bucket: "input",
+            unit: "token",
+            applicability: { kind: "all" },
+            currencyCode: "USD",
+            minorPerUnit: { numerator: "1", denominator: "1000" },
+          },
+        ],
+      },
+    });
+  const input = (): MeteringPricingSelectionInput => ({
+    tenantId,
+    profileRef: syntheticPolicy(tenantId).profileRef,
+    binding,
+    requests: [
+      { bucket: "input", unit: "token", applicability: { kind: "all" } },
+    ],
+  });
+  const select = (request = input()) =>
+    transactions.runRoot(
+      {
+        tenantId: request.tenantId,
+        actorId,
+        operation: "metering.select_pricing",
+        mode: "write",
+      },
+      () => selector.selectActivePricing(request),
+    );
+
+  beforeEach(async () => {
+    fixture = await createPrismaDatabaseFixture(assertDefined(adminUrl));
+    application = await Test.createTestingModule({
+      imports: [
+        DatabaseModule.register({ databaseUrl: fixture.url }),
+        MeteringModule,
+      ],
+    }).compile();
+    await application.init();
+    publisher = application.get(MeteringPricingPublicationService);
+    selector = application.get(MeteringPricingSelectionService);
+    transactions = application.get(TransactionService);
+  });
+  afterEach(async () => {
+    try {
+      await application?.close();
+    } finally {
+      application = undefined;
+      await fixture?.close();
+      fixture = undefined;
+    }
+  });
+
+  test("publishes exact seven-field policy bytes, replays both keys, audits the actual row, and separates rate identities", async () => {
+    await publishRate("policy-1");
+    const first = await publisher.publishPolicy(context(), command());
+    expect(Object.keys(first).sort()).toEqual(
+      [
+        "schemaVersion",
+        "kind",
+        "tenantId",
+        "revision",
+        "contentDigest",
+        "publishedAt",
+        "effectiveFrom",
+      ].sort(),
+    );
+    expect(first).toEqual({
+      schemaVersion: 1,
+      kind: "policy",
+      tenantId,
+      revision: "1",
+      contentDigest: encodeMeteringPolicyRevisionDraft(command().draft)
+        .contentDigest,
+      publishedAt: first.publishedAt,
+      effectiveFrom: command().draft.effectiveFrom,
+    });
+    expect(await publisher.publishPolicy(context(), command())).toEqual(first);
+    expect(
+      await publisher.publishPolicy(
+        context(),
+        command("policy-1", {}, "new-key"),
+      ),
+    ).toEqual(first);
+    expect(await counts()).toEqual([
+      { policies: "1", receipts: "1", keys: "2", audits: "1" },
+    ]);
+    const audit = await pool().query<{
+      id: string;
+      resource_id: string;
+      published_at: Date;
+    }>(
+      `SELECT p.id,a.resource_id,p.published_at FROM billing_metering_policy_revision p JOIN billing_audit_event a ON a.resource_id=p.id WHERE p.tenant_id=$1 AND a.action='metering.publish_policy_revision'`,
+      [tenantId],
+    );
+    expect(audit.rows).toHaveLength(1);
+    expect(audit.rows[0]?.published_at.toISOString()).toBe(first.publishedAt);
+    await expect(
+      publisher.publishPolicy(
+        context(),
+        command("policy-1", {
+          multiplier: { numerator: "8", denominator: "5" },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "METERING_PUBLICATION_CONFLICT" });
+    expect(await counts()).toEqual([
+      { policies: "1", receipts: "1", keys: "2", audits: "1" },
+    ]);
+  });
+
+  test("rejects wrong admin/tenant/actor and nonexecutable references before any policy facts", async () => {
+    for (const principal of [
+      null,
+      { ...context(), tenantId: "other" },
+      { ...context(), operatorId: "other" },
+    ])
+      await expect(
+        publisher.publishPolicy(principal, command()),
+      ).rejects.toMatchObject({ code: "METERING_PUBLICATION_FORBIDDEN" });
+    for (const draft of [
+      { failurePolicyRef: null },
+      {
+        failurePolicyRef: { version: "1.0.0", artifactDigest: "a".repeat(64) },
+      },
+      { profileRef: { version: "other", artifactDigest: "a".repeat(64) } },
+      { multiplier: { numerator: "0", denominator: "1" } },
+      { multiplier: { numerator: "2", denominator: "2" } },
+      { creditMicrosPerMinor: { numerator: "0", denominator: "1" } },
+      { creditMicrosPerMinor: { numerator: "4", denominator: "2" } },
+    ])
+      await expect(
+        publisher.publishPolicy(context(), command("invalid", draft)),
+      ).rejects.toMatchObject({ code: "METERING_PUBLICATION_UNAVAILABLE" });
+    expect(await counts()).toEqual([
+      { policies: "0", receipts: "0", keys: "0", audits: "0" },
+    ]);
+  });
+
+  test("serializes concurrent revisions and identical identities without duplicate rows", async () => {
+    const result = await Promise.all([
+      publisher.publishPolicy(context(), command()),
+      publisher.publishPolicy(context(), command("policy-1", {}, "second-key")),
+    ]);
+    expect(result[0]).toEqual(result[1]);
+    const distinct = await Promise.all([
+      publisher.publishPolicy(context(), command("policy-2")),
+      publisher.publishPolicy(context(), command("policy-3")),
+    ]);
+    expect(distinct.map((item) => item.revision).sort()).toEqual(["2", "3"]);
+    expect(await counts()).toEqual([
+      { policies: "3", receipts: "3", keys: "4", audits: "3" },
+    ]);
+  });
+
+  test.each([
+    "content_digest",
+    "multiplier_numerator",
+    "failure_policy_artifact_digest",
+    "profile_artifact_digest",
+  ] as const)(
+    "rejects %s drift on same/new-key replay and joint selection",
+    async (field) => {
+      await publishRate();
+      await publisher.publishPolicy(context(), command());
+      const statements = {
+        content_digest:
+          "UPDATE billing_metering_policy_revision SET content_digest=repeat('b',64)",
+        multiplier_numerator:
+          "UPDATE billing_metering_policy_revision SET multiplier_numerator=8",
+        failure_policy_artifact_digest:
+          "UPDATE billing_metering_policy_revision SET failure_policy_artifact_digest=repeat('b',64)",
+        profile_artifact_digest:
+          "UPDATE billing_metering_policy_revision SET profile_artifact_digest=repeat('b',64)",
+      };
+      await pool().query(statements[field]);
+      const before = await counts();
+      await expect(
+        publisher.publishPolicy(context(), command()),
+      ).rejects.toMatchObject({ code: "METERING_POLICY_CORRUPT" });
+      await expect(
+        publisher.publishPolicy(context(), command("policy-1", {}, "new-key")),
+      ).rejects.toMatchObject({ code: "METERING_POLICY_CORRUPT" });
+      await expect(select()).rejects.toMatchObject({
+        code: "METERING_POLICY_CORRUPT",
+      });
+      expect(await counts()).toEqual(before);
+    },
+  );
+
+  test("rejects cross-kind receipt JSON and rolls back a replay key", async () => {
+    await publisher.publishPolicy(context(), command());
+    await pool().query(
+      `UPDATE billing_command_receipt SET result_json=jsonb_set(result_json,'{kind}','"rate"'::jsonb) WHERE command_name='metering.publish_policy_revision'`,
+    );
+    const before = await counts();
+    await expect(
+      publisher.publishPolicy(context(), command("policy-1", {}, "new-key")),
+    ).rejects.toMatchObject({ code: "METERING_POLICY_CORRUPT" });
+    expect(await counts()).toEqual(before);
+  });
+
+  test("rolls back policy, receipt, key and audit when audit write fails", async () => {
+    await pool()
+      .query(`CREATE FUNCTION fail_policy_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'owned policy audit fault'; END $$;
+      CREATE TRIGGER fail_policy_audit BEFORE INSERT ON billing_audit_event FOR EACH ROW WHEN (NEW.action='metering.publish_policy_revision') EXECUTE FUNCTION fail_policy_audit()`);
+    await expect(
+      publisher.publishPolicy(context(), command()),
+    ).rejects.toMatchObject({ code: "METERING_PUBLICATION_UNAVAILABLE" });
+    expect(await counts()).toEqual([
+      { policies: "0", receipts: "0", keys: "0", audits: "0" },
+    ]);
+  });
+
+  test("preserves NUMERIC78 exactness and refuses revision overflow", async () => {
+    const draft = {
+      multiplier: {
+        numerator: MAX_NUMERIC_78,
+        denominator: COPRIME_NUMERIC_78,
+      },
+      creditMicrosPerMinor: { numerator: MAX_NUMERIC_78, denominator: "1" },
+    };
+    const result = await publisher.publishPolicy(
+      context(),
+      command("wide", draft),
+    );
+    expect(
+      await publisher.publishPolicy(context(), command("wide", draft)),
+    ).toEqual(result);
+    await pool().query(
+      `UPDATE billing_metering_policy_revision SET revision=$1`,
+      [MAX_BIGINT],
+    );
+    const before = await counts();
+    await expect(
+      publisher.publishPolicy(context(), command("overflow")),
+    ).rejects.toMatchObject({
+      code: "METERING_PUBLICATION_REVISION_EXHAUSTED",
+    });
+    expect(await counts()).toEqual(before);
+  });
+
+  test("jointly selects latest effective revisions at one transaction instant and returns immutable facts only", async () => {
+    await publishRate();
+    await publisher.publishPolicy(context(), command());
+    await publisher.publishPolicy(
+      context(),
+      command("policy-2", { multiplier: { numerator: "8", denominator: "5" } }),
+    );
+    await publisher.publishPolicy(
+      context(),
+      command("future", { effectiveFrom: "2099-01-01T00:00:00.000Z" }),
+    );
+    const before = await counts();
+    const selected = await transactions.runRoot(
+      {
+        tenantId,
+        actorId,
+        operation: "metering.select_pricing.clock",
+        mode: "write",
+      },
+      async () => {
+        const client = transactions.requireActiveTransaction(tenantId, "write");
+        const clocks = await client.$queryRaw<
+          readonly { now: Date }[]
+        >`SELECT CURRENT_TIMESTAMP(3) AS now`;
+        const result = await selector.selectActivePricing(input());
+        expect(result.dbNow).toBe(assertDefined(clocks[0]).now.toISOString());
+        return result;
+      },
+    );
+    expect(selected).toMatchObject({
+      revision: "1",
+      policy: {
+        revision: "2",
+        multiplier: { numerator: "8", denominator: "5" },
+        creditMicrosPerMinor: { numerator: "100", denominator: "1" },
+        roundingVersion: "attempt-ceil-v1",
+        failurePolicyRef: syntheticPolicy(tenantId).failurePolicyRef,
+      },
+    });
+    expect(Object.isFrozen(selected.policy)).toBe(true);
+    expect(Object.isFrozen(selected.policy.multiplier)).toBe(true);
+    expect(Object.isFrozen(selected.policy.creditMicrosPerMinor)).toBe(true);
+    expect(Object.isFrozen(selected.policy.failurePolicyRef)).toBe(true);
+    expect(Object.keys(selected).sort()).toEqual(
+      [
+        "tenantId",
+        "dbNow",
+        "revisionId",
+        "revision",
+        "effectiveFrom",
+        "contentDigest",
+        "profileRef",
+        "currencyCode",
+        "rates",
+        "policy",
+      ].sort(),
+    );
+    expect(await counts()).toEqual(before);
+  });
+
+  test("rejects future-only and foreign-tenant policies, then rejects a latest currency mismatch without old fallback", async () => {
+    await publishRate();
+    await publisher.publishPolicy(
+      context(),
+      command("future", { effectiveFrom: "2099-01-01T00:00:00.000Z" }),
+    );
+    await expect(select()).rejects.toMatchObject({
+      code: "METERING_POLICY_UNAVAILABLE",
+    });
+    const other = syntheticPolicy("other-tenant");
+    await publisher.publishPolicy(
+      { tenantId: other.tenantId, operatorId: actorId, role: "billing.admin" },
+      { ...command("other"), tenantId: other.tenantId, draft: other },
+    );
+    await expect(select()).rejects.toMatchObject({
+      code: "METERING_POLICY_UNAVAILABLE",
+    });
+    await publisher.publishPolicy(context(), command("valid"));
+    await expect(select()).resolves.toMatchObject({
+      policy: { revision: "2" },
+    });
+    await publisher.publishPolicy(
+      context(),
+      command("currency-mismatch", { currencyCode: "EUR" }),
+    );
+    const before = await counts();
+    await expect(select()).rejects.toMatchObject({
+      code: "METERING_POLICY_UNAVAILABLE",
+    });
+    expect(await counts()).toEqual(before);
+  });
+
+  test("retains raw policy-query first cause and rolls back prior writes", async () => {
+    await publishRate();
+    await publisher.publishPolicy(context(), command());
+    let innerFailure: unknown;
+    const outerFailure = await transactions
+      .runRoot(
+        {
+          tenantId,
+          actorId,
+          operation: "metering.select_pricing.failure_probe",
+          mode: "write",
+        },
+        async () => {
+          const client = transactions.requireActiveTransaction(
+            tenantId,
+            "write",
+          );
+          await client.billing_metering_policy_revision.update({
+            where: {
+              tenant_id_revision: { tenant_id: tenantId, revision: 1n },
+            },
+            data: { source_ref: "rollback-only QA" },
+          });
+          await client.$executeRawUnsafe(
+            "ALTER TABLE billing_metering_policy_revision RENAME TO billing_metering_policy_revision_fault",
+          );
+          try {
+            await selector.selectActivePricing(input());
+          } catch (error) {
+            innerFailure = error;
+          }
+        },
+      )
+      .catch((error: unknown) => error);
+    expect(innerFailure).toBeDefined();
+    expect(outerFailure).toBe(innerFailure);
+    await expect(select()).resolves.toMatchObject({
+      policy: { revision: "1" },
     });
   });
 });

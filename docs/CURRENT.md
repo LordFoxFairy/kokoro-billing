@@ -1,3 +1,11 @@
+## R243 policy publication 与 joint pricing 当前交付证据（2026-10-05）
+
+现 metering 模块已增加 closed owner failure policy artifact、trusted publication 的同事务 revision/receipt/audit，以及调用方同 write transaction 的单数据库时钟联合 rate/policy 选择。旧 selectActiveRates 已删除，无兼容alias。只有严格验证的不可变计价事实；不新增 public HTTP、quote、Credit hold/资金动作或Agent逐attempt授权。缺policy/损坏artifact拒绝，不回落免费或旧版本。
+
+Root先取得真实缺policy业务反例，再原反例通过；完整publication及邻接contract285通过。冻结候选完整11门全部终态0，9真实PG文件131通过、39辅助文件1365通过，源码/正规派生/邻库保持。实际manifest：/var/folders/gn/wbk8wfbd047_wvwkwtyn331r0000gn/T/kokoro-r243-billing-joint-full-hudilcv0/manifest.json。独立13文件冻结审查0成立P0/P1/P2，报告 /tmp/r243-billing-policy-joint-final-review.md（SHA96bb0a07734b263998d571936775d9ea3c0d25994d7844f4ac23eb5e34f96378）。此前RED与测试错误历史保留在Root台账；这些开发前置不替代真实收费用户旅程。
+
+仍待：quote/技术输入界、逐attempt许可、预占、sealed evidence、仅核实实际消耗结算并释放剩余、流水、UI权威余额、正式外部模型与真实用户完整链。部署artifact携带亦未在本片启用；缺失fail closed。当前3310旧qwen/无Billing组合未更新，未执行充值或支付。
+
 ## R243 当前验证快照（2026-10-05）
 
 本切片在e5d83db0基线上新增canonical ordinary `billing_metering_policy_revision`十九列及约束/索引，总表35，并沿正规Prisma流水线派生；SQL SHA926787608b9ce0faafb6cdb754df3a28407f1e271d4d00bdad6c342db1ab0c0d。Root实际11门全0，真实PG117pass/0fail/0skip、辅助1361pass/0fail，收据`/var/folders/gn/wbk8wfbd047_wvwkwtyn331r0000gn/T/kokoro-r243-billing-policy-full-ic4dfmc6/manifest.json`，source/derived/邻库保持。原113/4失败历史与四test精确修正保留在Root progress。

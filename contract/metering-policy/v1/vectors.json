@@ -1,0 +1,49 @@
+{
+  "artifact_version": "1.0.0",
+  "valid": [
+    {
+      "artifact_version": "1.0.0",
+      "completed": "capture_verified_actual_only",
+      "failed_or_cancelled": "capture_verified_actual_only",
+      "not_dispatched": "release_confirmed_unused",
+      "unknown_or_incomplete": "pending_reconciliation"
+    }
+  ],
+  "invalid": [
+    {
+      "artifact_version": "1.0.0",
+      "completed": "capture_verified_actual_only",
+      "failed_or_cancelled": "capture_verified_actual_only",
+      "not_dispatched": "release_confirmed_unused",
+      "unknown_or_incomplete": "pending_reconciliation",
+      "extra": "rejected"
+    },
+    {
+      "artifact_version": "1.0.0",
+      "failed_or_cancelled": "capture_verified_actual_only",
+      "not_dispatched": "release_confirmed_unused",
+      "unknown_or_incomplete": "pending_reconciliation"
+    },
+    {
+      "artifact_version": "1.0.0",
+      "completed": "capture_verified_actual_only",
+      "failed_or_cancelled": "capture_verified_actual_only",
+      "not_dispatched": "release_confirmed_unused",
+      "unknown_or_incomplete": "capture_verified_actual_only"
+    },
+    {
+      "artifact_version": "2.0.0",
+      "completed": "capture_verified_actual_only",
+      "failed_or_cancelled": "capture_verified_actual_only",
+      "not_dispatched": "release_confirmed_unused",
+      "unknown_or_incomplete": "pending_reconciliation"
+    },
+    {
+      "artifact_version": "1.0.0",
+      "completed": null,
+      "failed_or_cancelled": "capture_verified_actual_only",
+      "not_dispatched": "release_confirmed_unused",
+      "unknown_or_incomplete": "pending_reconciliation"
+    }
+  ]
+}

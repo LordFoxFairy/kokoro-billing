@@ -1,0 +1,7 @@
+{
+  "artifact_version": "1.0.0",
+  "completed": "capture_verified_actual_only",
+  "failed_or_cancelled": "capture_verified_actual_only",
+  "not_dispatched": "release_confirmed_unused",
+  "unknown_or_incomplete": "pending_reconciliation"
+}

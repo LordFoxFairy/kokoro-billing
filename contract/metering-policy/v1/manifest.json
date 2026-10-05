@@ -1,0 +1,14 @@
+{
+  "artifact_version": "1.0.0",
+  "owner": "kokoro-billing",
+  "policy_sha256": "8d8dbe5950cfaa7f1383f847ad6e270c62bbd67bf02ea8717ac8d360594cb076",
+  "agent_usage": {
+    "artifact_version": "1.0.0",
+    "aggregate_sha256": "ecd30d1908f410eed29181c9f52669f824312bf3a2e3874153d990b95fe58b91"
+  },
+  "files": {
+    "policy.json": "8d8dbe5950cfaa7f1383f847ad6e270c62bbd67bf02ea8717ac8d360594cb076",
+    "schema.json": "4f3cea39c03a644eed5c27ded6cf624eb16a908cd75df1090e1ab52c235f664a",
+    "vectors.json": "4056e0c98972f0635845806e91a3a92e6f90d35f6160e5e79e002c4e481b5b65"
+  }
+}

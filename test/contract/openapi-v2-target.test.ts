@@ -9,6 +9,9 @@ import {
   validateV2OpenApi,
 } from "../../scripts/openapi-v2-target.js";
 
+import { verifyMeteringPolicyArtifact } from "../../src/modules/metering/metering-policy-artifact.js";
+import { meteringPricingPublicationResultCodec } from "../../src/modules/metering/metering-pricing-publication-result-codec.js";
+
 type JsonObject = Record<string, unknown>;
 const target = join(process.cwd(), "contract/openapi/v2/openapi.yaml");
 const record = (value: unknown): JsonObject => {
@@ -2088,5 +2091,120 @@ it("R67 checks the repository artifacts against fresh official output in the nor
   await generateBillingApiArtifacts({
     rootDirectory: process.cwd(),
     mode: "check",
+  });
+});
+
+describe("R243 Billing-owned metering policy artifact", () => {
+  const directory = join(process.cwd(), "contract/metering-policy/v1");
+  it("pins policy raw bytes separately from Agent usage aggregate and verifies companion files", async () => {
+    const bytes = await readFile(join(directory, "policy.json"));
+    expect(verifyMeteringPolicyArtifact(bytes)).toEqual({
+      version: "1.0.0",
+      artifactDigest:
+        "8d8dbe5950cfaa7f1383f847ad6e270c62bbd67bf02ea8717ac8d360594cb076",
+    });
+    const manifest = record(
+      JSON.parse(
+        await readFile(join(directory, "manifest.json"), "utf8"),
+      ) as unknown,
+    );
+    expect(manifest.artifact_version).toBe("1.0.0");
+    expect(manifest.policy_sha256).toBe(
+      createHash("sha256").update(bytes).digest("hex"),
+    );
+    expect(manifest.agent_usage).toEqual({
+      artifact_version: "1.0.0",
+      aggregate_sha256:
+        "ecd30d1908f410eed29181c9f52669f824312bf3a2e3874153d990b95fe58b91",
+    });
+    const files = record(manifest.files);
+    expect(Object.keys(files).sort()).toEqual([
+      "policy.json",
+      "schema.json",
+      "vectors.json",
+    ]);
+    for (const name of Object.keys(files))
+      expect(
+        createHash("sha256")
+          .update(await readFile(join(directory, name)))
+          .digest("hex"),
+      ).toBe(files[name]);
+    for (const invalid of [
+      Buffer.concat([bytes, Buffer.from(" ")]),
+      Buffer.from([0xff]),
+      Buffer.from('{"artifact_version":"1.0.0"}'),
+      Buffer.from(
+        bytes
+          .toString("utf8")
+          .replace("pending_reconciliation", "release_confirmed_unused"),
+      ),
+    ])
+      expect(() => verifyMeteringPolicyArtifact(invalid)).toThrow(TypeError);
+  });
+
+  it("validates closed policy schema and all published positive/negative vectors", async () => {
+    const ajv = new Ajv2020({ strict: true });
+    const schema = record(
+      JSON.parse(
+        await readFile(join(directory, "schema.json"), "utf8"),
+      ) as unknown,
+    );
+    const validate = ajv.compile(schema);
+    const vectors = record(
+      JSON.parse(
+        await readFile(join(directory, "vectors.json"), "utf8"),
+      ) as unknown,
+    );
+    expect(Array.isArray(vectors.valid)).toBe(true);
+    expect(Array.isArray(vectors.invalid)).toBe(true);
+    if (!Array.isArray(vectors.valid) || !Array.isArray(vectors.invalid))
+      throw new TypeError("Invalid policy vectors");
+    for (const value of vectors.valid) expect(validate(value)).toBe(true);
+    for (const value of vectors.invalid) expect(validate(value)).toBe(false);
+  });
+
+  it("preserves rate seven-field result bytes and rejects cross-kind receipt reuse", () => {
+    const rate = {
+      schemaVersion: 1 as const,
+      kind: "rate" as const,
+      tenantId: "qa",
+      revision: "1",
+      contentDigest: "a".repeat(64),
+      publishedAt: "2026-01-01T00:00:00.000Z",
+      effectiveFrom: "2026-01-01T00:00:00.000Z",
+    };
+    const policy = { ...rate, kind: "policy" as const };
+    const rateCodec = meteringPricingPublicationResultCodec("rate");
+    const policyCodec = meteringPricingPublicationResultCodec("policy");
+    expect(JSON.stringify(rateCodec.encode(rate))).toBe(JSON.stringify(rate));
+    expect(JSON.stringify(policyCodec.encode(policy))).toBe(
+      JSON.stringify(policy),
+    );
+    expect(() => rateCodec.decode(policy)).toThrow(TypeError);
+    expect(() => policyCodec.decode(rate)).toThrow(TypeError);
+    expect(() => policyCodec.decode({ ...policy, extra: 0 })).toThrow(
+      TypeError,
+    );
+    expect(() =>
+      policyCodec.decode({ ...policy, revision: "9223372036854775808" }),
+    ).toThrow(TypeError);
+  });
+
+  it("removes the old selector and uses only one DB clock query for joint selection", async () => {
+    const source = await readFile(
+      join(
+        process.cwd(),
+        "src/modules/metering/metering-pricing-revision.repository.ts",
+      ),
+      "utf8",
+    );
+    const joint = source.slice(
+      source.indexOf("async selectActivePricing("),
+      source.indexOf("async publishPolicy("),
+    );
+    expect(joint.match(/CURRENT_TIMESTAMP\(3\)/gu)).toHaveLength(1);
+    expect(joint).toContain("FROM billing_metering_rate_revision");
+    expect(joint).toContain("FROM billing_metering_policy_revision");
+    expect(source).not.toContain("selectActiveRates");
   });
 });

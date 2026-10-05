@@ -1,9 +1,9 @@
 import type { MeteringPricingRevisionRepository } from "./metering-pricing-revision.repository.js";
 import type {
-  MeteringRateSelectionBinding,
-  MeteringRateSelectionInput,
-  MeteringRateSelectionRequest,
-  MeteringRateSelectionResult,
+  MeteringPricingSelectionBinding,
+  MeteringPricingSelectionInput,
+  MeteringPricingSelectionRequest,
+  MeteringPricingSelectionResult,
 } from "./metering-pricing-selection.types.js";
 import { MeteringError } from "./metering.error.js";
 
@@ -58,7 +58,7 @@ function businessKey(value: unknown): string {
   return result;
 }
 
-function binding(value: unknown): MeteringRateSelectionBinding {
+function binding(value: unknown): MeteringPricingSelectionBinding {
   const fields = object(value, [
     "providerRef",
     "environment",
@@ -75,7 +75,7 @@ function binding(value: unknown): MeteringRateSelectionBinding {
   });
 }
 
-function request(value: unknown): MeteringRateSelectionRequest {
+function request(value: unknown): MeteringPricingSelectionRequest {
   const fields = object(value, ["bucket", "unit", "applicability"]);
   if (fields.applicability === null || typeof fields.applicability !== "object")
     invalid();
@@ -115,7 +115,7 @@ function request(value: unknown): MeteringRateSelectionRequest {
   });
 }
 
-function parse(input: unknown): MeteringRateSelectionInput {
+function parse(input: unknown): MeteringPricingSelectionInput {
   const fields = object(input, [
     "tenantId",
     "profileRef",
@@ -161,9 +161,9 @@ function parse(input: unknown): MeteringRateSelectionInput {
 export class MeteringPricingSelectionService {
   constructor(private readonly repository: MeteringPricingRevisionRepository) {}
 
-  selectActiveRates(
-    input: MeteringRateSelectionInput,
-  ): Promise<MeteringRateSelectionResult> {
-    return this.repository.selectActiveRates(parse(input));
+  selectActivePricing(
+    input: MeteringPricingSelectionInput,
+  ): Promise<MeteringPricingSelectionResult> {
+    return this.repository.selectActivePricing(parse(input));
   }
 }
