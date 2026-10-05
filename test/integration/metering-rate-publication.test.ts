@@ -213,7 +213,7 @@ integration("R224 immutable metering rate canonical schema", () => {
       `SELECT table_name,column_name,data_type,is_nullable,
               character_maximum_length,numeric_precision,numeric_scale
          FROM information_schema.columns
-        WHERE table_schema='public'
+        WHERE table_schema='kokoro_billing'
           AND table_name IN ('billing_metering_rate_revision','billing_metering_rate')
         ORDER BY table_name,ordinal_position`,
     );
@@ -515,7 +515,7 @@ integration("R224 immutable metering rate canonical schema", () => {
       `SELECT c.relname AS table_name,k.conname AS name,
               pg_get_constraintdef(k.oid,false) AS definition
          FROM pg_constraint k JOIN pg_class c ON c.oid=k.conrelid
-        WHERE c.relnamespace='public'::regnamespace
+        WHERE c.relnamespace='kokoro_billing'::regnamespace
           AND c.relname IN ('billing_metering_rate_revision','billing_metering_rate')
           AND k.contype='c' ORDER BY c.relname,k.conname`,
     );
@@ -621,8 +621,8 @@ integration("R224 immutable metering rate canonical schema", () => {
                     JOIN pg_attribute a ON a.attrelid=i.indrelid AND a.attnum=k.attnum
                    WHERE k.ord<=i.indnkeyatts ORDER BY k.ord) AS keys
          FROM pg_index i JOIN pg_class c ON c.oid=i.indexrelid
-        WHERE i.indrelid IN ('public.billing_metering_rate_revision'::regclass,
-                             'public.billing_metering_rate'::regclass)
+        WHERE i.indrelid IN ('kokoro_billing.billing_metering_rate_revision'::regclass,
+                             'kokoro_billing.billing_metering_rate'::regclass)
           AND NOT EXISTS (SELECT 1 FROM pg_constraint p
                            WHERE p.conindid=i.indexrelid AND p.contype='p')
         ORDER BY c.relname`,
@@ -1923,7 +1923,7 @@ describe.skipIf(adminUrl === undefined)("R241 policy catalog RED", () => {
       `SELECT n.nspname AS "schemaName",c.relname AS "relationName",
               c.relkind::text AS "relationKind"
          FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
-        WHERE n.nspname='public'
+        WHERE n.nspname='kokoro_billing'
           AND c.relname IN ('billing_metering_rate_revision',
                             'billing_metering_rate',
                             'billing_metering_policy_revision')
@@ -1938,12 +1938,12 @@ describe.skipIf(adminUrl === undefined)("R241 policy catalog RED", () => {
       ),
     ).toEqual([
       {
-        schemaName: "public",
+        schemaName: "kokoro_billing",
         relationName: "billing_metering_rate_revision",
         relationKind: "r",
       },
       {
-        schemaName: "public",
+        schemaName: "kokoro_billing",
         relationName: "billing_metering_rate",
         relationKind: "r",
       },
@@ -1956,7 +1956,7 @@ describe.skipIf(adminUrl === undefined)("R241 policy catalog RED", () => {
       "policy relation is the intended catalog RED, after rate positive control",
     ).toEqual([
       {
-        schemaName: "public",
+        schemaName: "kokoro_billing",
         relationName: "billing_metering_policy_revision",
         relationKind: "r",
       },
@@ -1982,7 +1982,7 @@ describe.skipIf(adminUrl === undefined)("R241 policy catalog RED", () => {
               datetime_precision AS "datetimePrecision",column_default AS "columnDefault",
               is_generated AS "isGenerated",identity_generation AS "identityGeneration"
          FROM information_schema.columns
-        WHERE table_schema='public'
+        WHERE table_schema='kokoro_billing'
           AND table_name='billing_metering_policy_revision'
         ORDER BY ordinal_position`,
     );
@@ -2065,7 +2065,7 @@ describe.skipIf(adminUrl === undefined)("R241 policy catalog RED", () => {
               c.relkind::text AS "relationKind",pg_get_userbyid(c.relowner) AS "ownerName",
               c.relrowsecurity AS "rowSecurity",c.relforcerowsecurity AS "forceRowSecurity"
          FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
-        WHERE n.nspname='public'
+        WHERE n.nspname='kokoro_billing'
           AND c.relname IN ('billing_metering_rate_revision',
                             'billing_metering_policy_revision')
         ORDER BY c.relname`,
@@ -2087,7 +2087,7 @@ describe.skipIf(adminUrl === undefined)("R241 policy catalog RED", () => {
          FROM pg_constraint k
          JOIN pg_class c ON c.oid=k.conrelid
          JOIN pg_namespace n ON n.oid=c.relnamespace
-        WHERE n.nspname='public'
+        WHERE n.nspname='kokoro_billing'
           AND c.relname='billing_metering_policy_revision'
           AND k.contype<>'n'
         ORDER BY k.contype,k.conname`,
@@ -2156,7 +2156,7 @@ describe.skipIf(adminUrl === undefined)("R241 policy catalog RED", () => {
          JOIN pg_am am ON am.oid=c.relam
          JOIN pg_class t ON t.oid=i.indrelid
          JOIN pg_namespace n ON n.oid=t.relnamespace
-        WHERE n.nspname='public'
+        WHERE n.nspname='kokoro_billing'
           AND t.relname='billing_metering_policy_revision'
           AND NOT EXISTS (SELECT 1 FROM pg_constraint p
                            WHERE p.conindid=i.indexrelid AND p.contype='p')
@@ -2167,7 +2167,7 @@ describe.skipIf(adminUrl === undefined)("R241 policy catalog RED", () => {
          FROM pg_trigger t
          JOIN pg_class c ON c.oid=t.tgrelid
          JOIN pg_namespace n ON n.oid=c.relnamespace
-        WHERE n.nspname='public'
+        WHERE n.nspname='kokoro_billing'
           AND c.relname='billing_metering_policy_revision'
           AND NOT t.tgisinternal
         ORDER BY t.tgname`,
@@ -2175,7 +2175,7 @@ describe.skipIf(adminUrl === undefined)("R241 policy catalog RED", () => {
     const rules = await pool().query<{ name: string }>(
       `SELECT rulename AS name
          FROM pg_rules
-        WHERE schemaname='public' AND tablename='billing_metering_policy_revision'
+        WHERE schemaname='kokoro_billing' AND tablename='billing_metering_policy_revision'
         ORDER BY rulename`,
     );
     const policies = await pool().query<{ name: string }>(
@@ -2183,7 +2183,7 @@ describe.skipIf(adminUrl === undefined)("R241 policy catalog RED", () => {
          FROM pg_policy p
          JOIN pg_class c ON c.oid=p.polrelid
          JOIN pg_namespace n ON n.oid=c.relnamespace
-        WHERE n.nspname='public' AND c.relname='billing_metering_policy_revision'
+        WHERE n.nspname='kokoro_billing' AND c.relname='billing_metering_policy_revision'
         ORDER BY p.polname`,
     );
     const foreignKeys = await pool().query<{ name: string }>(
@@ -2191,7 +2191,7 @@ describe.skipIf(adminUrl === undefined)("R241 policy catalog RED", () => {
          FROM pg_constraint k
          JOIN pg_class c ON c.oid=k.conrelid
          JOIN pg_namespace n ON n.oid=c.relnamespace
-        WHERE n.nspname='public'
+        WHERE n.nspname='kokoro_billing'
           AND c.relname='billing_metering_policy_revision'
           AND k.contype='f'
         ORDER BY k.conname`,
@@ -2200,7 +2200,7 @@ describe.skipIf(adminUrl === undefined)("R241 policy catalog RED", () => {
       `SELECT p.proname AS name
          FROM pg_proc p
          JOIN pg_namespace n ON n.oid=p.pronamespace
-        WHERE n.nspname='public'
+        WHERE n.nspname='kokoro_billing'
           AND EXISTS (
             SELECT 1
               FROM pg_depend d
@@ -2211,7 +2211,7 @@ describe.skipIf(adminUrl === undefined)("R241 policy catalog RED", () => {
                  SELECT c.oid
                    FROM pg_class c
                    JOIN pg_namespace ns ON ns.oid=c.relnamespace
-                  WHERE ns.nspname='public'
+                  WHERE ns.nspname='kokoro_billing'
                     AND c.relname='billing_metering_policy_revision'
                )
           )
@@ -2244,7 +2244,7 @@ describe.skipIf(adminUrl === undefined)("R241 policy catalog RED", () => {
     }).toEqual({
       columns: expectedColumns,
       relation: {
-        schemaName: "public",
+        schemaName: "kokoro_billing",
         relationKind: "r",
         ownerMatchesRate: true,
         rowSecurity: false,
