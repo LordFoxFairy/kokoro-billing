@@ -1,3 +1,10 @@
+## R255：IAM token consumer 数据边界（2026-10-05）
+
+本认证收敛不新增或修改 Billing schema、表、索引、事务、receipt、余额、Credit、计量、价格或费用事实。IAM 独占 token 签发、session、membership 与 resource-server profile；Billing 只把通过唯一 EdDSA/profile verifier 的 namespaced tenant 与 subject 映射为请求上下文，不复制或持久化 `sid`、`client_id`、scope、JWKS 或 IAM membership。
+
+签名、issuer、audience、时间、kind、scope、required/rejected claims 或 tenant header 任一失败，必须在任何业务 SQL、Redis marker、receipt、audit 或资金效果前 fail closed。真实 PostgreSQL HTTP RED须证明拒绝前后全部 owner facts零差量；local JWKS签名不是最终 IAM owner 签发验收。
+
+---
 ## R255：`kokoro_billing` owner schema 数据设计门（2026-10-05）
 
 当前 canonical DDL 是未限定对象名，实际安装位置由 session `search_path` 决定；现 installer 却固定 `public` 并要求整个数据库无用户对象，runtime 的 Prisma/Transaction/legacy connection 又有不一致的 public 或任意 schema 行为。目标由既有连接与安装边界把唯一物理 namespace 固定为 `kokoro_billing`：URL 不允许省略 schema，事务只设 `kokoro_billing,pg_catalog`，不含 `public`。

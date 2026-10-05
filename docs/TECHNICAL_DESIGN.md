@@ -1,3 +1,16 @@
+## R255：IAM Billing access-token consumer 设计门（2026-10-05）
+
+本节只批准后继认证实现，不表示真实 IAM owner 签发到 Billing 的用户正控已经通过。当前两个用户认证入口分别在 `billing-auth.ts` 内固定 `RS256` 并读取 plain `tenant_id`；正式 IAM 的 `/iam/jwks` 只发布 EdDSA/OKP，tenant claim 为 namespaced `https://kokoro.dev/tenant_id`，因此当前正常认证必然阻断。
+
+### §8 放置与依赖
+
+Owner 为 `kokoro-billing` 的 IAM token consumer。采用同一现有 auth 目录的两个普通文件：`billing-access-token-claims.schema.ts` 只定义 consumer runtime claim shape 与固定 profile 常量；`billing-access-token.verifier.ts` 只拥有 remote JWKS、EdDSA signature、issuer/audience/time 与完整 profile 验证，并返回最小 tenant/subject context。两个现 auth 入口必须复用这一 verifier；淘汰把第二份 profile 分支继续塞入已同时承担 header、machine 与 HTTP 映射的 `billing-auth.ts`。不建模块、client framework 或跨仓共享 schema。
+
+允许依赖 `jose` 与现 runtime validation 工具；禁止 import IAM 源码或可编辑 schema。consumer 固定 IAM 已发布的 claim 名、resource 与 scope，不提供 RSA、plain tenant claim、旧 audience、双读或 fallback。legacy Fastify plain internal header 与 personal `u1` machine header、五因素选择、tenant header binding及既有 HTTP 错误映射保持；认证失败在业务调用前 fail closed，不新增 503/result 枚举。
+
+首个行为 RED 落在现 `test/integration/credit-read-http.test.ts`：使用真实 PostgreSQL、Nest personal route、HTTP JWKS 与真实 EdDSA 签名的完整 IAM profile；当前实现应返回 401，而不是靠 unit mock、未注册 route 或不可达 JWKS。原 machine 矩阵保留。后继再把现 `test/unit/billing-auth.test.ts` 与 `test/http/credit-read.test.ts` 的 RSA/plain fixtures 同步为唯一 profile。local 签名只证明 consumer 行为，最终仍须 Root 以真实 IAM owner 签发 token 完成正负控。
+
+---
 ## R255：单库 Billing owner schema 技术设计门（2026-10-05）
 
 本节只批准下一实现片，不表示源码、安装、迁移或真实 PostgreSQL 已完成。当前 installer、Prisma transaction 与 legacy PostgreSQL connection 对 `public`、任意 schema 和 fallback 的处理不一致，并以整库空白作为 fresh install 前提，阻断同一数据库内按 owner schema 组合。
