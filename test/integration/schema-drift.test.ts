@@ -26,6 +26,7 @@ integration("full canonical catalog drift", () => {
     const url = new URL(assertDefined(adminUrl));
     url.pathname = `/${database}`;
     url.search = "";
+    url.searchParams.set("schema", "kokoro_billing");
     targetUrl = url.toString();
     await installCanonicalSchema({
       databaseUrl: targetUrl,
@@ -43,7 +44,7 @@ integration("full canonical catalog drift", () => {
   async function mutate(sql: string): Promise<void> {
     const pool = new Pool({ connectionString: targetUrl, max: 1 });
     try {
-      await pool.query("SET search_path=public,pg_catalog");
+      await pool.query("SET search_path=kokoro_billing,pg_catalog");
       await pool.query(sql);
     } finally {
       await pool.end();
@@ -71,10 +72,12 @@ integration("full canonical catalog drift", () => {
     expect(after.rows).toEqual(before.rows);
   });
 
-  it("reads the target through an effective read-only role", async () => {
+  it("rejects an injected target role before catalog reads", async () => {
     const url = new URL(targetUrl);
     url.searchParams.set("options", "-c role=pg_read_all_data");
-    expect((await verify(url.toString())).differences).toEqual([]);
+    await expect(verify(url.toString())).rejects.toThrow(
+      /must not contain PostgreSQL options/iu,
+    );
   });
 
   it("reports target database locale metadata that differs from template0 defaults", async () => {
@@ -85,6 +88,7 @@ integration("full canonical catalog drift", () => {
     const url = new URL(assertDefined(adminUrl));
     url.pathname = `/${alternate}`;
     url.search = "";
+    url.searchParams.set("schema", "kokoro_billing");
     try {
       await installCanonicalSchema({
         databaseUrl: url.toString(),
@@ -194,7 +198,7 @@ integration("full canonical catalog drift", () => {
       const pool = new Pool({ connectionString: targetUrl, max: 1 });
       try {
         const marker = await pool.query<{ count: string }>(
-          "SELECT count(*)::text AS count FROM public.billing_credit_account WHERE id='00000000-0000-4000-8000-000000000001'",
+          "SELECT count(*)::text AS count FROM kokoro_billing.billing_credit_account WHERE id='00000000-0000-4000-8000-000000000001'",
         );
         expect(marker.rows[0]?.count).toBe("1");
       } finally {
@@ -210,16 +214,18 @@ integration("full canonical catalog drift", () => {
         schemaAdminUrl: assertDefined(adminUrl),
         canonicalSql,
       }),
-    ).rejects.toThrow(/schema must be public/iu);
+    ).rejects.toThrow(/exactly one schema=kokoro_billing/iu);
   });
 
-  it("does not execute a target-defined system-function shadow during identity checks", async () => {
+  it("rejects target options before identity checks", async () => {
     await mutate(
-      "CREATE TABLE identity_marker(value int); CREATE FUNCTION public.current_setting(text) RETURNS text LANGUAGE plpgsql AS $$ BEGIN INSERT INTO public.identity_marker VALUES (1); RETURN 'shadow'; END $$",
+      "CREATE TABLE public.identity_marker(value int); CREATE FUNCTION public.current_setting(text) RETURNS text LANGUAGE plpgsql AS $$ BEGIN INSERT INTO public.identity_marker VALUES (1); RETURN 'shadow'; END $$",
     );
     const url = new URL(targetUrl);
-    url.searchParams.set("options", "-c search_path=public,pg_catalog");
-    await verify(url.toString());
+    url.searchParams.set("options", "-c search_path=kokoro_billing,pg_catalog");
+    await expect(verify(url.toString())).rejects.toThrow(
+      /must not contain PostgreSQL options/iu,
+    );
     const pool = new Pool({ connectionString: targetUrl, max: 1 });
     try {
       expect(

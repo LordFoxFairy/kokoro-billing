@@ -53,7 +53,8 @@ describe("canonical installer error identity (unit fault injection)", () => {
       for (const closeError of [undefined, new Error("close failed")]) {
         state.value.closeError = closeError;
         const installing = installCanonicalSchema({
-          databaseUrl: "postgresql://fixture@localhost/fixture",
+          databaseUrl:
+            "postgresql://fixture@localhost/fixture?schema=kokoro_billing",
           schemaSql: "SELECT 1;",
         });
         await expect(installing).rejects.toBe(failure);

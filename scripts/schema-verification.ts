@@ -10,6 +10,11 @@ import type {
   SchemaCatalog,
   SchemaVerificationResult,
 } from "./schema-catalog.types.js";
+import {
+  BILLING_DATABASE_SCHEMA,
+  BILLING_DATABASE_SEARCH_PATH,
+  parseBillingDatabaseUrl,
+} from "../src/config/runtime-config.js";
 
 const categories = [
   "database",
@@ -56,12 +61,12 @@ export function compareSchemaCatalogs(
   return differences;
 }
 
-function checkedUrl(raw: string, name: string): URL {
+function checkedAdminUrl(raw: string): URL {
   const url = new URL(raw);
   if (!["postgres:", "postgresql:"].includes(url.protocol))
-    throw new Error(`${name} must be PostgreSQL`);
-  if (url.searchParams.getAll("schema").some((value) => value !== "public"))
-    throw new Error(`${name} schema must be public`);
+    throw new Error("SCHEMA_ADMIN_URL must be PostgreSQL");
+  if (url.searchParams.has("schema") || url.searchParams.has("options"))
+    throw new Error("SCHEMA_ADMIN_URL must not contain schema or options");
   return url;
 }
 
@@ -70,9 +75,10 @@ async function snapshot(url: string): Promise<SchemaCatalog> {
     await query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
     try {
       await query(
-        "SELECT pg_catalog.set_config('search_path','public,pg_catalog',true), pg_catalog.set_config('TimeZone','UTC',true)",
+        "SELECT pg_catalog.set_config('search_path',$1,true), pg_catalog.set_config('TimeZone','UTC',true)",
+        [BILLING_DATABASE_SEARCH_PATH],
       );
-      const catalog = await readSchemaCatalog(query);
+      const catalog = await readSchemaCatalog(query, BILLING_DATABASE_SCHEMA);
       await query("COMMIT");
       return catalog;
     } catch (error) {
@@ -104,7 +110,7 @@ async function readOnlyIdentity(
     await query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
     try {
       await query(
-        "SELECT pg_catalog.set_config('search_path','pg_catalog,public',true), pg_catalog.set_config('TimeZone','UTC',true)",
+        "SELECT pg_catalog.set_config('search_path','pg_catalog',true), pg_catalog.set_config('TimeZone','UTC',true)",
       );
       const value = await identity(query);
       await query("COMMIT");
@@ -121,8 +127,8 @@ export async function verifySchema(input: {
   schemaAdminUrl: string;
   canonicalSql: string;
 }): Promise<SchemaVerificationResult> {
-  const targetUrl = checkedUrl(input.databaseUrl, "DATABASE_URL");
-  const adminUrl = checkedUrl(input.schemaAdminUrl, "SCHEMA_ADMIN_URL");
+  const targetUrl = parseBillingDatabaseUrl(input.databaseUrl);
+  const adminUrl = checkedAdminUrl(input.schemaAdminUrl);
   if (
     targetUrl.hostname !== adminUrl.hostname ||
     (targetUrl.port || "5432") !== (adminUrl.port || "5432")

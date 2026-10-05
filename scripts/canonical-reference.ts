@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { installCanonicalSchema } from "./canonical-schema.js";
 import { withSchemaSession } from "./schema-database-session.js";
 import { SchemaVerificationResourceError } from "./schema-verification.error.js";
+import { BILLING_DATABASE_SCHEMA } from "../src/config/runtime-config.js";
 
 export async function withCanonicalReference<T>(
   adminUrlRaw: string,
@@ -12,9 +13,10 @@ export async function withCanonicalReference<T>(
   if (!["postgres:", "postgresql:"].includes(adminUrl.protocol))
     throw new Error("SCHEMA_ADMIN_URL must be PostgreSQL");
   if (
-    adminUrl.searchParams.getAll("schema").some((schema) => schema !== "public")
+    adminUrl.searchParams.has("schema") ||
+    adminUrl.searchParams.has("options")
   )
-    throw new Error("SCHEMA_ADMIN_URL schema parameters must all be public");
+    throw new Error("SCHEMA_ADMIN_URL must not contain schema or options");
   const name = `billing_reference_${randomUUID().replaceAll("-", "")}`;
   let created = false;
   let result: { value: T } | undefined;
@@ -39,6 +41,7 @@ export async function withCanonicalReference<T>(
     reference.pathname = `/${name}`;
     reference.searchParams.delete("schema");
     reference.searchParams.delete("options");
+    reference.searchParams.set("schema", BILLING_DATABASE_SCHEMA);
     await installCanonicalSchema({
       databaseUrl: reference.toString(),
       schemaSql: canonicalSql,

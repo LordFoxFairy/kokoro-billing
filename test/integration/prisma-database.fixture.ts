@@ -4,6 +4,7 @@ import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../../src/generated/prisma/client.js";
 import { withCanonicalReference } from "../../scripts/canonical-reference.js";
+import { BILLING_DATABASE_SCHEMA } from "../../src/config/runtime-config.js";
 
 export type PrismaDatabaseFixture = {
   client: PrismaClient;
@@ -34,9 +35,11 @@ export async function createPrismaDatabaseFixture(
       max: 8,
       connectionTimeoutMillis: 2_000,
       options:
-        "-c search_path=public,pg_catalog -c timezone=UTC -c statement_timeout=5000 -c lock_timeout=2000 -c idle_in_transaction_session_timeout=5000",
+        "-c search_path=kokoro_billing,pg_catalog -c timezone=UTC -c statement_timeout=5000 -c lock_timeout=2000 -c idle_in_transaction_session_timeout=5000",
     });
-    const client = new PrismaClient({ adapter: new PrismaPg(pool) });
+    const client = new PrismaClient({
+      adapter: new PrismaPg(pool, { schema: BILLING_DATABASE_SCHEMA }),
+    });
     let primaryError: unknown;
     let hasPrimaryError = false;
     try {

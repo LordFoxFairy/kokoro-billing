@@ -4,6 +4,11 @@ import {
   type QueryResult,
   type QueryResultRow,
 } from "pg";
+import {
+  BILLING_DATABASE_SCHEMA,
+  BILLING_DATABASE_SEARCH_PATH,
+  parseBillingDatabaseUrl,
+} from "../src/config/runtime-config.js";
 
 export type CanonicalSchemaInstallation = {
   readonly databaseUrl: string;
@@ -29,18 +34,6 @@ function positiveMilliseconds(
   return actual;
 }
 
-function validateDatabaseUrl(raw: string): URL {
-  const url = new URL(raw);
-  if (url.protocol !== "postgres:" && url.protocol !== "postgresql:") {
-    throw new Error("databaseUrl must be a PostgreSQL connection string");
-  }
-  const schemas = url.searchParams.getAll("schema");
-  if (schemas.some((schema) => schema !== "public")) {
-    throw new Error("DATABASE_URL schema parameters must all be public");
-  }
-  return url;
-}
-
 async function rollbackWithoutMasking(
   rollback: () => Promise<unknown>,
   originalError: unknown,
@@ -54,11 +47,11 @@ async function rollbackWithoutMasking(
   throw originalError;
 }
 
-/** Install the SQL authority into an exclusive, empty Billing database. */
+/** Install the SQL authority into an empty Billing owner schema. */
 export async function installCanonicalSchema(
   input: CanonicalSchemaInstallation,
 ): Promise<void> {
-  const url = validateDatabaseUrl(input.databaseUrl);
+  const url = parseBillingDatabaseUrl(input.databaseUrl);
   if (input.schemaSql.trim() === "")
     throw new Error("canonical schema SQL must not be empty");
 
@@ -175,67 +168,56 @@ export async function installCanonicalSchema(
         [`${idleTimeoutMs}ms`],
       );
       await query("SELECT pg_catalog.set_config('TimeZone', 'UTC', true)");
-      await query(
-        "SELECT pg_catalog.set_config('search_path', 'public,pg_catalog', true)",
-      );
+      await query("SELECT pg_catalog.set_config('search_path', $1, true)", [
+        BILLING_DATABASE_SEARCH_PATH,
+      ]);
       await query(
         "SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended($1, 0))",
         [INSTALLATION_LOCK],
       );
 
-      const publicSchema = await query<{
+      await query(`CREATE SCHEMA IF NOT EXISTS ${BILLING_DATABASE_SCHEMA}`);
+      const ownerSchema = await query<{
         exists: boolean;
         can_create: boolean;
-      }>(`
+      }>(
+        `
         SELECT n.oid IS NOT NULL AS exists,
                COALESCE(pg_catalog.has_schema_privilege(current_user, n.oid, 'CREATE'), false) AS can_create
-        FROM (VALUES ('public'::pg_catalog.name)) AS requested(name)
+        FROM (VALUES ($1::pg_catalog.name)) AS requested(name)
         LEFT JOIN pg_catalog.pg_namespace n ON n.nspname = requested.name
-      `);
-      if (!publicSchema.rows[0]?.exists)
+      `,
+        [BILLING_DATABASE_SCHEMA],
+      );
+      if (!ownerSchema.rows[0]?.exists)
         throw new Error(
-          "public schema must exist before canonical schema installation",
+          `${BILLING_DATABASE_SCHEMA} schema must exist before canonical schema installation`,
         );
-      if (!publicSchema.rows[0].can_create)
+      if (!ownerSchema.rows[0].can_create)
         throw new Error(
-          "current database role requires CREATE privilege on public schema",
+          `current database role requires CREATE privilege on ${BILLING_DATABASE_SCHEMA} schema`,
         );
 
-      const objects = await query<{
-        kind: string;
-        schema_name: string;
-        object_name: string;
-      }>(`
-        WITH user_namespaces AS (
-          SELECT oid, nspname FROM pg_catalog.pg_namespace
-          WHERE nspname <> 'information_schema' AND nspname NOT LIKE 'pg\\_%' ESCAPE '\\'
-        ), user_relations AS (
-          SELECT 'relation'::text AS kind, n.nspname AS schema_name, c.relname AS object_name
-          FROM pg_catalog.pg_class c JOIN user_namespaces n ON n.oid = c.relnamespace
-          WHERE c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f')
-        ), independent_types AS (
-          SELECT 'type'::text AS kind, n.nspname AS schema_name, t.typname AS object_name
-          FROM pg_catalog.pg_type t JOIN user_namespaces n ON n.oid = t.typnamespace
-          LEFT JOIN pg_catalog.pg_class c ON c.oid = t.typrelid
-          LEFT JOIN pg_catalog.pg_type array_base ON array_base.typarray = t.oid
-          WHERE (t.typrelid = 0 OR c.relkind = 'c') AND array_base.oid IS NULL
-        ), user_functions AS (
-          SELECT 'function'::text AS kind, n.nspname AS schema_name, p.proname AS object_name
-          FROM pg_catalog.pg_proc p JOIN user_namespaces n ON n.oid = p.pronamespace
-        )
-        SELECT kind, schema_name, object_name FROM user_relations
-        UNION ALL SELECT kind, schema_name, object_name FROM independent_types
-        UNION ALL SELECT kind, schema_name, object_name FROM user_functions
-        ORDER BY schema_name, kind, object_name
-      `);
+      const objects = await query<{ description: string }>(
+        `
+        SELECT pg_catalog.pg_describe_object(
+                 dependency.classid,
+                 dependency.objid,
+                 dependency.objsubid
+               ) AS description
+          FROM pg_catalog.pg_namespace owner_namespace
+          JOIN pg_catalog.pg_depend dependency
+            ON dependency.refclassid = 'pg_catalog.pg_namespace'::pg_catalog.regclass
+           AND dependency.refobjid = owner_namespace.oid
+         WHERE owner_namespace.nspname = $1
+         ORDER BY dependency.classid, dependency.objid, dependency.objsubid
+      `,
+        [BILLING_DATABASE_SCHEMA],
+      );
       if (objects.rows.length > 0) {
-        const summary = objects.rows
-          .map(
-            (item) => `${item.schema_name}.${item.object_name} (${item.kind})`,
-          )
-          .join(", ");
+        const summary = objects.rows.map((item) => item.description).join(", ");
         throw new Error(
-          `canonical schema installation requires a non-empty-object-free database; found: ${summary}`,
+          `canonical schema installation rejects a non-empty ${BILLING_DATABASE_SCHEMA} owner schema; found: ${summary}`,
         );
       }
 

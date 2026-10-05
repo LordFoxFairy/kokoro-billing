@@ -6,6 +6,11 @@ import type {
   PrismaLifecycleState,
   PrismaServiceOptions,
 } from "./prisma.types.js";
+import {
+  BILLING_DATABASE_SCHEMA,
+  BILLING_DATABASE_SEARCH_PATH,
+  parseBillingDatabaseUrl,
+} from "../config/runtime-config.js";
 
 export class PrismaService implements PrismaLifecycleGate {
   readonly #pool: Pool;
@@ -16,13 +21,14 @@ export class PrismaService implements PrismaLifecycleGate {
 
   constructor(options: PrismaServiceOptions) {
     this.#pool = new Pool({
-      connectionString: options.databaseUrl,
+      connectionString: parseBillingDatabaseUrl(options.databaseUrl).toString(),
       max: options.pool?.max ?? 10,
       connectionTimeoutMillis: options.pool?.connectionTimeoutMillis ?? 2_000,
-      options:
-        "-c search_path=public,pg_catalog -c timezone=UTC -c statement_timeout=10000 -c lock_timeout=2000 -c idle_in_transaction_session_timeout=10000",
+      options: `-c search_path=${BILLING_DATABASE_SEARCH_PATH} -c timezone=UTC -c statement_timeout=10000 -c lock_timeout=2000 -c idle_in_transaction_session_timeout=10000`,
     });
-    this.#client = new PrismaClient({ adapter: new PrismaPg(this.#pool) });
+    this.#client = new PrismaClient({
+      adapter: new PrismaPg(this.#pool, { schema: BILLING_DATABASE_SCHEMA }),
+    });
   }
 
   get state(): PrismaLifecycleState {

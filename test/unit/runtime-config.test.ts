@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { readBillingRuntimeConfig } from "../../src/config/runtime-config.js";
 
 const baseEnvironment = (): NodeJS.ProcessEnv => ({
-  DATABASE_URL: "postgresql://billing:billing@127.0.0.1:5432/billing",
+  DATABASE_URL:
+    "postgresql://billing:billing@127.0.0.1:5432/billing?schema=kokoro_billing",
   REDIS_URL: "redis://127.0.0.1:6379/0",
   INTERNAL_SERVICE_SECRET: "internal-secret",
   BILLING_BFF_SERVICE_TOKEN: "bff-token",
@@ -10,6 +11,17 @@ const baseEnvironment = (): NodeJS.ProcessEnv => ({
 });
 
 describe("billing production timeout configuration", () => {
+  it.each([
+    "postgresql://billing@127.0.0.1/billing",
+    "postgresql://billing@127.0.0.1/billing?schema=public",
+    "postgresql://billing@127.0.0.1/billing?schema=kokoro_billing&schema=kokoro_billing",
+    "postgresql://billing@127.0.0.1/billing?schema=kokoro_billing&options=-c%20search_path%3Dpublic",
+  ])("rejects an unsafe Billing database URL before runtime startup", (url) => {
+    expect(() =>
+      readBillingRuntimeConfig({ ...baseEnvironment(), DATABASE_URL: url }),
+    ).toThrow(/schema=kokoro_billing|must not contain PostgreSQL options/iu);
+  });
+
   it("provides bounded dependency and shutdown defaults", () => {
     const config = readBillingRuntimeConfig(baseEnvironment());
     expect(config.redisTimeouts).toEqual({

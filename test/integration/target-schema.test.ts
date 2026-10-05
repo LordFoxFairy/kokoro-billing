@@ -5,6 +5,7 @@ import { withCanonicalReference } from "../../scripts/canonical-reference.js";
 import { readSchemaCatalog } from "../../scripts/schema-catalog.js";
 import { compareSchemaCatalogs } from "../../scripts/schema-verification.js";
 import { assertDefined } from "../assert-defined.js";
+import { BILLING_DATABASE_SCHEMA } from "../../src/config/runtime-config.js";
 
 const adminUrl = process.env.SCHEMA_ADMIN_URL;
 const integration = describe.skipIf(adminUrl === undefined);
@@ -33,7 +34,7 @@ integration("B8 target canonical schema", () => {
       is_nullable: string;
       column_default: string | null;
     }>(
-      "SELECT data_type,character_maximum_length,is_nullable,column_default FROM information_schema.columns WHERE table_schema='public' AND table_name='billing_credit_hold' AND column_name='terminal_source_ref'",
+      "SELECT data_type,character_maximum_length,is_nullable,column_default FROM information_schema.columns WHERE table_schema='kokoro_billing' AND table_name='billing_credit_hold' AND column_name='terminal_source_ref'",
     );
     expect(column.rows, "canonical terminal source column is required").toEqual(
       [
@@ -77,7 +78,7 @@ integration("B8 target canonical schema", () => {
         validated: boolean;
         definition: string;
       }>(
-        "SELECT conname AS name,convalidated AS validated,pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid='public.billing_credit_hold'::regclass AND contype='c' ORDER BY conname",
+        "SELECT conname AS name,convalidated AS validated,pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid='kokoro_billing.billing_credit_hold'::regclass AND contype='c' ORDER BY conname",
       );
       expect(checks.rows.map(({ name }) => name)).toEqual([
         "ck_billing_credit_hold_amounts",
@@ -100,7 +101,7 @@ integration("B8 target canonical schema", () => {
         predicate: string;
         keys: string[];
       }>(
-        "SELECT i.indisunique AS unique,i.indisvalid AS valid,pg_get_expr(i.indpred,i.indrelid) AS predicate,ARRAY(SELECT a.attname::text FROM unnest(i.indkey) WITH ORDINALITY k(attnum,ord) JOIN pg_attribute a ON a.attrelid=i.indrelid AND a.attnum=k.attnum WHERE k.ord<=i.indnkeyatts ORDER BY k.ord) AS keys FROM pg_index i JOIN pg_class c ON c.oid=i.indexrelid WHERE i.indrelid='public.billing_credit_hold'::regclass AND c.relname='uq_billing_credit_hold_capture_source'",
+        "SELECT i.indisunique AS unique,i.indisvalid AS valid,pg_get_expr(i.indpred,i.indrelid) AS predicate,ARRAY(SELECT a.attname::text FROM unnest(i.indkey) WITH ORDINALITY k(attnum,ord) JOIN pg_attribute a ON a.attrelid=i.indrelid AND a.attnum=k.attnum WHERE k.ord<=i.indnkeyatts ORDER BY k.ord) AS keys FROM pg_index i JOIN pg_class c ON c.oid=i.indexrelid WHERE i.indrelid='kokoro_billing.billing_credit_hold'::regclass AND c.relname='uq_billing_credit_hold_capture_source'",
       );
       expect(index.rows).toHaveLength(1);
       const actual = assertDefined(index.rows[0]);
@@ -113,14 +114,14 @@ integration("B8 target canonical schema", () => {
         "status='captured'",
       );
       const journalUniques = await pool.query<{ name: string }>(
-        "SELECT conname AS name FROM pg_constraint WHERE conrelid='public.billing_credit_journal'::regclass AND contype='u' ORDER BY conname",
+        "SELECT conname AS name FROM pg_constraint WHERE conrelid='kokoro_billing.billing_credit_journal'::regclass AND contype='u' ORDER BY conname",
       );
       expect(journalUniques.rows.map(({ name }) => name)).toEqual([
         "uq_billing_credit_journal_sequence",
         "uq_billing_credit_journal_source",
       ]);
       const foreignKeys = await pool.query<{ count: number }>(
-        "SELECT count(*)::int AS count FROM pg_constraint WHERE conrelid IN ('public.billing_credit_hold'::regclass,'public.billing_credit_journal'::regclass) AND contype='f'",
+        "SELECT count(*)::int AS count FROM pg_constraint WHERE conrelid IN ('kokoro_billing.billing_credit_hold'::regclass,'kokoro_billing.billing_credit_journal'::regclass) AND contype='f'",
       );
       expect(foreignKeys.rows[0]?.count).toBe(0);
     });
@@ -330,7 +331,10 @@ integration("B8 target canonical schema", () => {
     async (damage) => {
       await withHoldSchema(async (pool) => {
         await requireTerminalColumn(pool);
-        const before = await readSchemaCatalog(pool.query.bind(pool));
+        const before = await readSchemaCatalog(
+          pool.query.bind(pool),
+          BILLING_DATABASE_SCHEMA,
+        );
         expect(
           before.indexes.some(({ key }) =>
             key.endsWith(".uq_billing_credit_hold_capture_source"),
@@ -341,12 +345,15 @@ integration("B8 target canonical schema", () => {
           await pool.query(
             "CREATE UNIQUE INDEX uq_billing_credit_hold_capture_source ON billing_credit_hold (tenant_id,terminal_source_ref) WHERE status='released'",
           );
-        const after = await readSchemaCatalog(pool.query.bind(pool));
+        const after = await readSchemaCatalog(
+          pool.query.bind(pool),
+          BILLING_DATABASE_SCHEMA,
+        );
         expect(compareSchemaCatalogs(before, after)).toEqual(
           expect.arrayContaining([
             expect.objectContaining({
               category: "indexes",
-              key: "public.billing_credit_hold.uq_billing_credit_hold_capture_source",
+              key: "kokoro_billing.billing_credit_hold.uq_billing_credit_hold_capture_source",
               kind: damage === "missing" ? "missing" : "changed",
             }),
           ]),
@@ -355,7 +362,7 @@ integration("B8 target canonical schema", () => {
     },
   );
 
-  it("installs exactly 32 billing-owned UUID resources without foreign keys", async () => {
+  it("installs exactly 35 billing-owned UUID resources without foreign keys", async () => {
     await withCanonicalReference(
       assertDefined(adminUrl),
       await readFile("database/schema.sql", "utf8"),
@@ -366,9 +373,9 @@ integration("B8 target canonical schema", () => {
         });
         try {
           const relations = await pool.query<{ name: string }>(
-            "SELECT tablename name FROM pg_tables WHERE schemaname='public' ORDER BY tablename",
+            "SELECT tablename name FROM pg_tables WHERE schemaname='kokoro_billing' ORDER BY tablename",
           );
-          expect(relations.rows).toHaveLength(32);
+          expect(relations.rows).toHaveLength(35);
           expect(
             relations.rows.every(({ name }) => name.startsWith("billing_")),
           ).toBe(true);
@@ -384,12 +391,12 @@ integration("B8 target canonical schema", () => {
             `SELECT COUNT(*)::int count FROM information_schema.table_constraints tc
              JOIN information_schema.key_column_usage k USING (constraint_catalog,constraint_schema,constraint_name,table_catalog,table_schema,table_name)
              JOIN information_schema.columns c ON c.table_schema=k.table_schema AND c.table_name=k.table_name AND c.column_name=k.column_name
-             WHERE tc.table_schema='public' AND tc.constraint_type='PRIMARY KEY'
+             WHERE tc.table_schema='kokoro_billing' AND tc.constraint_type='PRIMARY KEY'
                AND k.column_name='id' AND c.udt_name='uuid'`,
           );
-          expect(primaryKeys.rows[0]?.count).toBe(32);
+          expect(primaryKeys.rows[0]?.count).toBe(35);
           const foreignKeys = await pool.query<{ count: number }>(
-            "SELECT COUNT(*)::int count FROM information_schema.table_constraints WHERE table_schema='public' AND constraint_type='FOREIGN KEY'",
+            "SELECT COUNT(*)::int count FROM information_schema.table_constraints WHERE table_schema='kokoro_billing' AND constraint_type='FOREIGN KEY'",
           );
           expect(foreignKeys.rows[0]?.count).toBe(0);
         } finally {
@@ -660,6 +667,6 @@ integration("B8 target canonical schema", () => {
 
 function publicSchemaUrl(raw: string): string {
   const url = new URL(raw);
-  url.searchParams.set("options", "-c search_path=public,pg_catalog");
+  url.searchParams.set("options", "-c search_path=kokoro_billing,pg_catalog");
   return url.toString();
 }

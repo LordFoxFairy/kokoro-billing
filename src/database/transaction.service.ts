@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { BILLING_DATABASE_SEARCH_PATH } from "../config/runtime-config.js";
 import type { PrismaClient } from "../generated/prisma/client.js";
 import type { PrismaLifecycleGate } from "./prisma.types.js";
 import {
@@ -297,7 +298,7 @@ export class TransactionService {
   async #configure(client: TransactionClient, mode: TransactionMode) {
     if (mode === "readOnlySnapshot")
       await client.$executeRaw`SET TRANSACTION READ ONLY`;
-    await client.$queryRaw`SELECT set_config('statement_timeout', ${`${this.#options.statementTimeoutMs}ms`}, true), set_config('lock_timeout', ${`${this.#options.lockTimeoutMs}ms`}, true), set_config('idle_in_transaction_session_timeout', ${`${this.#options.idleInTransactionTimeoutMs}ms`}, true), set_config('TimeZone', 'UTC', true), set_config('search_path', 'public, pg_catalog', true)`;
+    await client.$queryRaw`SELECT set_config('statement_timeout', ${`${this.#options.statementTimeoutMs}ms`}, true), set_config('lock_timeout', ${`${this.#options.lockTimeoutMs}ms`}, true), set_config('idle_in_transaction_session_timeout', ${`${this.#options.idleInTransactionTimeoutMs}ms`}, true), set_config('TimeZone', 'UTC', true), set_config('search_path', ${BILLING_DATABASE_SEARCH_PATH}, true)`;
   }
 
   #markRollbackOnly(error: unknown): void {

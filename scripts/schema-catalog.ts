@@ -1,22 +1,26 @@
 import type { QueryResultRow } from "pg";
 import type { CatalogQuery } from "./schema-database-session.js";
 import type { CatalogItem, SchemaCatalog } from "./schema-catalog.types.js";
+import { BILLING_DATABASE_SCHEMA } from "../src/config/runtime-config.js";
 
 type ItemRow = QueryResultRow & { key: string; definition: string };
-const USER_NAMESPACE =
-  "n.nspname <> 'information_schema' AND n.nspname NOT LIKE 'pg\\_%' ESCAPE '\\'";
+const OWNER_NAMESPACE = "n.nspname = $1";
 
 async function items(
   client: CatalogQuery,
   sql: string,
+  values?: unknown[],
 ): Promise<CatalogItem[]> {
-  const result = await client<ItemRow>(sql);
+  const result = await client<ItemRow>(sql, values);
   return result.rows.map(({ key, definition }) => ({ key, definition }));
 }
 
 export async function readSchemaCatalog(
   client: CatalogQuery,
+  ownerSchema: string,
 ): Promise<SchemaCatalog> {
+  if (ownerSchema !== BILLING_DATABASE_SCHEMA)
+    throw new Error(`schema catalog owner must be ${BILLING_DATABASE_SCHEMA}`);
   const version = await client<{ version: string }>(
     "SELECT pg_catalog.current_setting('server_version_num') AS version",
   );
@@ -32,9 +36,10 @@ export async function readSchemaCatalog(
     SELECT n.nspname || '.' || c.relname AS key, pg_catalog.jsonb_build_object('kind',c.relkind,'persistence',c.relpersistence,'rls',c.relrowsecurity,'force_rls',c.relforcerowsecurity)::pg_catalog.text AS definition
     FROM pg_catalog.pg_class c
     JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
-    WHERE ${USER_NAMESPACE} AND c.relkind IN ('r','p','v','m','S','f')
+    WHERE ${OWNER_NAMESPACE} AND c.relkind IN ('r','p','v','m','S','f')
     ORDER BY key
   `,
+    [ownerSchema],
   );
   const columns = await items(
     client,
@@ -46,9 +51,10 @@ export async function readSchemaCatalog(
     JOIN pg_catalog.pg_attrdef d ON d.adrelid=a.attrelid AND d.adnum=a.attnum LEFT
     JOIN pg_catalog.pg_collation coll ON coll.oid=a.attcollation LEFT
     JOIN pg_catalog.pg_namespace cn ON cn.oid=coll.collnamespace
-    WHERE ${USER_NAMESPACE} AND c.relkind IN ('r','p') AND a.attnum>0 AND NOT a.attisdropped
+    WHERE ${OWNER_NAMESPACE} AND c.relkind IN ('r','p') AND a.attnum>0 AND NOT a.attisdropped
     ORDER BY key
   `,
+    [ownerSchema],
   );
   const constraints = await items(
     client,
@@ -57,9 +63,10 @@ export async function readSchemaCatalog(
     FROM pg_catalog.pg_constraint con
     JOIN pg_catalog.pg_class c ON c.oid=con.conrelid
     JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
-    WHERE ${USER_NAMESPACE} AND con.contype<>'n'
+    WHERE ${OWNER_NAMESPACE} AND con.contype<>'n'
     ORDER BY key
   `,
+    [ownerSchema],
   );
   const indexes = await items(
     client,
@@ -69,9 +76,10 @@ export async function readSchemaCatalog(
     JOIN pg_catalog.pg_class c ON c.oid=ix.indrelid
     JOIN pg_catalog.pg_class i ON i.oid=ix.indexrelid
     JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
-    WHERE ${USER_NAMESPACE}
+    WHERE ${OWNER_NAMESPACE}
     ORDER BY key
   `,
+    [ownerSchema],
   );
   const types = await items(
     client,
@@ -81,9 +89,10 @@ export async function readSchemaCatalog(
     JOIN pg_catalog.pg_namespace n ON n.oid=t.typnamespace LEFT
     JOIN pg_catalog.pg_class c ON c.oid=t.typrelid LEFT
     JOIN pg_catalog.pg_type base ON base.typarray=t.oid
-    WHERE ${USER_NAMESPACE} AND (t.typrelid=0 OR c.relkind='c') AND base.oid IS NULL
+    WHERE ${OWNER_NAMESPACE} AND (t.typrelid=0 OR c.relkind='c') AND base.oid IS NULL
     ORDER BY key
   `,
+    [ownerSchema],
   );
   const routines = await items(
     client,
@@ -91,9 +100,10 @@ export async function readSchemaCatalog(
     SELECT n.nspname || '.' || p.proname || '(' || pg_catalog.pg_get_function_identity_arguments(p.oid) || ')' AS key, pg_catalog.jsonb_build_object('kind',p.prokind,'result',pg_catalog.pg_get_function_result(p.oid),'definition',CASE WHEN p.prokind='a' THEN pg_catalog.jsonb_build_object('source',p.prosrc,'volatility',p.provolatile,'strict',p.proisstrict,'security_definer',p.prosecdef,'parallel',p.proparallel,'config',p.proconfig)::pg_catalog.text ELSE pg_catalog.pg_get_functiondef(p.oid) END)::pg_catalog.text AS definition
     FROM pg_catalog.pg_proc p
     JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
-    WHERE ${USER_NAMESPACE}
+    WHERE ${OWNER_NAMESPACE}
     ORDER BY key
   `,
+    [ownerSchema],
   );
   const triggers = await items(
     client,
@@ -102,9 +112,10 @@ export async function readSchemaCatalog(
     FROM pg_catalog.pg_trigger t
     JOIN pg_catalog.pg_class c ON c.oid=t.tgrelid
     JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
-    WHERE ${USER_NAMESPACE} AND NOT t.tgisinternal
+    WHERE ${OWNER_NAMESPACE} AND NOT t.tgisinternal
     ORDER BY key
   `,
+    [ownerSchema],
   );
   const rules = await items(
     client,
@@ -113,9 +124,10 @@ export async function readSchemaCatalog(
     FROM pg_catalog.pg_rewrite r
     JOIN pg_catalog.pg_class c ON c.oid=r.ev_class
     JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
-    WHERE ${USER_NAMESPACE}
+    WHERE ${OWNER_NAMESPACE}
     ORDER BY key
   `,
+    [ownerSchema],
   );
   const policies = await items(
     client,
@@ -125,9 +137,10 @@ export async function readSchemaCatalog(
     FROM pg_catalog.pg_policy p
     JOIN pg_catalog.pg_class c ON c.oid=p.polrelid
     JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
-    WHERE ${USER_NAMESPACE}
+    WHERE ${OWNER_NAMESPACE}
     ORDER BY key
   `,
+    [ownerSchema],
   );
   return {
     serverVersion: version.rows[0]?.version ?? "unknown",

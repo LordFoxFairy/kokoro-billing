@@ -25,9 +25,9 @@ integration("Prisma PostgreSQL persistence", () => {
   it("rejects fixture initialization failures without hanging", async () => {
     await expect(
       createPrismaDatabaseFixture(
-        "postgresql://fixture@127.0.0.1:1/postgres?schema=private",
+        "postgresql://fixture@127.0.0.1:1/postgres?schema=kokoro_billing",
       ),
-    ).rejects.toThrow(/schema parameters/iu);
+    ).rejects.toThrow(/must not contain schema or options/iu);
   });
 
   it("performs typed CRUD with UTC millisecond and exact BigInt/JSON null semantics", async () => {
@@ -379,7 +379,7 @@ integration("Prisma PostgreSQL persistence", () => {
           Array<{ pid: number }>
         >`SELECT pg_catalog.pg_backend_pid() AS pid`;
         holderPid = assertDefined(backend[0]).pid;
-        await tx.$queryRaw`SELECT id FROM public.billing_credit_account WHERE tenant_id = ${"tenant"} AND id = ${accountId} FOR UPDATE`;
+        await tx.$queryRaw`SELECT id FROM kokoro_billing.billing_credit_account WHERE tenant_id = ${"tenant"} AND id = ${accountId} FOR UPDATE`;
         locked();
         await gate;
       },
@@ -391,13 +391,13 @@ integration("Prisma PostgreSQL persistence", () => {
       await acquired;
       expect(
         await fixture.client
-          .$queryRaw`SELECT id FROM public.billing_credit_account WHERE tenant_id = ${"wrong-tenant"} AND id = ${accountId} FOR UPDATE`,
+          .$queryRaw`SELECT id FROM kokoro_billing.billing_credit_account WHERE tenant_id = ${"wrong-tenant"} AND id = ${accountId} FOR UPDATE`,
       ).toEqual([]);
       const skipped = await fixture.client.$transaction(
         (tx) =>
           tx.$queryRaw<
             Array<{ id: string }>
-          >`SELECT id FROM public.billing_credit_account WHERE tenant_id = ${"tenant"} AND id = ${accountId} FOR UPDATE SKIP LOCKED`,
+          >`SELECT id FROM kokoro_billing.billing_credit_account WHERE tenant_id = ${"tenant"} AND id = ${accountId} FOR UPDATE SKIP LOCKED`,
       );
       expect(skipped).toEqual([]);
       await expect(
@@ -406,7 +406,7 @@ integration("Prisma PostgreSQL persistence", () => {
             Array<{ value: string }>
           >`SELECT pg_catalog.set_config('lock_timeout', '50ms', true) AS value`;
           expect(setting).toEqual([{ value: "50ms" }]);
-          await tx.$queryRaw`SELECT id FROM public.billing_credit_account WHERE tenant_id = ${"tenant"} AND id = ${accountId} FOR UPDATE`;
+          await tx.$queryRaw`SELECT id FROM kokoro_billing.billing_credit_account WHERE tenant_id = ${"tenant"} AND id = ${accountId} FOR UPDATE`;
         }),
       ).rejects.toMatchObject({
         code: "P2010",
@@ -416,7 +416,7 @@ integration("Prisma PostgreSQL persistence", () => {
         (tx) =>
           tx.$queryRaw<
             Array<{ id: string }>
-          >`SELECT id FROM public.billing_credit_account WHERE tenant_id = ${"tenant"} AND id = ${accountId} FOR UPDATE`,
+          >`SELECT id FROM kokoro_billing.billing_credit_account WHERE tenant_id = ${"tenant"} AND id = ${accountId} FOR UPDATE`,
       );
       let waiting = false;
       for (let attempt = 0; attempt < 50 && !waiting; attempt += 1) {

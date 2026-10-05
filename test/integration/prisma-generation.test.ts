@@ -13,6 +13,10 @@ import {
   temporaryGenerationRoot,
 } from "../../scripts/prisma-generation.js";
 import { comparePrismaArtifacts } from "../../scripts/prisma-artifacts.js";
+import {
+  BILLING_DATABASE_SCHEMA,
+  BILLING_DATABASE_SEARCH_PATH,
+} from "../../src/config/runtime-config.js";
 const adminUrl = process.env.SCHEMA_ADMIN_URL;
 const integration = describe.skipIf(!adminUrl);
 integration("generated Prisma Client", () => {
@@ -25,6 +29,8 @@ integration("generated Prisma Client", () => {
     await admin.query(`CREATE DATABASE "${database}" TEMPLATE template0`);
     const parsed = new URL(assertDefined(adminUrl));
     parsed.pathname = `/${database}`;
+    parsed.search = "";
+    parsed.searchParams.set("schema", "kokoro_billing");
     url = parsed.toString();
     await installCanonicalSchema({
       databaseUrl: url,
@@ -109,8 +115,14 @@ integration("generated Prisma Client", () => {
     }
   });
   it("uses the generated source Client against canonical PostgreSQL", async () => {
-    const pool = new Pool({ connectionString: url, max: 2 });
-    const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
+    const pool = new Pool({
+      connectionString: url,
+      max: 2,
+      options: `-c search_path=${BILLING_DATABASE_SEARCH_PATH}`,
+    });
+    const prisma = new PrismaClient({
+      adapter: new PrismaPg(pool, { schema: BILLING_DATABASE_SCHEMA }),
+    });
     try {
       expect(await prisma.billing_credit_account.count()).toBe(0);
     } finally {
@@ -119,13 +131,13 @@ integration("generated Prisma Client", () => {
     }
   });
 
-  it("rejects a non-public admin schema before attempting a connection", async () => {
+  it("rejects admin schema parameters before attempting a connection", async () => {
     await expect(
       withCanonicalReference(
-        "postgresql://fixture@127.0.0.1:1/postgres?schema=public&schema=private",
+        "postgresql://fixture@127.0.0.1:1/postgres?schema=kokoro_billing",
         "SELECT 1",
         async () => Promise.resolve(undefined),
       ),
-    ).rejects.toThrow(/schema parameters must all be public/iu);
+    ).rejects.toThrow(/must not contain schema or options/iu);
   });
 });

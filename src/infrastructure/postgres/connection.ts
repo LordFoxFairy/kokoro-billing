@@ -1,6 +1,10 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Pool, type PoolClient, type QueryResultRow } from "pg";
 import type { QueryResult, RowDataPacket, SqlConnection } from "./database.js";
+import {
+  BILLING_DATABASE_SEARCH_PATH,
+  parseBillingDatabaseUrl,
+} from "../../config/runtime-config.js";
 export type {
   QueryResult,
   ResultSetHeader,
@@ -20,17 +24,6 @@ type BillingContext = {
 };
 const billingContext = new AsyncLocalStorage<BillingContext>();
 
-function postgresSearchPath(uri: string): string {
-  const schema = new URL(uri).searchParams.get("schema") ?? "public";
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/u.test(schema))
-    throw new Error(
-      "DATABASE_URL schema must be a simple PostgreSQL identifier",
-    );
-  return schema === "public"
-    ? "public,pg_catalog"
-    : `${schema},public,pg_catalog`;
-}
-
 /** Bind one request/worker operation to one PostgreSQL session. */
 export function runWithBillingContext<T>(task: () => T): T {
   return billingContext.run({ transactions: new Map() }, task);
@@ -46,11 +39,11 @@ class PostgresConnection implements SqlConnection {
         "POSTGRES_POOL_SIZE must be an integer of at least 2",
       );
     this.pool = new Pool({
-      connectionString: uri,
+      connectionString: parseBillingDatabaseUrl(uri).toString(),
       max: poolSize,
       connectionTimeoutMillis: 10_000,
       idleTimeoutMillis: 30_000,
-      options: `-c search_path=${postgresSearchPath(uri)}`,
+      options: `-c search_path=${BILLING_DATABASE_SEARCH_PATH}`,
     });
     // pg-pool removes failed idle clients itself; never release them again here.
     this.pool.on("error", (error: Error) => this.diagnose("pool_idle", error));

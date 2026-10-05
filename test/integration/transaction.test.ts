@@ -44,7 +44,7 @@ describeDatabase("TransactionService with PostgreSQL", () => {
   it("uses one backend and txid and hides writes until commit", async () => {
     const outside = new Pool({
       connectionString: fixture.url,
-      options: "-c search_path=public,pg_catalog",
+      options: "-c search_path=kokoro_billing,pg_catalog",
     });
     try {
       const marker = randomUUID();
@@ -259,7 +259,7 @@ describeDatabase("TransactionService with PostgreSQL", () => {
   it("provides a repeatable read-only snapshot", async () => {
     const outside = new Pool({
       connectionString: fixture.url,
-      options: "-c search_path=public,pg_catalog",
+      options: "-c search_path=kokoro_billing,pg_catalog",
     });
     const count = async () =>
       service

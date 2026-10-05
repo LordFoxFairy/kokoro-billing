@@ -2,6 +2,10 @@ import "reflect-metadata";
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
+import {
+  BILLING_DATABASE_SCHEMA,
+  BILLING_DATABASE_SEARCH_PATH,
+} from "../../src/config/runtime-config.js";
 import { Test } from "@nestjs/testing";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { AuditAppender } from "../../src/database/audit-appender.js";
@@ -193,7 +197,7 @@ describe.skipIf(adminUrl === undefined)(
       const terminalSource = async (holdId: string) => {
         const pool = assertDefined(fixture).pool;
         const columns = await pool.query<{ column_name: string }>(
-          "SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='billing_credit_hold' AND column_name='terminal_source_ref'",
+          "SELECT column_name FROM information_schema.columns WHERE table_schema='kokoro_billing' AND table_name='billing_credit_hold' AND column_name='terminal_source_ref'",
         );
         expect(
           columns.rows,
@@ -257,10 +261,11 @@ describe.skipIf(adminUrl === undefined)(
           connectionString: assertDefined(fixture).url,
           max: 2,
           connectionTimeoutMillis: 2_000,
-          options:
-            "-c search_path=public,pg_catalog -c timezone=UTC -c statement_timeout=5000 -c lock_timeout=2000",
+          options: `-c search_path=${BILLING_DATABASE_SEARCH_PATH} -c timezone=UTC -c statement_timeout=5000 -c lock_timeout=2000`,
         });
-        const client = new PrismaClient({ adapter: new PrismaPg(pool) });
+        const client = new PrismaClient({
+          adapter: new PrismaPg(pool, { schema: BILLING_DATABASE_SCHEMA }),
+        });
         const peerTx = new TransactionService(client);
         return {
           tx: peerTx,
@@ -1124,7 +1129,7 @@ describe.skipIf(adminUrl === undefined)(
               ? "ck_billing_credit_hold_terminal_source"
               : "ck_billing_credit_hold_terminal_amounts";
           const definitions = await pool.query<{ definition: string }>(
-            "SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid='public.billing_credit_hold'::regclass AND conname=$1",
+            "SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid='kokoro_billing.billing_credit_hold'::regclass AND conname=$1",
             [constraint],
           );
           expect(definitions.rows).toHaveLength(1);

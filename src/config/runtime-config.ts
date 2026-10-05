@@ -8,6 +8,26 @@ import {
 } from "./provider-config.js";
 
 export type BillingAuthMode = "internal-header" | "jwks";
+export const BILLING_DATABASE_SCHEMA = "kokoro_billing";
+export const BILLING_DATABASE_SEARCH_PATH = `${BILLING_DATABASE_SCHEMA},pg_catalog`;
+
+export function parseBillingDatabaseUrl(
+  raw: string,
+  name = "DATABASE_URL",
+): URL {
+  const url = new URL(raw);
+  if (url.protocol !== "postgres:" && url.protocol !== "postgresql:")
+    throw new Error(`${name} must be a PostgreSQL connection string`);
+  const schemas = url.searchParams.getAll("schema");
+  if (schemas.length !== 1 || schemas[0] !== BILLING_DATABASE_SCHEMA)
+    throw new Error(
+      `${name} must contain exactly one schema=${BILLING_DATABASE_SCHEMA}`,
+    );
+  if (url.searchParams.has("options"))
+    throw new Error(`${name} must not contain PostgreSQL options`);
+  return url;
+}
+
 export type DependencyTimeoutConfig = Readonly<{
   connectTimeoutMs: number;
   readTimeoutMs: number;
@@ -109,7 +129,9 @@ const readAuthMode = (env: NodeJS.ProcessEnv): BillingAuthMode => {
 export const readBillingRuntimeConfig = (
   env: NodeJS.ProcessEnv = process.env,
 ): BillingRuntimeConfig => {
-  const databaseUrl = required(env, "DATABASE_URL");
+  const databaseUrl = parseBillingDatabaseUrl(
+    required(env, "DATABASE_URL"),
+  ).toString();
   const redisUrl = required(env, "REDIS_URL");
   const internalServiceSecret = required(env, "INTERNAL_SERVICE_SECRET");
   const bffServiceToken = required(env, "BILLING_BFF_SERVICE_TOKEN");

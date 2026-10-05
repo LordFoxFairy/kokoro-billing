@@ -1,3 +1,11 @@
+## R255 当前 owner-schema 代码切片（2026-10-05）
+
+现 installer、drift catalog、Prisma adapter、事务和既有 SQL pool 统一 `kokoro_billing`；URL 必须仅含一个该 schema，拒绝 options，无 public fallback。fresh install 只核 owner namespace 的完整 PG 目录依赖，非空零变更拒绝；canonical 35 表与 API/资金规则未变。Prisma 由本仓 canonical SQL 正规生成，不手改生成物。
+
+Root 绑定18文件冻结复跑：真实 PostgreSQL 8文件217项通过（含 typed CRUD、command receipt、积分预占/结算/释放、竞争与 rollback）；纯门33文件1018项通过；format/lint/types/build/contract/sql 全0。独审无 P0/P1/P2。原76数据库集合逐OID/name保持，fixture自有资源回收。历史失败与 Root 原始收据在主仓同 progress，未放宽断言消除失败。
+
+这仅放行本代码切片：Billing 服务尚未加入日常组合，正式 IAM/BFF/Agent 用户计费旅程及余额/流水页面仍待真实验收，不等同整体 Billing 完成。原未交接文档正文逐字保留。
+
 ## R243 policy publication 与 joint pricing 当前交付证据（2026-10-05）
 
 现 metering 模块已增加 closed owner failure policy artifact、trusted publication 的同事务 revision/receipt/audit，以及调用方同 write transaction 的单数据库时钟联合 rate/policy 选择。旧 selectActiveRates 已删除，无兼容alias。只有严格验证的不可变计价事实；不新增 public HTTP、quote、Credit hold/资金动作或Agent逐attempt授权。缺policy/损坏artifact拒绝，不回落免费或旧版本。

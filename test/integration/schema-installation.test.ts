@@ -42,7 +42,7 @@ integration("canonical schema installation", () => {
   });
 
   const install = (
-    url = databaseUrl(database),
+    url = databaseUrl(database, "?schema=kokoro_billing"),
     sql = canonicalSql,
     lockTimeoutMs = 1_000,
     clientQueryTimeoutMs = 12_000,
@@ -70,7 +70,7 @@ integration("canonical schema installation", () => {
     const pool = new Pool({ connectionString: databaseUrl(database), max: 1 });
     try {
       const result = await pool.query<{ relation: string | null }>(
-        "SELECT pg_catalog.to_regclass('public.partial')::text AS relation",
+        "SELECT pg_catalog.to_regclass('kokoro_billing.partial')::text AS relation",
       );
       expect(result.rows[0]?.relation).toBeNull();
     } finally {
@@ -83,7 +83,7 @@ integration("canonical schema installation", () => {
     const pool = new Pool({ connectionString: databaseUrl(database), max: 1 });
     try {
       const result = await pool.query<{ count: string }>(
-        "SELECT count(*)::text AS count FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','p')",
+        "SELECT count(*)::text AS count FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='kokoro_billing' AND c.relkind IN ('r','p')",
       );
       expect(result.rows[0]?.count).toBe("35");
     } finally {
@@ -92,33 +92,116 @@ integration("canonical schema installation", () => {
     await expect(install()).rejects.toThrow(/non-empty/iu);
   });
 
+  it("installs only the kokoro_billing owner schema beside an existing owner", async () => {
+    await inTarget(`
+      CREATE SCHEMA kokoro_iam;
+      CREATE TABLE kokoro_iam.owner_marker(id integer PRIMARY KEY);
+      CREATE TYPE kokoro_iam.owner_state AS ENUM ('ready');
+      CREATE FUNCTION kokoro_iam.owner_probe() RETURNS integer
+        LANGUAGE sql IMMUTABLE AS $$ SELECT 1 $$;
+    `);
+    const pool = new Pool({ connectionString: databaseUrl(database), max: 1 });
+    const readNeighborCatalog = async () =>
+      pool.query<{ kind: string; identity: string }>(`
+        SELECT 'relation' AS kind, c.relname AS identity
+        FROM pg_catalog.pg_class c
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'kokoro_iam' AND c.relname = 'owner_marker'
+        UNION ALL
+        SELECT 'type' AS kind, t.typname AS identity
+        FROM pg_catalog.pg_type t
+        JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+        WHERE n.nspname = 'kokoro_iam' AND t.typname = 'owner_state'
+        UNION ALL
+        SELECT 'function' AS kind, p.proname AS identity
+        FROM pg_catalog.pg_proc p
+        JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'kokoro_iam' AND p.proname = 'owner_probe'
+        ORDER BY kind, identity
+      `);
+    try {
+      const before = await readNeighborCatalog();
+      expect(before.rows).toEqual([
+        { kind: "function", identity: "owner_probe" },
+        { kind: "relation", identity: "owner_marker" },
+        { kind: "type", identity: "owner_state" },
+      ]);
+
+      await install(databaseUrl(database, "?schema=kokoro_billing"));
+
+      const billing = await pool.query<{ count: string }>(`
+        SELECT count(*)::text AS count
+        FROM pg_catalog.pg_class c
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'kokoro_billing' AND c.relkind IN ('r', 'p')
+      `);
+      expect(billing.rows[0]?.count).toBe("35");
+      const publicBilling = await pool.query<{ count: string }>(`
+        SELECT count(*)::text AS count
+        FROM pg_catalog.pg_class c
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public' AND c.relname LIKE 'billing\\_%' ESCAPE '\\'
+      `);
+      expect(publicBilling.rows[0]?.count).toBe("0");
+      expect((await readNeighborCatalog()).rows).toEqual(before.rows);
+
+      await expect(
+        install(databaseUrl(database, "?schema=kokoro_billing")),
+      ).rejects.toThrow(/non-empty/iu);
+      expect((await readNeighborCatalog()).rows).toEqual(before.rows);
+      expect(
+        (await pool.query("SELECT 1 FROM kokoro_iam.owner_marker")).rows,
+      ).toEqual([]);
+    } finally {
+      await pool.end();
+    }
+  });
+
   it.each([
     [
-      "non-public table",
-      "CREATE SCHEMA occupied; CREATE TABLE occupied.item(id int)",
-    ],
-    ["public view", "CREATE VIEW public.item AS SELECT 1 AS id"],
-    ["public sequence", "CREATE SEQUENCE public.item_seq"],
-    [
-      "public materialized view",
-      "CREATE MATERIALIZED VIEW public.item AS SELECT 1 AS id",
+      "owner table",
+      "CREATE SCHEMA kokoro_billing; CREATE TABLE kokoro_billing.item(id int)",
     ],
     [
-      "public foreign table",
-      "CREATE EXTENSION file_fdw WITH SCHEMA pg_catalog; CREATE SERVER fixture FOREIGN DATA WRAPPER file_fdw; CREATE FOREIGN TABLE public.item(id int) SERVER fixture OPTIONS (filename '/tmp/billing-fixture')",
+      "owner view",
+      "CREATE SCHEMA kokoro_billing; CREATE VIEW kokoro_billing.item AS SELECT 1 AS id",
     ],
-    ["enum", "CREATE TYPE public.item AS ENUM ('one')"],
-    ["domain", "CREATE DOMAIN public.item AS text"],
-    ["composite", "CREATE TYPE public.item AS (id int)"],
+    [
+      "owner sequence",
+      "CREATE SCHEMA kokoro_billing; CREATE SEQUENCE kokoro_billing.item_seq",
+    ],
+    [
+      "owner materialized view",
+      "CREATE SCHEMA kokoro_billing; CREATE MATERIALIZED VIEW kokoro_billing.item AS SELECT 1 AS id",
+    ],
+    [
+      "owner foreign table",
+      "CREATE SCHEMA kokoro_billing; CREATE EXTENSION file_fdw WITH SCHEMA pg_catalog; CREATE SERVER fixture FOREIGN DATA WRAPPER file_fdw; CREATE FOREIGN TABLE kokoro_billing.item(id int) SERVER fixture OPTIONS (filename '/tmp/billing-fixture')",
+    ],
+    [
+      "enum",
+      "CREATE SCHEMA kokoro_billing; CREATE TYPE kokoro_billing.item AS ENUM ('one')",
+    ],
+    [
+      "domain",
+      "CREATE SCHEMA kokoro_billing; CREATE DOMAIN kokoro_billing.item AS text",
+    ],
+    [
+      "composite",
+      "CREATE SCHEMA kokoro_billing; CREATE TYPE kokoro_billing.item AS (id int)",
+    ],
     [
       "function",
-      "CREATE FUNCTION public.item() RETURNS int LANGUAGE sql AS $$ SELECT 1 $$",
+      "CREATE SCHEMA kokoro_billing; CREATE FUNCTION kokoro_billing.item() RETURNS int LANGUAGE sql AS $$ SELECT 1 $$",
     ],
     [
       "procedure",
-      "CREATE PROCEDURE public.item() LANGUAGE sql AS $$ SELECT 1 $$",
+      "CREATE SCHEMA kokoro_billing; CREATE PROCEDURE kokoro_billing.item() LANGUAGE sql AS $$ SELECT 1 $$",
     ],
-    ["range", "CREATE TYPE public.item AS RANGE (subtype = integer)"],
+    [
+      "range",
+      "CREATE SCHEMA kokoro_billing; CREATE TYPE kokoro_billing.item AS RANGE (subtype = integer)",
+    ],
   ])("rejects %s in an otherwise fresh database", async (_name, sql) => {
     await inTarget(sql);
     await expect(install()).rejects.toThrow(/non-empty/iu);
@@ -133,7 +216,7 @@ integration("canonical schema installation", () => {
       `);
       expect(Number(original.rows[0]?.count)).toBeGreaterThan(0);
       const billing = await pool.query<{ count: string }>(
-        "SELECT count(*)::text AS count FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND (c.relname LIKE 'billing_%' OR c.relname LIKE 'billing_%')",
+        "SELECT count(*)::text AS count FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='kokoro_billing' AND c.relname LIKE 'billing\\_%' ESCAPE '\\'",
       );
       expect(billing.rows[0]?.count).toBe("0");
     } finally {
@@ -141,51 +224,77 @@ integration("canonical schema installation", () => {
     }
   });
 
-  it("rejects every non-public schema URL value before connecting", async () => {
-    const unreachable = "postgresql://fixture@127.0.0.1:1/fixture";
-    await expect(
-      install(`${unreachable}?schema=public&schema=private`),
-    ).rejects.toThrow(/schema.*public/iu);
-    await expect(
-      install(`${unreachable}?schema=private&schema=public`),
-    ).rejects.toThrow(/schema.*public/iu);
-    await expect(install(`${unreachable}?schema=private`)).rejects.toThrow(
-      /schema.*public/iu,
+  it("rejects an owner-local collation without installing canonical tables", async () => {
+    await inTarget(
+      'CREATE SCHEMA kokoro_billing; CREATE COLLATION kokoro_billing.owner_marker FROM pg_catalog."C"',
     );
-  });
 
-  it("requires the public schema to exist", async () => {
-    await inTarget("DROP SCHEMA public");
-    await expect(install()).rejects.toThrow(/public schema.*exist/iu);
-  });
+    await expect(install()).rejects.toThrow(/non-empty/iu);
 
-  it("verifies CREATE privilege using the effective connection role", async () => {
-    const options = encodeURIComponent("-c role=pg_read_all_data");
-    await expect(
-      install(databaseUrl(database, `?options=${options}`)),
-    ).rejects.toThrow(/CREATE privilege/iu);
-  });
-
-  it("overrides URI options search_path and installs only in public", async () => {
-    await inTarget("CREATE SCHEMA route_elsewhere");
-    const options = encodeURIComponent("-c search_path=route_elsewhere");
-    await install(databaseUrl(database, `?schema=public&options=${options}`));
     const pool = new Pool({ connectionString: databaseUrl(database), max: 1 });
     try {
-      const result = await pool.query<{ schema_name: string }>(
-        "SELECT DISTINCT n.nspname AS schema_name FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.relname LIKE 'billing_%' OR c.relname LIKE 'billing_%'",
-      );
-      expect(result.rows.map((row) => row.schema_name)).toEqual(["public"]);
+      const state = await pool.query<{
+        billing_table: string | null;
+        marker_count: string;
+      }>(`
+        SELECT pg_catalog.to_regclass('kokoro_billing.billing_credit_account')::text AS billing_table,
+               (SELECT count(*)::text
+                  FROM pg_catalog.pg_collation c
+                  JOIN pg_catalog.pg_namespace n ON n.oid = c.collnamespace
+                 WHERE n.nspname = 'kokoro_billing' AND c.collname = 'owner_marker') AS marker_count
+      `);
+      expect(state.rows[0]).toEqual({
+        billing_table: null,
+        marker_count: "1",
+      });
     } finally {
       await pool.end();
     }
+  });
+
+  it("requires exactly one kokoro_billing schema before connecting", async () => {
+    const unreachable = "postgresql://fixture@127.0.0.1:1/fixture";
+    await expect(install(unreachable)).rejects.toThrow(/exactly one schema/iu);
+    await expect(
+      install(`${unreachable}?schema=kokoro_billing&schema=kokoro_billing`),
+    ).rejects.toThrow(/exactly one schema/iu);
+    await expect(install(`${unreachable}?schema=public`)).rejects.toThrow(
+      /exactly one schema/iu,
+    );
+    await expect(install(`${unreachable}?schema=private`)).rejects.toThrow(
+      /exactly one schema/iu,
+    );
+  });
+
+  it("creates the owner schema without depending on public", async () => {
+    await inTarget("DROP SCHEMA public");
+    await install();
+  });
+
+  it("rejects URI options before connecting", async () => {
+    const options = encodeURIComponent("-c role=pg_read_all_data");
+    await expect(
+      install(
+        databaseUrl(database, `?schema=kokoro_billing&options=${options}`),
+      ),
+    ).rejects.toThrow(/must not contain PostgreSQL options/iu);
+  });
+
+  it("rejects search_path injection instead of overriding it", async () => {
+    await inTarget("CREATE SCHEMA route_elsewhere");
+    const options = encodeURIComponent("-c search_path=route_elsewhere");
+    await expect(
+      install(
+        databaseUrl(database, `?schema=kokoro_billing&options=${options}`),
+      ),
+    ).rejects.toThrow(/must not contain PostgreSQL options/iu);
   });
 
   it("rolls back a mid-DDL failure and permits a later canonical installation", async () => {
     await expect(
       install(
         undefined,
-        "CREATE TABLE public.first(id int); SELECT missing_function();",
+        "CREATE TABLE kokoro_billing.first(id int); SELECT missing_function();",
       ),
     ).rejects.toThrow();
     await install();
@@ -228,7 +337,7 @@ integration("canonical schema installation", () => {
     const marker = `billing_terminate_${randomUUID().replaceAll("-", "")}`;
     const pending = install(
       undefined,
-      `CREATE TABLE public.partial(id int); SELECT pg_sleep(10) /* ${marker} */`,
+      `CREATE TABLE kokoro_billing.partial(id int); SELECT pg_sleep(10) /* ${marker} */`,
     );
     let pid: number | undefined;
     for (let attempt = 0; attempt < 100 && pid === undefined; attempt += 1) {
@@ -253,7 +362,7 @@ integration("canonical schema installation", () => {
     await expect(
       install(
         undefined,
-        "CREATE TABLE public.partial(id int); SELECT pg_sleep(1)",
+        "CREATE TABLE kokoro_billing.partial(id int); SELECT pg_sleep(1)",
         1_000,
         100,
       ),
