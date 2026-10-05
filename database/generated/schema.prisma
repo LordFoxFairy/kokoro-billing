@@ -335,6 +335,32 @@ model billing_feature_price_revision {
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model billing_metering_policy_revision {
+  id                                  String   @id @db.Uuid
+  tenant_id                           String   @db.VarChar(191)
+  revision                            BigInt
+  schema_version                      Int
+  effective_from                      DateTime @db.Timestamptz(3)
+  source_ref                          String   @db.VarChar(255)
+  verified_at                         DateTime @db.Timestamptz(3)
+  profile_version                     String   @db.VarChar(255)
+  profile_artifact_digest             String   @db.Char(64)
+  currency_code                       String   @db.Char(3)
+  multiplier_numerator                Decimal  @db.Decimal(78, 0)
+  multiplier_denominator              Decimal  @db.Decimal(78, 0)
+  credit_micros_per_minor_numerator   Decimal  @db.Decimal(78, 0)
+  credit_micros_per_minor_denominator Decimal  @db.Decimal(78, 0)
+  rounding_version                    String   @db.VarChar(64)
+  failure_policy_version              String   @db.VarChar(255)
+  failure_policy_artifact_digest      String   @db.Char(64)
+  content_digest                      String   @db.Char(64)
+  published_at                        DateTime @db.Timestamptz(3)
+
+  @@unique([tenant_id, revision], map: "uq_billing_metering_policy_revision_number")
+  @@index([tenant_id, effective_from(sort: Desc), revision(sort: Desc)], map: "ix_billing_metering_policy_revision_effective")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model billing_metering_rate {
   id                         String  @id @db.Uuid
   tenant_id                  String  @db.VarChar(191)

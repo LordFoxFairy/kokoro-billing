@@ -806,3 +806,45 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_billing_metering_rate_ordinal
   ON billing_metering_rate (tenant_id, revision, ordinal);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_billing_metering_rate_business_key
   ON billing_metering_rate (tenant_id, revision, business_key_digest);
+
+CREATE TABLE IF NOT EXISTS billing_metering_policy_revision (
+  id UUID NOT NULL PRIMARY KEY,
+  tenant_id VARCHAR(191) NOT NULL,
+  revision BIGINT NOT NULL,
+  schema_version INTEGER NOT NULL,
+  effective_from TIMESTAMPTZ(3) NOT NULL,
+  source_ref VARCHAR(255) NOT NULL,
+  verified_at TIMESTAMPTZ(3) NOT NULL,
+  profile_version VARCHAR(255) NOT NULL,
+  profile_artifact_digest CHAR(64) NOT NULL,
+  currency_code CHAR(3) NOT NULL,
+  multiplier_numerator NUMERIC(78,0) NOT NULL,
+  multiplier_denominator NUMERIC(78,0) NOT NULL,
+  credit_micros_per_minor_numerator NUMERIC(78,0) NOT NULL,
+  credit_micros_per_minor_denominator NUMERIC(78,0) NOT NULL,
+  rounding_version VARCHAR(64) NOT NULL,
+  failure_policy_version VARCHAR(255) NOT NULL,
+  failure_policy_artifact_digest CHAR(64) NOT NULL,
+  content_digest CHAR(64) NOT NULL,
+  published_at TIMESTAMPTZ(3) NOT NULL,
+  CONSTRAINT ck_billing_metering_policy_revision_number CHECK (revision > 0),
+  CONSTRAINT ck_billing_metering_policy_revision_schema CHECK (schema_version = 1),
+  CONSTRAINT ck_billing_metering_policy_revision_tenant CHECK (char_length(tenant_id) >= 1),
+  CONSTRAINT ck_billing_metering_policy_revision_source CHECK (char_length(source_ref) >= 1),
+  CONSTRAINT ck_billing_metering_policy_revision_profile CHECK (char_length(profile_version) >= 1),
+  CONSTRAINT ck_billing_metering_policy_revision_failure_version CHECK (char_length(failure_policy_version) >= 1),
+  CONSTRAINT ck_billing_metering_policy_revision_rounding CHECK (char_length(rounding_version) >= 1),
+  CONSTRAINT ck_billing_metering_policy_revision_profile_digest CHECK (profile_artifact_digest ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT ck_billing_metering_policy_revision_failure_digest CHECK (failure_policy_artifact_digest ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT ck_billing_metering_policy_revision_content_digest CHECK (content_digest ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT ck_billing_metering_policy_revision_currency CHECK (currency_code ~ '^[A-Z]{3}$'),
+  CONSTRAINT ck_billing_metering_policy_revision_multiplier_numerator CHECK (multiplier_numerator > 0),
+  CONSTRAINT ck_billing_metering_policy_revision_multiplier_denominator CHECK (multiplier_denominator > 0),
+  CONSTRAINT ck_billing_metering_policy_revision_credit_numerator CHECK (credit_micros_per_minor_numerator > 0),
+  CONSTRAINT ck_billing_metering_policy_revision_credit_denominator CHECK (credit_micros_per_minor_denominator > 0)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_billing_metering_policy_revision_number
+  ON billing_metering_policy_revision (tenant_id, revision);
+CREATE INDEX IF NOT EXISTS ix_billing_metering_policy_revision_effective
+  ON billing_metering_policy_revision (tenant_id, effective_from DESC, revision DESC);

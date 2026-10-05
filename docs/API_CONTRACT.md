@@ -1,3 +1,21 @@
+## R243验证快照：API边界（2026-10-05）
+
+本切片冻结候选记录 `billing_metering_policy_revision` 的 19 列普通列、canonical 35 表与 SQL SHA-256 `926787608b9ce0faafb6cdb754df3a28407f1e271d4d00bdad6c342db1ab0c0d`，正常 Prisma 派生保持对齐。验证证据为 117 项真实 PostgreSQL、1,361 项辅助检查及 11 门（manifest `/var/folders/gn/wbk8wfbd047_wvwkwtyn331r0000gn/T/kokoro-r243-billing-policy-full-ic4dfmc6/manifest.json`）。新的 policy publication/joint selection→quote→逐attempt许可→预占/实际用量结算释放/流水用户旅程尚未接通；现阶段只覆盖 SQL 持久化前置，不新增 API。既有旧组件的存在不计为这条新链通过。验证基线为 `e5d83db0` + 本切片冻结候选；本记录不证明 Git 发布、当前 3310 运行组合或费用整链。
+
+## R241：Billing包内policy artifact与joint pricing seam（无OpenAPI变化，尚未实现）
+
+当前正式`main@e5d83db0b3af894cf1ae413849cc6153f789bcdb`的experimental v2 OpenAPI与24 operation不变。本片不新增/修改public或internal-owner HTTP operation、request/response/error schema、generated HTTP artifact或`metering.public.ts` export；旧generic Admission/caller `actualMicros`不被本片认可为新收费入口，也不在本片扩展。
+
+唯一新增机器事实是Billing-owned `contract/metering-policy/v1/policy.json`及其校验闭集。`policy.json`为单一可编辑源，closed字段精确为：`artifact_version`、`completed`、`failed_or_cancelled`、`not_dispatched`、`unknown_or_incomplete`；值分别固定为`1.0.0`、`capture_verified_actual_only`、`capture_verified_actual_only`、`release_confirmed_unused`、`pending_reconciliation`。未知/缺失/额外字段、非string、非精确值、坏UTF-8均拒绝。schema/vectors/manifest只验证并固定该源，不提供第二套可编辑policy。
+
+包内`MeteringPolicyRevisionDraft`沿现canonical codec，不复制HTTP DTO。`profileRef`精确绑定Agent usage normalization artifact：version=`1.0.0`，artifactDigest=`ecd30d1908f410eed29181c9f52669f824312bf3a2e3874153d990b95fe58b91`（owner manifest.aggregate_sha256）；不得使用usage schema SHA、manifest文件SHA、相对sibling文件或调用方自报替代。`failurePolicyRef`则使用Billing policy artifact version与`policy.json`原UTF-8 bytes SHA-256；两类digest语义不得互换。
+
+包内publication command继续使用现closed command语义，policy command name固定`metering.publish_policy_revision`，与rate receipt identity/key命名域独立。policy永久result为closed七字段exact `{schemaVersion:1,kind:"policy",tenantId,revision,contentDigest,publishedAt,effectiveFrom}`；现rate `kind:"rate"`七字段及其bytes不变。共享现result codec通过调用方传入的expected kind做discriminated decode；每个receipt replay必须匹配原command exact kind，cross-kind fail closed。不得新增`replayed`、profile、倍率、金额或HTTP字段。strict replay返回原policy publication result，不读取latest替换；同identity漂移或同key换identity冲突。包内joint selection替换现无消费者的rate-only selection，不保兼容alias；它只返回已验证immutable rate+policy facts，不是quote、grant、Admission、hold或结算许可。
+
+7/5是Billing可发布倍率而非默认常量；可执行publication要求multiplier和currency→Credit换算均strict positive。真实换算/价格未给时只允许明确synthetic QA，不激活生产policy。actual-only、not-dispatched确认释放与unknown pending只是fixed artifact语义；本片不实现capture/release状态机，不因artifact存在声称费用闭环。
+
+---
+
 ## R232：Rate selection 最终契约证据（2026-10-04）
 
 本轮仅确认现有 module-private `selectActiveRates` 内部边界及错误分类落地证据，不新增 HTTP/OpenAPI、public export 或跨仓 artifact。Root 首轮真实 RED 为 1 fail/21 pass，修正为最小 canonical encode 窄 catch 后，最终十步骤全部 exit 0：9 个真实 PostgreSQL 文件 115 项、39 个纯门/辅助文件 1361 项；source/derived/database collection 保持，独审 `/tmp/r231-billing-selection-final-review.md` 为 P0/P1/P2 全 0。

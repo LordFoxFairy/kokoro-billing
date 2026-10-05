@@ -1,3 +1,36 @@
+## R243验证快照：canonical持久化前置（2026-10-05）
+
+本切片冻结候选记录 `billing_metering_policy_revision` 的 19 列普通列、canonical 35 表与 SQL SHA-256 `926787608b9ce0faafb6cdb754df3a28407f1e271d4d00bdad6c342db1ab0c0d`，正常 Prisma 派生保持对齐。验证证据为 117 项真实 PostgreSQL、1,361 项辅助检查及 11 门（manifest `/var/folders/gn/wbk8wfbd047_wvwkwtyn331r0000gn/T/kokoro-r243-billing-policy-full-ic4dfmc6/manifest.json`）。这里只记录 SQL 持久化前置；新的 policy publication/joint selection→quote→逐attempt许可→预占/实际用量结算释放/流水用户旅程尚未接通。既有旧组件的存在不计为这条新链通过。验证基线为 `e5d83db0` + 本切片冻结候选；本记录不证明 Git 发布、当前 3310 运行组合或费用整链。
+
+## R241：Metering policy revision 单表（设计门，尚未实现）
+
+当前正式`main@e5d83db0b3af894cf1ae413849cc6153f789bcdb`只有`billing_metering_rate_revision`与`billing_metering_rate`；policy表尚不存在。本片只新增`billing_metering_policy_revision`一张immutable ordinary-column表，不新增snapshot、Admission、evidence inbox、hold、settlement、reconcile、ledger或第二资金账。
+
+最小列：
+
+|列|语义|
+|---|---|
+|`id UUID`|本地policy revision资源身份|
+|`tenant_id VARCHAR(191)`、`revision BIGINT`|tenant内正数单调revision|
+|`schema_version INTEGER`|固定1，`CHECK (schema_version = 1)`|
+|`effective_from TIMESTAMPTZ(3)`、`published_at TIMESTAMPTZ(3)`|生效与发布DB时间分离|
+|`source_ref VARCHAR(255)`、`verified_at TIMESTAMPTZ(3)`|政策来源与核验时刻|
+|`profile_version VARCHAR(255)`、`profile_artifact_digest CHAR(64)`|Agent usage normalization artifact version + manifest aggregate|
+|`currency_code CHAR(3)`|与joint rate binding单一currency匹配|
+|`multiplier_numerator NUMERIC(78,0)`、`multiplier_denominator NUMERIC(78,0)`|可配置销售倍率，执行policy严格正且应用层验证约分|
+|`credit_micros_per_minor_numerator NUMERIC(78,0)`、`..._denominator NUMERIC(78,0)`|显式现金minor→Credit micros换算，执行policy严格正且约分|
+|`rounding_version VARCHAR(64)`|固定`attempt-ceil-v1`|
+|`failure_policy_version VARCHAR(255)`、`failure_policy_artifact_digest CHAR(64)`|固定Billing policy artifact；digest为`policy.json`精确UTF-8 bytes SHA256|
+|`content_digest CHAR(64)`|完整canonical policy draft内容摘要|
+
+约束：`UNIQUE(tenant_id,revision)`；effective选择索引`(tenant_id,effective_from DESC,revision DESC)`；revision/schema/digest/currency/text/rational正值与时间精度按现SQL规范约束。gcd=1、canonical instant、artifact pin与完整content digest由应用重建验证，SQL不复制JSON。无default row、nullable failure policy、JSON policy、trigger、FK或自动TTL；publication/replay依赖现永久receipt/audit而不把它们复制进本表。
+
+publication root事务锁tenant policy generation，分配revision并插policy row、audit与receipt同commit。exact replay完整读取普通列重建`MeteringPolicyRevisionDraft`，canonical re-encode核digest与原result，零更新。selection在caller同tenant write transaction内与rate共用一次`CURRENT_TIMESTAMP(3)`；无active policy=`METERING_POLICY_UNAVAILABLE`，已持久unsupported ref/digest或row/canonical漂移=`METERING_POLICY_CORRUPT`。future revision不提前生效，不回退旧revision拼接可用组合。
+
+本片金额字段仅是policy参数，没有quote/authorized/captured/released余额事实；真实换算未批准前不插生产policy。actual-only与unknown pending不在本表形成执行状态。
+
+---
+
 ## R232：Rate selection 数据边界与最终证据（2026-10-04）
 
 本轮没有新增或修改 canonical schema、表、索引、generated 产物或数据库集合。selector 只在调用者现有同 tenant write transaction 内读取并复用 `billing_metering_rate_revision`/`billing_metering_rate` 的 strict canonical 重建；最小 canonical encode 窄 catch 只把持久 canonical drift 分类为 `METERING_RATE_CORRUPT`，不会吞掉真实 PostgreSQL/transaction firstCause，也不产生 receipt、audit、Credit 或资金写入。

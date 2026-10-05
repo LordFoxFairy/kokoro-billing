@@ -1,3 +1,11 @@
+## R243 当前验证快照（2026-10-05）
+
+本切片在e5d83db0基线上新增canonical ordinary `billing_metering_policy_revision`十九列及约束/索引，总表35，并沿正规Prisma流水线派生；SQL SHA926787608b9ce0faafb6cdb754df3a28407f1e271d4d00bdad6c342db1ab0c0d。Root实际11门全0，真实PG117pass/0fail/0skip、辅助1361pass/0fail，收据`/var/folders/gn/wbk8wfbd047_wvwkwtyn331r0000gn/T/kokoro-r243-billing-policy-full-ic4dfmc6/manifest.json`，source/derived/邻库保持。原113/4失败历史与四test精确修正保留在Root progress。
+
+仅SQL持久化前置，不新增HTTP/资金writer，不证明当前3310运行组合或收费旅程通过。后续policy publication/joint rate+policy selection→quote→逐attempt许可→预占/核实用量结算释放/流水用户旅程仍OPEN；旧组件存在不替代新链验收。部署、支付渠道后置，原五混合文档工作树保留。
+
+---
+
 ## R232：Rate selection 最终 Root 证据与交接状态（2026-10-04）
 
 R231 module-private rate selection 已完成 Root 最终候选验收：真实 RED 1 fail/21 pass 收敛为最小 canonical encode 错误分类后，最终十步骤全部 exit 0；9 个真实 PostgreSQL 文件 115 项、39 个纯门/辅助文件 1361 项通过。manifest：`/var/folders/gn/wbk8wfbd047_wvwkwtyn331r0000gn/T/kokoro-r231-billing-final-qz_5w_d3/manifest.json`；source、derived、owned database collection 保持；独审 `/tmp/r231-billing-selection-final-review.md`：P0=0/P1=0/P2=0。

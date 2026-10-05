@@ -1,3 +1,35 @@
+## R243验证快照：policy持久化前置（2026-10-05）
+
+本切片冻结候选记录 `billing_metering_policy_revision` 的 19 列普通列、canonical 35 表与 SQL SHA-256 `926787608b9ce0faafb6cdb754df3a28407f1e271d4d00bdad6c342db1ab0c0d`，正常 Prisma 派生保持对齐。验证证据为 117 项真实 PostgreSQL、1,361 项辅助检查及 11 门（manifest `/var/folders/gn/wbk8wfbd047_wvwkwtyn331r0000gn/T/kokoro-r243-billing-policy-full-ic4dfmc6/manifest.json`）。这只是 SQL 持久化前置；新的 policy publication/joint selection→quote→逐attempt许可→预占/实际用量结算释放/流水用户旅程尚未接通。既有旧组件的存在不计为这条新链通过。验证基线为 `e5d83db0` + 本切片冻结候选；本记录不证明 Git 发布、当前 3310 运行组合或费用整链。
+
+## R241：Metering policy publication 与 joint active pricing selection（设计门，尚未实现）
+
+当前正式基线 `main@e5d83db0b3af894cf1ae413849cc6153f789bcdb` 已交付 module-private rate publication、canonical rate 两表及 active rate selection；policy publication、policy表、joint quote、Admission、Credit hold、actual evidence消费与结算/释放仍未实现。本片只实现 Billing Metering owner 的固定failure-policy artifact、immutable policy publication，以及同一transaction/同一DB时钟的 joint rate+policy selection；不新增HTTP、资金事实、第二费率、通用policy engine或跨owner读取。
+
+### §8 放置表
+
+|项|R241裁决|
+|---|---|
+|Owner|`kokoro-billing/src/modules/metering`唯一拥有销售倍率、currency→Credit换算、attempt舍入与失败/取消/unknown收费policy publication。Agent继续唯一拥有attempt、dispatch与strict usage evidence。|
+|当前事实|现`metering-pricing-revision.types/codec`已能canonical encode policy draft，但现publication service/repository/result只实现rate；schema只有rate revision/rate两表；现selector只选rate且无生产消费者；legacy quote/admission与caller `actualMicros`不是目标依赖。|
+|目标职责|发布不可变、tenant-scoped、effective-dated policy revision；在调用者现write transaction内取一次PostgreSQL `CURRENT_TIMESTAMP(3)`，选择并完整验证latest effective rate与policy，再按现完整binding/request匹配rate。只返回joint内部pricing facts，不计算quote、不预占/结算。|
+|目录方案|采用扩展现publication service、revision repository、publication result codec、pricing selection types/service与module；它们已拥有相同canonical publication/replay/rebuild与selection职责。新增唯一机器artifact目录`contract/metering-policy/v1/`，其中`policy.json`是单一可编辑规则源，schema/vectors/manifest只校验。淘汰新policy module/repository、独立policy selector、legacy quote扩展与通用policy engine。|
+|粒度|artifact四文件有持续的发布/校验/provenance职责，不新建运行模块。现selector clean-slate收敛为joint selection，不保留`selectActiveRates`兼容alias；所有既有rate业务断言迁移保留。|
+|依赖|允许TransactionService、CommandReceiptRepository、AuditAppender、现pricing codec/types/repository/error及本仓固定artifact parser。禁止Agent sibling import、System DTO、legacy quote、Credit、HTTP/generated、caller金额、任意JSON表达式或跨owner数据库。|
+|数据/API|新增一张ordinary-column `billing_metering_policy_revision`表及实际unique/effective索引；正规派生Prisma。无OpenAPI/public export、snapshot、Admission、hold、ledger、settlement、Redis或outbox。|
+|删除项|不新增default/free/fallback/dual-read；不新独立selector。legacy admission/actualMicros待正式Admission cutover同片删除，本片不提前删有效旧路径。|
+|验证|首个RED只检查fresh canonical schema catalog缺policy表及closed列/约束/索引，且现rate事实不变；不调用缺失方法、不用future import、404或mock SQL造RED。GREEN后真实Nest+PG覆盖publication/replay/concurrency/corruption/rollback与joint DB-time selection；synthetic金额只验机制，不冒生产价格。|
+
+固定Agent normalization profile引用为 owner正式 usage artifact 的`artifact_version + manifest.aggregate_sha256`，不是schema SHA或manifest文件SHA。当前只允许Agent `cb64537048d34ce6db5bea5f2e12e182ba88092c` usage/v1 `1.0.0`、aggregate `ecd30d1908f410eed29181c9f52669f824312bf3a2e3874153d990b95fe58b91`；未来consumer必须固定owner发布出处并经artifact治理更新，runtime/build不得相对读取sibling checkout。
+
+Billing failure policy唯一可编辑规则源为`contract/metering-policy/v1/policy.json`：`artifact_version="1.0.0"`，`completed`与`failed_or_cancelled`均为`capture_verified_actual_only`，`not_dispatched="release_confirmed_unused"`，`unknown_or_incomplete="pending_reconciliation"`。`schema.json`固定closed parser，`vectors.json`含正反例，`manifest.json`列文件digest/provenance；后三者不形成第二规则源。`failurePolicyRef.version`精确匹配artifact version，`artifactDigest`精确等于`policy.json`原UTF-8 bytes SHA-256，不用manifest aggregate。文件hash只证明固定字节，不授业务权限。
+
+pure draft codec继续允许`failurePolicyRef:null`表达pending/nonexecutable草稿，也不改变其已有nonnegative rational语法；可执行publication另做严格门：failurePolicyRef必须非null且受支持，multiplier与creditMicrosPerMinor均须strict `>0`、约分、正分母。首个批准倍率值为可配置`7/5`，不是代码fallback；真实换算值未提供，只阻断生产policy激活，不阻断明确synthetic机制QA。publication输入null/unsupported在写前拒绝；持久row出现unsupported ref或digest漂移是`METERING_POLICY_CORRUPT`；无active policy是`METERING_POLICY_UNAVAILABLE`。 policy永久publication result严格沿现七字段，仅为`{schemaVersion:1,kind:"policy",tenantId,revision,contentDigest,publishedAt,effectiveFrom}`；现rate `kind:"rate"`七字段bytes保持不变。共享现result codec以调用方传入的expected kind做discriminated decode，receipt replay必须匹配原command的exact kind并拒cross-kind；不增加`replayed`、profile、倍率、金额或HTTP字段。
+
+joint selector要求caller现tenant write transaction；repository只取一次DB时间，分别选择`effective_from<=dbNow`的rate/policy `(effective_from DESC, revision DESC)`首项。两revision必须同时匹配请求`profileRef`，policy currency必须等于所选完整rate binding currency；不搜索旧revision拼接组合。rate重建/匹配的全部现保障保留；policy从ordinary columns重建完整draft、canonical re-encode并核content digest、profile与failure artifact。结果只增加policy revision/content、multiplier、conversion、rounding与failurePolicyRef，不含金额、bounded usage、授权或资金动作。
+
+---
+
 ## R232：Rate selection 最终交付证据（2026-10-04）
 
 R231 已把 module-private rate selection 的六路径候选收敛为最小 canonical encode 错误分类：Root 真实 RED 1 fail/21 pass 后，窄 catch 仅覆盖纯本地 canonical encode，GREEN 时保留 query/transaction 的原始 firstCause 与 rollback 语义。最终 Root manifest `/var/folders/gn/wbk8wfbd047_wvwkwtyn331r0000gn/T/kokoro-r231-billing-final-qz_5w_d3/manifest.json` 十个步骤全部 exit 0；9 个真实 PostgreSQL 文件 115 项通过，39 个纯门/辅助文件 1361 项通过，source、generated、owned database collection 均保持不变，独审 `/tmp/r231-billing-selection-final-review.md` 为 P0=0/P1=0/P2=0。

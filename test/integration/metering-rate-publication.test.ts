@@ -1878,3 +1878,395 @@ integration("R230 active metering rate selection", () => {
     expect(restored.rates[0]?.rate.minorPerUnit.numerator).toBe("1");
   });
 });
+
+describe.skipIf(adminUrl === undefined)("R241 policy catalog RED", () => {
+  let fixture: PrismaDatabaseFixture | undefined;
+
+  beforeEach(async () => {
+    fixture = await createPrismaDatabaseFixture(assertDefined(adminUrl));
+  });
+
+  afterEach(async () => {
+    await fixture?.close();
+    fixture = undefined;
+  });
+
+  const pool = () => assertDefined(fixture).pool;
+
+  test("keeps the rate relation as a positive control and requires policy relation", async () => {
+    const relations = await pool().query<{
+      schemaName: string;
+      relationName: string;
+      relationKind: string;
+    }>(
+      `SELECT n.nspname AS "schemaName",c.relname AS "relationName",
+              c.relkind::text AS "relationKind"
+         FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+        WHERE n.nspname='public'
+          AND c.relname IN ('billing_metering_rate_revision',
+                            'billing_metering_rate',
+                            'billing_metering_policy_revision')
+        ORDER BY CASE c.relname
+                   WHEN 'billing_metering_rate_revision' THEN 1
+                   WHEN 'billing_metering_rate' THEN 2
+                   ELSE 3 END`,
+    );
+    expect(
+      relations.rows.filter(({ relationName }) =>
+        relationName.startsWith("billing_metering_rate"),
+      ),
+    ).toEqual([
+      {
+        schemaName: "public",
+        relationName: "billing_metering_rate_revision",
+        relationKind: "r",
+      },
+      {
+        schemaName: "public",
+        relationName: "billing_metering_rate",
+        relationKind: "r",
+      },
+    ]);
+    expect(
+      relations.rows.filter(
+        ({ relationName }) =>
+          relationName === "billing_metering_policy_revision",
+      ),
+      "policy relation is the intended catalog RED, after rate positive control",
+    ).toEqual([
+      {
+        schemaName: "public",
+        relationName: "billing_metering_policy_revision",
+        relationKind: "r",
+      },
+    ]);
+  });
+
+  test("requires the closed policy columns, constraints, indexes and owner protections", async () => {
+    const columns = await pool().query<{
+      columnName: string;
+      dataType: string;
+      isNullable: "YES" | "NO";
+      characterMaximumLength: number | null;
+      numericPrecision: number | null;
+      numericScale: number | null;
+      datetimePrecision: number | null;
+      columnDefault: string | null;
+      isGenerated: string;
+      identityGeneration: string | null;
+    }>(
+      `SELECT column_name AS "columnName",data_type AS "dataType",
+              is_nullable AS "isNullable",character_maximum_length AS "characterMaximumLength",
+              numeric_precision AS "numericPrecision",numeric_scale AS "numericScale",
+              datetime_precision AS "datetimePrecision",column_default AS "columnDefault",
+              is_generated AS "isGenerated",identity_generation AS "identityGeneration"
+         FROM information_schema.columns
+        WHERE table_schema='public'
+          AND table_name='billing_metering_policy_revision'
+        ORDER BY ordinal_position`,
+    );
+    const expectedColumns = [
+      ["id", "uuid", "NO", null, null, null, null],
+      ["tenant_id", "character varying", "NO", 191, null, null, null],
+      ["revision", "bigint", "NO", null, 64, 0, null],
+      ["schema_version", "integer", "NO", null, 32, 0, null],
+      ["effective_from", "timestamp with time zone", "NO", null, null, null, 3],
+      ["source_ref", "character varying", "NO", 255, null, null, null],
+      ["verified_at", "timestamp with time zone", "NO", null, null, null, 3],
+      ["profile_version", "character varying", "NO", 255, null, null, null],
+      ["profile_artifact_digest", "character", "NO", 64, null, null, null],
+      ["currency_code", "character", "NO", 3, null, null, null],
+      ["multiplier_numerator", "numeric", "NO", null, 78, 0, null],
+      ["multiplier_denominator", "numeric", "NO", null, 78, 0, null],
+      ["credit_micros_per_minor_numerator", "numeric", "NO", null, 78, 0, null],
+      [
+        "credit_micros_per_minor_denominator",
+        "numeric",
+        "NO",
+        null,
+        78,
+        0,
+        null,
+      ],
+      ["rounding_version", "character varying", "NO", 64, null, null, null],
+      [
+        "failure_policy_version",
+        "character varying",
+        "NO",
+        255,
+        null,
+        null,
+        null,
+      ],
+      [
+        "failure_policy_artifact_digest",
+        "character",
+        "NO",
+        64,
+        null,
+        null,
+        null,
+      ],
+      ["content_digest", "character", "NO", 64, null, null, null],
+      ["published_at", "timestamp with time zone", "NO", null, null, null, 3],
+    ].map(
+      ([
+        columnName,
+        dataType,
+        isNullable,
+        characterMaximumLength,
+        numericPrecision,
+        numericScale,
+        datetimePrecision,
+      ]) => ({
+        columnName,
+        dataType,
+        isNullable,
+        characterMaximumLength,
+        numericPrecision,
+        numericScale,
+        datetimePrecision,
+        columnDefault: null,
+        isGenerated: "NEVER",
+        identityGeneration: null,
+      }),
+    );
+
+    const relations = await pool().query<{
+      schemaName: string;
+      relationName: string;
+      relationKind: string;
+      ownerName: string;
+      rowSecurity: boolean;
+      forceRowSecurity: boolean;
+    }>(
+      `SELECT n.nspname AS "schemaName",c.relname AS "relationName",
+              c.relkind::text AS "relationKind",pg_get_userbyid(c.relowner) AS "ownerName",
+              c.relrowsecurity AS "rowSecurity",c.relforcerowsecurity AS "forceRowSecurity"
+         FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+        WHERE n.nspname='public'
+          AND c.relname IN ('billing_metering_rate_revision',
+                            'billing_metering_policy_revision')
+        ORDER BY c.relname`,
+    );
+    const rateOwner = relations.rows.find(
+      ({ relationName }) => relationName === "billing_metering_rate_revision",
+    )?.ownerName;
+    const policyRelation = relations.rows.find(
+      ({ relationName }) => relationName === "billing_metering_policy_revision",
+    );
+
+    const constraints = await pool().query<{
+      name: string;
+      kind: string;
+      definition: string;
+    }>(
+      `SELECT k.conname AS name,k.contype AS kind,
+              pg_get_constraintdef(k.oid,false) AS definition
+         FROM pg_constraint k
+         JOIN pg_class c ON c.oid=k.conrelid
+         JOIN pg_namespace n ON n.oid=c.relnamespace
+        WHERE n.nspname='public'
+          AND c.relname='billing_metering_policy_revision'
+          AND k.contype<>'n'
+        ORDER BY k.contype,k.conname`,
+    );
+    const normalize = (definition: string) =>
+      definition
+        .split(/('(?:''|[^'])*')/gu)
+        .map((fragment, index) =>
+          index % 2 === 1
+            ? fragment
+            : fragment
+                .toLowerCase()
+                .replace(/::(?:text|bigint|numeric|integer|smallint)/gu, "")
+                .replace(/^check/iu, "")
+                .replace(/[\s()]/gu, ""),
+        )
+        .join("");
+    const checkDefinitions = constraints.rows
+      .filter(({ kind }) => kind === "c")
+      .map(({ definition }) => normalize(definition))
+      .sort();
+    const requiredCheckTerms = [
+      "revision>0",
+      "schema_version=1",
+      "char_length(tenant_id)>=1",
+      "char_length(source_ref)>=1",
+      "char_length(profile_version)>=1",
+      "char_length(failure_policy_version)>=1",
+      "char_length(rounding_version)>=1",
+      "profile_artifact_digest~'^[0-9a-f]{64}$'",
+      "failure_policy_artifact_digest~'^[0-9a-f]{64}$'",
+      "content_digest~'^[0-9a-f]{64}$'",
+      "currency_code~'^[A-Z]{3}$'",
+      "multiplier_numerator>0",
+      "multiplier_denominator>0",
+      "credit_micros_per_minor_numerator>0",
+      "credit_micros_per_minor_denominator>0",
+    ];
+
+    const indexes = await pool().query<{
+      name: string;
+      unique: boolean;
+      accessMethod: string;
+      valid: boolean;
+      ready: boolean;
+      indnkeyatts: number;
+      indnatts: number;
+      indexprs: string | null;
+      keys: string[];
+      options: number[];
+      predicate: string | null;
+    }>(
+      `SELECT c.relname AS "name",i.indisunique AS "unique",
+              am.amname AS "accessMethod",i.indisvalid AS "valid",
+              i.indisready AS "ready",i.indnkeyatts AS "indnkeyatts",
+              i.indnatts AS "indnatts",pg_get_expr(i.indexprs,i.indrelid) AS "indexprs",
+              ARRAY(SELECT a.attname::text
+                      FROM unnest(i.indkey) WITH ORDINALITY k(attnum,ord)
+                      JOIN pg_attribute a ON a.attrelid=i.indrelid AND a.attnum=k.attnum
+                     WHERE k.ord<=i.indnkeyatts ORDER BY k.ord) AS "keys",
+              ARRAY(SELECT option::int FROM unnest(i.indoption) WITH ORDINALITY o(option,ord)
+                     WHERE o.ord<=i.indnkeyatts ORDER BY o.ord) AS "options",
+              pg_get_expr(i.indpred,i.indrelid) AS "predicate"
+         FROM pg_index i
+         JOIN pg_class c ON c.oid=i.indexrelid
+         JOIN pg_am am ON am.oid=c.relam
+         JOIN pg_class t ON t.oid=i.indrelid
+         JOIN pg_namespace n ON n.oid=t.relnamespace
+        WHERE n.nspname='public'
+          AND t.relname='billing_metering_policy_revision'
+          AND NOT EXISTS (SELECT 1 FROM pg_constraint p
+                           WHERE p.conindid=i.indexrelid AND p.contype='p')
+        ORDER BY c.relname`,
+    );
+    const triggers = await pool().query<{ name: string }>(
+      `SELECT t.tgname AS name
+         FROM pg_trigger t
+         JOIN pg_class c ON c.oid=t.tgrelid
+         JOIN pg_namespace n ON n.oid=c.relnamespace
+        WHERE n.nspname='public'
+          AND c.relname='billing_metering_policy_revision'
+          AND NOT t.tgisinternal
+        ORDER BY t.tgname`,
+    );
+    const rules = await pool().query<{ name: string }>(
+      `SELECT rulename AS name
+         FROM pg_rules
+        WHERE schemaname='public' AND tablename='billing_metering_policy_revision'
+        ORDER BY rulename`,
+    );
+    const policies = await pool().query<{ name: string }>(
+      `SELECT p.polname AS name
+         FROM pg_policy p
+         JOIN pg_class c ON c.oid=p.polrelid
+         JOIN pg_namespace n ON n.oid=c.relnamespace
+        WHERE n.nspname='public' AND c.relname='billing_metering_policy_revision'
+        ORDER BY p.polname`,
+    );
+    const foreignKeys = await pool().query<{ name: string }>(
+      `SELECT k.conname AS name
+         FROM pg_constraint k
+         JOIN pg_class c ON c.oid=k.conrelid
+         JOIN pg_namespace n ON n.oid=c.relnamespace
+        WHERE n.nspname='public'
+          AND c.relname='billing_metering_policy_revision'
+          AND k.contype='f'
+        ORDER BY k.conname`,
+    );
+    const routines = await pool().query<{ name: string }>(
+      `SELECT p.proname AS name
+         FROM pg_proc p
+         JOIN pg_namespace n ON n.oid=p.pronamespace
+        WHERE n.nspname='public'
+          AND EXISTS (
+            SELECT 1
+              FROM pg_depend d
+             WHERE d.classid='pg_proc'::regclass
+               AND d.objid=p.oid
+               AND d.refclassid='pg_class'::regclass
+               AND d.refobjid=(
+                 SELECT c.oid
+                   FROM pg_class c
+                   JOIN pg_namespace ns ON ns.oid=c.relnamespace
+                  WHERE ns.nspname='public'
+                    AND c.relname='billing_metering_policy_revision'
+               )
+          )
+        ORDER BY p.proname`,
+    );
+
+    expect({
+      columns: columns.rows,
+      relation: policyRelation
+        ? {
+            schemaName: policyRelation.schemaName,
+            relationKind: policyRelation.relationKind,
+            ownerMatchesRate: policyRelation.ownerName === rateOwner,
+            rowSecurity: policyRelation.rowSecurity,
+            forceRowSecurity: policyRelation.forceRowSecurity,
+          }
+        : null,
+      constraints: constraints.rows
+        .filter(({ kind }) => kind !== "c")
+        .map(({ name, kind }) => ({ name, kind })),
+      primaryKeyDefinition:
+        constraints.rows.find(({ kind }) => kind === "p")?.definition ?? null,
+      checkDefinitions,
+      indexes: indexes.rows,
+      triggers: triggers.rows,
+      rules: rules.rows,
+      policies: policies.rows,
+      foreignKeys: foreignKeys.rows,
+      routines: routines.rows,
+    }).toEqual({
+      columns: expectedColumns,
+      relation: {
+        schemaName: "public",
+        relationKind: "r",
+        ownerMatchesRate: true,
+        rowSecurity: false,
+        forceRowSecurity: false,
+      },
+      constraints: [
+        { name: "billing_metering_policy_revision_pkey", kind: "p" },
+      ],
+      primaryKeyDefinition: "PRIMARY KEY (id)",
+      checkDefinitions: requiredCheckTerms.map(normalize).sort(),
+      indexes: [
+        {
+          name: "ix_billing_metering_policy_revision_effective",
+          unique: false,
+          accessMethod: "btree",
+          valid: true,
+          ready: true,
+          indnkeyatts: 3,
+          indnatts: 3,
+          indexprs: null,
+          keys: ["tenant_id", "effective_from", "revision"],
+          options: [0, 3, 3],
+          predicate: null,
+        },
+        {
+          name: "uq_billing_metering_policy_revision_number",
+          unique: true,
+          accessMethod: "btree",
+          valid: true,
+          ready: true,
+          indnkeyatts: 2,
+          indnatts: 2,
+          indexprs: null,
+          keys: ["tenant_id", "revision"],
+          options: [0, 0],
+          predicate: null,
+        },
+      ],
+      triggers: [],
+      rules: [],
+      policies: [],
+      foreignKeys: [],
+      routines: [],
+    });
+  });
+});
