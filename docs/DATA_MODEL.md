@@ -155,7 +155,7 @@ header、1..64 rates、receipt、audit/result同一root transaction。replay按o
 | `billing_metering_rate_revision` | id/tenant/revision/effective_from/published_at/source_ref/source_verified_at/content_digest/actor audit ref；完整版本append-only。 |
 | `billing_metering_rate` | revision、provider/environment/pricing_account_ref/model/version、usage_profile version/digest、normalization version/digest、category/unit/tier boundaries、currency、约分rate numerator/denominator；随revision一次插入，键与范围唯一。 |
 | `billing_metering_policy_revision` | id/tenant/revision/effective/published、multiplier 7/5、currency→Credit-micros约分换算、rounding_version、quote_validity_ms、failure-policy ref、digest；未决policy不可用于quote。 |
-| `billing_metering_snapshot` | id/tenant、rate/policy revision、planned/actual binding refs+digests、usage profile version/schema digest/owner manifest aggregate、execution bound ref/digest/artifact version/valid_until、normalization/rounding/currency、bounded category count/detail schema version+digest、authorized_micros、valid_until、created_at；immutable。只有bounded tariff明细可strict JSONB，identity/版本/金额/查询字段必须普通列。 |
+| `billing_metering_snapshot` | id/tenant、rate/policy revision、planned technical binding ref+digest、Billing本地commercial mapping version、usage profile version/schema digest/owner manifest aggregate、execution bound ref/digest/artifact version/valid_until、normalization/rounding/currency、bounded category count/detail schema version+digest、authorized_micros、valid_until、created_at；immutable。actual attribution只在后继sealed evidence核验后进入usage/settlement事实。只有bounded tariff明细可strict JSONB，identity/版本/金额/查询字段必须普通列。 |
 | replacement `billing_admission` | id/tenant/payer、subject kind/ref、trusted service producer/run/request_ref/call/attempt/ordinal/feature、四独立状态、snapshot/hold、全部profile/binding/bound refs+digests、authorized_micros、valid_until、created/updated与必要reconcile generation/due；不存token/decision_ref/raw owner payload。 |
 | replacement `billing_usage_event` | immutable sealed Agent evidence identity/version/ref/event/revision/digest、同attempt/admission/snapshot/binding、strict normalized actual quantities与exact procurement result；unknown不以0替代。 |
 | replacement `billing_usage_settlement` | 每attempt唯一成功结算：usage/admission/snapshot/hold、actual cost/sales/conversion摘要、charge/released micros、rounding version、Credit journal/result refs、created_at；append-only。 |
@@ -170,11 +170,11 @@ header、1..64 rates、receipt、audit/result同一root transaction。replay按o
 - 四状态各有闭集CHECK及跨列CHECK：started只配authorized；captured/partially_captured要求sealed_known与settlement；released只配confirmed not_dispatched或已结算remainder；unknown/pending_review不得有成功settlement终态。复杂transition仍由锁内service验证，不假装CHECK能代替状态机。
 - snapshot/admission/usage/settlement所有digest为64 lowercase hex；usage profile version/digest固定owner artifact；refs 1..255 Unicode scalar，call/attempt/本地资源UUID。所有金额非负int64；精确比率是`NUMERIC(78,0)`分子/正分母并在应用验证gcd=1。
 - rate/policy按tenant+revision唯一；tariff key覆盖技术binding/category/unit/tier且发布事务检查范围不重叠。无default tariff。新quote仅选published且`effective_from<=db_now`的唯一版本。
-- snapshot `valid_until=min(execution_bound_valid_until, db_now + policy.quote_validity_ms)`且必须大于db_now；其中execution-bound有效期只能来自Agent明确冻结的bound授权有效期，绝不读取或推断System内部route cache TTL。当前System resolve没有context window，Agent model配置也没有可信max output，因此finite bound仍是正式producer实现依赖，本文不宣称已经可生成。Admission复制同一瞬时点便于查询但写入时逐值相等；expiry只阻止未提交create/dispatch，不改已提交authorization_status，也不是自动release依据。
+- snapshot `valid_until=min(execution_bound_valid_until, db_now + policy.quote_validity_ms)`且必须大于db_now；其中execution-bound有效期只能来自Agent明确冻结的bound授权有效期，绝不读取或推断System内部route cache TTL。System 3.0目录现已提供context/output capability metadata，但其provenance只证明来源，不证明所绑定gateway/model对该attempt的计费输入及inclusive类别cap guarantee；在Agent把具名可信guarantee identity与版本/digest、joint constraints及planned技术身份冻结进execution-bound并由唯一reader返回前，finite bound仍不可用于paid Admission，本文不宣称已经可生成。Admission复制同一瞬时点便于查询但写入时逐值相等；expiry只阻止未提交create/dispatch，不改已提交authorization_status，也不是自动release依据。
 - snapshot/Admission/usage/settlement引用无FK，由同一tenant锁内逐项读取和比较；跨owner只存已验证opaque ref/digest，不跨库SQL。
 - snapshot、rate/policy、usage、settlement、receipt/key、Admission identity在承担计费/replay期间无自动TTL/软删除；pending/unknown/dead-letter不清理。
 
-usage profile当前owner机器身份固定为version `1.0.0`、schema digest `eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0`、manifest aggregate `ecd30d1908f410eed29181c9f52669f824312bf3a2e3874153d990b95fe58b91`。planned/execution-bound reader尚无发布artifact，所以canonical成功fixture不得先插入伪ref/digest；待Agent owner发布后，snapshot普通列固定其artifact version/commit/digest并验证canonical bytes，绝不保存Billing自造JSON作为替代。
+usage profile当前owner机器身份固定为version `1.0.0`、schema digest `eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0`、manifest aggregate `ecd30d1908f410eed29181c9f52669f824312bf3a2e3874153d990b95fe58b91`。一次返回planned/bound原始bytes的唯一受认证reader、execution-bound artifact及具名可信capacity guarantee尚未发布，所以canonical成功fixture不得先插入伪ref/digest；待Agent owner发布后，snapshot普通列固定其artifact version/commit/digest并验证canonical bytes，绝不保存Billing自造JSON作为替代。现PlannedBinding闭集没有`provider_account_ref`；commercial environment/pricing account/model pricing version只来自Billing本地显式版本化mapping snapshot，不从planned bytes、名称或credential推导。
 
 ### 事务与访问路径
 
@@ -196,7 +196,7 @@ Capture/Release分别先在事务外读取strict Agent artifact，再在本地�
 - commit ACK lost后原key恢复恰一snapshot/hold；
 - capture/release的known actual、confirmed zero、unknown不释放、重复evidence与settlement/journal唯一。
 
-下一最小writer集以TECH本轮清单为准。没有固定Agent usage artifact与planned/execution-bound正式reader、没有published rate/policy合法数据时，成功Admission fixture不得用mock/default构造；只可保留明确业务RED。
+下一最小writer集以TECH本轮清单为准。固定Agent usage artifact虽已存在，但唯一planned+execution-bound正式reader、execution-bound机器artifact及具名可信capacity guarantee尚未发布；且没有published rate/policy合法数据时，成功Admission fixture不得用mock/default构造，只可保留明确业务RED。
 
 ---
 
