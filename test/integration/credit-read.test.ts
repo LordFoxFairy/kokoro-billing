@@ -238,6 +238,8 @@ describe.skipIf(adminUrl === undefined)("R43 canonical Credit reads", () => {
     const identity = randomUUID();
     // Fixture-only writer in the owned temporary database, not a gift endpoint.
     return production.service.grant({
+      reason:
+        "Allocate isolated credits for personal account and ledger read verification",
       ...context,
       actorId: "fixture-only",
       amountMicros,

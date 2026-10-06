@@ -8,6 +8,7 @@ export type GrantCreditEffectInput = Readonly<{
   subjectId: string;
   amountMicros: bigint;
   sourceKind: string;
+  reason: string;
   sourceRef: string;
   programKey: string;
   effectiveAt: Date;

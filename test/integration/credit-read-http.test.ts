@@ -146,6 +146,8 @@ describe.skipIf(adminUrl === undefined)(
     const seed = (context: CreditReadContext, amountMicros = 100n) => {
       const id = randomUUID();
       return credit.grant({
+        reason:
+          "Allocate isolated credits for authenticated personal credit HTTP verification",
         ...context,
         actorId: "fixture-only",
         amountMicros,

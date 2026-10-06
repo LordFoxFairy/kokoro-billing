@@ -1,3 +1,9 @@
+## R255 01:41：Credit grant reason 内部切片已实施，正式赠送链仍未开放
+
+当前CreditEffect/Command必填reason，保合法原文、Unicode codepoint1–500，拒缺失/空白/NUL/unpaired surrogate；Service在事务/receipt前校验，直接Effects在嵌套事务内校验。reason进入credit.grant/v2 digest、request schema2与audit.reason；同identity原因漂移冲突，exact replay不二次效果。原14直接集成caller显式原因，legacy同名grant未动，无默认或兼容v1。
+
+Root真实隔离PG旧9断言7fail/2pass→现9pass；4现owner集成文件154pass/0fail，另legacy durable-command-receipts因未设DATABASE_URL12skip（不冒通过），前后77数据库catalog exact、五文件冻结一致。Root定向format/lint、全types、临时输出build、SQL/contract门均exit0；独审b44b3aab零P0/P1/P2。本片未切换normal main、未发布admin HTTP/IAM target、不执行正常账户赠送、余额充值或模型调用，不增加完整用户PASS。正式管理员→入账→用户余额→聊天→积分结算仍OPEN，原5mixed文档其余字节保护。证据Root ignored var/dev/r255-preserve/0141-grant-{reason-red.log,reason-probe-green.log,reason-pg-green.log,root-pg-receipt.json}与0141-billing-root-gates.json。
+
 ## R255 当前 IAM profile consumer 已源码接收（2026-10-05）
 
 本提交将两个用户JWT入口统一到同一EdDSA/完整IAM Billing profile verifier；tenant仅namespaced、scope与openid/audience精确联动，时间为安全整数。legacy plain tenant header、personal canonical u1、可信BFF机器五因素与HTTP错误边界保持，无RSA/plain alias fallback；SQL/余额/费用规则未改。

@@ -25,6 +25,19 @@ import type {
   ReserveCreditResult,
 } from "./credit.types.js";
 
+function assertGrantReason(reason: string): void {
+  if (
+    typeof reason !== "string" ||
+    reason.trim().length === 0 ||
+    [...reason].length > 500 ||
+    reason.includes("\u0000") ||
+    /[\uD800-\uDFFF]/u.test(reason)
+  )
+    throw new TypeError(
+      "Grant reason must contain 1–500 valid non-blank characters",
+    );
+}
+
 export class CreditEffects {
   constructor(
     private readonly transactions: TransactionService,
@@ -34,6 +47,7 @@ export class CreditEffects {
   async grant(input: GrantCreditEffectInput): Promise<GrantCreditResult> {
     const active = this.transactions.requireActive(input.tenantId);
     return this.transactions.run(active.scope, async () => {
+      assertGrantReason(input.reason);
       const result = await this.repository.grant(input);
       await this.audit.append({
         tenantId: input.tenantId,
@@ -41,7 +55,7 @@ export class CreditEffects {
         subjectId: input.subjectId,
         resourceType: "credit_grant",
         resourceId: result.grantId,
-        reason: input.sourceKind,
+        reason: input.reason,
         payload: {
           sourceRef: input.sourceRef,
           programKey: input.programKey,
@@ -188,11 +202,13 @@ export class CreditService {
     );
   }
   async grant(input: GrantCreditInput): Promise<GrantCreditResult> {
+    assertGrantReason(input.reason);
     const effect: GrantCreditEffectInput = {
       tenantId: input.tenantId,
       subjectId: input.subjectId,
       amountMicros: input.amountMicros,
       sourceKind: input.sourceKind,
+      reason: input.reason,
       sourceRef: input.sourceRef,
       programKey: input.programKey,
       effectiveAt: input.effectiveAt,
@@ -202,7 +218,7 @@ export class CreditService {
         : { burnPriority: input.burnPriority }),
     };
     const payloadDigest = commandDigest({
-      command: "credit.grant/v1",
+      command: "credit.grant/v2",
       ...effect,
     });
     return this.transactions.runRoot(
@@ -223,7 +239,7 @@ export class CreditService {
                 ? {}
                 : { commandIdentity: input.commandIdentity }),
               idempotencyKey: input.idempotencyKey,
-              requestSchemaVersion: 1,
+              requestSchemaVersion: 2,
               payloadDigest,
             },
             grantResultCodec,

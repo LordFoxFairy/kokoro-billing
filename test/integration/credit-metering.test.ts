@@ -59,6 +59,7 @@ describe.skipIf(adminUrl === undefined)(
 
     const grant = (key = "grant-1") =>
       credit.grant({
+        reason: "Admin credit allocation for metering integration",
         tenantId: "tenant",
         actorId: "operator",
         subjectId: "subject",
@@ -111,6 +112,134 @@ describe.skipIf(adminUrl === undefined)(
       };
     };
 
+    describe("R255 grant reason", () => {
+      const input = (
+        reason = "Approved admin allocation for credit verification",
+      ) => ({
+        tenantId: "tenant",
+        actorId: "operator",
+        subjectId: "reason-subject",
+        amountMicros: 100n,
+        sourceKind: "admin",
+        sourceRef: "reason-source",
+        programKey: "reason-program",
+        effectiveAt: new Date("2026-01-01T00:00:00Z"),
+        reason,
+        idempotencyKey: "reason-key",
+        commandIdentity: "reason-identity",
+      });
+
+      test("persists the exact reason and v2 request digest without duplicate effects on replay", async () => {
+        const request = input("  Approved allocation — 核准 😀  ");
+        const first = await credit.grant(request);
+        const before = await reserveFacts();
+        expect(before.audits).toHaveLength(1);
+        expect(before.audits[0]).toMatchObject({
+          reason: request.reason,
+          operator_id: request.actorId,
+          action: "credit.grant",
+        });
+        expect(before.receipts).toHaveLength(1);
+        expect(before.receipts[0]).toMatchObject({
+          request_schema_version: 2,
+          payload_digest: commandDigest({
+            command: "credit.grant/v2",
+            tenantId: request.tenantId,
+            subjectId: request.subjectId,
+            amountMicros: request.amountMicros,
+            sourceKind: request.sourceKind,
+            reason: request.reason,
+            sourceRef: request.sourceRef,
+            programKey: request.programKey,
+            effectiveAt: request.effectiveAt,
+          }),
+        });
+        expect(await credit.grant(request)).toEqual(first);
+        expect(await reserveFacts()).toEqual(before);
+        expect(
+          await credit.grant({
+            ...request,
+            idempotencyKey: "reason-replay-key",
+          }),
+        ).toEqual(first);
+        const after = await reserveFacts();
+        expect(after.bindings).toHaveLength(before.bindings.length + 1);
+        expect({ ...after, bindings: [] }).toEqual({ ...before, bindings: [] });
+      });
+
+      test.each(["same-key", "new-key"] as const)(
+        "%s rejects reason-only drift without changing durable facts",
+        async (keyMode) => {
+          const request = input();
+          await credit.grant(request);
+          const before = await reserveFacts();
+          await expect(
+            credit.grant({
+              ...request,
+              reason: "A different approval for the same allocation",
+              idempotencyKey:
+                keyMode === "same-key" ? request.idempotencyKey : "drift-key",
+            }),
+          ).rejects.toMatchObject({ code: "COMMAND_IDEMPOTENCY_CONFLICT" });
+          expect(await reserveFacts()).toEqual(before);
+        },
+      );
+
+      test.each([
+        ["missing", undefined],
+        ["non-string", 42],
+        ["empty", ""],
+        ["blank", " \t\n"],
+        ["501 code points", "界".repeat(501)],
+        ["NUL", "Approved\u0000allocation"],
+        ["unpaired high surrogate", "Approved\uD800allocation"],
+        ["unpaired low surrogate", "Approved\uDC00allocation"],
+      ] as const)("rejects %s before durable writes", async (_name, reason) => {
+        const request = input();
+        if (reason === undefined) Reflect.deleteProperty(request, "reason");
+        else Reflect.set(request, "reason", reason);
+        const before = await reserveFacts();
+        await expect(credit.grant(request)).rejects.toBeInstanceOf(TypeError);
+        expect(await reserveFacts()).toEqual(before);
+      });
+
+      test.each(["核", "😀".repeat(500)])(
+        "accepts valid code-point length and preserves original text (%#)",
+        async (reason) => {
+          await credit.grant(input(reason));
+          const facts = await reserveFacts();
+          expect(facts.audits).toHaveLength(1);
+          expect(facts.audits[0]?.reason).toBe(reason);
+        },
+      );
+
+      test("invalid direct-effect reason marks the outer transaction rollback-only even when caught", async () => {
+        const before = await reserveFacts();
+        await expect(
+          tx.runRoot(
+            {
+              tenantId: "tenant",
+              actorId: "operator",
+              operation: "grant.reason.rollback",
+              mode: "write",
+            },
+            async () => {
+              await effects.grant(input());
+              try {
+                await effects.grant({
+                  ...input("   "),
+                  sourceRef: "invalid-effect-source",
+                });
+              } catch {
+                // The real transaction owner must reject the entire commit.
+              }
+            },
+          ),
+        ).rejects.toBeInstanceOf(TypeError);
+        expect(await reserveFacts()).toEqual(before);
+      });
+    });
+
     describe("R34 C1 terminal identity RED", () => {
       const scope = (operation: string, tenantId = "tenant") => ({
         tenantId,
@@ -120,6 +249,7 @@ describe.skipIf(adminUrl === undefined)(
       });
       const otherGrant = (subject = "other-subject", tenantId = "tenant") =>
         credit.grant({
+          reason: "Admin allocation for tenant and subject isolation",
           tenantId,
           actorId: "operator",
           subjectId: subject,
@@ -1352,6 +1482,7 @@ describe.skipIf(adminUrl === undefined)(
         for (const key of ["multi-a", "multi-b"]) {
           credits.push(
             await credit.grant({
+              reason: "Admin allocation for deterministic multi-grant locking",
               tenantId: "tenant",
               actorId: "operator",
               subjectId: "multi-grant",
@@ -1599,6 +1730,7 @@ describe.skipIf(adminUrl === undefined)(
       async ({ keyMode, field }) => {
         const account = await grant();
         const otherAccount = await credit.grant({
+          reason: "Admin allocation for independent account drift checks",
           tenantId: "tenant",
           actorId: "operator",
           subjectId: "other-subject",
@@ -1857,6 +1989,8 @@ describe.skipIf(adminUrl === undefined)(
           },
           async () => {
             await effects.grant({
+              reason:
+                "Admin allocation rolled back with the caller transaction",
               tenantId: "tenant",
               subjectId: "subject",
               amountMicros: 100n,
@@ -1895,6 +2029,7 @@ describe.skipIf(adminUrl === undefined)(
         const moduleCredit = context.get(CreditService);
         const moduleMetering = context.get(MeteringService);
         const account = await moduleCredit.grant({
+          reason: "Admin allocation through the Credit module",
           tenantId: "module-tenant",
           actorId: "operator",
           subjectId: "subject",
@@ -1934,6 +2069,7 @@ describe.skipIf(adminUrl === undefined)(
       await grant("digest-key-1");
       await expect(
         credit.grant({
+          reason: "Admin credit allocation for metering integration",
           tenantId: "tenant",
           actorId: "operator",
           subjectId: "subject",
@@ -1951,6 +2087,7 @@ describe.skipIf(adminUrl === undefined)(
     test("does not expose a future grant until its effective window", async () => {
       const effectiveAt = new Date(Date.now() + 100);
       const result = await credit.grant({
+        reason: "Scheduled admin allocation for future availability",
         tenantId: "tenant",
         actorId: "operator",
         subjectId: "future-subject",
@@ -2037,6 +2174,7 @@ describe.skipIf(adminUrl === undefined)(
     });
 
     test("rolls back receipt, credit and audit when the audit tail fails", async () => {
+      const before = await reserveFacts();
       const repository = new CreditRepository(tx);
       class FailingAudit extends AuditAppender {
         override append(): Promise<string> {
@@ -2056,6 +2194,7 @@ describe.skipIf(adminUrl === undefined)(
       );
       await expect(
         service.grant({
+          reason: "Admin allocation requiring durable audit completion",
           tenantId: "tenant",
           actorId: "operator",
           subjectId: "subject",
@@ -2076,12 +2215,14 @@ describe.skipIf(adminUrl === undefined)(
       expect(
         await assertDefined(fixture).client.billing_audit_event.count(),
       ).toBe(0);
+      expect(await reserveFacts()).toEqual(before);
     });
 
     test("rejects grant source reuse with another program", async () => {
       await grant("source-key-1");
       await expect(
         credit.grant({
+          reason: "Admin credit allocation for metering integration",
           tenantId: "tenant",
           actorId: "operator",
           subjectId: "subject",
@@ -2100,6 +2241,7 @@ describe.skipIf(adminUrl === undefined)(
 
     test("expires active grant availability before another reservation", async () => {
       const result = await credit.grant({
+        reason: "Time-limited admin allocation for expiry verification",
         tenantId: "tenant",
         actorId: "operator",
         subjectId: "expiring",
@@ -2184,6 +2326,8 @@ describe.skipIf(adminUrl === undefined)(
           },
           async () => {
             const granted = await effects.grant({
+              reason:
+                "Admin allocation rolled back after a caught effect error",
               tenantId: "tenant",
               subjectId: "subject",
               amountMicros: 10n,
