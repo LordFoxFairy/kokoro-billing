@@ -1,3 +1,39 @@
+## R255：唯一正常 Nest 增量组合入口设计门（2026-10-06）
+
+本节覆盖下方 R80-C3“全部 24 operation/worker 完成后才切 main”的串行启动条件，但不缩减完整 C3 目标。当前正常用户个人余额/流水已经由 canonical `CreditModule`、`BillingHttpModule` 与 `DatabaseModule` 实现，读取本身不依赖 financial grant、成本上界、Redis 或支付 provider；继续让正式 `src/main.ts` 等待其余 19 个业务 operation 和支付验收，会把未承接能力错误变成已实现读取页面的开发启动前置。
+
+### 当前事实、Owner 与采用方案
+
+| 项 | 当前裁决 |
+|---|---|
+| Owner | `kokoro-billing` 拥有唯一进程入口、HTTP module graph、Credit 读事实和生命周期；BFF/Web 只消费正式 owner HTTP，不读库。 |
+| 当前事实 | `src/main.ts` 唯一调用 `src/bootstrap/create-billing-runtime.ts`；后者仍创建旧 pg/Redis/provider/Fastify `src/interfaces/http/server.ts`。现 Nest graph 只在测试中注册两项本人 GET，且旧查询使用已淘汰的 `entitlement_*`/`payment_*`，不是 canonical owner-schema 的正常入口。 |
+| 目标职责 | 唯一 `src/main.ts` 和构建后的 `dist/src/main.js` 都经同一 `createBillingRuntime` 启动 canonical Nest graph；第一增量只注册三 probe 与已实现两项本人 GET。19 个未承接 operation 明确不存在，不加假成功、v1 alias、proxy、readonly mode、第二端口或第二 runner。 |
+| 完成边界 | 该增量只使正常开发读取入口可启动，不表示 24 operation、worker、seed、赠送、Admission、结算、支付或收费用户旅程完成。完整 C3/支付最终退出线保持。 |
+
+放置比较：
+
+1. **采用：原位替换 `src/bootstrap/create-billing-runtime.ts`。** 文件继续拥有唯一 composition/lifecycle API，但旧 `createBillingConnection`、Redis hint、provider registry、Stripe adapter 与 `createBillingServer` 装配全部删除，改为 `NestFactory` + `FastifyAdapter` 创建 `AppModule.register(...)`，返回有界、幂等的 `listen/close`。`src/main.ts` 只读配置、调用该 API、安装一次信号处理；不直接拼模块。
+2. **淘汰：新建 `src/bootstrap/create-billing-application.ts`。** 当前文件替换后仍只有一个变化原因；移动会同时产生两个具名 root 或无收益路径 churn，并诱发测试/worker选择不同 factory。只有未来原文件出现第二独立职责时才另行设计，不在本片预建。
+3. **淘汰：把 NestFactory/模块/探针都写入 `src/main.ts`，或保留旧 server 由 Nest 转发。** 前者混合配置、图构建与信号生命周期，后者形成双栈/兼容层，均不能接受。
+
+### 目录、依赖和生命周期
+
+- 新 `src/app.module.ts` 只定义动态根图：`DatabaseModule.register({databaseUrl})` + `BillingHttpModule.register(auth)`；不复制业务 provider，不导出 ORM，不为未实现 operation 预建 controller。
+- 新 `src/http/service-probes.controller.ts` 只拥有 `/healthz`、`/readyz`、`/metrics`。liveness 不访问依赖；readiness 通过 `PrismaService` 的 infrastructure-only bounded ping 判断 PostgreSQL；metrics 复用 `src/infrastructure/metrics.ts` 既有 registry/collector。未装配 Redis/provider 时不得把它们列为启动必需或伪 degraded。
+- `BillingHttpModule` 继续拥有 request-id、`no-store`、schema registry、Guard/Filter 与完成日志，并注册 probes；`CreditModule`/Controller/Service/Repository 保持不重写。`DatabaseModule` 仍是唯一 Prisma lifecycle owner，仅为 probe 暴露窄 readiness 能力。
+- `runtime-config.ts` 的唯一 normal 配置只要求实际已装模块：exact `DATABASE_URL schema=kokoro_billing`、显式 JWKS/issuer/audience、三种分离 service credential、host/port/shutdown deadline。Redis、provider、rate、grant、financial issuer 不因尚未装配能力成为 main 必填；后继模块接入时在同一配置 schema 增加其真实依赖，不加运行模式开关。
+- 创建顺序：严格解析配置 → 创建 adapter/root graph → Nest init（Prisma connect+ping、schema compile）→ Fastify ready → main listen。任一步失败保留原始 first cause并关闭已创建资源；停止顺序为停止 accept → 等在途 HTTP → Nest destroy → Prisma pool，`close` 同 promise 幂等且受 main deadline 约束。
+
+### 删除与有效语义承接
+
+生产 import 核查显示，除 `src/main.ts`→`createBillingRuntime`、该 bootstrap→`createBillingServer` 外，没有其他 production source 调用旧 server。入口切换同片删除 `src/interfaces/http/server.ts`，且 bootstrap 不保留旧 pg/Redis/provider 分支；旧 v1 不监听、不转发。
+
+旧 server 的有效语义不得随文件盲删：本人读、五因素认证、错误/no-store/request-id 由现 Nest HTTP 测试承接；readiness/metrics/信号/Redis 非权威语义由新 runtime/probe 测试承接；catalog、subscription、checkout、admission、execution、settlement、refund、expiry、webhook 的业务状态与 provider 验签仍由现 service/provider/integration 测试和 v2 target contract 保留，未承接 HTTP 明列为未实现。任何只在旧 v1 transport test 中存在且没有等价 owner 断言的行为，先登记到对应目标 operation 测试，再删除旧测试，不复制旧 server 作为 test helper。
+
+完整退出仍要求 24 operation、三 worker/seed 使用同一 module graph，旧 application/pg writer 按 import 闭包删除，source/dist route parity、恢复/drain、真实 provider/payment sandbox 与消费者用户旅程通过；本增量不改变这些门。
+
+---
 ## R255：IAM Billing access-token consumer 设计门（2026-10-05）
 
 本节只批准后继认证实现，不表示真实 IAM owner 签发到 Billing 的用户正控已经通过。当前两个用户认证入口分别在 `billing-auth.ts` 内固定 `RS256` 并读取 plain `tenant_id`；正式 IAM 的 `/iam/jwks` 只发布 EdDSA/OKP，tenant claim 为 namespaced `https://kokoro.dev/tenant_id`，因此当前正常认证必然阻断。

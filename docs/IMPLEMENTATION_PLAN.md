@@ -1,3 +1,34 @@
+## R255：正常 Nest 增量 composition 实施卡（2026-10-06，D0 待 Root 冻结）
+
+本卡修订原 R80-C3 的**启动阶段**，不修订完整退出线。目标是让已实现的个人余额/流水经唯一正常 `src/main.ts`/source/dist 可达，同时把19项未实现业务显式留空；不新增第二服务、readonly模式、legacy proxy、假handler或seed，不把增量开发入口称为全Billing上线。
+
+### 阶段与精确候选范围
+
+| 阶段 | 允许路径与完成条件 |
+|---|---|
+| D0（当前） | 仅本文件与 `TECHNICAL_DESIGN.md`、`API_CONTRACT.md`、`DATA_MODEL.md` 当前前缀；四原mixed suffix逐字保留。CURRENT/source/SQL/contract/generated/package/资源/Git均冻结。 |
+| RED（Root后继单独放行） | 新 `test/integration/billing-runtime.test.ts` 真正 spawn `pnpm exec tsx src/main.ts`，用Root隔离PG、真实canonical账户、本地HTTP JWKS和随机TCP端口；`/healthz=200` 为control，当前v2两读404只算composition RED。现 `test/integration/credit-read-http.test.ts` 的深层真实PG矩阵必须同时保留，禁止用单一404冒充业务RED。 |
+| Source（D0/RED通过后另行授权） | 新 `src/app.module.ts`、`src/http/service-probes.controller.ts`；修改 `src/bootstrap/create-billing-runtime.ts`、`src/main.ts`、`src/config/runtime-config.ts`、`src/http/billing-http.module.ts`、`src/infrastructure/metrics.ts`、`src/database/{database.module,prisma.service}.ts`。只组合现Database/Credit/HTTP和真实probes，不改Credit/Metering业务。 |
+| Test/governance承接 | 新 runtime smoke；修改现 `test/integration/credit-read-http.test.ts`、`test/http/credit-read.test.ts`、`test/architecture/{ownership.test.ts,billing-dependency-policy.ts,typescript-dependency-graph.test.ts}`、`test/unit/runtime-config.test.ts`、`scripts/verify-openapi.ts`，范围只限新唯一root、5项实际route、source/dist/lifecycle与移除旧server引用。精确旧测试迁移见下表，不能整目录删除。 |
+| Cutover删除 | 删除 `src/interfaces/http/server.ts`；`src/bootstrap/create-billing-runtime.ts` 仅删除旧 pg/Redis/provider/server装配而保留文件与具名API。移除旧v1 runtime parity及 `contract/openapi/v1/openapi.yaml` 须由Root另给contract删除权限；当前D0不改。生产grep若仍有除main→runtime以外的旧server调用即停止，不以dead code遗留。 |
+
+### 旧引用的逐文件承接门
+
+- `test/http/server.test.ts`、`readiness.test.ts`、`target-v1.test.ts`：本人读/auth/error/probes迁现Nest HTTP/runtime测试；v1 envelope/alias本身退役；provider与未实现业务只在已有provider/service测试或对应v2目标测试已具名后删。
+- `test/integration/{runtime-redis-loss,stripe-payment-gating,durable-result-http,admission-command-receipts,checkout-http-replay}.test.ts`：不得继续 import旧runtime/server。Redis-loss改证初始读graph不需要Redis；payment/admission/checkout持久业务断言改走现service/provider边界保留，HTTP断言随v2 operation实施，不为本片注册假route。
+- `test/unit/persisted-json.test.ts`：保留JSON invariant；旧classifier断言迁真实`ErrorFilter`。
+- `test/architecture/{ownership.test.ts,billing-dependency-policy.ts,typescript-dependency-graph.test.ts}` 与 `scripts/verify-openapi.ts`：删除旧server白名单/源码扫描，增加唯一AppModule/runtime依赖门；contract24目标门与runtime当前5项门分开，不能相互冒充。
+- 已核生产 source 除 `main.ts`→`create-billing-runtime.ts`→`interfaces/http/server.ts` 外无旧server caller；测试/checker上述引用是迁移清单，不是保留旧运行栈理由。
+
+### 真实行为与停止线
+
+GREEN必须从原 source child 经真实TCP证明：合法账户两GET 200及exact decimal/cursor；无账户404且零创建；machine五因素每项缺失/重复/错配均在业务前拒绝；35张owner表请求前后逐行相等；`SIGTERM` deadline内exit0、端口释放、PG session归零；端口占用或PG init失败时非零退出并清理已建资源。构建后对 `node dist/src/main.js` 重跑同一graph/route/lifecycle；不以inject-only、mock、工程门或404计业务通过。
+
+初始runtime只验5项实际route，19项目标route必须未注册且无v1 fallback。后继每完成一个owner operation，按contract→真实PG业务→Controller→runtime inventory增量接入。三worker与seed最终改为从同一AppModule context取得owner service；全部24项、有效旧业务语义、worker recovery/drain、source/dist、provider/payment sandbox与消费者用户旅程通过后，才关闭完整C3。
+
+配置值、owner schema安装/既有数据和实际进程由Root独占核验；本片不发行financial token、不赠送、不选价格/额度、不调用provider。D0冻结后writer停写，Root审查并决定RED/source精确授权。
+
+---
 ## R228 本地源码交付（2026-10-04）
 
 本次本地提交交付已审查的 rate-only module-private publication、两张 canonical 表及正规派生、纯 codec 和相应测试。Root R227 最终 107 项真实 PostgreSQL 与 1361 项辅助门通过，两个真实故障已修复，publication 源码与当前证据独审均 0P0/P1/P2。该结果只覆盖本切片；未推送或启用用户组合，HTTP、policy、Admission、实际用量与积分/用户整链仍开放。下方 R227/R223 是实现前后时间点记录，不作为当前“尚无源码”的结论。

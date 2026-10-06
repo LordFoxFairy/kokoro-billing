@@ -1,3 +1,25 @@
+## R255：唯一正常 Nest 增量 HTTP 契约门（2026-10-06）
+
+本节只裁决正式开发进程当前可达能力，不修改 `contract/openapi/v2/openapi.yaml`、生成物或任何 wire。v2 experimental target 仍为 24 operation（3 probes + 21 business）；唯一 `src/main.ts` 首次切换只实现其中 5 项：`GET /healthz`、`GET /readyz`、`GET /metrics`、`GET /v2/billing/me/credit-account`、`GET /v2/billing/me/credit-ledger`。
+
+其余 19 项明确为**未实现**，不是启动依赖也不是成功占位：catalog、subscriptions；admission create/get/capture/release；execution event accept/get；checkout create/get；settlement create/get；internal refund create/get、admin refund create；expire holds；Stripe/Alipay/WeChat webhook。请求这些路径只得到正常未注册路由的 404/ErrorResponse；不得返回空列表、零余额、accepted/pending、501 alias，亦不得代理旧 v1。
+
+两项本人读的当前 owner 契约不变：
+
+- 账户不存在返回 404，禁止隐式 create/seed/zero account；存在时返回 canonical decimal-string balance/generation。
+- 流水按 canonical cursor/limit 分页，只读本人 tenant+subject；深层损坏或依赖不可判定使用现稳定错误映射。
+- user bearer 使用已固定 IAM EdDSA/namespaced profile；BFF machine read 必须同时满足 `web-bff` service、internal secret、BFF bearer、唯一 `u1` tenant、唯一 `u1` subject。任一缺失、重复或错配在业务查询前 fail closed。
+- 两 GET 与所有错误保持 `x-request-id`、`cache-control: no-store`、strict generated response validation；不增加兼容 envelope。
+
+probe 契约只反映已装配依赖：health 表示进程存活；ready 仅在 canonical schema 的 PostgreSQL/Prisma 可查询时 200，否则 503；metrics 使用现 Prometheus content type 且采集失败不改变业务请求。Redis/provider 尚未被此 module graph 使用，不得成为 ready 条件。probe 不证明 19 项业务、worker、支付或收费链可用。
+
+旧 v1 runtime 与 `contract/openapi/v1/openapi.yaml` 不作为兼容 API 保留。后继入口切换必须同步停止 `scripts/verify-openapi.ts` 对 `src/interfaces/http/server.ts` 的 v1 route parity读取；v2 target artifact 的24项治理继续由 contract tests验证，**当前实际已注册5项**由真实 source/dist runtime smoke 独立验证。每个后继 operation 只有在 Controller/Guard/Service/真实PG语义就绪后才能加入 runtime inventory；不能为达到24数量注册404/空handler。
+
+旧 transport 测试的承接规则：`test/http/{server,readiness,target-v1}.test.ts` 中本人读/probe/auth/error断言迁入现 `credit-read.test.ts` 与新 runtime smoke；provider/webhook断言由现 provider registry/signature integration 保留；checkout/admission/payment/refund/expiry 的 durable语义由现真实PG service tests保留，目标HTTP断言随对应v2 operation实施。`persisted-json.test.ts` 仅把旧 `classifyBillingError` HTTP断言迁到真实 Nest `ErrorFilter`，其持久JSON测试本体保留。无等价断言时先补目标测试条目，不以删除测试宣称能力已承接。
+
+本门不发布新 contract version/digest，不改变 BFF 固定 owner artifact；Root 在正常 runtime 真正启动后只验已实现两读。完整24项、worker与支付最终验收仍是 C3 总退出线。
+
+---
 ## R255：IAM Billing access-token profile 契约门（2026-10-05）
 
 用户 Bearer token 的唯一接受 profile 为：JOSE `EdDSA`；issuer 精确等于配置的 IAM issuer；固定 Billing resource audience `https://kokoro.dev/resources/billing`；`https://kokoro.dev/token_kind=user_delegated`；tenant 只来自 `https://kokoro.dev/tenant_id`。必需 claims 为 `iss`、`aud`、`sub`、`sid`、`client_id`、`exp`、`iat`、`scope`、token kind 与 namespaced tenant；`nbf` 可选，`exp`/`iat`/`nbf` 的时间语义沿 IAM 与 JOSE 当前规则，不新增未来时间或自定义 iat 规则。`https://kokoro.dev/operator` 与 `cnf` 必须不存在。

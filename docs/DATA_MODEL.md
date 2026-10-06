@@ -1,3 +1,18 @@
+## R255：正常 Nest 增量读取的数据边界（2026-10-06）
+
+本入口切换无 DDL、migration、seed、余额初始化、费率、赠送、hold、settlement、provider 或 financial issuer 变化。唯一事实源仍是 canonical `kokoro_billing` owner schema；连接 URL 必须恰有一个 `schema=kokoro_billing`，正常重启不调用 installer。
+
+已实现两 GET 只经 `CreditService`/`CreditRepository` 读取 `billing_credit_account` 与 `billing_credit_journal`，根事务为 PostgreSQL Repeatable Read + `SET TRANSACTION READ ONLY`。账户不存在即 404，零行保持零行；不得为页面验收创建假账户、SQL充值或把缺账户映射为零余额。ledger cursor、tenant/subject binding和decimal string语义不变。
+
+`/readyz` 只执行 infrastructure-owned bounded PostgreSQL ping，不读取邻 owner、创建 receipt/audit/account 或扫描业务数据；`/healthz`/`/metrics` 无业务数据写入。Redis/provider未被初始 Nest graph装配，既不参与readiness，也不产生 hint/lease/provider fact。
+
+真实 source-child 验收须在 Root 创建的隔离 owner schema中分别准备合法账户与无账户subject；请求前后对 canonical 35 表逐表、逐行稳定快照，所有成功读、404及五因素认证拒绝均必须零差量。SIGTERM/启动失败后连接归零并可清理临时schema；这只证明读取与生命周期，不证明19项未实现业务、worker、seed或支付。
+
+旧 pg/Fastify runtime 查询的 `entitlement_*`/`payment_*` 不迁入 canonical schema，不建 view/alias/fallback。入口切换删除旧运行装配，不删除目标业务语义：尚未承接的catalog/subscription/checkout/admission/execution/payment/refund/expiry/webhook仍按既定v2设计和现canonical表逐片实现，完整C3前不声称这些事实可由HTTP操作。
+
+因此当前增量的SQL/生成影响为零：`database/schema.sql`、Prisma schema/client/provenance、OpenAPI generated均冻结。以后任一operation若确需数据变化，必须另过DATA_MODEL/Schema门，不得借composition切换扩表。
+
+---
 ## R255：IAM token consumer 数据边界（2026-10-05）
 
 本认证收敛不新增或修改 Billing schema、表、索引、事务、receipt、余额、Credit、计量、价格或费用事实。IAM 独占 token 签发、session、membership 与 resource-server profile；Billing 只把通过唯一 EdDSA/profile verifier 的 namespaced tenant 与 subject 映射为请求上下文，不复制或持久化 `sid`、`client_id`、scope、JWKS 或 IAM membership。
