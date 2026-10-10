@@ -1,14 +1,13 @@
-## R255 当前财务赠送依赖与已确认费用规则（2026-10-06）
+## R255 财务赠送裁决与当前实现边界（2026-10-10）
 
-本节是当前执行口径，覆盖下方历史“actor必须Member/operator/admin role”“失败收费待用户答”“gift先等全C1/C2/C3/payment”的叙述；原mixed/历史正文逐字节保留，不把历史记录继续列为业务阻塞。归属Billing当前研发依赖与业务规则，仅现五文档前缀；无source/schema/机器contract/generated/资金动作。
+本节接收 698da77 的业务裁决，不接收其“canonical Nest 已正常运行”的当前态声明。已提交源码 main261a20f 的唯一入口仍为 createBillingRuntime；运行目录中的 Nest 候选属于未接收 mixed，不是本次代码交付。以下旧运行报告只作为具日期的历史证据。
 
-1. **当前事实**：正常唯一canonical Nest已运行并提供本人余额/流水两GET；无账户正式404，不假建账户或显示零余额。IAM bb4663a 的financial HUMAN注册/名单CAS与真实Code+PKCE发行已隔离验收，但grant-target专用machine/operation/verified exp/artifact仍未发布。Billing当前没有该正常admin route/赠送用户闭环；不能仅拿FG1 token跳过current授权或在本仓自行拼IAM权力。
-2. **唯一资格owner**：financial actor由IAM当前受认证专用client完整注册/current roster、User、本人有效Session、fixed active tenant建立；**actor不要求Member**。OAuth operator只管理client/名单，普通组织role/admin/member不自动获赠送权。target另由IAM在actor合格后核User、同tenant当前Member并返回canonical subject；target无须在线Session。既有私有管理transport仍须验证，但其自报tenant/operator/role不代替IAM业务decision。
-3. **最短正规依赖**：FG1（已交付）→FG2 owner发布并固定version/commit/digest→Billing消费唯一artifact、canonical Nest管理入口与durable grant事务→真实授权赠送/本人余额与流水/刷新/撤权重放。每次资金命令和receipt replay都须当前授权；拒绝/依赖不可判定先于账务I/O，不缓存旧allow。明确tenant/target/program/source/amount/reason/idempotency身份后才真实入账；本次不选金额、不seed或伪充值。
-4. **取消/失败费用已裁**：仅结算已核实实际用量（verified actual usage），释放确认未使用的预占余量；确认未调用不扣。用量/结果未知保持pending待核，不猜零、不全扣、不整笔释放。actual evidence、费率与恢复实现仍待各owner真实验收，不再向用户重复问已决定政策。
-5. **完整退出线不缩小**：其余C1/C2/C3、19未承接operation、worker、System bound/Agent evidence、旧栈切换与payment/provider sandbox继续完成；payment最后。它们不成为FG2或独立赠送研发启动前置，赠送单片通过也不等整个Billing上线/完整收费链闭环。任何wire/错误码/授权期限仅引用IAM正式发布物，本文件目标描述不是消费者实现依据。
+- IAM 是唯一财务资格 owner；financial actor 不要求 Member，普通组织角色不自动得到赠送资格。target 另核同 tenant Member，不能把 actor 与 target 混为一体。
+- FG1 已交付；grant-target 专用 FG2 artifact 尚待 owner 发布、固定 version/commit/digest后消费。每次资金命令及重放重新授权，依赖不确定先于账务 I/O，不复用旧 allow。
+- 只结算已证实实际用量；释放已确认未使用部分；未知保持 pending。该规则由 ADR-033 actual-only 承接，不再复制另一套规则。
+- 赠送独立依赖按 FG1→FG2→Billing 消费推进；完整 Billing、Agent/System evidence 与资金旅程仍待验，支付最后。单片读取或文档接收不等于资金闭环。
 
-**本阶段技术放置**：沿现Credit/HTTP/AppModule与已批准admin grant设计消费IAM owner，无新配置中心/角色平台/双轨服务；target与actor分别绑定，外部scope不扩普通Web。资格认证与授权在Billing事务外，资金receipt/审计在本仓唯一write事务中，恢复/重放同身份不重复效果。
+本次仅收敛五文档前缀及 main 历史接收，不改源码、SQL、机器契约、生成物、运行服务或资金数据。本文是业务裁决而非新 operation 实现；历史与未接收 mixed 不作为当前完成依据。
 
 ## R255：唯一正常 Nest 增量组合入口设计门（2026-10-06）
 

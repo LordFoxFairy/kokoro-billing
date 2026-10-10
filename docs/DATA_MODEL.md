@@ -1,14 +1,6 @@
-## R255 当前财务赠送依赖与已确认费用规则（2026-10-06）
+## R255 财务赠送裁决引用（2026-10-10）
 
-本节是当前执行口径，覆盖下方历史“actor必须Member/operator/admin role”“失败收费待用户答”“gift先等全C1/C2/C3/payment”的叙述；原mixed/历史正文逐字节保留，不把历史记录继续列为业务阻塞。归属Billing当前研发依赖与业务规则，仅现五文档前缀；无source/schema/机器contract/generated/资金动作。
-
-1. **当前事实**：正常唯一canonical Nest已运行并提供本人余额/流水两GET；无账户正式404，不假建账户或显示零余额。IAM bb4663a 的financial HUMAN注册/名单CAS与真实Code+PKCE发行已隔离验收，但grant-target专用machine/operation/verified exp/artifact仍未发布。Billing当前没有该正常admin route/赠送用户闭环；不能仅拿FG1 token跳过current授权或在本仓自行拼IAM权力。
-2. **唯一资格owner**：financial actor由IAM当前受认证专用client完整注册/current roster、User、本人有效Session、fixed active tenant建立；**actor不要求Member**。OAuth operator只管理client/名单，普通组织role/admin/member不自动获赠送权。target另由IAM在actor合格后核User、同tenant当前Member并返回canonical subject；target无须在线Session。既有私有管理transport仍须验证，但其自报tenant/operator/role不代替IAM业务decision。
-3. **最短正规依赖**：FG1（已交付）→FG2 owner发布并固定version/commit/digest→Billing消费唯一artifact、canonical Nest管理入口与durable grant事务→真实授权赠送/本人余额与流水/刷新/撤权重放。每次资金命令和receipt replay都须当前授权；拒绝/依赖不可判定先于账务I/O，不缓存旧allow。明确tenant/target/program/source/amount/reason/idempotency身份后才真实入账；本次不选金额、不seed或伪充值。
-4. **取消/失败费用已裁**：仅结算已核实实际用量（verified actual usage），释放确认未使用的预占余量；确认未调用不扣。用量/结果未知保持pending待核，不猜零、不全扣、不整笔释放。actual evidence、费率与恢复实现仍待各owner真实验收，不再向用户重复问已决定政策。
-5. **完整退出线不缩小**：其余C1/C2/C3、19未承接operation、worker、System bound/Agent evidence、旧栈切换与payment/provider sandbox继续完成；payment最后。它们不成为FG2或独立赠送研发启动前置，赠送单片通过也不等整个Billing上线/完整收费链闭环。任何wire/错误码/授权期限仅引用IAM正式发布物，本文件目标描述不是消费者实现依据。
-
-**本阶段数据边界**：无表/索引/schema或资金变更；不复制IAM User/Session/Member/client事实入Billing库。合格decision只作为本次账务命令受信输入，canonical target按现personal编码绑定`tenant_id+subject_id` Credit账户；reason/source/program/amount/idempotency沿现Credit/receipt/audit owner，不能以transport字符串代替current资格。
+唯一业务裁决与实现边界见 [TECHNICAL_DESIGN](TECHNICAL_DESIGN.md#r255-财务赠送裁决与当前实现边界2026-10-10)。698da77 的依赖裁决已接收；Nest 运行候选、FG2 消费、资金用户旅程尚未接收。本次无运行、SQL、机器契约或资金效果；下方旧报告只作为具日期历史证据。
 
 ## R255：正常 Nest 增量读取的数据边界（2026-10-06）
 
