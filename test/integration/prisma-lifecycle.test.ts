@@ -176,7 +176,7 @@ describe.skipIf(adminUrl === undefined)("Prisma database lifecycle", () => {
 
   test("shares cleanup after initialization failure", async () => {
     const prisma = new PrismaService({
-      databaseUrl: "postgresql://127.0.0.1:1/unreachable",
+      databaseUrl: "postgresql://127.0.0.1:1/unreachable?schema=kokoro_billing",
       pool: { connectionTimeoutMillis: 50 },
     });
     const initialized = prisma.onModuleInit();
