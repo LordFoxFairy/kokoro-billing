@@ -1,3 +1,13 @@
+## SET-15：商品目录canonical只读数据门（2026-10-13）
+
+无DDL、Prisma schema/client、索引、installer、seed、业务写或资金变化。事实仅billing_offer与billing_offer_revision，同owner允许关联；不查询entitlement_*或payment_*旧表，不跨owner JOIN。Prisma查询沿既有TransactionService readOnlySnapshot/Repeatable Read及tenant上下文，root只读事务有界取消/timeout，不创建第二pool。
+
+仅同tenant active offer和其同tenant published、deleted_at为空、published_at非空且<=同一事务DB instant的revision；每offer选此集合中revision最大项（稳定ID排序防御）。未来发布、draft、disabled、soft deleted不可售。No-FK下必须验证拟可售revision parent存在且tenant一致；损坏关系不能通过JOIN/过滤静默丢失为成功空页，也不能读取/返回他tenant业务事实。canonical amount_minor/credit_micros转decimal string，不过Number，不补0；name/currency/interval/UUID/revision等非法fail closed。
+
+cursor只承载有界tenant+catalog scope+稳定排序位置，strict/base64url canonical解码；不创建持久cursor表、缓存或报价/当前订阅投影。读取不会自动发布商品、开户、订阅或增加receipt/audit。普通租户未发布商品时返回真实空目录，不拿测试fixture当正常在售商品；非空产品发布要求后继权威产品数据与正式owner发布用例，旧seed禁止执行。
+
+真实PG只用Root创建的隔离fixture，覆盖多tenant/多revision/软删除/未来发布/大整数/稳定分页/cursor越界/parent损坏；请求前后35表全行零差量与connection清理必须证明。源schema及Prisma派生hash保持，本片API生成只由catalog字段/身份说明/version的正式owner源驱动。
+
 ## SET-10：唯一正常 Nest 读取入口候选（待 Root 验收）
 
 沿既有 R255 增量门原位切换 main/createBillingRuntime；正常 source/dist 只装 DatabaseModule + BillingHttpModule/CreditModule，注册两本人 GET 与三 probes。旧 interfaces/http/server.ts 和 v1 runtime parity已删除，无第二runner、模式、旧表alias或proxy；19项未承接operation保持未注册，完整C3/收费/worker退出线不变。

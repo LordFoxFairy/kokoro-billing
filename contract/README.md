@@ -1,3 +1,7 @@
+## SET-15 catalog候选裁决（2026-10-13）
+
+本节覆盖下表旧current Fastify已部署状态：正常Nest入口已交付五GET及HEAD。下一canonical catalog候选将现v2 artifact从3.0.0-experimental.3推进为3.0.0-experimental.4，承认required offer_key及catalog身份transport的strict消费breaking；只自有开发成对固定immutable commit/digest，现Credit wire与operation数24不变。三个设计面SET15门为当前方案，catalog未实现/未启动前不宣称部署；历史表格保留作前态，非当前激活证据。不得手改生成物、旧hash或借beta例外。
+
 # kokoro-billing contract governance
 
 ## Current and target artifacts

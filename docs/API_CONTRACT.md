@@ -1,3 +1,13 @@
+## SET-15：catalog读取及不可变消费者配对门（2026-10-13）
+
+批准沿现/v2/commerce/catalog实现真实canonical目录，machine唯一源仍contract/openapi/v2/openapi.yaml。CatalogItem新增required offer_key（canonical offer业务key），artifact明确breaking 3.0.0-experimental.4；正规contract:generate/check，不能手改generated或把新增strict字段冒兼容minor。仅自有开发精确配对，未激活main/日常/生产。Credit两读wire不变，其他operation字段/历史artifact约束不改。
+
+成功仍closed data.items/page.next_cursor，decimal string、currency_code、billing_interval与offer_revision_id来源严格owner事实；不输出当前套餐/支付可用性。GET只接受唯一limit(1..100，默认50)/有界cursor，未知/重复query及正文拒绝；cursor绑定tenant、scope、精确排序tuple。列表返回每offer当前已发布可售revision，规则见TECH。无目录为真实空200，损坏/依赖错误不降级空；错误沿现ErrorResponse/no-store/request-id/schema校验。
+
+身份为现完整IAM user或web-bff machine；machine不要求subject但若携带则严格解码校验，tenant使用既有u1 identity codec。部分机器/重复header/错Bearer/错tenant不得fallback。需要明确更新catalog的机器身份transport说明，保持两本人五因素强度不变；此认证适配亦包含在本breaking owner配对内。
+
+消费者接续由Root另行审批BFF：只把计划GET切到v2并strict读正规immutable artifact、完整有界翻页后投影既有public plans shape；不得把revision ID假充业务key，不能顺带激活旧checkout。BFF/Web schema与generated只有正常精确pin。目录有项目也不证明支付或订阅可用；Web支付按钮必须按真实未支持状态disabled，旧错误不能改成假成功。
+
 ## SET-10：唯一正常 Nest 读取入口候选（待 Root 验收）
 
 沿既有 R255 增量门原位切换 main/createBillingRuntime；正常 source/dist 只装 DatabaseModule + BillingHttpModule/CreditModule，注册两本人 GET 与三 probes。旧 interfaces/http/server.ts 和 v1 runtime parity已删除，无第二runner、模式、旧表alias或proxy；19项未承接operation保持未注册，完整C3/收费/worker退出线不变。

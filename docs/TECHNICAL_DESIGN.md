@@ -1,3 +1,24 @@
+## SET-15：canonical 商品目录读取设计门（2026-10-13，实施前）
+
+本节批准现唯一Nest入口增量注册真正catalog GET，不缩减完整订阅、checkout与C3目标。Root主控裁决/Git/资源，Billing负责人为本片唯一实现writer；当前基线20dba9c仅五GET及HEAD，旧catalog query读entitlement_*且未装配，不能复活旧runner。当前套餐加载失败不是数据库能力缺失。
+
+|项|采用方案|
+|---|---|
+|Owner/职责|Billing commerce拥有同tenant可售offer revision只读目录；公开能力为现/v2/commerce/catalog，BFF只消费owner HTTP。|
+|位置比较|采用src/modules/commerce能力目录，与credit/metering并列；淘汰旧infrastructure/postgres/repositories/checkout（旧pg SQL与分层），淘汰挂CreditModule（商品不属余额）。|
+|粒度|commerce.module.ts仅DI；catalog-read.controller.ts仅HTTP/guard/generated response；catalog.service.ts仅只读事务与业务返回；catalog.repository.ts唯一canonical Prisma查询与行映射；catalog.query.ts集中GET/query/cursor解析。没有机械DTO/ports/mapper层或第二进程。|
+|依赖|沿DatabaseModule→TransactionService/Prisma，controller由BillingHttpModule和现schema registry装配。新窄CatalogGuard/认证能力复用现EdDSA verifier、严格header codec和常时secret比较；不让controller访问ORM。|
+|状态与失败|真实无商品为空页，损坏行或查询错误保持安全失败；不写账户/receipt/audit，不造默认商品。正常source/dist唯一graph新增一GET及HEAD。|
+|删除与兼容|不引旧表、v1 alias或fallback，不替换旧query为新真源；旧unused组件最终移除仍按C3 import闭包。支付、本人订阅与商品发布后继，不用读取假装购买成功。|
+
+Catalog列表粒度为每active offer最新的published且未删除revision；同tenant parent关联验证，按offer_key ASC/revision DESC/revision_id ASC稳定排序与绑定tenant+catalog scope的有界closed cursor，不接受任意offset/旧cursor。published_at必须非空且不晚于事务DB instant；更高draft/disabled/deleted/future revision不隐藏当前可售版本。多个published历史只返回本次可见最新项，这承接旧目录有效语义。金额/积分BigInt仅decimal string，币种/间隔/ID/名称严格核验；不猜当前订阅或按额度匹配套餐。
+
+现v2 CatalogItem缺少BFF既有public key所需正式offer_key。批准owner artifact从3.0.0-experimental.3递增到3.0.0-experimental.4，明确新增required offer_key是strict消费breaking，仅隔离开发成对接收；不援未激活beta例外。既有Credit wire不变，所有固定全artifact消费者须正规刷新同commit/digest，后继Root配对才激活。v2只改catalog字段/身份说明/版本，不顺改订阅。设计三面与machine/generator一致后方进入runtime实现。
+
+Catalog认证与本人认证保持分离：完整web-bff机器身份要求service、internal secret、service Bearer和唯一u1 tenant；subject可缺，存在时必须唯一合法u1 subject。任一机器标记或service Bearer选machine后不得转用户fallback。用户沿现IAM完整EdDSA profile，token tenant与唯一u1 tenant精确绑定。重复/错配/部分machine在SQL前拒绝，不开放匿名读取；不直接套必须subject的PersonalGuard或放松现本人五因素规则。
+
+验证包含具名真实RED→GREEN、strict query/cursor/行损坏/认证负控、canonical真实PG隔离多tenant/多revision/大整数/分页、全部35表读前后零差量、source/dist真实路由与旧v1仍404、既有drain/启动失败清理保持。Root拥有PG/服务及实际浏览器；未执行项逐项保留，不称全仓/全设置完成。
+
 ## SET-10：HTTP drain 生命周期复审修正（候选）
 
 复审确认 Nest close 先销毁 provider、后关闭 adapter，原调用顺序无法保证请求继续使用数据库。现唯一 runtime 显式关闭并 drain HTTP adapter 后才调用 Nest close，仍共享 close promise、保 primary failure 和 main deadline；若HTTP drain失败仍执行provider cleanup，双失败以HTTP为cause。
