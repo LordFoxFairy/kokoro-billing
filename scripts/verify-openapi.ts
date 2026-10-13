@@ -102,10 +102,6 @@ const keysNamed = (value: unknown, target: string, path = "$"): string[] => {
 };
 
 const root = resolve(new URL("..", import.meta.url).pathname);
-const serverSource = await readFile(
-  resolve(root, "src/interfaces/http/server.ts"),
-  "utf8",
-);
 const contractSource = await readFile(
   resolve(root, "contract/openapi/v1/openapi.yaml"),
   "utf8",
@@ -396,39 +392,8 @@ for (const operationKey of Object.keys(expectedOperationGovernance)) {
 if (governanceErrors.length > 0)
   throw new Error(`OpenAPI governance failed:\n${governanceErrors.join("\n")}`);
 
-const implementation = new Set<string>();
-const routePattern =
-  /app\.(get|post|put|patch|delete|options|head)(?:<[^>]+>)?\(\s*['"]([^'"]+)['"]/gu;
-for (const match of serverSource.matchAll(routePattern)) {
-  const method = match[1]?.toLowerCase();
-  const rawPath = match[2];
-  if (!method || !rawPath) continue;
-  implementation.add(
-    `${method} ${rawPath.replace(/:([A-Za-z0-9_]+)/gu, "{$1}")}`,
-  );
-}
-// `/metrics` is registered by the shared Prometheus helper rather than an
-// inline `app.get` declaration, so include that framework-owned route here.
-implementation.add("get /metrics");
-
-const documented = new Set<string>();
-for (const [path, methods] of Object.entries(contract.paths ?? {})) {
-  for (const method of Object.keys(methods)) {
-    if (httpMethod.test(method)) documented.add(`${method} ${path}`);
-  }
-}
-
-const missing = [...implementation]
-  .filter((route) => !documented.has(route))
-  .sort();
-const stale = [...documented]
-  .filter((route) => !implementation.has(route))
-  .sort();
-if (missing.length > 0 || stale.length > 0) {
-  throw new Error(JSON.stringify({ missing, stale }, null, 2));
-}
 console.log(
-  `OpenAPI governance and route parity passed: ${implementation.size} routes`,
+  "Historical v1 artifact governance passed; runtime parity is owned by canonical Nest tests",
 );
 
 const v2Source = await readFile(

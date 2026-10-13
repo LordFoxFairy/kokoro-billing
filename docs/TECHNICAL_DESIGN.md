@@ -1,3 +1,17 @@
+## SET-10：HTTP drain 生命周期复审修正（候选）
+
+复审确认 Nest close 先销毁 provider、后关闭 adapter，原调用顺序无法保证请求继续使用数据库。现唯一 runtime 显式关闭并 drain HTTP adapter 后才调用 Nest close，仍共享 close promise、保 primary failure 和 main deadline；若HTTP drain失败仍执行provider cleanup，双失败以HTTP为cause。
+
+回归包含受控adapter drain期间实际Fastify请求仍pending、database destroy不得提前的RED→GREEN；实际注册route由Fastify onRoute收集method/path，精确五GET及其HEAD，无源码regex。source/dist真实PG候选再以自有账户表ACCESS EXCLUSIVE锁确认请求正在等待，发送SIGTERM，释放锁后必须读200再退出；这项真实进程回归由Root执行，writer未启动DB或进程。前一轮Root已通过的真实读取与prisma校验不替代此次新增drain验收。
+
+## SET-10：唯一正常 Nest 读取入口候选（待 Root 验收）
+
+沿既有 R255 增量门原位切换 main/createBillingRuntime；正常 source/dist 只装 DatabaseModule + BillingHttpModule/CreditModule，注册两本人 GET 与三 probes。旧 interfaces/http/server.ts 和 v1 runtime parity已删除，无第二runner、模式、旧表alias或proxy；19项未承接operation保持未注册，完整C3/收费/worker退出线不变。
+
+窄 readiness DI契约共置 src/http/service-probes.options.ts，仅 BILLING_PG_READINESS 与 Readonly ping；DatabaseModule提供/导出该能力，不向HTTP导出PrismaService。Prisma infrastructure ping复用现private pool，query_timeout有界；controller不持有ORM/SQL/业务事实。factory严格init后ready/listen，init或bind失败保primary cause并cleanup；并发listen/close共享promise，close等待pending bind并停止accept/drain，main以deadline约束退出。默认请求日志关闭，完成日志只用闭集字段；启动/停止失败对stderr只输出稳定类别。
+
+Root将direct Fastify精确对齐现Nest adapter已经锁定的5.12.4，避免原5.12.1/5.12.4双实例LogController类型与身份差异；不扩其它依赖或工具链。
+
 ## R255 财务赠送裁决与当前实现边界（2026-10-10）
 
 本节接收 698da77 的业务裁决，不接收其“canonical Nest 已正常运行”的当前态声明。已提交源码 main261a20f 的唯一入口仍为 createBillingRuntime；运行目录中的 Nest 候选属于未接收 mixed，不是本次代码交付。以下旧运行报告只作为具日期的历史证据。

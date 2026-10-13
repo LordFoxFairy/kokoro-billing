@@ -1,3 +1,9 @@
+## SET-10：唯一正常 Nest 读取入口候选（待 Root 验收）
+
+沿既有 R255 增量门原位切换 main/createBillingRuntime；正常 source/dist 只装 DatabaseModule + BillingHttpModule/CreditModule，注册两本人 GET 与三 probes。旧 interfaces/http/server.ts 和 v1 runtime parity已删除，无第二runner、模式、旧表alias或proxy；19项未承接operation保持未注册，完整C3/收费/worker退出线不变。
+
+两读wire与固定v2 artifact不变；三probe只报告实际装配的PostgreSQL，Redis/provider不再列为normal配置或ready依赖。所有三个service credential必须各自分离，机器五因素、用户EdDSA/profile、u1 header、query/cursor/响应schema及ErrorFilter保持。actual五路由由独立runtime测试验证，v2 target24项由contract门治理，不以数量补假handler。
+
 ## R255 财务赠送裁决引用（2026-10-10）
 
 唯一业务裁决与实现边界见 [TECHNICAL_DESIGN](TECHNICAL_DESIGN.md#r255-财务赠送裁决与当前实现边界2026-10-10)。698da77 的依赖裁决已接收；Nest 运行候选、FG2 消费、资金用户旅程尚未接收。本次无运行、SQL、机器契约或资金效果；下方旧报告只作为具日期历史证据。

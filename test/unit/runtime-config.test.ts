@@ -4,10 +4,13 @@ import { readBillingRuntimeConfig } from "../../src/config/runtime-config.js";
 const baseEnvironment = (): NodeJS.ProcessEnv => ({
   DATABASE_URL:
     "postgresql://billing:billing@127.0.0.1:5432/billing?schema=kokoro_billing",
-  REDIS_URL: "redis://127.0.0.1:6379/0",
-  INTERNAL_SERVICE_SECRET: "internal-secret",
-  BILLING_BFF_SERVICE_TOKEN: "bff-token",
-  BILLING_OPERATOR_PROXY_SECRET: "operator-secret",
+  BILLING_AUTH_MODE: "jwks",
+  BILLING_AUTH_JWKS_URL: "https://iam.example.test/iam/jwks",
+  BILLING_AUTH_JWT_ISSUER: "https://iam.example.test/iam",
+  BILLING_AUTH_JWT_AUDIENCE: "https://kokoro.dev/resources/billing",
+  INTERNAL_SERVICE_SECRET: "internal-secret-00000000000000000001",
+  BILLING_BFF_SERVICE_TOKEN: "bff-token-000000000000000000000000001",
+  BILLING_OPERATOR_PROXY_SECRET: "operator-secret-00000000000000000001",
 });
 
 describe("billing production timeout configuration", () => {
@@ -24,32 +27,12 @@ describe("billing production timeout configuration", () => {
 
   it("provides bounded dependency and shutdown defaults", () => {
     const config = readBillingRuntimeConfig(baseEnvironment());
-    expect(config.redisTimeouts).toEqual({
-      connectTimeoutMs: 2_000,
-      readTimeoutMs: 1_000,
-      overallTimeoutMs: 3_000,
-    });
-    expect(config.stripeTimeouts).toEqual({
-      connectTimeoutMs: 3_000,
-      readTimeoutMs: 10_000,
-      overallTimeoutMs: 12_000,
-    });
+    expect(config).not.toHaveProperty("redisUrl");
+    expect(config).not.toHaveProperty("enabledProviders");
     expect(config.shutdownDeadlineMs).toBe(10_000);
   });
 
   it("rejects non-positive and internally inconsistent deadlines", () => {
-    expect(() =>
-      readBillingRuntimeConfig({
-        ...baseEnvironment(),
-        REDIS_READ_TIMEOUT_MS: "0",
-      }),
-    ).toThrow("REDIS_READ_TIMEOUT_MS must be a positive safe integer");
-    expect(() =>
-      readBillingRuntimeConfig({
-        ...baseEnvironment(),
-        STRIPE_OVERALL_TIMEOUT_MS: "100",
-      }),
-    ).toThrow("STRIPE_OVERALL_TIMEOUT_MS must be at least");
     expect(() =>
       readBillingRuntimeConfig({
         ...baseEnvironment(),

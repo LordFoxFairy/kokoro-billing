@@ -315,7 +315,7 @@ describe("billing ownership architecture", () => {
     const stripe = await text(
       "src/infrastructure/providers/stripe-checkout-provider.ts",
     );
-    const server = await text("src/interfaces/http/server.ts");
+    const server = `${await text("src/bootstrap/create-billing-runtime.ts")}\n${await text("src/http/billing-http.module.ts")}`;
     const ci = await text(".github/workflows/ci.yml");
     const release = await text(".github/workflows/release-image.yml");
 
@@ -338,7 +338,7 @@ describe("billing ownership architecture", () => {
       "request_id",
       "trace_id",
       "result",
-      "duration_ms",
+      "duration",
     ]) {
       expect(server, field).toContain(field);
     }
@@ -389,7 +389,7 @@ describe("billing ownership architecture", () => {
   });
 
   it("keeps transport aliases and test doubles outside production composition", async () => {
-    const server = await text("src/interfaces/http/server.ts");
+    const server = `${await text("src/bootstrap/create-billing-runtime.ts")}\n${await text("src/http/billing-http.module.ts")}`;
     const main = await text("src/main.ts");
     const bootstrap = await text("src/bootstrap/create-billing-runtime.ts");
     const production = (
@@ -400,8 +400,15 @@ describe("billing ownership architecture", () => {
     expect(main).not.toContain("new RedeemAdminService");
     expect(main).toContain("createBillingRuntime");
     expect(main).not.toContain("createBillingConnection");
-    expect(bootstrap).toContain("createBillingConnection");
-    expect(bootstrap).toContain("createBillingServer");
+    expect(bootstrap).not.toContain("createBillingConnection");
+    expect(bootstrap).not.toContain("createBillingServer");
+    expect(bootstrap).toContain("AppModule.register");
+    expect(await text("src/app.module.ts")).toContain(
+      "DatabaseModule.register",
+    );
+    expect(await text("src/app.module.ts")).toContain(
+      "BillingHttpModule.register",
+    );
     expect(production).not.toMatch(
       /MockWebhookProvider|mock-checkout|InMemory|Fixture|Fake/u,
     );

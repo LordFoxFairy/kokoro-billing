@@ -1,4 +1,3 @@
-import type { FastifyInstance } from "fastify";
 import {
   collectDefaultMetrics,
   Counter,
@@ -42,26 +41,21 @@ export function recordHttpRequest(input: {
   }
 }
 
-export function registerMetricsRoute(
-  app: FastifyInstance,
-  moduleName = "billing",
-): void {
+export async function collectBillingMetrics(): Promise<{
+  contentType: string;
+  body: string;
+}> {
   if (!defaultsStarted) {
     defaultsStarted = true;
-    register.setDefaultLabels({ module: moduleName });
+    register.setDefaultLabels({ module: "billing" });
     collectDefaultMetrics();
   }
-  app.get("/metrics", async (_request, reply) => {
-    try {
-      return reply
-        .code(200)
-        .header("content-type", register.contentType)
-        .send(await register.metrics());
-    } catch {
-      return reply
-        .code(200)
-        .header("content-type", "text/plain; version=0.0.4")
-        .send("");
-    }
-  });
+  try {
+    return {
+      contentType: register.contentType,
+      body: await register.metrics(),
+    };
+  } catch {
+    return { contentType: "text/plain; version=0.0.4", body: "" };
+  }
 }

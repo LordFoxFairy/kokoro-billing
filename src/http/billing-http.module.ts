@@ -24,6 +24,8 @@ import type {
 import { CreditModule } from "../modules/credit/credit.module.js";
 import { CreditReadController } from "../modules/credit/credit-read.controller.js";
 import { PersonalGuard } from "./personal.guard.js";
+import { ServiceProbesController } from "./service-probes.controller.js";
+import { recordHttpRequest } from "../infrastructure/metrics.js";
 import { ErrorFilter } from "./error.filter.js";
 
 @Module({})
@@ -50,6 +52,12 @@ export class BillingHttpModule implements NestModule {
       done();
     });
     fastify.addHook("onResponse", (request, reply, done) => {
+      recordHttpRequest({
+        method: request.method,
+        route: request.routeOptions.url ?? "unmatched",
+        statusCode: reply.statusCode,
+        durationSeconds: reply.elapsedTime / 1000,
+      });
       request.log.info(
         {
           service: "kokoro-billing",
@@ -69,7 +77,7 @@ export class BillingHttpModule implements NestModule {
     return {
       module: BillingHttpModule,
       imports: [CreditModule],
-      controllers: [CreditReadController],
+      controllers: [CreditReadController, ServiceProbesController],
       providers: [
         { provide: BILLING_PERSONAL_HTTP_OPTIONS, useValue: config },
         {

@@ -1,3 +1,17 @@
+## SET-10：HTTP drain 生命周期复审修正（候选）
+
+复审确认 Nest close 先销毁 provider、后关闭 adapter，原调用顺序无法保证请求继续使用数据库。现唯一 runtime 显式关闭并 drain HTTP adapter 后才调用 Nest close，仍共享 close promise、保 primary failure 和 main deadline；若HTTP drain失败仍执行provider cleanup，双失败以HTTP为cause。
+
+回归包含受控adapter drain期间实际Fastify请求仍pending、database destroy不得提前的RED→GREEN；实际注册route由Fastify onRoute收集method/path，精确五GET及其HEAD，无源码regex。source/dist真实PG候选再以自有账户表ACCESS EXCLUSIVE锁确认请求正在等待，发送SIGTERM，释放锁后必须读200再退出；这项真实进程回归由Root执行，writer未启动DB或进程。前一轮Root已通过的真实读取与prisma校验不替代此次新增drain验收。
+
+## SET-10：唯一正常 Nest 读取入口候选（待 Root 验收）
+
+沿既有 R255 增量门原位切换 main/createBillingRuntime；正常 source/dist 只装 DatabaseModule + BillingHttpModule/CreditModule，注册两本人 GET 与三 probes。旧 interfaces/http/server.ts 和 v1 runtime parity已删除，无第二runner、模式、旧表alias或proxy；19项未承接operation保持未注册，完整C3/收费/worker退出线不变。
+
+本片唯一writer settings Billing，Root负责依赖版本、Git/PR与真实资源/进程验收。新增src/http/service-probes.options.ts是既有D0窄readiness接口的必要放置，不增加module/framework。
+
+旧测试承接：server/readiness的personal/probe/auth/error由现credit-read矩阵与新Nest probe测试承接；Alipay signed-body/unsigned-body与unsupported provider迁原registry。target-v1的snake_case/envelope/alias/mock transport映射随v1退休，不能作为v2成功证据；未实现的tenant-resolver/webhook输入、checkout/admin/admission/expiry HTTP映射留对应v2 operation后继。checkout-http-replay保offer disabled后的canonical reordered replay、drift拒绝、唯一checkout，改direct CheckoutService；admission-command-receipts保capture/release/event identity/replay/drift/唯一receipt及原完整rollback/余额/流水断言，改direct AdmissionService；durable-result-http保corrupt durable receipt rejection，generic500由真实ErrorFilter测试承接；stripe-payment-gating保official签名拒绝前零inbox、unpaid/paid/replay/late事件、outbox receipt、唯一settlement/实际Credit recipients，改现provider+inbox+worker边界。不得把这些旧service依赖entitlement/payment表的历史集成当canonical新入口成功；此次未改SQL/业务，它们需Root另核合法fixture前置。
+
 ## R255 财务赠送裁决引用（2026-10-10）
 
 唯一业务裁决与实现边界见 [TECHNICAL_DESIGN](TECHNICAL_DESIGN.md#r255-财务赠送裁决与当前实现边界2026-10-10)。698da77 的依赖裁决已接收；Nest 运行候选、FG2 消费、资金用户旅程尚未接收。本次无运行、SQL、机器契约或资金效果；下方旧报告只作为具日期历史证据。
