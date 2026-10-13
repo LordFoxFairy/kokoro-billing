@@ -124,15 +124,11 @@ export const ReadyResponseSchema = {
         dependencies: {
           type: "object",
           additionalProperties: false,
-          required: ["postgres", "redis"],
+          required: ["postgres"],
           properties: {
             postgres: {
               type: "string",
               enum: ["ok", "unavailable"],
-            },
-            redis: {
-              type: "string",
-              enum: ["ok", "degraded"],
             },
           },
         },

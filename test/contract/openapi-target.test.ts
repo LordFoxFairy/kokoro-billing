@@ -5,15 +5,15 @@ import formatsModule from "ajv-formats";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import {
-  assertV2OpenApi,
+  assertTargetOpenApi,
   validateV2OpenApi,
-} from "../../scripts/openapi-v2-target.js";
+} from "../../scripts/openapi-target.js";
 
 import { verifyMeteringPolicyArtifact } from "../../src/modules/metering/metering-policy-artifact.js";
 import { meteringPricingPublicationResultCodec } from "../../src/modules/metering/metering-pricing-publication-result-codec.js";
 
 type JsonObject = Record<string, unknown>;
-const target = join(process.cwd(), "contract/openapi/v2/openapi.yaml");
+const target = join(process.cwd(), "contract/openapi/v1/openapi.yaml");
 const record = (value: unknown): JsonObject => {
   expect(value).not.toBeNull();
   expect(typeof value).toBe("object");
@@ -39,7 +39,7 @@ const mutate = (
 describe("Billing v2 target OpenAPI", () => {
   it("publishes the complete target major contract with fully resolved refs", async () => {
     const document = await readContract();
-    expect(() => assertV2OpenApi(document)).not.toThrow();
+    expect(() => assertTargetOpenApi(document)).not.toThrow();
     expect(record(document.info).version).toBe("3.0.0-experimental.3");
     const operationCount = Object.values(record(document.paths)).reduce<number>(
       (count, path) =>
@@ -474,28 +474,28 @@ describe("Billing v2 target OpenAPI", () => {
       record(record(operation(path).responses)[status]);
 
     expect(
-      record(response("/v2/internal/billing/execution-events", "202").headers),
+      record(response("/v1/internal/billing/execution-events", "202").headers),
     ).toHaveProperty("Location");
     for (const path of [
-      "/v2/internal/billing/admissions",
-      "/v2/billing/checkouts",
-      "/v2/internal/payment/settlements",
-      "/v2/internal/payment/refunds",
-      "/v2/admin/billing/refunds",
+      "/v1/internal/billing/admissions",
+      "/v1/billing/checkouts",
+      "/v1/internal/payment/settlements",
+      "/v1/internal/payment/refunds",
+      "/v1/admin/billing/refunds",
     ]) {
       expect(record(response(path, "201").headers)).toHaveProperty("Location");
     }
-    expect(response("/v2/webhooks/payment/stripe", "200")).not.toHaveProperty(
+    expect(response("/v1/webhooks/payment/stripe", "200")).not.toHaveProperty(
       "content",
     );
-    expect(response("/v2/webhooks/payment/wechat", "204")).not.toHaveProperty(
+    expect(response("/v1/webhooks/payment/wechat", "204")).not.toHaveProperty(
       "content",
     );
     expect(
       record(
         record(
           record(
-            record(response("/v2/webhooks/payment/alipay", "200").content)[
+            record(response("/v1/webhooks/payment/alipay", "200").content)[
               "text/plain"
             ],
           ).schema,
@@ -509,7 +509,7 @@ describe("Billing v2 target OpenAPI", () => {
     expect(
       mutate(document, (copy) => {
         record(
-          record(record(copy.paths)["/v2/billing/checkouts"]).post,
+          record(record(copy.paths)["/v1/billing/checkouts"]).post,
         ).operationId = "getCheckout";
       }),
     ).toEqual(
@@ -558,7 +558,7 @@ describe("Billing v2 target OpenAPI", () => {
     expect(
       mutate(document, (copy) => {
         record(
-          record(record(record(copy.paths)["/v2/billing/checkouts"]).post)
+          record(record(record(copy.paths)["/v1/billing/checkouts"]).post)
             .responses,
         )["400"] = {
           description: "bad",
@@ -598,25 +598,25 @@ describe("Billing v2 target OpenAPI", () => {
       );
 
     rejected((copy) => {
-      post(copy, "/v2/internal/billing/admissions").security = [];
+      post(copy, "/v1/internal/billing/admissions").security = [];
     }, "requires authenticated service security");
     rejected((copy) => {
-      const admission = post(copy, "/v2/internal/billing/admissions");
+      const admission = post(copy, "/v1/internal/billing/admissions");
       admission.parameters = (admission.parameters as unknown[]).filter(
         (parameter) =>
           record(parameter).$ref !== "#/components/parameters/ConsumptionToken",
       );
     }, "requires ConsumptionToken");
     rejected((copy) => {
-      const checkout = post(copy, "/v2/billing/checkouts");
+      const checkout = post(copy, "/v1/billing/checkouts");
       delete record(record(checkout.responses)["201"]).content;
     }, "missing success representation");
     rejected((copy) => {
-      delete record(post(copy, "/v2/webhooks/payment/stripe").responses)["200"];
+      delete record(post(copy, "/v1/webhooks/payment/stripe").responses)["200"];
     }, "must define a 200 ACK");
     rejected((copy) => {
       const operation = record(
-        record(paths(copy)["/v2/billing/checkouts/{checkout_id}"]).get,
+        record(paths(copy)["/v1/billing/checkouts/{checkout_id}"]).get,
       );
       const parameter = (operation.parameters as unknown[])
         .map(record)
@@ -624,11 +624,11 @@ describe("Billing v2 target OpenAPI", () => {
       record(parameter).schema = { type: "string" };
     }, "must be UUID");
     rejected((copy) => {
-      post(copy, "/v2/internal/payment/settlements")["x-kokoro-permission"] =
+      post(copy, "/v1/internal/payment/settlements")["x-kokoro-permission"] =
         "none";
     }, "invalid permission");
     rejected((copy) => {
-      record(record(post(copy, "/v2/billing/checkouts").responses)["403"])[
+      record(record(post(copy, "/v1/billing/checkouts").responses)["403"])[
         "x-kokoro-errors"
       ] = [];
     }, "missing explicit error semantics");
@@ -646,7 +646,7 @@ describe("Billing v2 target OpenAPI", () => {
       );
     }, "Admission.hold_id must be required and nullable");
     rejected((copy) => {
-      const checkout = post(copy, "/v2/billing/checkouts");
+      const checkout = post(copy, "/v1/billing/checkouts");
       checkout.security = (checkout.security as unknown[]).filter(
         (alternative) => !Object.hasOwn(record(alternative), "subjectContext"),
       );
@@ -965,8 +965,8 @@ it("rejects a shared Credit reference at an extra YAML alias occurrence", async 
 
 // R61 target assertions are append-only; the original 72-test prefix is frozen.
 const personalReadPaths = [
-  "/v2/billing/me/credit-account",
-  "/v2/billing/me/credit-ledger",
+  "/v1/billing/me/credit-account",
+  "/v1/billing/me/credit-ledger",
 ] as const;
 const personalReadStatuses = ["200", "400", "401", "403", "404", "500", "503"];
 const personalReadSecurity = [
@@ -1197,7 +1197,7 @@ describe("R61 personal-read source contract target", () => {
         "400": ["billing.invalid_request", false],
         "401": ["billing.unauthenticated", false],
         "403": ["billing.forbidden", false],
-        "404": ["billing.not_found", false],
+        "404": ["billing.credit_account_not_found", false],
         "500": ["billing.internal_error", false],
         "503": ["billing.dependency_unavailable", true],
       };
@@ -1346,7 +1346,7 @@ describe("R61 personal-read source contract target", () => {
       createHash("sha256")
         .update(JSON.stringify(stableContractJson(projection)))
         .digest("hex"),
-    ).toBe("3e846a6a39a69b0dfe7186c6de496f27d902f53a494625abf1954fa1da874892");
+    ).toBe("634da300906670a4b7612cb4bf736d28706dbc92968cfff7b44b7b9c91ea393e");
     const count = Object.values(record(document.paths)).reduce<number>(
       (total, item) =>
         total +
@@ -1547,7 +1547,7 @@ describe("R61 production validator personal-read guards", () => {
     rejectPersonalReadMutation(
       withApprovedPersonalReads(await readContract()),
       (copy) => {
-        personalRead(copy, "/v2/billing/me/subscriptions")[
+        personalRead(copy, "/v1/billing/me/subscriptions")[
           "x-kokoro-identity-transport"
         ] = "personal-identity-u1";
       },
@@ -1750,7 +1750,7 @@ describe("R64 personal-read auth-selection machine facts", () => {
     rejectPersonalReadMutation(
       withApprovedPersonalAuthSelection(await readContract()),
       (copy) => {
-        personalRead(copy, "/v2/billing/me/subscriptions")[
+        personalRead(copy, "/v1/billing/me/subscriptions")[
           personalAuthSelectionExtension
         ] = structuredClone(approvedPersonalAuthSelection);
       },

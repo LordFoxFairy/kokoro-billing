@@ -1,3 +1,7 @@
+## BILLING-V1-FIX（P0，2026-10-13）
+
+单一切片：24-operation target 收敛到唯一 `/v1` 并正规生成；正常 Nest 图只挂载 probes 与两项已实现 Credit read；删除 `/v2` 双轨及旧运行 transport。完成证据必须同时包含 `/v1` 认证正控、旧 `/v2` 404、contract/generated drift、source/dist build 与隔离 PostgreSQL read；其余 19 项保持未实现。
+
 ## R255 财务赠送裁决引用（2026-10-10）
 
 唯一业务裁决与实现边界见 [TECHNICAL_DESIGN](TECHNICAL_DESIGN.md#r255-财务赠送裁决与当前实现边界2026-10-10)。698da77 的依赖裁决已接收；Nest 运行候选、FG2 消费、资金用户旅程尚未接收。本次无运行、SQL、机器契约或资金效果；下方旧报告只作为具日期历史证据。

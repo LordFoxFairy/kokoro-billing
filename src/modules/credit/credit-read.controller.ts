@@ -3,7 +3,6 @@ import {
   Get,
   Inject,
   InternalServerErrorException,
-  NotFoundException,
   Req,
   UseGuards,
 } from "@nestjs/common";
@@ -19,13 +18,14 @@ import type {
 } from "../../generated/billing-api/types.gen.js";
 import { PersonalGuard } from "../../http/personal.guard.js";
 import { CreditService } from "./credit.service.js";
+import { CreditError } from "./credit.error.js";
 import { mapCreditAccount, mapCreditLedger } from "./credit-read.mapper.js";
 import {
   assertCreditAccountQuery,
   parseCreditLedgerQuery,
 } from "./credit-read.query.js";
 
-@Controller("v2/billing/me")
+@Controller("v1/billing/me")
 @UseGuards(PersonalGuard)
 export class CreditReadController {
   constructor(
@@ -44,7 +44,11 @@ export class CreditReadController {
   ): Promise<CreditAccountResponse> {
     assertCreditAccountQuery(request);
     const account = await this.credit.getMyAccount(this.context(request));
-    if (account === null) throw new NotFoundException();
+    if (account === null)
+      throw new CreditError(
+        "CREDIT_ACCOUNT_NOT_FOUND",
+        "Credit account was not found",
+      );
     const response = mapCreditAccount(account);
     this.schemas.assert("CreditAccountResponse", response);
     return response;

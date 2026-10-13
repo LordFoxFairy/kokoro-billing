@@ -1,3 +1,9 @@
+## BILLING-V1-FIX 唯一 HTTP 契约（2026-10-13）
+
+缺失 Credit account 返回 HTTP 404 且稳定码 `billing.credit_account_not_found`、`retryable=false`；普通未注册路径仍是 `billing.not_found`，消费者不得把任意 owner 404 当作业务空账户。
+
+唯一可编辑机器源为 `contract/openapi/v1/openapi.yaml`，精确定义 3 probes 与 21 个 `/v1` internal-owner operation；不存在 `/v2` alias/fallback。当前正常运行图只实现 probes 与 `GET /v1/billing/me/credit-account`、`GET /v1/billing/me/credit-ledger`，旧 `/v2` 必须真实 404；其余目标 operation 的契约存在不等于 handler 或财务语义完成。
+
 ## R255 财务赠送裁决引用（2026-10-10）
 
 唯一业务裁决与实现边界见 [TECHNICAL_DESIGN](TECHNICAL_DESIGN.md#r255-财务赠送裁决与当前实现边界2026-10-10)。698da77 的依赖裁决已接收；Nest 运行候选、FG2 消费、资金用户旅程尚未接收。本次无运行、SQL、机器契约或资金效果；下方旧报告只作为具日期历史证据。

@@ -4,7 +4,22 @@ import { readBillingRuntimeConfig } from "./config/runtime-config.js";
 const config = readBillingRuntimeConfig();
 const runtime = await createBillingRuntime(config);
 
-await runtime.server.listen({ host: config.host, port: config.port });
+try {
+  await runtime.server.listen({ host: config.host, port: config.port });
+} catch (error) {
+  try {
+    await runtime.close();
+  } catch (closeError) {
+    // The listen failure is deliberately primary; cleanup is secondary.
+    throw new AggregateError(
+      [error, closeError],
+      "Billing listen and cleanup failed",
+      // eslint-disable-next-line preserve-caught-error
+      { cause: error },
+    );
+  }
+  throw error;
+}
 
 let shutdownPromise: Promise<void> | undefined;
 const shutdown = async (): Promise<void> => {

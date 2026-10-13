@@ -57,6 +57,7 @@ export class DatabaseModule {
         },
       ],
       exports: [
+        PrismaService,
         TransactionService,
         CommandReceiptRepository,
         AuditAppender,

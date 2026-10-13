@@ -3,7 +3,6 @@ import { resolve } from "node:path";
 import { check, format, getFileInfo, resolveConfig, version } from "prettier";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import ts from "typescript";
 
 const sourceGlob =
   "{src,test,scripts}/**/*.{ts,mts,cts,tsx,js,mjs,cjs,json,yaml,yml}";
@@ -106,47 +105,8 @@ describe("repository formatting governance", () => {
   });
 });
 
-it("keeps the actual route-parity matcher invariant under formatting", async () => {
-  const text = await readFile("scripts/verify-openapi.ts", "utf8");
-  const file = ts.createSourceFile(
-    "verify-openapi.ts",
-    text,
-    ts.ScriptTarget.Latest,
-    true,
-  );
-  let literal: string | undefined;
-  const visit = (node: ts.Node): void => {
-    if (
-      ts.isVariableDeclaration(node) &&
-      ts.isIdentifier(node.name) &&
-      node.name.text === "routePattern" &&
-      node.initializer &&
-      ts.isRegularExpressionLiteral(node.initializer)
-    )
-      literal = node.initializer.text;
-    ts.forEachChild(node, visit);
-  };
-  visit(file);
-  if (!literal) throw new Error("route-pattern-not-found");
-  const boundary = literal.lastIndexOf("/");
-  const pattern = new RegExp(
-    literal.slice(1, boundary),
-    literal.slice(boundary + 1),
-  );
-  const routes = (source: string) =>
-    [...source.matchAll(pattern)].map((match) => [match[1], match[2]]);
-  for (const source of [
-    "app.post('/v1/webhooks/payment/:provider', handler);",
-    'app.post(\n  "/v1/webhooks/payment/:provider",\n  handler,\n);',
-    'app.post<{ Params: Params }>(\n "/v1/webhooks/payment/:provider", handler);',
-  ]) {
-    expect(routes(source)).toEqual([
-      ["post", "/v1/webhooks/payment/:provider"],
-    ]);
-    expect(routes(await format(source, { parser: "typescript" }))).toEqual([
-      ["post", "/v1/webhooks/payment/:provider"],
-    ]);
-  }
-  expect(routes('app.notARoute("/v1/no");')).toEqual([]);
-  expect(routes("app.post(variable, handler);")).toEqual([]);
+it("validates the single target contract instead of source-text route parity", async () => {
+  const source = await readFile("scripts/verify-openapi.ts", "utf8");
+  expect(source).toContain("assertTargetOpenApi");
+  expect(source).not.toContain("routePattern");
 });

@@ -42,7 +42,6 @@ export type ReadyResponse = {
     status: "ready" | "not_ready";
     dependencies: {
       postgres: "ok" | "unavailable";
-      redis: "ok" | "degraded";
     };
   };
 };
@@ -468,7 +467,7 @@ export type GetCatalogData = {
     limit?: number;
     cursor?: string;
   };
-  url: "/v2/commerce/catalog";
+  url: "/v1/commerce/catalog";
 };
 
 export type GetCatalogErrors = {
@@ -518,7 +517,7 @@ export type GetMyCreditAccountData = {
   };
   path?: never;
   query?: never;
-  url: "/v2/billing/me/credit-account";
+  url: "/v1/billing/me/credit-account";
 };
 
 export type GetMyCreditAccountErrors = {
@@ -573,7 +572,7 @@ export type GetMyCreditLedgerData = {
     limit?: number;
     cursor?: string;
   };
-  url: "/v2/billing/me/credit-ledger";
+  url: "/v1/billing/me/credit-ledger";
 };
 
 export type GetMyCreditLedgerErrors = {
@@ -626,7 +625,7 @@ export type GetMySubscriptionsData = {
     limit?: number;
     cursor?: string;
   };
-  url: "/v2/billing/me/subscriptions";
+  url: "/v1/billing/me/subscriptions";
 };
 
 export type GetMySubscriptionsErrors = {
@@ -678,7 +677,7 @@ export type CreateAdmissionData = {
   };
   path?: never;
   query?: never;
-  url: "/v2/internal/billing/admissions";
+  url: "/v1/internal/billing/admissions";
 };
 
 export type CreateAdmissionErrors = {
@@ -738,7 +737,7 @@ export type GetAdmissionData = {
     admission_id: Uuid;
   };
   query?: never;
-  url: "/v2/internal/billing/admissions/{admission_id}";
+  url: "/v1/internal/billing/admissions/{admission_id}";
 };
 
 export type GetAdmissionErrors = {
@@ -790,7 +789,7 @@ export type CaptureAdmissionData = {
     admission_id: Uuid;
   };
   query?: never;
-  url: "/v2/internal/billing/admissions/{admission_id}/capture";
+  url: "/v1/internal/billing/admissions/{admission_id}/capture";
 };
 
 export type CaptureAdmissionErrors = {
@@ -851,7 +850,7 @@ export type ReleaseAdmissionData = {
     admission_id: Uuid;
   };
   query?: never;
-  url: "/v2/internal/billing/admissions/{admission_id}/release";
+  url: "/v1/internal/billing/admissions/{admission_id}/release";
 };
 
 export type ReleaseAdmissionErrors = {
@@ -910,7 +909,7 @@ export type AcceptExecutionEventData = {
   };
   path?: never;
   query?: never;
-  url: "/v2/internal/billing/execution-events";
+  url: "/v1/internal/billing/execution-events";
 };
 
 export type AcceptExecutionEventErrors = {
@@ -970,7 +969,7 @@ export type GetExecutionEventData = {
     execution_event_id: Uuid;
   };
   query?: never;
-  url: "/v2/internal/billing/execution-events/{execution_event_id}";
+  url: "/v1/internal/billing/execution-events/{execution_event_id}";
 };
 
 export type GetExecutionEventErrors = {
@@ -1021,7 +1020,7 @@ export type CreateCheckoutData = {
   };
   path?: never;
   query?: never;
-  url: "/v2/billing/checkouts";
+  url: "/v1/billing/checkouts";
 };
 
 export type CreateCheckoutErrors = {
@@ -1081,7 +1080,7 @@ export type GetCheckoutData = {
     checkout_id: Uuid;
   };
   query?: never;
-  url: "/v2/billing/checkouts/{checkout_id}";
+  url: "/v1/billing/checkouts/{checkout_id}";
 };
 
 export type GetCheckoutErrors = {
@@ -1131,7 +1130,7 @@ export type CreateSettlementData = {
   };
   path?: never;
   query?: never;
-  url: "/v2/internal/payment/settlements";
+  url: "/v1/internal/payment/settlements";
 };
 
 export type CreateSettlementErrors = {
@@ -1191,7 +1190,7 @@ export type GetSettlementData = {
     settlement_id: Uuid;
   };
   query?: never;
-  url: "/v2/internal/payment/settlements/{settlement_id}";
+  url: "/v1/internal/payment/settlements/{settlement_id}";
 };
 
 export type GetSettlementErrors = {
@@ -1241,7 +1240,7 @@ export type CreateInternalRefundData = {
   };
   path?: never;
   query?: never;
-  url: "/v2/internal/payment/refunds";
+  url: "/v1/internal/payment/refunds";
 };
 
 export type CreateInternalRefundErrors = {
@@ -1301,7 +1300,7 @@ export type GetRefundData = {
     refund_id: Uuid;
   };
   query?: never;
-  url: "/v2/internal/payment/refunds/{refund_id}";
+  url: "/v1/internal/payment/refunds/{refund_id}";
 };
 
 export type GetRefundErrors = {
@@ -1350,7 +1349,7 @@ export type CreateAdminRefundData = {
   };
   path?: never;
   query?: never;
-  url: "/v2/admin/billing/refunds";
+  url: "/v1/admin/billing/refunds";
 };
 
 export type CreateAdminRefundErrors = {
@@ -1409,7 +1408,7 @@ export type ExpireCreditHoldsData = {
   };
   path?: never;
   query?: never;
-  url: "/v2/internal/credit-holds/expire";
+  url: "/v1/internal/credit-holds/expire";
 };
 
 export type ExpireCreditHoldsErrors = {
@@ -1464,7 +1463,7 @@ export type AcceptStripeWebhookData = {
   body: ProviderJsonPayload;
   path?: never;
   query?: never;
-  url: "/v2/webhooks/payment/stripe";
+  url: "/v1/webhooks/payment/stripe";
 };
 
 export type AcceptStripeWebhookErrors = {
@@ -1500,7 +1499,7 @@ export type AcceptAlipayWebhookData = {
   body: AlipayWebhookForm;
   path?: never;
   query?: never;
-  url: "/v2/webhooks/payment/alipay";
+  url: "/v1/webhooks/payment/alipay";
 };
 
 export type AcceptAlipayWebhookErrors = {
@@ -1543,7 +1542,7 @@ export type AcceptWechatWebhookData = {
   };
   path?: never;
   query?: never;
-  url: "/v2/webhooks/payment/wechat";
+  url: "/v1/webhooks/payment/wechat";
 };
 
 export type AcceptWechatWebhookErrors = {

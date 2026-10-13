@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import ts from "typescript";
 import { parse } from "yaml";
-import { assertV2OpenApi } from "./openapi-v2-target.js";
+import { assertTargetOpenApi } from "./openapi-target.js";
 
 export const billingApiOfficialNames = [
   "index.ts",
@@ -120,7 +120,7 @@ export function readBillingApiSource(
   sourceText: string,
 ): Record<string, unknown> {
   const document = object(parse(sourceText) as unknown);
-  assertV2OpenApi(document);
+  assertTargetOpenApi(document);
   const schemas = object(object(document.components).schemas);
   assertKeys(schemas, componentNames, "source components");
   assertSchemaRefs(schemas, componentNames);
@@ -242,7 +242,7 @@ export function createBillingApiProvenance(input: ArtifactInput) {
   return {
     owner: "@kokoro/billing",
     source: {
-      path: "contract/openapi/v2/openapi.yaml",
+      path: "contract/openapi/v1/openapi.yaml",
       version: object(document.info).version,
       ...fingerprint(input.sourceText),
     },

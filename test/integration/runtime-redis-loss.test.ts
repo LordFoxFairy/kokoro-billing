@@ -39,7 +39,7 @@ const config = (): BillingRuntimeConfig => {
 };
 
 integration("runtime recovery without Redis", () => {
-  it("starts and restarts against PostgreSQL while reporting the Redis hint degraded", async () => {
+  it("starts and restarts against PostgreSQL without making Redis a readiness dependency", async () => {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const runtime = await createBillingRuntime(config());
       try {
@@ -51,7 +51,7 @@ integration("runtime recovery without Redis", () => {
         expect(dataEnvelope.parse(response.json<unknown>()).data).toMatchObject(
           {
             status: "ready",
-            dependencies: { postgres: "ok", redis: "degraded" },
+            dependencies: { postgres: "ok" },
           },
         );
       } finally {

@@ -22,6 +22,15 @@ describe("billing production timeout configuration", () => {
     ).toThrow(/schema=kokoro_billing|must not contain PostgreSQL options/iu);
   });
 
+  it("does not require Redis or provider configuration for the normal read runtime", () => {
+    const env = baseEnvironment();
+    delete env.REDIS_URL;
+    const config = readBillingRuntimeConfig(env);
+    expect(config.redisUrl).toBeUndefined();
+    expect(config.enabledProviders).toEqual([]);
+    expect(config.providerSecrets).toEqual({});
+  });
+
   it("provides bounded dependency and shutdown defaults", () => {
     const config = readBillingRuntimeConfig(baseEnvironment());
     expect(config.redisTimeouts).toEqual({

@@ -1,38 +1,14 @@
 # kokoro-billing contract governance
 
-## Current and target artifacts
+## Current machine artifact
 
-Billing owns both machine sources in this directory. They describe two distinct
-states; they are not interchangeable versions of one deployed surface.
-
-| State           | Machine source                                       | Operations | Transport                                 | Artifact status                                              |
-| --------------- | ---------------------------------------------------- | ---------: | ----------------------------------------- | ------------------------------------------------------------ |
-| Current runtime | [`openapi/v1/openapi.yaml`](openapi/v1/openapi.yaml) |         17 | existing `/v1/**` plus unversioned probes | `stable`, used for current Fastify route parity              |
-| Target          | [`openapi/v2/openapi.yaml`](openapi/v2/openapi.yaml) |         24 | `/v2/**` plus unversioned probes          | `3.0.0-experimental.3`, not published, deployed, or consumed |
-
-The target artifact SemVer and the HTTP transport prefix are independent. The
-breaking clean-slate artifact is `3.0.0-experimental.3`; its routes intentionally
-remain under `/v2`. The private package version is not a wire version. Human
-semantics live in [`../docs/API_CONTRACT.md`](../docs/API_CONTRACT.md), which is
-not a second editable field-level contract.
-
-Current source digests:
+[`openapi/v1/openapi.yaml`](openapi/v1/openapi.yaml) is the only editable Billing HTTP machine source. It defines exactly 24 operations: three unversioned probes and 21 `/v1/**` internal-owner operations. The artifact version remains `3.0.0-experimental.3`; package version and HTTP path version are independent. There is no `/v2` alias, fallback, or second editable contract.
 
 ```text
-openapi/v1/openapi.yaml  fbe34c188cf4a9f08955e4b94ceab40d63a41156a3106fae6ab939a4190612b7
-openapi/v2/openapi.yaml  ecaceefd3fd09d5106b364593dd513506622ca011bb0436b74f0928ffd8dcf00
+openapi/v1/openapi.yaml  35b4a2d1d178f6a548fe67460c8e8cbba9eb247296f9051f6ec23060235baff8
 ```
 
-The current v1 source contains an authentication-breaking replacement that is
-not deployed: its two security
-descriptions identify IAM EdDSA/JWKS `user_delegated` tokens, the namespaced
-tenant claim, fixed Billing resource audience, and complete Billing scope
-profile. The digest above is the direct SHA-256 of that source; this edit does
-not claim generated-artifact publication or runtime rollout.
-
-Historical candidate narratives and old validation counts are available in Git
-history and the owner [`../docs/CURRENT.md`](../docs/CURRENT.md). They are not
-current generation or runtime evidence.
+Only the probes and two personal Credit reads are currently mounted by the normal Nest runtime. The other 19 contract operations remain unimplemented and unregistered; their presence in the target artifact is not runtime-completion evidence. Historical candidate narratives and old digests remain in Git history and dated owner documentation.
 
 ## Owner, visibility, and authority
 
@@ -114,7 +90,7 @@ revisions with integer/exact arithmetic; consumers display owner results.
 
 ## Generation and read-only outputs
 
-`contract/openapi/v2/openapi.yaml` is the only editable target machine source.
+`contract/openapi/v1/openapi.yaml` is the only editable target machine source.
 The pinned local toolchain is:
 
 ```text
@@ -152,8 +128,7 @@ The target currently contains 42 schema components. The present personal HTTP
 bootstrap uses Ajv 8.20.0 with ajv-formats 3.0.1 and compiles the exact
 42-component generated registry. It rejects missing, extra, duplicate-target,
 or uncompiled bindings and keeps coercion, defaults, and removal of additional
-properties disabled. This bootstrap evidence does not mean the 24 target v2
-operations are implemented.
+properties disabled. This bootstrap evidence does not mean the 24 target operations are implemented.
 
 Generated files are never edited by hand. A source change must regenerate all
 affected outputs and update this README's target digest in the same reviewed
@@ -169,9 +144,7 @@ pnpm contract:check
 pnpm contract:generated:check
 ```
 
-`contract:check` preserves exact parity for the current 17-operation v1
-runtime and independently verifies the target 24-operation v2 source. Target
-checks cover OpenAPI syntax, local references, operation IDs and governance,
+`contract:check` preserves exact parity for the single 24-operation v1 source. Checks cover OpenAPI syntax, local references, operation IDs and governance,
 tenant/request identity, permission and idempotency metadata, closed command
 and response shapes, explicit errors, webhook signature/ACK differences,
 strict Agent artifact identity, immutable Admission/evidence references,

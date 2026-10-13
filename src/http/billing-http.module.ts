@@ -25,6 +25,12 @@ import { CreditModule } from "../modules/credit/credit.module.js";
 import { CreditReadController } from "../modules/credit/credit-read.controller.js";
 import { PersonalGuard } from "./personal.guard.js";
 import { ErrorFilter } from "./error.filter.js";
+import {
+  BILLING_READINESS,
+  ServiceProbesController,
+} from "./service-probes.controller.js";
+import { PrismaService } from "../database/prisma.service.js";
+import { registerMetricsRoute } from "../infrastructure/metrics.js";
 
 @Module({})
 export class BillingHttpModule implements NestModule {
@@ -36,6 +42,7 @@ export class BillingHttpModule implements NestModule {
     if (!(adapter instanceof FastifyAdapter))
       throw new Error("Billing HTTP requires FastifyAdapter");
     const fastify = adapter.getInstance<FastifyInstance>();
+    registerMetricsRoute(fastify, "billing");
     fastify.addHook("onRequest", (request, reply, done) => {
       const supplied = request.headers["x-request-id"];
       request.id =
@@ -69,8 +76,9 @@ export class BillingHttpModule implements NestModule {
     return {
       module: BillingHttpModule,
       imports: [CreditModule],
-      controllers: [CreditReadController],
+      controllers: [CreditReadController, ServiceProbesController],
       providers: [
+        { provide: BILLING_READINESS, useExisting: PrismaService },
         { provide: BILLING_PERSONAL_HTTP_OPTIONS, useValue: config },
         {
           provide: BILLING_PERSONAL_AUTH,

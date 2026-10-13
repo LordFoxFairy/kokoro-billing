@@ -1,3 +1,7 @@
+## BILLING-V1-FIX 唯一 v1 与正常 Nest 读取入口（2026-10-13）
+
+Billing 的唯一目标机器源收敛为 24-operation `/v1`；删除旧 17-operation source、`/v2` source、alias 与双轨校验。正常 `createBillingRuntime` 原位组合 Database、Billing HTTP、三项 probe 与已实现的两项本人 Credit GET；其余 19 项不注册空 handler。旧 Fastify transport 不再是正常入口，其仍有价值的资金/provider断言由既有业务测试承接，不据此声称未实现财务能力完成。
+
 ## R255 财务赠送裁决与当前实现边界（2026-10-10）
 
 本节接收 698da77 的业务裁决，不接收其“canonical Nest 已正常运行”的当前态声明。已提交源码 main261a20f 的唯一入口仍为 createBillingRuntime；运行目录中的 Nest 候选属于未接收 mixed，不是本次代码交付。以下旧运行报告只作为具日期的历史证据。

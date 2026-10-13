@@ -76,7 +76,7 @@ export async function generateBillingApiArtifacts(
     options.outputDirectory ?? join(root, "src/generated/billing-api");
   await assertToolchain(root);
   const sourceText = await readUtf8(
-    join(root, "contract/openapi/v2/openapi.yaml"),
+    join(root, "contract/openapi/v1/openapi.yaml"),
   );
   readBillingApiSource(sourceText);
   const scratch = await mkdtemp(join(tmpdir(), "kokoro-billing-api-"));

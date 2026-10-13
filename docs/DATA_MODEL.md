@@ -1,3 +1,7 @@
+## BILLING-V1-FIX 数据边界（2026-10-13）
+
+本切换不修改 canonical SQL、Prisma model、表、索引、资金状态机或 worker。两项 Credit GET 继续只读 `kokoro_billing` owner schema，缺账户为明确 404，不以未注册 route 的 404 伪装业务无账户。
+
 ## R255 财务赠送裁决引用（2026-10-10）
 
 唯一业务裁决与实现边界见 [TECHNICAL_DESIGN](TECHNICAL_DESIGN.md#r255-财务赠送裁决与当前实现边界2026-10-10)。698da77 的依赖裁决已接收；Nest 运行候选、FG2 消费、资金用户旅程尚未接收。本次无运行、SQL、机器契约或资金效果；下方旧报告只作为具日期历史证据。

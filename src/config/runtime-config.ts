@@ -36,7 +36,7 @@ export type DependencyTimeoutConfig = Readonly<{
 
 export type BillingRuntimeConfig = {
   readonly databaseUrl: string;
-  readonly redisUrl: string;
+  readonly redisUrl?: string;
   readonly authMode: BillingAuthMode;
   readonly internalServiceSecret: string;
   readonly bffServiceToken: string;
@@ -132,7 +132,7 @@ export const readBillingRuntimeConfig = (
   const databaseUrl = parseBillingDatabaseUrl(
     required(env, "DATABASE_URL"),
   ).toString();
-  const redisUrl = required(env, "REDIS_URL");
+  const redisUrl = env.REDIS_URL;
   const internalServiceSecret = required(env, "INTERNAL_SERVICE_SECRET");
   const bffServiceToken = required(env, "BILLING_BFF_SERVICE_TOKEN");
   const operatorProxySecret = required(env, "BILLING_OPERATOR_PROXY_SECRET");
@@ -169,7 +169,7 @@ export const readBillingRuntimeConfig = (
 
   return {
     databaseUrl,
-    redisUrl,
+    ...(redisUrl === undefined ? {} : { redisUrl }),
     authMode,
     internalServiceSecret,
     bffServiceToken,

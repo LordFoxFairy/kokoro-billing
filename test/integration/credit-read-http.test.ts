@@ -36,8 +36,8 @@ describe.skipIf(adminUrl === undefined)(
     let schemas: BillingSchemaValidator;
     let jwksServer: Server;
     let signingKey: Awaited<ReturnType<typeof generateKeyPair>>["privateKey"];
-    const accountPath = "/v2/billing/me/credit-account";
-    const ledgerPath = "/v2/billing/me/credit-ledger";
+    const accountPath = "/v1/billing/me/credit-account";
+    const ledgerPath = "/v1/billing/me/credit-ledger";
     const profile = {
       mode: "jwks" as const,
       internalServiceSecret: "r74-http-pg-service-secret-0000000001",
@@ -473,7 +473,7 @@ describe.skipIf(adminUrl === undefined)(
         });
         check(response, 404);
         expect(response.json<ErrorResponse>().error.code).toBe(
-          "billing.not_found",
+          "billing.credit_account_not_found",
         );
       }
       expect(await facts()).toEqual(before);
