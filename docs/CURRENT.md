@@ -1,3 +1,11 @@
+## SET-15 canonical Catalog冻结候选（待Root独审/资源验收）
+
+基线fe1c37226a2373d753396d3be866099fc1b54dad。正常Nest已新增/v2/commerce/catalog，五commerce文件与窄CatalogGuard，不新增mapper/port/pool；本片不实现subscriptions/checkout/商品发布/资金命令。完整机器可无subject，携带subject仍严格合法；transaction actor为authenticated web-bff，无伪用户。catalog使用现readOnlySnapshot事务、同DB instant、No-FK关系损坏先安全失败、最新eligible版本和有界稳定cursor，decimal始终string。SQL/Prisma/schema/锁文件/旧v1artifact无改动，普通租户未发布目录仍真实空页。
+
+实际RED为正常Nest控制health200而完整machine无subject Catalog404（1FAIL）；候选同用例GREEN。strict auth/query/repository/HTTP定向40PASS，含重复header、optional subject、personal五因素不退、最大Unicode cursor预算、损坏行、int64精度；contract新增required offer_key/optional-subject u1 transport治理及无关历史projectionhash保持。正规artifact从experimental.3到experimental.4生成，是strict消费breaking，Root须按owner正式commit/digest成对刷新消费者，未以beta或兼容alias激活。
+
+完整pnpm verify自然exit0：46文件1433 PASS、46文件492 SKIP；format/lint/typecheck/build/sql/contract/test通过，contract:generated:check自然exit0。canonical真实PG新5项、现creditHTTP新1项IAM profile正负控、source/dist非空目录及既有drain/启动失败cleanup仍待Root执行；writer未启动服务/访问PG。测试数据仅隔离fixture，不作为正常产品计划/订阅证明。BFF还需后继v2GET/分页投影及Web正常浏览器闭环；支付按钮不可因目录读取成功而启用。
+
 ## SET-10：已接受请求的 keep-alive drain 修正候选
 
 Root真实source/dist已接受的表锁GET均读200，但关闭超过既有5秒deadline后exit1；四项启动失败负控和24项credit读取已通过，此前idle退出不构成在途drain证据。锁定Fastify的route入口只对关闭后新进入的请求设置Connection: close，已进入handler的响应遗漏；Root独立TCP诊断也复现完整读取后close仍pending。

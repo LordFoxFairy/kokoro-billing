@@ -1,3 +1,7 @@
+## SET-15 canonical目录读取候选
+
+`src/modules/commerce/`：commerce.module仅DI；catalog-read.controller仅HTTP/guard/generated响应；catalog.service只读事务；catalog.repository canonical查询/映射；catalog.query strict GET/tenant-scoped cursor。`src/http/catalog.guard.ts`与现auth能力区分machine optional subject和本人五因素。新unit/query/auth/repository、HTTP normal graph、canonical PG tests对应证据；source/dist沿现runtime集成承接。没有mapper/port/第二pool。
+
 # kokoro-billing 仓库地图
 
 本文描述当前代码与事实边界。进度与缺口见 [`docs/CURRENT.md`](docs/CURRENT.md)，目标字段级wire contract见

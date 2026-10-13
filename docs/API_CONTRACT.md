@@ -1,3 +1,9 @@
+## SET-15 Catalog实现候选（待Root资源验收）
+
+已按本文件SET15设计门接入五commerce文件、窄CatalogGuard及正常BillingHttpModule；CatalogService沿同一TransactionService readOnlySnapshot，repository使用parameterized Prisma tagged SQL，先取事务DB instant，检查本tenant otherwise-eligible revision parent完整性，再bounded latest eligible目录查询。无SQL/Prisma/seed/provider/资金修改；machine可无subject，若有仍由原personal严格codec/五因素验证，事务actor始终authenticated web-bff。cursor绑定tenant identity digest、scope和稳定排序tuple，最大合法Unicode边界仍在2048wire预算；不持久化业务事实。
+
+CatalogItem required offer_key和u1 transport以3.0.0-experimental.4正规生成，现closed schema registry新增CatalogResponse允许名。历史v1及无关wire保留，消费者必须Root精确commit/digest成对承接。当前候选六GET及HEAD不代表其它18operation或正式商品发布/支付/本人订阅完成。测试用合成商品仅隔离fixture，不进入正常产品目录。
+
 ## SET-15：catalog读取及不可变消费者配对门（2026-10-13）
 
 批准沿现/v2/commerce/catalog实现真实canonical目录，machine唯一源仍contract/openapi/v2/openapi.yaml。CatalogItem新增required offer_key（canonical offer业务key），artifact明确breaking 3.0.0-experimental.4；正规contract:generate/check，不能手改generated或把新增strict字段冒兼容minor。仅自有开发精确配对，未激活main/日常/生产。Credit两读wire不变，其他operation字段/历史artifact约束不改。

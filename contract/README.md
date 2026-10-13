@@ -1,3 +1,7 @@
+## SET-15 Catalog owner候选生成（待Root验收）
+
+当前正规生成源为v2 `3.0.0-experimental.4`，required `offer_key`及canonical u1 catalog transport是明确strict消费breaking；只允许Root按正式owner commit及本页current digest成对刷新消费者。v1历史artifact及其digest未修改。候选正常Nest graph已注册六GET及HEAD，目录只读且不证明checkout、subscriptions或商品发布可用；正式PG/source/dist/浏览器证据仍待Root。
+
 ## SET-15 catalog候选裁决（2026-10-13）
 
 本节覆盖下表旧current Fastify已部署状态：正常Nest入口已交付五GET及HEAD。下一canonical catalog候选将现v2 artifact从3.0.0-experimental.3推进为3.0.0-experimental.4，承认required offer_key及catalog身份transport的strict消费breaking；只自有开发成对固定immutable commit/digest，现Credit wire与operation数24不变。三个设计面SET15门为当前方案，catalog未实现/未启动前不宣称部署；历史表格保留作前态，非当前激活证据。不得手改生成物、旧hash或借beta例外。
@@ -24,7 +28,7 @@ Current source digests:
 
 ```text
 openapi/v1/openapi.yaml  fbe34c188cf4a9f08955e4b94ceab40d63a41156a3106fae6ab939a4190612b7
-openapi/v2/openapi.yaml  ecaceefd3fd09d5106b364593dd513506622ca011bb0436b74f0928ffd8dcf00
+openapi/v2/openapi.yaml  8a3d12cf7517e7ee6cb2958b740bb69ab4831d38a383e61aca383b5fd1e8b27a
 ```
 
 The current v1 source contains an authentication-breaking replacement that is

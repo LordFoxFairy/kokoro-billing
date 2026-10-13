@@ -44,6 +44,7 @@ describe("canonical runtime probe authority and retired route removal", () => {
         "/healthz",
         "/readyz",
         "/metrics",
+        "/v2/commerce/catalog",
         "/v2/billing/me/credit-account",
         "/v2/billing/me/credit-ledger",
       ];
@@ -79,7 +80,6 @@ describe("canonical runtime probe authority and retired route removal", () => {
         "/v1/billing/me/credit-account",
         "/v1/commerce/catalog",
         "/v1/webhooks/payment/stripe",
-        "/v2/commerce/catalog",
         "/v2/billing/me/subscriptions",
         "/credit-account",
       ]) {

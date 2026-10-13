@@ -14,6 +14,7 @@ import type {
   BillingUserContext,
   BillingAuthOptions,
   BillingPersonalAuth,
+  BillingCatalogAuth,
 } from "./billing-auth.types.js";
 
 const headerValue = (
@@ -300,6 +301,80 @@ export function createBillingPersonalAuth(
         )
           return { ok: false, status: 403 };
         return { ok: true, context };
+      } catch {
+        return { ok: false, status: 400 };
+      }
+    },
+  };
+}
+
+/** Catalog machines act as their authenticated service, never as a fabricated user. */
+export function createBillingCatalogAuth(
+  options: BillingAuthOptions,
+): BillingCatalogAuth {
+  const config = validateBillingPersonalHttpOptions(options);
+  const personal = createBillingPersonalAuth(config);
+  return {
+    authenticate: async (request) => {
+      const token = bearer(request);
+      const machine =
+        [
+          "x-kokoro-service",
+          "x-kokoro-internal-secret",
+          "x-kokoro-subject",
+        ].some((name) => Object.hasOwn(request.headers, name)) ||
+        credentialMatches(token, config.bffServiceToken);
+      if (!machine || Object.hasOwn(request.headers, "x-kokoro-subject")) {
+        const result = await personal.authenticate(request);
+        if (!result.ok) return result;
+        return {
+          ok: true,
+          context: Object.freeze({
+            tenantId: result.context.tenantId,
+            actorId: machine ? "web-bff" : result.context.subjectId,
+          }),
+        };
+      }
+      for (const name of [
+        "x-kokoro-service",
+        "x-kokoro-internal-secret",
+        "authorization",
+      ]) {
+        if (
+          typeof request.headers[name] !== "string" ||
+          billingHeaderCount(request.raw.rawHeaders, name) !== 1
+        )
+          return { ok: false, status: 403 };
+      }
+      if (
+        request.headers["x-kokoro-service"] !== "web-bff" ||
+        !credentialMatches(
+          headerValue(request, "x-kokoro-internal-secret"),
+          config.internalServiceSecret,
+        ) ||
+        !credentialMatches(token, config.bffServiceToken)
+      )
+        return { ok: false, status: 403 };
+      if (
+        request.headers["x-kokoro-tenant-id"] === undefined ||
+        request.headers["x-kokoro-tenant-id"] === ""
+      )
+        return { ok: false, status: 403 };
+      try {
+        if (
+          billingHeaderCount(request.raw.rawHeaders, "x-kokoro-tenant-id") !== 1
+        )
+          return { ok: false, status: 400 };
+        return {
+          ok: true,
+          context: Object.freeze({
+            tenantId: decodeBillingIdentityHeader(
+              request.headers["x-kokoro-tenant-id"],
+              "tenant",
+            ),
+            actorId: "web-bff",
+          }),
+        };
       } catch {
         return { ok: false, status: 400 };
       }

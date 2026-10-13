@@ -1,3 +1,7 @@
+## SET-15当前候选入口
+
+三设计及IMPLEMENTATION_PLAN顶端SET15前缀是本片当前裁决，CURRENT记录实测；normal Nest候选为六GET/HEAD，唯一v2 machine source是contract/openapi/v2/openapi.yaml experimental.4。下方Fastify/v1当前态描述仅历史，不作为现已激活证据。
+
 # kokoro-billing 文档索引
 
 本目录只描述当前 Billing owner 实现、协议策略、运行和缺口。字段级 API 事实源是

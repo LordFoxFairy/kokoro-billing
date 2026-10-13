@@ -1,3 +1,9 @@
+## SET-15 Catalog实现候选（待Root资源验收）
+
+已按本文件SET15设计门接入五commerce文件、窄CatalogGuard及正常BillingHttpModule；CatalogService沿同一TransactionService readOnlySnapshot，repository使用parameterized Prisma tagged SQL，先取事务DB instant，检查本tenant otherwise-eligible revision parent完整性，再bounded latest eligible目录查询。无SQL/Prisma/seed/provider/资金修改；machine可无subject，若有仍由原personal严格codec/五因素验证，事务actor始终authenticated web-bff。cursor绑定tenant identity digest、scope和稳定排序tuple，最大合法Unicode边界仍在2048wire预算；不持久化业务事实。
+
+CatalogItem required offer_key和u1 transport以3.0.0-experimental.4正规生成，现closed schema registry新增CatalogResponse允许名。历史v1及无关wire保留，消费者必须Root精确commit/digest成对承接。当前候选六GET及HEAD不代表其它18operation或正式商品发布/支付/本人订阅完成。测试用合成商品仅隔离fixture，不进入正常产品目录。
+
 ## SET-15：canonical 商品目录读取设计门（2026-10-13，实施前）
 
 本节批准现唯一Nest入口增量注册真正catalog GET，不缩减完整订阅、checkout与C3目标。Root主控裁决/Git/资源，Billing负责人为本片唯一实现writer；当前基线20dba9c仅五GET及HEAD，旧catalog query读entitlement_*且未装配，不能复活旧runner。当前套餐加载失败不是数据库能力缺失。

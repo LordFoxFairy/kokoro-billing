@@ -187,6 +187,30 @@ describe.skipIf(admin === undefined)(
               }),
             );
           };
+          const catalogOffer = await fixture.client.billing_offer.create({
+            data: {
+              id: randomUUID(),
+              tenant_id: tenant,
+              offer_key: "runtime-isolated-plan",
+              status: "active",
+            },
+          });
+          const catalogRevision =
+            await fixture.client.billing_offer_revision.create({
+              data: {
+                id: randomUUID(),
+                tenant_id: tenant,
+                offer_id: catalogOffer.id,
+                revision: 1,
+                name: "Isolated runtime plan",
+                amount_minor: 9007199254740993n,
+                credit_micros: 9223372036854775807n,
+                currency_code: "USD",
+                billing_interval: "month",
+                status: "published",
+                published_at: new Date("2020-01-01T00:00:00Z"),
+              },
+            });
           const before = await facts();
           const sessionCount = async () =>
             (
@@ -266,6 +290,28 @@ describe.skipIf(admin === undefined)(
             "x-kokoro-subject": encode(subject),
             "x-request-id": "runtime-read-proof",
           };
+          const catalogHeaders: Record<string, string> = { ...headers };
+          delete catalogHeaders["x-kokoro-subject"];
+          const catalog = await fetch(base + "/v2/commerce/catalog", {
+            headers: catalogHeaders,
+          });
+          expect(catalog.status).toBe(200);
+          expect(await catalog.json()).toEqual({
+            data: {
+              items: [
+                {
+                  offer_revision_id: catalogRevision.id,
+                  offer_key: "runtime-isolated-plan",
+                  name: "Isolated runtime plan",
+                  amount_minor: "9007199254740993",
+                  credit_micros: "9223372036854775807",
+                  currency_code: "USD",
+                  billing_interval: "month",
+                },
+              ],
+              page: { next_cursor: null },
+            },
+          });
           const account = await fetch(base + "/v2/billing/me/credit-account", {
             headers,
           });

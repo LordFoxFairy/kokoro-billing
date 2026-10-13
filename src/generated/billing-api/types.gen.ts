@@ -52,6 +52,7 @@ export type Page = {
 };
 
 export type CatalogItem = {
+  offer_key: string;
   offer_revision_id: Uuid;
   name: string;
   amount_minor: NonNegativeDecimal;
@@ -462,6 +463,8 @@ export type GetCatalogData = {
   body?: never;
   headers: {
     "x-kokoro-tenant-id": string;
+    "x-kokoro-subject"?: string;
+    "x-kokoro-service"?: "web-bff";
   };
   path?: never;
   query?: {

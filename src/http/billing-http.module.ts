@@ -9,10 +9,14 @@ import { randomUUID } from "node:crypto";
 import * as generatedSchemas from "../generated/billing-api/schemas.gen.js";
 import provenance from "../generated/billing-api/provenance.json" with { type: "json" };
 import { validateBillingPersonalHttpOptions } from "../config/runtime-config.js";
-import { createBillingPersonalAuth } from "../infrastructure/auth/billing-auth.js";
+import {
+  createBillingCatalogAuth,
+  createBillingPersonalAuth,
+} from "../infrastructure/auth/billing-auth.js";
 import { billingHeaderCount } from "../infrastructure/auth/billing-identity-header.js";
 import {
   BILLING_PERSONAL_AUTH,
+  BILLING_CATALOG_AUTH,
   BILLING_PERSONAL_HTTP_OPTIONS,
   BILLING_SCHEMA_VALIDATOR,
 } from "../infrastructure/auth/billing-auth.types.js";
@@ -23,6 +27,9 @@ import type {
 } from "../infrastructure/auth/billing-auth.types.js";
 import { CreditModule } from "../modules/credit/credit.module.js";
 import { CreditReadController } from "../modules/credit/credit-read.controller.js";
+import { CommerceModule } from "../modules/commerce/commerce.module.js";
+import { CatalogReadController } from "../modules/commerce/catalog-read.controller.js";
+import { CatalogGuard } from "./catalog.guard.js";
 import { PersonalGuard } from "./personal.guard.js";
 import { ServiceProbesController } from "./service-probes.controller.js";
 import { recordHttpRequest } from "../infrastructure/metrics.js";
@@ -76,9 +83,20 @@ export class BillingHttpModule implements NestModule {
     const config = validateBillingPersonalHttpOptions(options);
     return {
       module: BillingHttpModule,
-      imports: [CreditModule],
-      controllers: [CreditReadController, ServiceProbesController],
+      imports: [CreditModule, CommerceModule],
+      controllers: [
+        CreditReadController,
+        CatalogReadController,
+        ServiceProbesController,
+      ],
       providers: [
+        {
+          provide: BILLING_CATALOG_AUTH,
+          inject: [BILLING_PERSONAL_HTTP_OPTIONS],
+          useFactory: (resolved: BillingPersonalHttpOptions) =>
+            createBillingCatalogAuth(resolved),
+        },
+        CatalogGuard,
         { provide: BILLING_PERSONAL_HTTP_OPTIONS, useValue: config },
         {
           provide: BILLING_PERSONAL_AUTH,
