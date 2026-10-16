@@ -1,3 +1,15 @@
+## MC01-B2a：Metering 严格 usage2 纯解码边界（2026-10-16）
+
+承接用户已确认MC01与B1 af0a531；先完成B2 reader的纯验证内核，不把它宣称为HTTP reader或Admission。唯一writer为主Agent。采用现`src/modules/metering/`普通codec/parser文件，不增加Module/controller/进程；淘汰复用旧commandDigest（非RFC8785）与手写第二份schema。Agent2d5ce12的schema、vectors、manifest从固定Git object逐字分发到只读`vendor/agent/usage/v2/`，SHA受既有consumer-pin约束；B1“不复制schema”仅描述B1已交付范围，本片明确增加不可编辑的发布物副本。类型经已锁HeyAPI从该schema派生，runtime schema为逐字事实的生成TS常量；编译后不依赖sibling或运行目录外文件。生成器与drift检查接既有contract门。
+
+原字节<=65536、root=1深度<=16、严格UTF8、无BOM/解码后重复key/控制字符/DEL/孤立surrogate；空原型对象避免特殊key。批准schema无number，纯JSON parser拒number，仅在该有限类型集实现RFC8785：UTF16码元排序、ECMAScript JSON字符串转义、原值不规范化，domain-separated SHA256去除唯一digest字段。Count/Ordinal按BigInt核INT63及加法，专用Ajv2020使用完整owner schema及其UTF8/decimal/calendar扩展，无coerce/default/remove。复现全部owner语义与successor知识单调规则，不猜测额外usage或补零。返回递归冻结的验证事实，不返回授权/金额。
+
+明确API为原bytes解码、两份原bytes successor核验、原bytes与后继可信snapshot的完整identity/planned/revision/digest逐字段绑定且要求sealed；不能从被核验body反向构建可信snapshot。解码允许合法unsealed或非首revision，sealed不代表known/free/可结算。expected包含actor/subject/assertion/session/lease/input_digest/peer_path等完整identity，不只tenant/model。只提供校验，不创建snapshot或假信任。所有失败只抛固定错误且不带raw/cause。后继HTTP6 adapter仍需明确服务身份、响应envelope与base64原bytes、预算/timeout/cancel/shutdown、无redirect/retry及完整binding；本片不实现或接线这些网络行为。
+
+无资金/数据库/HTTP target/配置/normal运行变更；新调用仅usage2，usage1历史由Agent提供，本codec无fallback。无可用正式preauthorization bound/技术保证仍零模型调用。验收先owner3正/29负/10pair及字节/完整binding/不可变/数值边界RED，再GREEN；生成物drift、打包执行、原Billing全门。复用原suite，不恢复UI锁样式测试。
+
+---
+
 ## MC01-B1：接收已验证 usage2 发布身份（2026-10-16；既定MC01内的候选）
 
 事实基线Billing1ceeae5：正常Nest只挂probes和Credit两读；未挂载的Admission/Capture/Release/Execution目标仍固定旧usage1/schema摘要，仓内没有正式Agent证据HTTP reader或consumer artifact。这不等于Agent usage2已被Billing接收。Agent本地候选2d5ce12c0eecdecfcdb44a21b69da707d51eb7c7已验HTTP6、usage2新写和sealed v1历史读取，normal Agent/System未切换。

@@ -212,3 +212,26 @@ The current target has not been published or pinned by Agent. Still open are:
 Until those owner slices pass, the target artifact and generated registry are
 machine-contract candidates, not evidence that a new Billing API or charging
 flow is live.
+
+## Distributed Agent usage2 validation kernel
+
+`agent/usage/v2/consumer-pin.json` remains the immutable release receipt. B2a now
+also distributes the exact Agent schema, vectors and manifest under
+`vendor/agent/usage/v2/`; these are read-only owner artifacts, not editable
+Billing schemas. The normal contract command checks all three accepted hashes
+and byte-exact generated drift:
+
+```bash
+pnpm contract:check
+pnpm exec tsx scripts/generate-agent-usage.ts --check
+```
+
+After an explicitly approved owner release update, the same generator without
+`--check` produces `src/generated/agent-usage-v2/`. Types use the existing pinned
+HeyAPI generator; a compiled schema constant keeps the decoder independent of
+source/vendor files at runtime. Do not edit generated output or change the
+receipt to silence a failed check. The pure Metering kernel validates original
+UTF-8 JSON, domain digest, successor knowledge and complete sealed snapshot
+binding. It performs no HTTP or database I/O and grants no financial permission;
+the authenticated HTTP reader and Admission/settlement remain separate open
+implementation work.

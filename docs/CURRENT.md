@@ -1,3 +1,13 @@
+## MC01-B2a：usage2 纯校验内核已验（2026-10-16）
+
+在B1 af0a531上完成Metering纯decoder、successor与sealed完整snapshot绑定；不新增HTTP、Module接线或资金效果。Agent2d5ce12的schema/vectors/manifest逐字分发且SHA匹配B1 pin，类型沿已锁HeyAPI派生，完整schema编入JS；公共contract门检查原发布物及generated drift。原bytes以严格UTF8的精确originalJson字符串保留，evidence递归冻结；未报告/未知/明确零保持区分，sealed不是charge许可。usage1无fallback。
+
+先9行为RED/49PASS，再修正大整数正控fixture内自身reasoning>output矛盾（未放宽校验）后全部GREEN。原样owner3positive/29negative/10successor，另核UTF8/BOM、decoded重复键、原型/深度/字节边界、UTF16、完整identity/planned绑定和失败脱敏；现focused60项与扩展后的原contract254项合314PASS。第一完整门4项lint失败保留，机械修复后Node24.20.0/pnpm11.25.0 `pnpm verify` exit0：format/lint/type/build/sql/contract、1481PASS/480原资源SKIP，32.71秒。日志保留原header诊断/故意Redis拒绝负控，不称全净。隔离temp只拷compiled codec/schema与node_modules链接，无source/vendor运行依赖，42个原发布向量再次全部通过；临时目录已清理。独立只读复核Approved，无确定P0–P2。
+
+数据库/Prisma/依赖/HTTP target/Module/正常进程和现余额原样；纯codec无I/O，480资源门未运行且不算通过。后继B2仍需正式HTTP6 reader、服务身份/envelope原bytes/预算与取消生命周期；正式bound/技术保证、IAM与Admission事务、single dispatch、实际结算和产品旅程均OPEN。零充值/扣费/真实模型调用/远程Git，不把内核交付冒成完整Billing上线。
+
+---
+
 ## MC01-B1：usage2目标契约与发布身份已本地接收（2026-10-16）
 
 用户明确确认“新调用只接受usage2，usage1仅历史读取”，限代码/契约，不启用扣费或发送模型。原分支1ceeae5后原位更新唯一canonical HTTP目标至4.0.0-experimental.1；仍/v1、24operations/42schemas、正常仅5routes。改动严格限六处usage version与两处schema digest和artifact版本；现有Credit两读、controller、财务/数据库/依赖/运行配置不变。只读consumer-pin记录Agent2d5ce12的精确Git对象与HTTP6/usage2来源摘要，公共contract gate固定receipt原字节SHA；不是第二份schema、runtime reader、权限或资金许可。

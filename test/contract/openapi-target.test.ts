@@ -2281,7 +2281,7 @@ describe("R243 Billing-owned metering policy artifact", () => {
 // Exercise the public command against owned input copies, never edit the live
 // owner artifact or accept an import failure as successful pin enforcement.
 describe("public Agent usage consumer pin gate", () => {
-  it.each(["missing", "changed"])(
+  it.each(["missing", "changed", "schema", "vectors", "manifest", "generated"])(
     "rejects a %s receipt after a valid public control",
     async (fault) => {
       const { cp, mkdir, symlink, unlink } = await import("node:fs/promises");
@@ -2316,6 +2316,20 @@ describe("public Agent usage consumer pin gate", () => {
           join(directory, "node_modules"),
           "dir",
         );
+        await cp(
+          join(process.cwd(), ".prettierrc.json"),
+          join(directory, ".prettierrc.json"),
+        );
+        await cp(
+          join(process.cwd(), "vendor/agent"),
+          join(directory, "vendor/agent"),
+          { recursive: true },
+        );
+        await cp(
+          join(process.cwd(), "src/generated/agent-usage-v2"),
+          join(directory, "src/generated/agent-usage-v2"),
+          { recursive: true },
+        );
         const check = () =>
           spawnSync(
             process.execPath,
@@ -2329,17 +2343,33 @@ describe("public Agent usage consumer pin gate", () => {
         const control = check();
         expect(control.status, control.stderr).toBe(0);
         if (fault === "missing") await unlink(pinPath);
-        else {
+        else if (fault === "changed") {
           const pin = record(
             JSON.parse(await readFile(pinPath, "utf8")) as unknown,
           );
           pin.source_commit = "0".repeat(40);
           await writeFile(pinPath, JSON.stringify(pin, null, 2) + "\n");
+        } else if (fault === "generated") {
+          await writeFile(
+            join(directory, "src/generated/agent-usage-v2/schema.gen.ts"),
+            "export const wrong = true;\n",
+          );
+        } else {
+          await writeFile(
+            join(directory, `vendor/agent/usage/v2/${fault}.json`),
+            "{}\n",
+          );
         }
         const denied = check();
         expect(denied.error).toBeUndefined();
         expect(denied.status).not.toBe(0);
-        expect(denied.stderr).toContain("Agent usage consumer pin");
+        expect(denied.stderr).toContain(
+          fault === "missing" || fault === "changed"
+            ? "Agent usage consumer pin"
+            : fault === "generated"
+              ? "Agent usage generated artifact drift"
+              : "Agent usage distributed artifact differs from accepted release",
+        );
       } finally {
         await rm(directory, { recursive: true, force: true });
       }

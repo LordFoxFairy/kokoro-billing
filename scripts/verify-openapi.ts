@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { parse } from "yaml";
 import { assertTargetOpenApi } from "./openapi-target.js";
 import { assertAgentUsageConsumerPin } from "./agent-usage-consumer-pin.js";
+import { generateAgentUsageArtifacts } from "./generate-agent-usage.js";
 
 const root = resolve(new URL("..", import.meta.url).pathname);
 const consumerPin = await readFile(
@@ -21,4 +22,5 @@ const digest = createHash("sha256").update(source).digest("hex");
 if (!readme.includes(digest))
   throw new Error(`contract/README.md provenance digest must be ${digest}`);
 assertTargetOpenApi(parse(source) as Record<string, unknown>);
+await generateAgentUsageArtifacts(root, true);
 process.stdout.write("Billing OpenAPI v1 contract is valid: 24 operations\n");

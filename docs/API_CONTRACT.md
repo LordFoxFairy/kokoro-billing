@@ -1,3 +1,9 @@
+## MC01-B2a：usage2 纯消费者验证（2026-10-16）
+
+本片不新增HTTP route或变更Billing4.0.0-experimental.1机器源。只读Agent发布物按B1 pin原样分发并生成包内类型/schema；源、vectors、manifest任何摘要变化由既有contract门拒绝，不接受静默升级。Metering内部纯API解码原bytes、核successor，或匹配可信snapshot中的完整identity/planned/revision/digest并要求seal；无v1解析/降级，无charge许可。完整binding的可信来源、HTTP6 envelope/原bytes读取及生命周期仍待后继adapter，不能用纯函数测试冒网络验收。
+
+---
+
 ## MC01-B1：usage2 consumer pin候选（2026-10-16）
 
 本片目标为尚未启用部分的canonical HTTP artifact4.0.0-experimental.1；/v1、24operation、42schema与实际5route不变。AdmissionCreateRequest/Admission固定usage_profile_version=2.0.0及schema SHA552f0d22251837aaf4d83766c7bd91311984f707f9a42950ed53ac7127bb5504；Capture/Release/Execution的evidence_schema_version固定2.0.0。caller仍只提交closed身份/引用，不提交usage JSON或金额。旧1.0.0或错schema摘要不能用于创建新Admission，不在一个enum里不加区分地放行两个收费协议。

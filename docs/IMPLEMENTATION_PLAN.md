@@ -1,3 +1,13 @@
+## MC01-B2a：严格 usage2 纯内核（2026-10-16，既定MC01内实施）
+
+- 基线Billing af0a531 clean，主Agent唯一writer。设计见三设计同名前缀；只读审查员核边界，无并行写入。
+- 写区：只读`vendor/agent/usage/v2/{schema,vectors,manifest}.json`、既有consumer-pin脚本扩展及新正规生成器、`src/generated/agent-usage-v2/`只读生成物、现Metering内纯parser/codec/error、单一focused suite；既有contract门接drift。无package/lock、SQL/Prisma、HTTP target或Module接线。
+- 顺序：固定Git objects/SHA→先写owner conformance与重复JSON/UTF8/深度/完整binding/不可变等行为RED→实现有限RFC8785+Ajv扩展/owner语义/successor→全部focused GREEN→只读复核→Node24全门与dist真实执行。生成文件只由脚本写，不手修。
+- 本片已验：有效9行为RED→focused314PASS（60内核+254原contract）；全门1481PASS/480原资源SKIP，format/lint/type/build/sql/contract全0；隔离compiled-only42原向量通过，独审Approved。首次lint4失败与fixture矛盾已修且保留日志，不放宽门。具体当前边界见CURRENT同名前缀。
+- 完成仅B2纯内核；HTTP6服务身份/原字节envelope/lifecycle、正式bound/技术保证、Admission/资金事务与真实聊天后继保持OPEN。零模型请求/资金写入/正常重启/远程Git；不以本片代替完整reader或收费闭环。
+
+---
+
 ## MC01-B1：usage2发布身份与未启用目标收敛（2026-10-16，用户已确认；本地源码候选已验）
 
 - 基线：Billing1ceeae5 clean；Agent2d5ce12候选已验而normal未激活。承接既有MC01，不新增owner/进程、价格规则或任务中心。

@@ -1,3 +1,9 @@
+## MC01-B2a：无持久化的证据验证（2026-10-16）
+
+本片仅严格解码、摘要、successor知识单调和完整snapshot绑定，返回冻结事实；不新增表/列、JSON回存、receipt/audit、预占或余额写入，不迁移usage1。Count/Ordinal保持十进制字符串，比较和合计使用BigInt；unknown、未报告与明确零互不转换，sealed不推导可扣费。旧canonical-digest与资金计算保持不变。可信snapshot与Admission事务尚未接线，零数据效果。
+
+---
+
 ## MC01-B1：无数据变更的consumer pin候选（2026-10-16）
 
 本片只接收Agent usage2发布身份并同步未启用目标的wire常量；canonical database/schema.sql、Prisma派生、所有普通列/JSON事实和现账户/余额/流水不变。不重写历史Agent证据或财务snapshot，不将旧planned字段改名后回存，不回填未知归属，不删除或自动replay旧Run，不引入版本表/兼容双写。
