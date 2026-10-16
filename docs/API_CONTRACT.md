@@ -1,3 +1,11 @@
+## SET55：本人开户契约设计门（2026-10-16；实施前）
+
+唯一机器源 contract/openapi/v2/openapi.yaml 将从3.0.0-experimental.5增量至3.0.0-experimental.6，新增 internal-owner PUT /v2/billing/me/credit-account，operationId openMyCreditAccount；原24operation及其wire保持。PUT按受信tenant/subject自然幂等，无Idempotency-Key、新receipt或调用方可指定ID。仅完整web-bff service/internal secret/service Bearer/唯一canonical u1 tenant与subject认证；direct-user不得调用。BFF必须先完成当前Product准入，再由权威身份映射委托本人，浏览器不得提供tenant/subject/actor。
+
+请求必须application/json且严格空对象{}；不接受query、额外字段、身份、金额、status、null/array、缺正文或任意扩展配置。具名input仅解析这一边界，错误走既有安全400。200复用CreditAccountResponse，不增加created/replayed等字段；初次返回真实零余额账户，重复返回当前原账户（非零亦不重置）。disabled账户403 billing.credit_account_disabled、retryable=false；身份拒绝沿现401/403，未知路由仍generic404，数据库预算/依赖错误沿现503，其他损坏500。仅新增CreditError disabled精确映射，不能把任意对象当受信异常。所有响应沿现no-store、x-request-id及生成schema校验。
+
+GET仍不创建，无账户404 billing.credit_account_not_found不变。未知写结果由消费者GET核实；已有dispatch在网络断连后可能提交，自然幂等处理重放，不承诺HTTP abort撤销COMMIT。请求schema如新增组件必须由正规生成链更新closed registry数量/测试，不手改generated；历史v1及无关v2面原字节逆恢复保护。BFF固定已提交owner artifact后才能实现公开PUT，Web仅消费BFF，当前本门尚未实现/发布。
+
 ## SET49：Billing本人缺账户错误契约
 
 SET49发布v2 3.0.0-experimental.5：仅两本人GET的404错误语义从billing.not_found改为billing.credit_account_not_found（retryable=false）。此错误码变化要求消费者成对更新固定commit/digest，严格区别缺账户与未知路由；v1 immutable不改，不建fallback。

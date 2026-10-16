@@ -109,3 +109,8 @@ export type CreditLedgerIntegrity = Readonly<{
   wrongTenant: boolean;
   invalidRow: boolean;
 }>;
+
+export type OpenCreditAccountResult = Readonly<{
+  account: CreditAccountSnapshot;
+  created: boolean;
+}>;

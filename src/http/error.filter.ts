@@ -87,6 +87,7 @@ function statusOf(error: unknown): Status {
   if (error instanceof CreditError) {
     if (["CREDIT_INVALID_QUERY", "CREDIT_INVALID_CURSOR"].includes(error.code))
       return 400;
+    if (error.code === "CREDIT_ACCOUNT_DISABLED") return 403;
     return error.code === "CREDIT_ACCOUNT_NOT_FOUND" ? 404 : 500;
   }
   if (error instanceof HttpException) {
@@ -134,7 +135,15 @@ export class ErrorFilter implements ExceptionFilter {
               message: "Credit account not found",
               retryable: false,
             }
-          : errors[status],
+          : status === 403 &&
+              error instanceof CreditError &&
+              error.code === "CREDIT_ACCOUNT_DISABLED"
+            ? {
+                code: "billing.credit_account_disabled",
+                message: "Credit account is disabled",
+                retryable: false,
+              }
+            : errors[status],
     };
     this.schemas.assert("ErrorResponse", response);
     void host

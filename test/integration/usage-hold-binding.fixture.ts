@@ -26,9 +26,7 @@ export async function createUsageHoldDatabaseFixture(
     await released;
   });
   void lifecycle.catch(rejectReady);
-  const installedUrl = new URL(await initialized);
-  installedUrl.searchParams.set("options", "-c search_path=public,pg_catalog");
-  const url = installedUrl.toString();
+  const url = await initialized;
   let closed = false;
   return {
     url,

@@ -1,3 +1,7 @@
+## SET55 contract-only candidate
+
+Canonical v2 is `3.0.0-experimental.6`, 25 operations / 43 schemas. The new machine-only naturally idempotent PUT opens a real own zero-balance account; runtime registration is not yet implemented. Normal generation consumes this current source. The outer account-opening gate restores the complete immutable experimental.5 source and delegates to its unchanged 24-operation validator. Consumers must pin the eventual formal owner commit and this exact current digest; no rollout is claimed.
+
 ## SET49 current publication
 
 正规v2推进3.0.0-experimental.5，仅本人两读404专用code变化；Catalog/u1/offer_key保留，v1不可变。消费者必须更新正式commit/digest并正常生成，不以不可取得的v1 pin冒provenance。
@@ -32,7 +36,7 @@ Current source digests:
 
 ```text
 openapi/v1/openapi.yaml  fbe34c188cf4a9f08955e4b94ceab40d63a41156a3106fae6ab939a4190612b7
-openapi/v2/openapi.yaml  b413db8965ed60683435adb7f2ce8650a7ca7bf7bee0989e8f83afc3d9f846af
+openapi/v2/openapi.yaml  41bb19f8a14b2f78049b7e5bcda8e5e9db47ed92ff80a0dc9a024147d10b75fc
 ```
 
 The current v1 source contains an authentication-breaking replacement that is

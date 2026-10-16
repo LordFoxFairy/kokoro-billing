@@ -1,3 +1,9 @@
+## SET55当前设计入口
+
+本人零余额账户的三设计SET55前缀和IMPLEMENTATION_PLAN阶段卡为当前裁决。phaseC正规exp6契约与43schema已通过纯门；phaseR候选已注册PUT，真实PG/source-dist尚待Root验证，未部署或声称页面开户可用。下方旧Fastify/v1/24operation叙述是历史。
+
+新增credit-account.controller.ts/input.ts位于src/modules/credit，负责严格空对象本人开户HTTP边界；src/http/credit-account.guard.ts只准完整web-bff五因素。事实仍由现credit.service.ts/repository.ts与同grant锁负责；不新建钱包模块或表。test/http/credit-account-open.test.ts和test/unit/credit-account-open.test.ts覆盖窄边界，test/integration/credit-account-open.test.ts与原billing-runtime.test.ts增量承接真实事务及source/dist。scripts/credit-account-contract.ts保护新增PUT和exp5全文逆恢复。
+
 ## SET-15当前候选入口
 
 三设计及IMPLEMENTATION_PLAN顶端SET15前缀是本片当前裁决，CURRENT记录实测；normal Nest候选为六GET/HEAD，唯一v2 machine source是contract/openapi/v2/openapi.yaml experimental.4。下方Fastify/v1当前态描述仅历史，不作为现已激活证据。

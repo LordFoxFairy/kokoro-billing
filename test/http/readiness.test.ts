@@ -49,7 +49,10 @@ describe("canonical runtime probe authority and retired route removal", () => {
         "/v2/billing/me/credit-ledger",
       ];
       expect(routes.sort()).toEqual(
-        expectedPaths.flatMap((path) => [`GET ${path}`, `HEAD ${path}`]).sort(),
+        [
+          ...expectedPaths.flatMap((path) => [`GET ${path}`, `HEAD ${path}`]),
+          "PUT /v2/billing/me/credit-account",
+        ].sort(),
       );
       const live = await app.inject({ method: "GET", url: "/healthz" });
       expect(live.statusCode).toBe(200);

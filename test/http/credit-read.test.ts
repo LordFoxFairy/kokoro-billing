@@ -378,7 +378,7 @@ describe("R74 production personal Credit HTTP", () => {
     return token.sign(privateKey);
   }
   it("compiles the closed 42-schema registry, rejects mutation/coercion and unknown UTC/nonnullable fields", () => {
-    expect(schemas.names).toHaveLength(42);
+    expect(schemas.names).toHaveLength(43);
     const valid = {
       data: {
         credit_account_id: snapshot.id,

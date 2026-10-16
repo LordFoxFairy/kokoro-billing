@@ -1,3 +1,21 @@
+## SET55 owner交付状态（2026-10-16）
+
+phaseC/R/R2实现闭集已冻结；Root真实15专项、正常verify及生成/Prisma/schema门已完成，完整资源门仍364PASS157FAIL。现仅正式提交owner artifact供后继BFF唯一固定消费，尚未Web功能验收；全部旧失败/初次资源遗留记录保留。下方各阶段准入保留历史，不代表当前仍停在phaseC。
+
+## SET55：本人零余额账户（2026-10-16；运行时实施阶段）
+
+Owner Billing Credit，Root设计/Git/资源，billing_scheduler_audit唯一后继实现writer，runtime_audit独立只读。基线main f7e138c04e5314543519433a27c8e6b53d6250e2已同步，feat/personal-credit-account。phaseC已冻结：263契约用例通过，正常生成/check、contract、lint、typecheck均exit0；Root与独立只读审查确认exp5全文逆恢复及旧validator保护，无确定P1/P2。现批准phaseR以下14文件，消费者仍等待完整owner正式提交。不开新模块/表/进程，不改Skills/MCP、历史v1、SQL、Prisma或依赖。
+
+阶段C允许：canonical v2、contract/README、scripts/credit-account-contract.ts、scripts/billing-api-artifacts.ts、scripts/verify-openapi.ts、test/contract/openapi-v2-target.test.ts历史loader及当前生成provenance的43/exp6精确增量、新test/contract/credit-account-contract.test.ts、正规生成billing-api四文件。openapi-v2-target.ts基线validator保持原字节。Root独占三设计/CURRENT/本计划/INDEX/docsINDEX；writer不改Root文件或Git。阶段C不注册运行PUT、不连PG/Redis/服务、不运行全资源测试；只用锁定Node24与pnpm做纯contract/生成/type/lint必要门，尚未通过项明确记录。后继阶段R与Root资源验收另行放行；账户/审计与35表差量、并发/disabled/零资金、正常source/dist及后继BFF/Web闭环都不能由阶段C宣称完成。
+
+
+phaseR唯一writer为billing_scheduler_audit。新增：src/modules/credit/credit-account.controller.ts、credit-account.input.ts，src/http/credit-account.guard.ts，test/http/credit-account-open.test.ts、test/unit/credit-account-open.test.ts、test/integration/credit-account-open.test.ts。修改：src/modules/credit/credit.types.ts、credit.repository.ts、credit.service.ts，src/http/billing-http.module.ts、error.filter.ts，test/http/readiness.test.ts、credit-read.test.ts，test/integration/billing-runtime.test.ts。phaseC 11文件冻结；Root独占7文档，其他tracked保护。不改TransactionService、SQL/Prisma、依赖、旧auth或服务配置。
+
+writer先无资源HTTP实际RED，再实现/纯HTTP/unit GREEN、format/lint/type/build；不得启动数据库/Redis/服务或跑integration/full test。真实PG及source/dist由Root在自有临时库串行运行。验收覆盖首次与重放、现余额/ID/generation/created_at不变、disabled、五因素和输入负控零调用、并发与grant同锁、首次audit且失败回滚、35表仅account/audit差量、锁超时回滚与丢失响应后GET核实/PUT重放。完成冻结STOP供Root评审与资源验证，不自提交或跨仓消费。
+
+
+phaseR2 资源清理必要修复（Root已观察完整integration364PASS/157FAIL且4个临时库遗留）：额外仅允许test/integration/usage-hold-binding.fixture.ts、usage-hold-binding.test.ts、admission-command-receipts.test.ts。原因是fixture追加被当前正式配置拒绝的options，四个case在try之前建立connection导致fixture.close永不到达。将fixture URL符合正式schema契约，连接初始化失败仍必须进入fixture清理；所有既有业务断言/测试名称/timeout保留，不改生产连接和旧财务业务。三现测试文件的局部清理归属同fixture生命周期，无新模块/契约/数据。Root已逐一核四新增库无连接、35表皆空后精确清理，原始失败记录保留。writer只做相关纯format/type/lint，真实integration由Root再次串行验证；未授权修157项旧业务故障。
+
 ## SET-15 Catalog实现候选（待Root资源验收）
 
 已按本文件SET15设计门接入五commerce文件、窄CatalogGuard及正常BillingHttpModule；CatalogService沿同一TransactionService readOnlySnapshot，repository使用parameterized Prisma tagged SQL，先取事务DB instant，检查本tenant otherwise-eligible revision parent完整性，再bounded latest eligible目录查询。无SQL/Prisma/seed/provider/资金修改；machine可无subject，若有仍由原personal严格codec/五因素验证，事务actor始终authenticated web-bff。cursor绑定tenant identity digest、scope和稳定排序tuple，最大合法Unicode边界仍在2048wire预算；不持久化业务事实。

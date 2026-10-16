@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { parse } from "yaml";
-import { assertV2OpenApi } from "./openapi-v2-target.js";
+import { assertCreditAccountContract } from "./credit-account-contract.js";
 
 type OpenApiDocument = {
   readonly openapi?: string;
@@ -405,5 +405,7 @@ if (!contractReadme.includes(v2Digest))
   throw new Error(
     `contract/README.md v2 provenance digest must be ${v2Digest}`,
   );
-assertV2OpenApi(parse(v2Source) as unknown);
-console.log("OpenAPI v2 target governance passed: 24 operations");
+assertCreditAccountContract(v2Source);
+console.log(
+  "OpenAPI v2 target governance passed: 25 operations (exp5 24-operation baseline preserved)",
+);
