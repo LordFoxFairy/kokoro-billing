@@ -1,3 +1,48 @@
+## SET49：Billing本人缺账户错误契约
+
+SET49在既有唯一Nest ErrorFilter将typed CREDIT_ACCOUNT_NOT_FOUND映射为专用billing.credit_account_not_found；其它404仍billing.not_found，不改认证、SQL、账户创建或付款。保留Catalog/u1/offer_key及v2唯一入口。
+
+## SET-15 Catalog实现候选（待Root资源验收）
+
+已按本文件SET15设计门接入五commerce文件、窄CatalogGuard及正常BillingHttpModule；CatalogService沿同一TransactionService readOnlySnapshot，repository使用parameterized Prisma tagged SQL，先取事务DB instant，检查本tenant otherwise-eligible revision parent完整性，再bounded latest eligible目录查询。无SQL/Prisma/seed/provider/资金修改；machine可无subject，若有仍由原personal严格codec/五因素验证，事务actor始终authenticated web-bff。cursor绑定tenant identity digest、scope和稳定排序tuple，最大合法Unicode边界仍在2048wire预算；不持久化业务事实。
+
+CatalogItem required offer_key和u1 transport以3.0.0-experimental.4正规生成，现closed schema registry新增CatalogResponse允许名。历史v1及无关wire保留，消费者必须Root精确commit/digest成对承接。当前候选六GET及HEAD不代表其它18operation或正式商品发布/支付/本人订阅完成。测试用合成商品仅隔离fixture，不进入正常产品目录。
+
+## SET-15：canonical 商品目录读取设计门（2026-10-13，实施前）
+
+本节批准现唯一Nest入口增量注册真正catalog GET，不缩减完整订阅、checkout与C3目标。Root主控裁决/Git/资源，Billing负责人为本片唯一实现writer；当前基线20dba9c仅五GET及HEAD，旧catalog query读entitlement_*且未装配，不能复活旧runner。当前套餐加载失败不是数据库能力缺失。
+
+|项|采用方案|
+|---|---|
+|Owner/职责|Billing commerce拥有同tenant可售offer revision只读目录；公开能力为现/v2/commerce/catalog，BFF只消费owner HTTP。|
+|位置比较|采用src/modules/commerce能力目录，与credit/metering并列；淘汰旧infrastructure/postgres/repositories/checkout（旧pg SQL与分层），淘汰挂CreditModule（商品不属余额）。|
+|粒度|commerce.module.ts仅DI；catalog-read.controller.ts仅HTTP/guard/generated response；catalog.service.ts仅只读事务与业务返回；catalog.repository.ts唯一canonical Prisma查询与行映射；catalog.query.ts集中GET/query/cursor解析。没有机械DTO/ports/mapper层或第二进程。|
+|依赖|沿DatabaseModule→TransactionService/Prisma，controller由BillingHttpModule和现schema registry装配。新窄CatalogGuard/认证能力复用现EdDSA verifier、严格header codec和常时secret比较；不让controller访问ORM。|
+|状态与失败|真实无商品为空页，损坏行或查询错误保持安全失败；不写账户/receipt/audit，不造默认商品。正常source/dist唯一graph新增一GET及HEAD。|
+|删除与兼容|不引旧表、v1 alias或fallback，不替换旧query为新真源；旧unused组件最终移除仍按C3 import闭包。支付、本人订阅与商品发布后继，不用读取假装购买成功。|
+
+Catalog列表粒度为每active offer最新的published且未删除revision；同tenant parent关联验证，按offer_key ASC/revision DESC/revision_id ASC稳定排序与绑定tenant+catalog scope的有界closed cursor，不接受任意offset/旧cursor。published_at必须非空且不晚于事务DB instant；更高draft/disabled/deleted/future revision不隐藏当前可售版本。多个published历史只返回本次可见最新项，这承接旧目录有效语义。金额/积分BigInt仅decimal string，币种/间隔/ID/名称严格核验；不猜当前订阅或按额度匹配套餐。
+
+现v2 CatalogItem缺少BFF既有public key所需正式offer_key。批准owner artifact从3.0.0-experimental.3递增到3.0.0-experimental.4，明确新增required offer_key是strict消费breaking，仅隔离开发成对接收；不援未激活beta例外。既有Credit wire不变，所有固定全artifact消费者须正规刷新同commit/digest，后继Root配对才激活。v2只改catalog字段/身份说明/版本，不顺改订阅。设计三面与machine/generator一致后方进入runtime实现。
+
+Catalog认证与本人认证保持分离：完整web-bff机器身份要求service、internal secret、service Bearer和唯一u1 tenant；subject可缺，存在时必须唯一合法u1 subject。任一机器标记或service Bearer选machine后不得转用户fallback。用户沿现IAM完整EdDSA profile，token tenant与唯一u1 tenant精确绑定。重复/错配/部分machine在SQL前拒绝，不开放匿名读取；不直接套必须subject的PersonalGuard或放松现本人五因素规则。
+
+验证包含具名真实RED→GREEN、strict query/cursor/行损坏/认证负控、canonical真实PG隔离多tenant/多revision/大整数/分页、全部35表读前后零差量、source/dist真实路由与旧v1仍404、既有drain/启动失败清理保持。Root拥有PG/服务及实际浏览器；未执行项逐项保留，不称全仓/全设置完成。
+
+## SET-10：HTTP drain 生命周期复审修正（候选）
+
+复审确认 Nest close 先销毁 provider、后关闭 adapter，原调用顺序无法保证请求继续使用数据库。现唯一 runtime 显式关闭并 drain HTTP adapter 后才调用 Nest close，仍共享 close promise、保 primary failure 和 main deadline；若HTTP drain失败仍执行provider cleanup，双失败以HTTP为cause。
+
+回归包含受控adapter drain期间实际Fastify请求仍pending、database destroy不得提前的RED→GREEN；实际注册route由Fastify onRoute收集method/path，精确五GET及其HEAD，无源码regex。source/dist真实PG候选再以自有账户表ACCESS EXCLUSIVE锁确认请求正在等待，发送SIGTERM，释放锁后必须读200再退出；这项真实进程回归由Root执行，writer未启动DB或进程。前一轮Root已通过的真实读取与prisma校验不替代此次新增drain验收。
+
+## SET-10：唯一正常 Nest 读取入口候选（待 Root 验收）
+
+沿既有 R255 增量门原位切换 main/createBillingRuntime；正常 source/dist 只装 DatabaseModule + BillingHttpModule/CreditModule，注册两本人 GET 与三 probes。旧 interfaces/http/server.ts 和 v1 runtime parity已删除，无第二runner、模式、旧表alias或proxy；19项未承接operation保持未注册，完整C3/收费/worker退出线不变。
+
+窄 readiness DI契约共置 src/http/service-probes.options.ts，仅 BILLING_PG_READINESS 与 Readonly ping；DatabaseModule提供/导出该能力，不向HTTP导出PrismaService。Prisma infrastructure ping复用现private pool，query_timeout有界；controller不持有ORM/SQL/业务事实。factory严格init后ready/listen，init或bind失败保primary cause并cleanup；并发listen/close共享promise，close等待pending bind并停止accept/drain，main以deadline约束退出。默认请求日志关闭，完成日志只用闭集字段；启动/停止失败对stderr只输出稳定类别。
+
+Root将direct Fastify精确对齐现Nest adapter已经锁定的5.12.4，避免原5.12.1/5.12.4双实例LogController类型与身份差异；不扩其它依赖或工具链。
+
 ## R255 财务赠送裁决与当前实现边界（2026-10-10）
 
 本节接收 698da77 的业务裁决，不接收其“canonical Nest 已正常运行”的当前态声明。已提交源码 main261a20f 的唯一入口仍为 createBillingRuntime；运行目录中的 Nest 候选属于未接收 mixed，不是本次代码交付。以下旧运行报告只作为具日期的历史证据。

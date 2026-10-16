@@ -4,7 +4,8 @@ import {
   PersistedDataInvariantError,
   parsePersistedJson,
 } from "../../src/infrastructure/postgres/json.js";
-import { classifyBillingError } from "../../src/interfaces/http/server.js";
+import { ErrorFilter } from "../../src/http/error.filter.js";
+import type { ArgumentsHost } from "@nestjs/common";
 import { toPersistedJson } from "../../src/database/persisted-json.js";
 
 describe("persisted JSON invariants", () => {
@@ -21,12 +22,35 @@ describe("persisted JSON invariants", () => {
     }
 
     expect(thrown).toBeInstanceOf(PersistedDataInvariantError);
-    expect(classifyBillingError(thrown)).toEqual({
-      statusCode: 500,
-      externalCode: "billing.internal_error",
-      externalMessage: "internal billing error",
-      internalCode: "billing.command_result_invalid",
+    let status: number | undefined;
+    let body: unknown;
+    const reply = {
+      code: (value: number) => {
+        status = value;
+        return reply;
+      },
+      send: (value: unknown) => {
+        body = value;
+      },
+    };
+    const host = {
+      switchToHttp: () => ({ getResponse: () => reply }),
+    } as ArgumentsHost;
+    new ErrorFilter({
+      names: ["ErrorResponse"],
+      assert: () => undefined,
+    }).catch(thrown, host);
+    expect(status).toBe(500);
+    expect(body).toEqual({
+      error: {
+        code: "billing.internal_error",
+        message: "Internal error",
+        retryable: false,
+      },
     });
+    expect(JSON.stringify(body)).not.toContain(
+      "billing.command_result_invalid",
+    );
   });
 });
 

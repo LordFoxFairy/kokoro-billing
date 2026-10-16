@@ -46,10 +46,27 @@ export type BillingPersonalAuthResult =
 export type BillingPersonalAuth = Readonly<{
   authenticate(request: FastifyRequest): Promise<BillingPersonalAuthResult>;
 }>;
+export type BillingCatalogContext = Readonly<{
+  tenantId: string;
+  actorId: string;
+}>;
+export type BillingCatalogAuth = Readonly<{
+  authenticate(
+    request: FastifyRequest,
+  ): Promise<
+    | Readonly<{ ok: true; context: BillingCatalogContext }>
+    | Readonly<{ ok: false; status: 400 | 401 | 403 }>
+  >;
+}>;
+export const BILLING_CATALOG_AUTH = Symbol("BILLING_CATALOG_AUTH");
 export type BillingSchemaValidator = Readonly<{
   names: readonly string[];
   assert(
-    name: "CreditAccountResponse" | "CreditLedgerResponse" | "ErrorResponse",
+    name:
+      | "CatalogResponse"
+      | "CreditAccountResponse"
+      | "CreditLedgerResponse"
+      | "ErrorResponse",
     value: unknown,
   ): void;
 }>;
@@ -62,5 +79,6 @@ export const BILLING_SCHEMA_VALIDATOR = Symbol("BILLING_SCHEMA_VALIDATOR");
 declare module "fastify" {
   interface FastifyRequest {
     billingPersonalContext?: BillingUserContext;
+    billingCatalogContext?: BillingCatalogContext;
   }
 }

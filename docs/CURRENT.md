@@ -1,3 +1,49 @@
+## SET49完整隔离资源门终态
+
+正式修复artifact commit cd92c728d8f658f54b254d5cbfd28156ca426dc1，v2 experimental.5 digest b413db8965ed60683435adb7f2ce8650a7ca7bf7bee0989e8f83afc3d9f846af。纯verify1433PASS/492SKIP与target本人HTTP25PASS不替代full integration。完整fresh canonical integration实际355PASS/157FAIL（20文件PASS/28FAIL），主要旧entitlement/payment表及旧schema/options假设失败，未恢复旧表、未改断言；完整资源门FAILED。四个本轮自建reference临时库未由测试自行清理，独占资源窗口内按精确owned身份补清理，最终PG/Redis库存恢复；正常服务/数据未动。本段只记录证据，不改变已发行artifact或消费者pin。
+
+## SET49：Billing本人缺账户错误契约
+
+SET49候选：修正本人缺账户专用404，v2 experimental.5正规生成并保留Catalog。正规pnpm verify exit0：1433PASS/492SKIP；现typed failure及真实null分支均专用404，未知route保持generic404。自有临时canonical PG HTTP专项25PASS，安装/清理由既有fixture负责；不动正常服务或数据。消费者唯一pin配对仍待后继BFF合并。
+
+## SET-15 canonical Catalog冻结候选（待Root独审/资源验收）
+
+基线fe1c37226a2373d753396d3be866099fc1b54dad。正常Nest已新增/v2/commerce/catalog，五commerce文件与窄CatalogGuard，不新增mapper/port/pool；本片不实现subscriptions/checkout/商品发布/资金命令。完整机器可无subject，携带subject仍严格合法；transaction actor为authenticated web-bff，无伪用户。catalog使用现readOnlySnapshot事务、同DB instant、No-FK关系损坏先安全失败、最新eligible版本和有界稳定cursor，decimal始终string。SQL/Prisma/schema/锁文件/旧v1artifact无改动，普通租户未发布目录仍真实空页。
+
+实际RED为正常Nest控制health200而完整machine无subject Catalog404（1FAIL）；候选同用例GREEN。strict auth/query/repository/HTTP定向40PASS，含重复header、optional subject、personal五因素不退、最大Unicode cursor预算、损坏行、int64精度；contract新增required offer_key/optional-subject u1 transport治理及无关历史projectionhash保持。正规artifact从experimental.3到experimental.4生成，是strict消费breaking，Root须按owner正式commit/digest成对刷新消费者，未以beta或兼容alias激活。
+
+完整pnpm verify自然exit0：46文件1433 PASS、46文件492 SKIP；format/lint/typecheck/build/sql/contract/test通过，contract:generated:check自然exit0。canonical真实PG新5项、现creditHTTP新1项IAM profile正负控、source/dist非空目录及既有drain/启动失败cleanup仍待Root执行；writer未启动服务/访问PG。测试数据仅隔离fixture，不作为正常产品计划/订阅证明。BFF还需后继v2GET/分页投影及Web正常浏览器闭环；支付按钮不可因目录读取成功而启用。
+
+## SET-10：已接受请求的 keep-alive drain 修正候选
+
+Root真实source/dist已接受的表锁GET均读200，但关闭超过既有5秒deadline后exit1；四项启动失败负控和24项credit读取已通过，此前idle退出不构成在途drain证据。锁定Fastify的route入口只对关闭后新进入的请求设置Connection: close，已进入handler的响应遗漏；Root独立TCP诊断也复现完整读取后close仍pending。
+
+唯一runtime在destroy开始标记draining，并通过既有adapter全局onSend对draining期间的HTTP1完整响应设置Connection: close，响应完整结束后自然退休socket；HTTP2不写该header，无closeAllConnections、无客户端Connectionclose绕过、deadline及exit0断言不变。仍先HTTP drain后Nest provider销毁，首因/共享close保留。unit新增正式响应header断言已有RED→GREEN（6PASS）；真实集成在最后GET及进程退出后再比较全部35表samefacts，确保最后请求也零写。完整 pnpm verify 自然exit0，42文件1392 PASS、45文件486 SKIP（含build）。Root独立同策略TCP诊断在100ms释放gate后109ms关闭完成且完整response200；这不是正式source/dist PG验收，最终真实复跑仍待Root，不将候选视为通过。
+
+## SET-10：Root 独立验收（2026-10-13）
+
+最终唯一正式源码/构建入口经Root独立 `pnpm verify` 自然exit0：1392 PASS、486未配置资源SKIP；format/lint/types/build/SQL/contract全部通过。随后以现共享PostgreSQL上的独立随机fixture运行 `billing-runtime` 与 `credit-read-http` 两文件30/30 PASS，无SKIP：source/dist大整数本人两读、五因素缺失拒绝、真实缺账户404、旧/未实现路径404，35表前后零差量；真实表锁在途请求经SIGTERM仍完整200，再正常exit0且PG sessions回基线；初始PG连接失败与占端口启动失败有界退出、凭据不泄露、占用者保留。此前Prisma canonical生成/drift检查通过，SQL/Prisma源未改。
+
+独立源码复审关闭HTTP先drain后provider销毁及keepalive缺陷，核实际注册五GET/HEAD inventory、first cause与清理；最新冻结无新增确定P1/P2。当前HTTP1关闭策略覆盖现五条非流式路由，不作为未来流式HTTP的验收。中途真实2FAIL/28PASS已保留为失败证据，未放宽期限或成功断言。正常资金账户没有seed；Root/Web的真实组合与完整支付/订阅/worker仍待验，30项隔离测试不代表完整财务或设置目标完成。
+
+## SET-10：真实启动失败负控候选（待 Root 执行）
+
+在既有 billing-runtime 集成文件为 source/dist 各补两项实际子进程负控：自有拒绝 PostgreSQL 握手 TCP endpoint 必须收到连接，启动须在10秒内 exit1且日志不含完整数据库URL、密码和三个服务凭据；自有 listener 占用目标端口时启动须 exit1，隔离 fixture 数据库 sessions 回到启动前基线，原 listener 在失败前后均须真实TCP连接返回标记。测试不停止共享PG、不修改角色；只操作本次fixture库及测试自有listener。
+
+writer 未运行真实PG或子进程测试。新增测试后完整 pnpm verify 自然 exit0：42文件1392 PASS、45文件486 SKIP，format/lint/typecheck/build/sql/contract/test均通过；增加的四项负控和前述实际inflight drain均等待Root执行，既有idle退出及上一轮PG通过不替代它们。此次仅追加集成测试和本记录，已冻结的runtime/source未改。
+
+## SET-10：HTTP drain 生命周期复审修正（候选）
+
+复审确认 Nest close 先销毁 provider、后关闭 adapter，原调用顺序无法保证请求继续使用数据库。现唯一 runtime 显式关闭并 drain HTTP adapter 后才调用 Nest close，仍共享 close promise、保 primary failure 和 main deadline；若HTTP drain失败仍执行provider cleanup，双失败以HTTP为cause。
+
+回归包含受控adapter drain期间实际Fastify请求仍pending、database destroy不得提前的RED→GREEN；实际注册route由Fastify onRoute收集method/path，精确五GET及其HEAD，无源码regex。source/dist真实PG候选再以自有账户表ACCESS EXCLUSIVE锁确认请求正在等待，发送SIGTERM，释放锁后必须读200再退出；这项真实进程回归由Root执行，writer未启动DB或进程。前一轮Root已通过的真实读取与prisma校验不替代此次新增drain验收。 本次完整 pnpm verify 已自然 exit0，42文件1392 PASS、45文件482 SKIP；真实PG/source/dist新增drain仍待Root实跑。
+
+## SET-10：唯一正常 Nest 读取入口候选（待 Root 验收）
+
+沿既有 R255 增量门原位切换 main/createBillingRuntime；正常 source/dist 只装 DatabaseModule + BillingHttpModule/CreditModule，注册两本人 GET 与三 probes。旧 interfaces/http/server.ts 和 v1 runtime parity已删除，无第二runner、模式、旧表alias或proxy；19项未承接operation保持未注册，完整C3/收费/worker退出线不变。
+
+本writer实际RED为normal配置仍被未装Redis依赖阻断（2FAIL/4PASS）；修复后定向Nest HTTP/架构/config/error342PASS，生命周期4PASS。完整 pnpm verify 已自然 exit0：format/lint/typecheck/build/sql/contract/test 全通过，42文件1390 PASS、45文件482 SKIP（未提供真实数据库环境，不作为集成通过）；真实PG/source/dist测试仅已编写，writer未启动服务或访问数据库，等待Root执行。此前历史运行和健康结果不追认为本候选证据。
+
 ## R255 财务赠送裁决引用（2026-10-10）
 
 唯一业务裁决与实现边界见 [TECHNICAL_DESIGN](TECHNICAL_DESIGN.md#r255-财务赠送裁决与当前实现边界2026-10-10)。698da77 的依赖裁决已接收；Nest 运行候选、FG2 消费、资金用户旅程尚未接收。本次无运行、SQL、机器契约或资金效果；下方旧报告只作为具日期历史证据。

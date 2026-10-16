@@ -241,11 +241,46 @@ function validatePersonalReads(
     "400": ["billing.invalid_request", false],
     "401": ["billing.unauthenticated", false],
     "403": ["billing.forbidden", false],
-    "404": ["billing.not_found", false],
+    "404": ["billing.credit_account_not_found", false],
     "500": ["billing.internal_error", false],
     "503": ["billing.dependency_unavailable", true],
   };
   for (const [key, operation] of operations) {
+    if (key === "get /v2/commerce/catalog") {
+      if (
+        !matchesContractValue(operation["x-kokoro-auth-selection"], {
+          machine_markers: [
+            "x-kokoro-service",
+            "x-kokoro-internal-secret",
+            "x-kokoro-subject",
+          ],
+          service_bearer_selects_machine: true,
+          machine_partial_response: 403,
+          machine_to_user_fallback: false,
+        })
+      )
+        errors.push("catalog must preserve closed machine selection");
+      if (operation["x-kokoro-identity-transport"] !== "catalog-identity-u1")
+        errors.push("catalog must declare canonical u1 transport");
+      if (
+        !matchesContractValue(operation.parameters, [
+          { $ref: "#/components/parameters/PersonalTenantId" },
+          { $ref: "#/components/parameters/PersonalSubjectId" },
+          {
+            name: "x-kokoro-service",
+            in: "header",
+            required: false,
+            schema: { type: "string", const: "web-bff" },
+          },
+          { $ref: "#/components/parameters/Limit" },
+          { $ref: "#/components/parameters/Cursor" },
+        ])
+      )
+        errors.push("catalog must preserve exact u1 and paging parameters");
+      if (Object.hasOwn(operation, "requestBody"))
+        errors.push("catalog GET must not accept a body");
+      continue;
+    }
     if (!personalReadKeys.some((personalKey) => personalKey === key)) {
       if (Object.hasOwn(operation, "x-kokoro-identity-transport"))
         errors.push(key + " must not declare the personal identity profile");
@@ -462,8 +497,22 @@ export function validateV2OpenApi(document: unknown): string[] {
   if (!root) return ["document must be an object"];
   const errors: string[] = [];
   if (root.openapi !== "3.1.0") errors.push("openapi must be 3.1.0");
-  if (object(root.info)?.version !== "3.0.0-experimental.3")
-    errors.push("info.version must be 3.0.0-experimental.3");
+  const catalogItem = object(
+    object(object(root.components)?.schemas)?.CatalogItem,
+  );
+  const catalogProperties = object(catalogItem?.properties);
+  if (
+    !matchesContractValue(catalogProperties?.offer_key, {
+      type: "string",
+      minLength: 1,
+      maxLength: 255,
+    }) ||
+    !Array.isArray(catalogItem?.required) ||
+    !catalogItem.required.includes("offer_key")
+  )
+    errors.push("catalog must require the bounded canonical offer_key");
+  if (object(root.info)?.version !== "3.0.0-experimental.5")
+    errors.push("info.version must be 3.0.0-experimental.5");
   validateCreditUnit(root, errors);
   const paths = object(root.paths) ?? {};
   const actual = new Map<string, JsonObject>();

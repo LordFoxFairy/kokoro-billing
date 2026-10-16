@@ -1,3 +1,29 @@
+## SET49：Billing本人缺账户错误契约
+
+SET49发布v2 3.0.0-experimental.5：仅两本人GET的404错误语义从billing.not_found改为billing.credit_account_not_found（retryable=false）。此错误码变化要求消费者成对更新固定commit/digest，严格区别缺账户与未知路由；v1 immutable不改，不建fallback。
+
+## SET-15 Catalog实现候选（待Root资源验收）
+
+已按本文件SET15设计门接入五commerce文件、窄CatalogGuard及正常BillingHttpModule；CatalogService沿同一TransactionService readOnlySnapshot，repository使用parameterized Prisma tagged SQL，先取事务DB instant，检查本tenant otherwise-eligible revision parent完整性，再bounded latest eligible目录查询。无SQL/Prisma/seed/provider/资金修改；machine可无subject，若有仍由原personal严格codec/五因素验证，事务actor始终authenticated web-bff。cursor绑定tenant identity digest、scope和稳定排序tuple，最大合法Unicode边界仍在2048wire预算；不持久化业务事实。
+
+CatalogItem required offer_key和u1 transport以3.0.0-experimental.4正规生成，现closed schema registry新增CatalogResponse允许名。历史v1及无关wire保留，消费者必须Root精确commit/digest成对承接。当前候选六GET及HEAD不代表其它18operation或正式商品发布/支付/本人订阅完成。测试用合成商品仅隔离fixture，不进入正常产品目录。
+
+## SET-15：catalog读取及不可变消费者配对门（2026-10-13）
+
+批准沿现/v2/commerce/catalog实现真实canonical目录，machine唯一源仍contract/openapi/v2/openapi.yaml。CatalogItem新增required offer_key（canonical offer业务key），artifact明确breaking 3.0.0-experimental.4；正规contract:generate/check，不能手改generated或把新增strict字段冒兼容minor。仅自有开发精确配对，未激活main/日常/生产。Credit两读wire不变，其他operation字段/历史artifact约束不改。
+
+成功仍closed data.items/page.next_cursor，decimal string、currency_code、billing_interval与offer_revision_id来源严格owner事实；不输出当前套餐/支付可用性。GET只接受唯一limit(1..100，默认50)/有界cursor，未知/重复query及正文拒绝；cursor绑定tenant、scope、精确排序tuple。列表返回每offer当前已发布可售revision，规则见TECH。无目录为真实空200，损坏/依赖错误不降级空；错误沿现ErrorResponse/no-store/request-id/schema校验。
+
+身份为现完整IAM user或web-bff machine；machine不要求subject但若携带则严格解码校验，tenant使用既有u1 identity codec。部分机器/重复header/错Bearer/错tenant不得fallback。需要明确更新catalog的机器身份transport说明，保持两本人五因素强度不变；此认证适配亦包含在本breaking owner配对内。
+
+消费者接续由Root另行审批BFF：只把计划GET切到v2并strict读正规immutable artifact、完整有界翻页后投影既有public plans shape；不得把revision ID假充业务key，不能顺带激活旧checkout。BFF/Web schema与generated只有正常精确pin。目录有项目也不证明支付或订阅可用；Web支付按钮必须按真实未支持状态disabled，旧错误不能改成假成功。
+
+## SET-10：唯一正常 Nest 读取入口候选（待 Root 验收）
+
+沿既有 R255 增量门原位切换 main/createBillingRuntime；正常 source/dist 只装 DatabaseModule + BillingHttpModule/CreditModule，注册两本人 GET 与三 probes。旧 interfaces/http/server.ts 和 v1 runtime parity已删除，无第二runner、模式、旧表alias或proxy；19项未承接operation保持未注册，完整C3/收费/worker退出线不变。
+
+两读wire与固定v2 artifact不变；三probe只报告实际装配的PostgreSQL，Redis/provider不再列为normal配置或ready依赖。所有三个service credential必须各自分离，机器五因素、用户EdDSA/profile、u1 header、query/cursor/响应schema及ErrorFilter保持。actual五路由由独立runtime测试验证，v2 target24项由contract门治理，不以数量补假handler。
+
 ## R255 财务赠送裁决引用（2026-10-10）
 
 唯一业务裁决与实现边界见 [TECHNICAL_DESIGN](TECHNICAL_DESIGN.md#r255-财务赠送裁决与当前实现边界2026-10-10)。698da77 的依赖裁决已接收；Nest 运行候选、FG2 消费、资金用户旅程尚未接收。本次无运行、SQL、机器契约或资金效果；下方旧报告只作为具日期历史证据。

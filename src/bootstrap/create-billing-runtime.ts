@@ -1,171 +1,141 @@
-import type { FastifyInstance } from "fastify";
-import { createBillingConnection } from "../infrastructure/postgres/connection.js";
-import { createBillingServer } from "../interfaces/http/server.js";
+import "reflect-metadata";
+import { NestFactory } from "@nestjs/core";
 import {
-  parseProviderWebhook,
-  verifyProviderWebhook,
-} from "../application/payment/ports/provider-registry.js";
-import { createProviderRegistry } from "../infrastructure/providers/payment/provider-registry.js";
-import { RedisIdempotencyHint } from "../infrastructure/redis/idempotency-hint.js";
-import { StripeCheckoutProvider } from "../infrastructure/providers/stripe-checkout-provider.js";
-import { createBillingAuth } from "../infrastructure/auth/billing-auth.js";
+  FastifyAdapter,
+  type NestFastifyApplication,
+} from "@nestjs/platform-fastify";
+import { LogController } from "fastify";
+import { AppModule } from "../app.module.js";
 import type { BillingRuntimeConfig } from "../config/runtime-config.js";
-import {
-  createPostgresBillingAdmissionService,
-  createPostgresBillingReversalService,
-  createPostgresBillingSettlementService,
-  createPostgresCatalogService,
-  createPostgresCheckoutService,
-  createPostgresCreditAccountQueryService,
-  createPostgresProviderAccountService,
-  createPostgresProviderEventInboxService,
-  createPostgresSubscriptionQueryService,
-  createPostgresUsageSettlementService,
-} from "../infrastructure/postgres/create-postgres-services.js";
 
 export type BillingRuntime = Readonly<{
-  server: FastifyInstance;
+  listen: () => Promise<void>;
   close: () => Promise<void>;
 }>;
 
-/** Composition root for PostgreSQL, Redis, provider adapters, application services and HTTP. */
+/** The unique source/dist composition root: canonical owner graph only. */
 export async function createBillingRuntime(
   config: BillingRuntimeConfig,
 ): Promise<BillingRuntime> {
-  const connection = await createBillingConnection(config.databaseUrl);
-  const idempotencyHint = new RedisIdempotencyHint(
-    config.redisUrl,
-    "billing:idempotency",
-    config.redisTimeouts,
-  );
-
-  try {
+  const adapter = new FastifyAdapter({
+    bodyLimit: 32_768,
+    logger: {
+      level:
+        process.env.NODE_ENV === "test"
+          ? "silent"
+          : (process.env.LOG_LEVEL ?? "info"),
+      redact: {
+        censor: "[REDACTED]",
+        paths: [
+          "req.headers.authorization",
+          "req.headers.cookie",
+          'req.headers["x-kokoro-internal-secret"]',
+          'req.headers["x-kokoro-subject"]',
+          'req.headers["x-kokoro-tenant-id"]',
+        ],
+      },
+    },
+    logController: new LogController({
+      disableRequestLogging: true,
+      requestIdLogLabel: "request_id",
+    }),
+    forceCloseConnections: "idle",
+  });
+  let draining = false;
+  // Fastify marks only requests entering after close as Connection: close.
+  // Requests already in handlers must also retire their keep-alive socket once
+  // their response completes, without interrupting the response or DB access.
+  adapter.getInstance().addHook("onSend", async (request, reply, payload) => {
+    if (draining && request.raw.httpVersionMajor !== 2)
+      reply.header("connection", "close");
+    return payload;
+  });
+  let app: NestFastifyApplication | undefined;
+  const destroy = async (): Promise<void> => {
+    draining = true;
+    let httpFailed = false;
+    let httpError: unknown;
     try {
-      await idempotencyHint.connect();
+      await adapter.close();
     } catch (error) {
-      process.stderr.write(
-        `kokoro-billing redis hint unavailable during startup error=${error instanceof Error ? error.message : String(error)}\n`,
+      httpFailed = true;
+      httpError = error;
+    }
+    // Nest invokes provider destroy hooks before disposing its adapter. Drain the
+    // adapter explicitly first so in-flight requests retain their database pool.
+    try {
+      if (app) await app.close();
+    } catch (error) {
+      if (!httpFailed) throw error;
+      throw new AggregateError(
+        [httpError, error],
+        "Billing HTTP drain and provider cleanup failed",
+        {
+          // HTTP drain failure is primary; provider cleanup is secondary.
+          // eslint-disable-next-line preserve-caught-error
+          cause: httpError,
+        },
       );
     }
-
-    const checkout = createPostgresCheckoutService(connection, {
-      ...(config.enabledProviders.includes("stripe") && config.stripeSecretKey
-        ? {
-            hostedProvider: new StripeCheckoutProvider(
-              config.stripeSecretKey,
-              config.stripeAccountRef,
-              config.stripeTimeouts,
-            ),
-            publicBaseUrl: config.publicBaseUrl,
-          }
-        : {}),
-    });
-    const catalog = createPostgresCatalogService(connection);
-    const settlement = createPostgresBillingSettlementService(connection);
-    const usage = createPostgresUsageSettlementService(connection);
-    const admission = createPostgresBillingAdmissionService(connection, usage);
-    const subscriptions = createPostgresSubscriptionQueryService(connection);
-    const webhook = createPostgresProviderEventInboxService(connection);
-    const providerAccounts = createPostgresProviderAccountService(connection);
-    const reversal = createPostgresBillingReversalService(connection);
-    const account = createPostgresCreditAccountQueryService(connection);
-    const providerRegistry = createProviderRegistry(
-      config.enabledProviders,
-      config.wechatApiV3Key === undefined
-        ? {}
-        : { wechatApiV3Key: config.wechatApiV3Key },
+    if (httpFailed) throw httpError;
+  };
+  try {
+    app = await NestFactory.create<NestFastifyApplication>(
+      AppModule.register(config),
+      adapter,
+      { logger: false, abortOnError: false },
     );
-    const auth = createBillingAuth({
-      mode: config.authMode,
-      internalServiceSecret: config.internalServiceSecret,
-      bffServiceToken: config.bffServiceToken,
-      operatorProxySecret: config.operatorProxySecret,
-      ...(config.jwksUrl === undefined ? {} : { jwksUrl: config.jwksUrl }),
-      issuer: config.issuer,
-      ...(config.audience === undefined ? {} : { audience: config.audience }),
-    });
-
-    const server = createBillingServer({
-      idempotencyHint,
-      catalog,
-      checkout,
-      settlement,
-      reversal,
-      usage,
-      admission,
-      subscriptionRead: subscriptions,
-      webhook,
-      parseWebhook: (provider, payload) =>
-        parseProviderWebhook(providerRegistry, provider, payload),
-      ...(config.authMode === "jwks"
-        ? {
-            resolveWebhookTenant: (
-              provider: string,
-              externalAccountRef: string,
-            ) => providerAccounts.resolveTenantId(provider, externalAccountRef),
-          }
-        : {}),
-      account,
-      accountRead: account,
-      auth: {
-        ...auth,
-        webhook: async (request) => {
-          const params: unknown = request.params;
-          const provider =
-            params !== null &&
-            typeof params === "object" &&
-            "provider" in params &&
-            typeof params.provider === "string"
-              ? params.provider
-              : undefined;
-          const secret =
-            typeof provider === "string"
-              ? config.providerSecrets[provider]
-              : undefined;
-          return Promise.resolve(
-            typeof provider === "string" &&
-              typeof secret === "string" &&
-              verifyProviderWebhook(
-                providerRegistry,
-                provider,
-                request.headers,
-                Buffer.from(request.rawBody ?? ""),
-                secret,
-              ),
-          );
-        },
-      },
-      resolveWebhookAccountRef: (provider) =>
-        config.providerAccountRefs[provider] ?? null,
-      health: {
-        postgres: () => connection.ping(),
-        redis: () => idempotencyHint.ping(),
-      },
-    });
-
-    let closed = false;
-    return {
-      server,
-      close: async () => {
-        if (closed) return;
-        closed = true;
-        const results = await Promise.allSettled([
-          server.close(),
-          idempotencyHint.close(),
-          connection.end(),
-        ]);
-        const failures = results.filter(
-          (result) => result.status === "rejected",
-        );
-        if (failures.length > 0)
-          throw new Error(
-            `${failures.length} billing resources failed to close`,
-          );
-      },
-    };
+    await app.init();
+    await adapter.getInstance().ready();
   } catch (error) {
-    await idempotencyHint.close();
-    await connection.end();
+    try {
+      await destroy();
+    } catch (cleanupError) {
+      // Initialization/listen is primary; cleanup is secondary.
+      throw new AggregateError(
+        [error, cleanupError],
+        "Billing initialization and cleanup failed",
+        // eslint-disable-next-line preserve-caught-error
+        { cause: error },
+      );
+    }
     throw error;
   }
+  const application = app;
+  let closing: Promise<void> | undefined;
+  let starting: Promise<void> | undefined;
+  let listening: Promise<void> | undefined;
+  const close = (): Promise<void> => {
+    closing ??= (starting ?? Promise.resolve())
+      .catch(() => undefined)
+      .then(destroy);
+    return closing;
+  };
+  return Object.freeze({
+    listen: () => {
+      if (closing)
+        return Promise.reject(new Error("Billing runtime is closing"));
+      if (!listening) {
+        starting = application
+          .listen(config.port, config.host)
+          .then(() => undefined);
+        listening = starting.catch(async (error: unknown) => {
+          try {
+            await close();
+          } catch (cleanupError) {
+            // Initialization/listen is primary; cleanup is secondary.
+            throw new AggregateError(
+              [error, cleanupError],
+              "Billing listen and cleanup failed",
+              // eslint-disable-next-line preserve-caught-error
+              { cause: error },
+            );
+          }
+          throw error;
+        });
+      }
+      return listening;
+    },
+    close,
+  });
 }

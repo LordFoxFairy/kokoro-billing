@@ -227,6 +227,56 @@ describe.skipIf(adminUrl === undefined)(
         token = token.setNotBefore(patch.notBefore);
       return token.sign(patch.signingKey ?? signingKey);
     };
+    it("SET15 Catalog admits the same complete IAM profile but never downgrades marked machine requests", async () => {
+      const before = await facts();
+      const userHeaders = {
+        authorization: `Bearer ${await signUser()}`,
+        "x-kokoro-tenant-id": encode("r74-owner-http"),
+        "x-request-id": "r74-real-pg-1",
+      };
+      const catalog = await app.inject({
+        method: "GET",
+        url: "/v2/commerce/catalog",
+        headers: userHeaders,
+      });
+      check(catalog, 200);
+      expect(catalog.json()).toEqual({
+        data: { items: [], page: { next_cursor: null } },
+      });
+      for (const patch of [
+        { "x-kokoro-tenant-id": encode("wrong-tenant") },
+        { "x-kokoro-service": "web-bff" },
+        { "x-kokoro-subject": encode("r255-user") },
+      ]) {
+        check(
+          await app.inject({
+            method: "GET",
+            url: "/v2/commerce/catalog",
+            headers: { ...userHeaders, ...patch },
+          }),
+          403,
+        );
+      }
+      for (const patch of [
+        { expiresAt: 1 },
+        { omitSid: true },
+        { scope: "openid" },
+        { plainTenantOnly: true },
+      ]) {
+        check(
+          await app.inject({
+            method: "GET",
+            url: "/v2/commerce/catalog",
+            headers: {
+              ...userHeaders,
+              authorization: `Bearer ${await signUser(patch)}`,
+            },
+          }),
+          401,
+        );
+      }
+      expect(await facts()).toEqual(before);
+    });
     it("accepts a complete IAM EdDSA user profile without mutating owner facts", async () => {
       const context = own("r255-user");
       const result = await seed(context, 321n);
@@ -473,7 +523,7 @@ describe.skipIf(adminUrl === undefined)(
         });
         check(response, 404);
         expect(response.json<ErrorResponse>().error.code).toBe(
-          "billing.not_found",
+          "billing.credit_account_not_found",
         );
       }
       expect(await facts()).toEqual(before);

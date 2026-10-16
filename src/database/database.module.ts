@@ -1,3 +1,4 @@
+import { BILLING_PG_READINESS } from "../http/service-probes.options.js";
 import { Module, type DynamicModule } from "@nestjs/common";
 import { PrismaService } from "./prisma.service.js";
 import type { PrismaServiceOptions } from "./prisma.types.js";
@@ -24,6 +25,12 @@ export class DatabaseModule {
           inject: [PRISMA_SERVICE_OPTIONS],
           useFactory: (resolved: PrismaServiceOptions) =>
             new PrismaService(resolved),
+        },
+        {
+          provide: BILLING_PG_READINESS,
+          inject: [PrismaService],
+          useFactory: (prisma: PrismaService) =>
+            Object.freeze({ ping: () => prisma.ping() }),
         },
         {
           provide: TransactionService,
@@ -57,6 +64,7 @@ export class DatabaseModule {
         },
       ],
       exports: [
+        BILLING_PG_READINESS,
         TransactionService,
         CommandReceiptRepository,
         AuditAppender,

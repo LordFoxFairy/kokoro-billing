@@ -124,7 +124,18 @@ export class ErrorFilter implements ExceptionFilter {
   ) {}
   catch(error: unknown, host: ArgumentsHost): void {
     const status = statusOf(error);
-    const response: ErrorResponse = { error: errors[status] };
+    const response: ErrorResponse = {
+      error:
+        status === 404 &&
+        error instanceof CreditError &&
+        error.code === "CREDIT_ACCOUNT_NOT_FOUND"
+          ? {
+              code: "billing.credit_account_not_found",
+              message: "Credit account not found",
+              retryable: false,
+            }
+          : errors[status],
+    };
     this.schemas.assert("ErrorResponse", response);
     void host
       .switchToHttp()

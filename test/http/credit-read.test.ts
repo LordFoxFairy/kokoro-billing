@@ -511,7 +511,7 @@ describe("R74 production personal Credit HTTP", () => {
     check(
       await app.inject({ method: "GET", url: accountPath, headers: machine() }),
       404,
-      "billing.not_found",
+      "billing.credit_account_not_found",
     );
   });
   it.each([
@@ -1160,7 +1160,7 @@ describe("R74 production personal Credit HTTP", () => {
       [
         new CreditError("CREDIT_ACCOUNT_NOT_FOUND", "PRIVATE_DB_DETAIL"),
         404,
-        "billing.not_found",
+        "billing.credit_account_not_found",
       ],
       [
         new CreditError("CREDIT_READ_CORRUPT", "PRIVATE_DB_DETAIL"),
