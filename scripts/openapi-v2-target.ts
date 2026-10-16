@@ -241,7 +241,7 @@ function validatePersonalReads(
     "400": ["billing.invalid_request", false],
     "401": ["billing.unauthenticated", false],
     "403": ["billing.forbidden", false],
-    "404": ["billing.not_found", false],
+    "404": ["billing.credit_account_not_found", false],
     "500": ["billing.internal_error", false],
     "503": ["billing.dependency_unavailable", true],
   };
@@ -511,8 +511,8 @@ export function validateV2OpenApi(document: unknown): string[] {
     !catalogItem.required.includes("offer_key")
   )
     errors.push("catalog must require the bounded canonical offer_key");
-  if (object(root.info)?.version !== "3.0.0-experimental.4")
-    errors.push("info.version must be 3.0.0-experimental.4");
+  if (object(root.info)?.version !== "3.0.0-experimental.5")
+    errors.push("info.version must be 3.0.0-experimental.5");
   validateCreditUnit(root, errors);
   const paths = object(root.paths) ?? {};
   const actual = new Map<string, JsonObject>();

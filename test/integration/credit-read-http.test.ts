@@ -523,7 +523,7 @@ describe.skipIf(adminUrl === undefined)(
         });
         check(response, 404);
         expect(response.json<ErrorResponse>().error.code).toBe(
-          "billing.not_found",
+          "billing.credit_account_not_found",
         );
       }
       expect(await facts()).toEqual(before);

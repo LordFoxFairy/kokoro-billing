@@ -1,3 +1,7 @@
+## SET49：Billing本人缺账户错误契约
+
+SET49发布v2 3.0.0-experimental.5：仅两本人GET的404错误语义从billing.not_found改为billing.credit_account_not_found（retryable=false）。此错误码变化要求消费者成对更新固定commit/digest，严格区别缺账户与未知路由；v1 immutable不改，不建fallback。
+
 ## SET-15 Catalog实现候选（待Root资源验收）
 
 已按本文件SET15设计门接入五commerce文件、窄CatalogGuard及正常BillingHttpModule；CatalogService沿同一TransactionService readOnlySnapshot，repository使用parameterized Prisma tagged SQL，先取事务DB instant，检查本tenant otherwise-eligible revision parent完整性，再bounded latest eligible目录查询。无SQL/Prisma/seed/provider/资金修改；machine可无subject，若有仍由原personal严格codec/五因素验证，事务actor始终authenticated web-bff。cursor绑定tenant identity digest、scope和稳定排序tuple，最大合法Unicode边界仍在2048wire预算；不持久化业务事实。

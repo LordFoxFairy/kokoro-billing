@@ -40,7 +40,7 @@ describe("Billing v2 target OpenAPI", () => {
   it("publishes the complete target major contract with fully resolved refs", async () => {
     const document = await readContract();
     expect(() => assertV2OpenApi(document)).not.toThrow();
-    expect(record(document.info).version).toBe("3.0.0-experimental.4");
+    expect(record(document.info).version).toBe("3.0.0-experimental.5");
     const operationCount = Object.values(record(document.paths)).reduce<number>(
       (count, path) =>
         count +
@@ -54,7 +54,7 @@ describe("Billing v2 target OpenAPI", () => {
 
   it("publishes the clean-slate admission identity correction as experimental.3", async () => {
     const document = await readContract();
-    expect(record(document.info).version).toBe("3.0.0-experimental.4");
+    expect(record(document.info).version).toBe("3.0.0-experimental.5");
   });
 
   it("uses only trusted producer context and the Agent request reference for admission identity", async () => {
@@ -1040,7 +1040,7 @@ const personalResponse = (
 // It changes only the approved two-read slice; it is not a replacement checker.
 const withApprovedPersonalReads = (document: JsonObject): JsonObject => {
   const copy = clone(document);
-  record(copy.info).version = "3.0.0-experimental.4";
+  record(copy.info).version = "3.0.0-experimental.5";
   const components = record(copy.components);
   for (const [
     name,
@@ -1116,9 +1116,9 @@ const stableContractJson = (value: unknown): unknown => {
 };
 
 describe("R61 personal-read source contract target", () => {
-  it("publishes the approved experimental 3.0.0-experimental.4 target independently of other fields", async () => {
+  it("publishes the approved experimental 3.0.0-experimental.5 target independently of other fields", async () => {
     expect(record((await readContract()).info).version).toBe(
-      "3.0.0-experimental.4",
+      "3.0.0-experimental.5",
     );
   });
 
@@ -1197,7 +1197,7 @@ describe("R61 personal-read source contract target", () => {
         "400": ["billing.invalid_request", false],
         "401": ["billing.unauthenticated", false],
         "403": ["billing.forbidden", false],
-        "404": ["billing.not_found", false],
+        "404": ["billing.credit_account_not_found", false],
         "500": ["billing.internal_error", false],
         "503": ["billing.dependency_unavailable", true],
       };
@@ -1855,7 +1855,7 @@ describe("R67 generated schema semantics and provenance", () => {
       );
     }
     const provenance = validProvenance();
-    expect(provenance.source.version).toBe("3.0.0-experimental.4");
+    expect(provenance.source.version).toBe("3.0.0-experimental.5");
     expect(provenance.source.sha256).toBe(
       createHash("sha256").update(sourceText).digest("hex"),
     );
@@ -2232,7 +2232,7 @@ describe("R243 Billing-owned metering policy artifact", () => {
 describe("SET15 breaking canonical Catalog contract", () => {
   it("requires the real business offer key and publishes optional-subject u1 machine identity without altering personal five factors", async () => {
     const document = await readContract();
-    expect(record(document.info).version).toBe("3.0.0-experimental.4");
+    expect(record(document.info).version).toBe("3.0.0-experimental.5");
     const item = record(
       record(record(document.components).schemas).CatalogItem,
     );

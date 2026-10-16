@@ -2,9 +2,9 @@
   "owner": "@kokoro/billing",
   "source": {
     "path": "contract/openapi/v2/openapi.yaml",
-    "version": "3.0.0-experimental.4",
-    "bytes": 109939,
-    "sha256": "8a3d12cf7517e7ee6cb2958b740bb69ab4831d38a383e61aca383b5fd1e8b27a"
+    "version": "3.0.0-experimental.5",
+    "bytes": 109969,
+    "sha256": "b413db8965ed60683435adb7f2ce8650a7ca7bf7bee0989e8f83afc3d9f846af"
   },
   "generator": {
     "package": "@hey-api/openapi-ts",

@@ -1,3 +1,7 @@
+## SET49：Billing本人缺账户错误契约
+
+SET49不改变schema/数据/写入：缺CreditAccount仍只读返回404，绝不自动开户/赠送；仅transport专用错误码演进。
+
 ## SET-15 Catalog实现候选（待Root资源验收）
 
 已按本文件SET15设计门接入五commerce文件、窄CatalogGuard及正常BillingHttpModule；CatalogService沿同一TransactionService readOnlySnapshot，repository使用parameterized Prisma tagged SQL，先取事务DB instant，检查本tenant otherwise-eligible revision parent完整性，再bounded latest eligible目录查询。无SQL/Prisma/seed/provider/资金修改；machine可无subject，若有仍由原personal严格codec/五因素验证，事务actor始终authenticated web-bff。cursor绑定tenant identity digest、scope和稳定排序tuple，最大合法Unicode边界仍在2048wire预算；不持久化业务事实。

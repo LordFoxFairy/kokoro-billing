@@ -1,3 +1,7 @@
+## SET49：Billing本人缺账户错误契约
+
+SET49候选：修正本人缺账户专用404，v2 experimental.5正规生成并保留Catalog。正规pnpm verify exit0：1433PASS/492SKIP；现typed failure及真实null分支均专用404，未知route保持generic404。自有临时canonical PG HTTP专项25PASS，安装/清理由既有fixture负责；不动正常服务或数据。消费者唯一pin配对仍待后继BFF合并。
+
 ## SET-15 canonical Catalog冻结候选（待Root独审/资源验收）
 
 基线fe1c37226a2373d753396d3be866099fc1b54dad。正常Nest已新增/v2/commerce/catalog，五commerce文件与窄CatalogGuard，不新增mapper/port/pool；本片不实现subscriptions/checkout/商品发布/资金命令。完整机器可无subject，携带subject仍严格合法；transaction actor为authenticated web-bff，无伪用户。catalog使用现readOnlySnapshot事务、同DB instant、No-FK关系损坏先安全失败、最新eligible版本和有界稳定cursor，decimal始终string。SQL/Prisma/schema/锁文件/旧v1artifact无改动，普通租户未发布目录仍真实空页。
