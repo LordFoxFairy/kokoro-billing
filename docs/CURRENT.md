@@ -1,3 +1,7 @@
+## SET49完整隔离资源门终态
+
+正式修复artifact commit cd92c728d8f658f54b254d5cbfd28156ca426dc1，v2 experimental.5 digest b413db8965ed60683435adb7f2ce8650a7ca7bf7bee0989e8f83afc3d9f846af。纯verify1433PASS/492SKIP与target本人HTTP25PASS不替代full integration。完整fresh canonical integration实际355PASS/157FAIL（20文件PASS/28FAIL），主要旧entitlement/payment表及旧schema/options假设失败，未恢复旧表、未改断言；完整资源门FAILED。四个本轮自建reference临时库未由测试自行清理，独占资源窗口内按精确owned身份补清理，最终PG/Redis库存恢复；正常服务/数据未动。本段只记录证据，不改变已发行artifact或消费者pin。
+
 ## SET49：Billing本人缺账户错误契约
 
 SET49候选：修正本人缺账户专用404，v2 experimental.5正规生成并保留Catalog。正规pnpm verify exit0：1433PASS/492SKIP；现typed failure及真实null分支均专用404，未知route保持generic404。自有临时canonical PG HTTP专项25PASS，安装/清理由既有fixture负责；不动正常服务或数据。消费者唯一pin配对仍待后继BFF合并。
