@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import ts from "typescript";
 import { parse } from "yaml";
-import { assertV2OpenApi } from "./openapi-v2-target.js";
+import { assertCreditAccountContract } from "./credit-account-contract.js";
 
 export const billingApiOfficialNames = [
   "index.ts",
@@ -49,6 +49,7 @@ const componentNames = [
   "CatalogResponse",
   "CreditAccount",
   "CreditAccountResponse",
+  "OpenCreditAccountRequest",
   "LedgerEntry",
   "CreditLedgerResponse",
   "Subscription",
@@ -120,7 +121,7 @@ export function readBillingApiSource(
   sourceText: string,
 ): Record<string, unknown> {
   const document = object(parse(sourceText) as unknown);
-  assertV2OpenApi(document);
+  assertCreditAccountContract(sourceText);
   const schemas = object(object(document.components).schemas);
   assertKeys(schemas, componentNames, "source components");
   assertSchemaRefs(schemas, componentNames);

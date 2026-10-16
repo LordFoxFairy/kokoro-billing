@@ -1,3 +1,23 @@
+## SET55 本人零积分账户 owner实现与Root验收（2026-10-16）
+
+正常Nest新增PUT /v2/billing/me/credit-account，五因素web-bff机器边界，严格必需空JSON且无query；同subject advisory lock，缺账户只创建默认0账户与首次credit.account_open审计，已有账户原事实保持、disabled专用403，无grant/journal/payment/SQL/Prisma/依赖变更。exp6/43schema canonical SHA256 41bb19f8a14b2f78049b7e5bcda8e5e9db47ed92ff80a0dc9a024147d10b75fc；正常生成及exp5完整逆恢复保持。当前只交付owner，BFF固定消费者、Web按钮与正常浏览器仍未接通；旧3313不宣新开户可用。
+
+Root独立真实PG/source-dist两文件15PASS（12.00s），包含并发唯一、余额/35表差量、审计回滚、disabled、同锁和超时/丢ACK核实。完整pnpm verify自然exit0：1477PASS/501SKIP（资源未配置，不能作资源通过），format/lint/type/build/sql/contract全部0。随后完整资源门364PASS/157FAIL；首次四旧fixture建库后初始化抛错导致遗留，原resources_restored=false收据保留，Root确认四库无连接/35表全空后精确清理，非用户数据。三现测试清理修复未改97处名称/timeout/断言调用，原25源/契约hash全保持；修后完整integration仍364PASS/157FAIL/521（101.129s），PG/Redis库存精确恢复，完整资源门依然FAILED。四例现在进入旧entitlement表缺失分支，不能称业务修完。
+
+最终prisma:check、db:apply-schema→db:verify-schema、contract:generated:check均exit0，分别自有fixture/资源库存恢复，所有冻结源和保护hash精确。phaseR2作者format/lint/type0；纯verify在phaseR2前执行，后继仅integration fixture清理三文件，不冒称新树重新全verify。独立phaseC/phaseR审查无确定P1/P2；phaseR2另核清理。只作可审查Draft交付，禁止以局部门通过称全仓/完整产品通过。未知网络结果必须GET核实，再用户显式相同PUT重放，取消不保证owner事务回滚。
+
+## SET55 Root第一轮验证与清理修复（2026-10-16）
+
+15项真实PG/source-dist专项PASS；完整verify exit0（1477PASS/501SKIP，资源未配置）；全integration364PASS/157FAIL。四个旧UsageHold fixture在连接初始化失败前已建库，因try位置错误未close；Root精确清理四新增且35表皆空、无连接的临时库，原始库存失败receipt保留，另记恢复证据。按IMPLEMENTATION_PLAN批准三现测试文件清理修复，正式开户25writer源码/契约冻结不变。完整资源门仍失败，未声称旧业务已修或正常页面可用。
+
+## SET55 phaseC结果与phaseR范围（2026-10-16）
+
+契约阶段263PASS；正常生成/check、contract、lint、typecheck exit0。exp6 canonical SHA256 41bb19f8a14b2f78049b7e5bcda8e5e9db47ed92ff80a0dc9a024147d10b75fc，43 schema；exp5原文逆恢复及旧validator原字节验证通过。Root/独立只读审查无确定P1/P2。HTTP尚未注册，开户尚不可用。phaseR按唯一IMPLEMENTATION_PLAN 14文件闭集实施，Root保留真实资源/source-dist与Git；未执行项不得算通过。
+
+## SET55本人开户准备（2026-10-16；实施前）
+
+已只读确认现schema可正规创建默认零账户，但正式API缺失；禁止grant0/SQL补账户或假余额。Root三设计及阶段卡已收敛，先exp6增量契约，仍无新运行操作或实际开户。旧完整资源门失败保持；后继必须以真实PG/HTTP证明唯一开户、幂等、零金融事实差量，不把网络取消当数据库撤销。
+
 ## SET49完整隔离资源门终态
 
 正式修复artifact commit cd92c728d8f658f54b254d5cbfd28156ca426dc1，v2 experimental.5 digest b413db8965ed60683435adb7f2ce8650a7ca7bf7bee0989e8f83afc3d9f846af。纯verify1433PASS/492SKIP与target本人HTTP25PASS不替代full integration。完整fresh canonical integration实际355PASS/157FAIL（20文件PASS/28FAIL），主要旧entitlement/payment表及旧schema/options假设失败，未恢复旧表、未改断言；完整资源门FAILED。四个本轮自建reference临时库未由测试自行清理，独占资源窗口内按精确owned身份补清理，最终PG/Redis库存恢复；正常服务/数据未动。本段只记录证据，不改变已发行artifact或消费者pin。

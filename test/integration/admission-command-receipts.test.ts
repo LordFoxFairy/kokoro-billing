@@ -324,83 +324,87 @@ integration("execution receipt provider reference input types", () => {
 integration("maximum-length invocation admission lifecycle", () => {
   it("creates, rolls back a late capture failure, replays capture, and releases using admission UUID keys", async () => {
     const fixture = await createUsageHoldDatabaseFixture(adminUrl ?? "");
-    const connection = await createBillingConnection(fixture.url);
-    const tenantId = randomUUID();
-    const subjectId = `subject-${randomUUID()}`;
-    const accountId = randomUUID();
-    const invocationId = "i".repeat(255);
-    const usage = createPostgresUsageSettlementService(connection);
-    const admission = createPostgresBillingAdmissionService(connection, usage);
     try {
-      const settlement = createPostgresBillingSettlementService(connection);
-      const paymentId = randomUUID();
-      await settlement.recordSettlement({
-        tenantId,
-        settlementId: paymentId,
-        idempotencyKey: randomUUID(),
-        externalPaymentRef: randomUUID(),
-        amountMinor: 100,
-        currency: "USD",
-      });
-      await settlement.fulfillSettlement({
-        tenantId,
-        settlementId: paymentId,
-        accountId,
-        subjectId,
-        programKey: "long-invocation",
-        grantMicros: 100,
-      });
-      const revisionId = randomUUID();
-      await connection.execute(
-        `INSERT INTO entitlement_usage_price_revision
+      const connection = await createBillingConnection(fixture.url);
+      try {
+        const tenantId = randomUUID();
+        const subjectId = `subject-${randomUUID()}`;
+        const accountId = randomUUID();
+        const invocationId = "i".repeat(255);
+        const usage = createPostgresUsageSettlementService(connection);
+        const admission = createPostgresBillingAdmissionService(
+          connection,
+          usage,
+        );
+        const settlement = createPostgresBillingSettlementService(connection);
+        const paymentId = randomUUID();
+        await settlement.recordSettlement({
+          tenantId,
+          settlementId: paymentId,
+          idempotencyKey: randomUUID(),
+          externalPaymentRef: randomUUID(),
+          amountMinor: 100,
+          currency: "USD",
+        });
+        await settlement.fulfillSettlement({
+          tenantId,
+          settlementId: paymentId,
+          accountId,
+          subjectId,
+          programKey: "long-invocation",
+          grantMicros: 100,
+        });
+        const revisionId = randomUUID();
+        await connection.execute(
+          `INSERT INTO entitlement_usage_price_revision
           (usage_price_revision_id, tenant_id, revision, effective_from, status, published_at)
          VALUES ($1, $2, 1, CURRENT_TIMESTAMP - INTERVAL '1 minute', 'published', CURRENT_TIMESTAMP)`,
-        [revisionId, tenantId],
-      );
-      await connection.execute(
-        `INSERT INTO entitlement_usage_price_rate
+          [revisionId, tenantId],
+        );
+        await connection.execute(
+          `INSERT INTO entitlement_usage_price_rate
           (usage_price_rate_id, usage_price_revision_id, tenant_id, feature_key, reservation_micros)
          VALUES ($1, $2, $3, 'model.request', 10)`,
-        [randomUUID(), revisionId, tenantId],
-      );
-      const created = await admission.create({
-        tenantId,
-        billingSubject: { kind: "user", ref: subjectId },
-        payerRef: subjectId,
-        featureKey: "model.request",
-        surface: "agent",
-        invocationId,
-        executionId: `execution-${randomUUID()}`,
-        meterKind: "model_invocation",
-        idempotencyKey: randomUUID(),
-      });
-      expect(created.status).toBe("held");
-      await connection.execute(
-        `CREATE FUNCTION fail_usage_outbox() RETURNS trigger LANGUAGE plpgsql AS $$
+          [randomUUID(), revisionId, tenantId],
+        );
+        const created = await admission.create({
+          tenantId,
+          billingSubject: { kind: "user", ref: subjectId },
+          payerRef: subjectId,
+          featureKey: "model.request",
+          surface: "agent",
+          invocationId,
+          executionId: `execution-${randomUUID()}`,
+          meterKind: "model_invocation",
+          idempotencyKey: randomUUID(),
+        });
+        expect(created.status).toBe("held");
+        await connection.execute(
+          `CREATE FUNCTION fail_usage_outbox() RETURNS trigger LANGUAGE plpgsql AS $$
          BEGIN IF NEW.aggregate_type = 'usage_settlement' THEN RAISE EXCEPTION 'injected tail failure'; END IF; RETURN NEW; END $$`,
-      );
-      await connection.execute(
-        `CREATE TRIGGER fail_usage_outbox BEFORE INSERT ON entitlement_outbox
+        );
+        await connection.execute(
+          `CREATE TRIGGER fail_usage_outbox BEFORE INSERT ON entitlement_outbox
          FOR EACH ROW EXECUTE FUNCTION fail_usage_outbox()`,
-      );
-      const receipt = {
-        invocationId,
-        executionId: "",
-        acceptedProviderRef: "provider-operation",
-        acceptedAt: new Date("2026-09-01T00:00:00.000Z"),
-        serviceReceipt: { digest: "long" },
-        receiptSchemaVersion: "1",
-      };
-      const [stored] = await connection.query<
-        (RowDataPacket & { execution_id: string })[]
-      >(
-        "SELECT execution_id FROM entitlement_billing_admission WHERE admission_id = $1",
-        [created.admissionId],
-      );
-      receipt.executionId = String(stored[0]?.execution_id);
-      const snapshot = async () =>
-        connection.query<RowDataPacket[]>(
-          `SELECT
+        );
+        const receipt = {
+          invocationId,
+          executionId: "",
+          acceptedProviderRef: "provider-operation",
+          acceptedAt: new Date("2026-09-01T00:00:00.000Z"),
+          serviceReceipt: { digest: "long" },
+          receiptSchemaVersion: "1",
+        };
+        const [stored] = await connection.query<
+          (RowDataPacket & { execution_id: string })[]
+        >(
+          "SELECT execution_id FROM entitlement_billing_admission WHERE admission_id = $1",
+          [created.admissionId],
+        );
+        receipt.executionId = String(stored[0]?.execution_id);
+        const snapshot = async () =>
+          connection.query<RowDataPacket[]>(
+            `SELECT
             (SELECT row_to_json(a) FROM (SELECT available_micros, held_micros, generation FROM entitlement_credit_account WHERE credit_account_id = $2) a) account,
             (SELECT jsonb_agg(row_to_json(g) ORDER BY g.credit_grant_id) FROM (SELECT credit_grant_id, remaining_micros, status FROM entitlement_credit_grant WHERE tenant_id = $1 AND credit_account_id = $2) g) grants,
             (SELECT jsonb_agg(row_to_json(x) ORDER BY x.credit_grant_id) FROM (SELECT credit_grant_id, held_micros, captured_micros, released_micros FROM entitlement_credit_hold_allocation WHERE tenant_id = $1 AND credit_hold_id = $3) x) allocations,
@@ -411,73 +415,75 @@ integration("maximum-length invocation admission lifecycle", () => {
             (SELECT COUNT(*)::int FROM entitlement_outbox WHERE tenant_id = $1) outbox_count,
             (SELECT status FROM entitlement_billing_admission WHERE tenant_id = $1 AND admission_id = $4) admission_status,
             (SELECT jsonb_agg(row_to_json(r) ORDER BY r.receipt_id) FROM (SELECT receipt_id, status, command_name FROM entitlement_billing_command_receipt WHERE tenant_id = $1) r) receipts`,
-          [tenantId, accountId, created.holdId, created.admissionId],
+            [tenantId, accountId, created.holdId, created.admissionId],
+          );
+        const beforeFailure = await snapshot();
+        try {
+          await expect(
+            admission.capture(
+              tenantId,
+              created.admissionId,
+              receipt,
+              randomUUID(),
+            ),
+          ).rejects.toThrow("injected tail failure");
+        } finally {
+          await connection.execute(
+            "DROP TRIGGER fail_usage_outbox ON entitlement_outbox",
+          );
+          await connection.execute("DROP FUNCTION fail_usage_outbox()");
+        }
+        expect(await snapshot()).toEqual(beforeFailure);
+        const captured = await admission.capture(
+          tenantId,
+          created.admissionId,
+          receipt,
+          randomUUID(),
         );
-      const beforeFailure = await snapshot();
-      try {
-        await expect(
-          admission.capture(
-            tenantId,
-            created.admissionId,
-            receipt,
-            randomUUID(),
-          ),
-        ).rejects.toThrow("injected tail failure");
-      } finally {
-        await connection.execute(
-          "DROP TRIGGER fail_usage_outbox ON entitlement_outbox",
+        const replay = await admission.capture(
+          tenantId,
+          created.admissionId,
+          receipt,
+          randomUUID(),
         );
-        await connection.execute("DROP FUNCTION fail_usage_outbox()");
-      }
-      expect(await snapshot()).toEqual(beforeFailure);
-      const captured = await admission.capture(
-        tenantId,
-        created.admissionId,
-        receipt,
-        randomUUID(),
-      );
-      const replay = await admission.capture(
-        tenantId,
-        created.admissionId,
-        receipt,
-        randomUUID(),
-      );
-      expect(replay).toEqual(captured);
-      const [capturedState] = await connection.query<RowDataPacket[]>(
-        `SELECT
+        expect(replay).toEqual(captured);
+        const [capturedState] = await connection.query<RowDataPacket[]>(
+          `SELECT
           (SELECT COUNT(*)::int FROM entitlement_usage_event WHERE tenant_id = $1 AND credit_hold_id = $2) events,
           (SELECT COUNT(*)::int FROM entitlement_usage_settlement WHERE tenant_id = $1 AND credit_hold_id = $2) settlements,
           (SELECT COUNT(*)::int FROM entitlement_credit_journal WHERE tenant_id = $1 AND source_ref = $2 AND entry_kind = 'debit') debits,
           (SELECT COUNT(*)::int FROM entitlement_outbox WHERE tenant_id = $1 AND aggregate_type = 'usage_settlement') outbox,
           (SELECT COUNT(*)::int FROM entitlement_billing_command_receipt WHERE tenant_id = $1 AND status = 'processing') processing`,
-        [tenantId, created.holdId],
-      );
-      expect(capturedState).toEqual([
-        { events: 1, settlements: 1, debits: 1, outbox: 1, processing: 0 },
-      ]);
+          [tenantId, created.holdId],
+        );
+        expect(capturedState).toEqual([
+          { events: 1, settlements: 1, debits: 1, outbox: 1, processing: 0 },
+        ]);
 
-      const releasedCreation = await admission.create({
-        tenantId,
-        billingSubject: { kind: "user", ref: subjectId },
-        payerRef: subjectId,
-        featureKey: "model.request",
-        surface: "agent",
-        invocationId: `r${"i".repeat(254)}`,
-        executionId: `execution-${randomUUID()}`,
-        meterKind: "model_invocation",
-        idempotencyKey: randomUUID(),
-      });
-      await expect(
-        admission.release({
+        const releasedCreation = await admission.create({
           tenantId,
-          admissionId: releasedCreation.admissionId,
+          billingSubject: { kind: "user", ref: subjectId },
+          payerRef: subjectId,
+          featureKey: "model.request",
+          surface: "agent",
           invocationId: `r${"i".repeat(254)}`,
-          reason: "execution.failed",
+          executionId: `execution-${randomUUID()}`,
+          meterKind: "model_invocation",
           idempotencyKey: randomUUID(),
-        }),
-      ).resolves.toMatchObject({ status: "rejected" });
+        });
+        await expect(
+          admission.release({
+            tenantId,
+            admissionId: releasedCreation.admissionId,
+            invocationId: `r${"i".repeat(254)}`,
+            reason: "execution.failed",
+            idempotencyKey: randomUUID(),
+          }),
+        ).resolves.toMatchObject({ status: "rejected" });
+      } finally {
+        await connection.end();
+      }
     } finally {
-      await connection.end();
       await fixture.close();
     }
   });

@@ -244,192 +244,260 @@ integration("usage event to credit hold binding", () => {
 
   it("allows exactly one source to win concurrent creation for a hold", async () => {
     const fixture = await createUsageHoldDatabaseFixture(adminUrl ?? "");
-    const first = await createBillingConnection(fixture.url);
-    const second = await createBillingConnection(fixture.url);
-    const barrierPool = new Pool({ connectionString: fixture.url });
-    const barrier = await barrierPool.connect();
-    const barrierKey = Math.floor(Math.random() * 1_000_000_000);
-    const barrierPid = (
-      await barrier.query<{ pid: number }>("SELECT pg_backend_pid() pid")
-    ).rows[0]?.pid;
-    if (barrierPid === undefined) throw new Error("barrier backend missing");
-    const inFlight: Promise<unknown>[] = [];
     try {
-      await barrier.query(
-        `CREATE FUNCTION block_usage_binding() RETURNS trigger LANGUAGE plpgsql AS $$
+      const first = await createBillingConnection(fixture.url);
+      try {
+        const second = await createBillingConnection(fixture.url);
+        try {
+          const barrierPool = new Pool({ connectionString: fixture.url });
+          try {
+            const barrier = await barrierPool.connect();
+            try {
+              const barrierKey = Math.floor(Math.random() * 1_000_000_000);
+              const barrierPid = (
+                await barrier.query<{ pid: number }>(
+                  "SELECT pg_backend_pid() pid",
+                )
+              ).rows[0]?.pid;
+              if (barrierPid === undefined)
+                throw new Error("barrier backend missing");
+              const inFlight: Promise<unknown>[] = [];
+              try {
+                await barrier.query(
+                  `CREATE FUNCTION block_usage_binding() RETURNS trigger LANGUAGE plpgsql AS $$
          BEGIN PERFORM pg_advisory_xact_lock(${barrierKey}); RETURN NEW; END $$`,
-      );
-      await barrier.query(
-        `CREATE TRIGGER block_usage_binding BEFORE INSERT ON entitlement_usage_event
+                );
+                await barrier.query(
+                  `CREATE TRIGGER block_usage_binding BEFORE INSERT ON entitlement_usage_event
          FOR EACH ROW WHEN (NEW.credit_hold_id IS NOT NULL) EXECUTE FUNCTION block_usage_binding()`,
-      );
-      const services = [first, second].map(
-        createPostgresUsageSettlementService,
-      );
-      for (const sameSource of [true, false]) {
-        const seeded = await seedHold(first);
-        const sharedSource = `provider-${randomUUID()}`;
-        await barrier.query("SELECT pg_advisory_lock($1)", [barrierKey]);
-        const pending = Promise.allSettled(
-          services.map((usage, index) =>
-            usage.ensureUsageEventForHold({
-              tenantId: seeded.tenantId,
-              holdId: seeded.holdId,
-              sourceEventId: sameSource
-                ? sharedSource
-                : `${sharedSource}-${index}`,
-            }),
-          ),
-        );
-        inFlight.push(pending);
-        await waitForBlockedInserts(
-          barrier,
-          2,
-          "entitlement_usage_event",
-          barrierPid,
-        );
-        await barrier.query("SELECT pg_advisory_unlock($1)", [barrierKey]);
-        const outcomes = await pending;
-        const fulfilled = outcomes.filter(
-          (item): item is PromiseFulfilledResult<string> =>
-            item.status === "fulfilled",
-        );
-        expect(fulfilled).toHaveLength(sameSource ? 2 : 1);
-        expect(new Set(fulfilled.map((item) => item.value)).size).toBe(1);
-        expect(
-          outcomes.filter((item) => item.status === "rejected"),
-        ).toHaveLength(sameSource ? 0 : 1);
+                );
+                const services = [first, second].map(
+                  createPostgresUsageSettlementService,
+                );
+                for (const sameSource of [true, false]) {
+                  const seeded = await seedHold(first);
+                  const sharedSource = `provider-${randomUUID()}`;
+                  await barrier.query("SELECT pg_advisory_lock($1)", [
+                    barrierKey,
+                  ]);
+                  const pending = Promise.allSettled(
+                    services.map((usage, index) =>
+                      usage.ensureUsageEventForHold({
+                        tenantId: seeded.tenantId,
+                        holdId: seeded.holdId,
+                        sourceEventId: sameSource
+                          ? sharedSource
+                          : `${sharedSource}-${index}`,
+                      }),
+                    ),
+                  );
+                  inFlight.push(pending);
+                  await waitForBlockedInserts(
+                    barrier,
+                    2,
+                    "entitlement_usage_event",
+                    barrierPid,
+                  );
+                  await barrier.query("SELECT pg_advisory_unlock($1)", [
+                    barrierKey,
+                  ]);
+                  const outcomes = await pending;
+                  const fulfilled = outcomes.filter(
+                    (item): item is PromiseFulfilledResult<string> =>
+                      item.status === "fulfilled",
+                  );
+                  expect(fulfilled).toHaveLength(sameSource ? 2 : 1);
+                  expect(
+                    new Set(fulfilled.map((item) => item.value)).size,
+                  ).toBe(1);
+                  expect(
+                    outcomes.filter((item) => item.status === "rejected"),
+                  ).toHaveLength(sameSource ? 0 : 1);
+                }
+                const sharedTenant = randomUUID();
+                const holds = await Promise.all([
+                  seedHold(first, "active", sharedTenant),
+                  seedHold(first, "active", sharedTenant),
+                ]);
+                const sharedSource = `provider-${randomUUID()}`;
+                await barrier.query("SELECT pg_advisory_lock($1)", [
+                  barrierKey,
+                ]);
+                const competingHolds = Promise.allSettled(
+                  services.map((usage, index) =>
+                    usage.ensureUsageEventForHold({
+                      tenantId: holds[index]?.tenantId ?? "",
+                      holdId: holds[index]?.holdId ?? "",
+                      sourceEventId: sharedSource,
+                    }),
+                  ),
+                );
+                inFlight.push(competingHolds);
+                await waitForBlockedInserts(
+                  barrier,
+                  2,
+                  "entitlement_usage_event",
+                  barrierPid,
+                );
+                await barrier.query("SELECT pg_advisory_unlock($1)", [
+                  barrierKey,
+                ]);
+                const holdOutcomes = await competingHolds;
+                expect(
+                  holdOutcomes.filter((item) => item.status === "fulfilled"),
+                ).toHaveLength(1);
+                expect(
+                  holdOutcomes.filter((item) => item.status === "rejected"),
+                ).toHaveLength(1);
+              } finally {
+                await barrier
+                  .query("SELECT pg_advisory_unlock($1)", [barrierKey])
+                  .catch(() => undefined);
+                await Promise.allSettled(inFlight);
+                await barrier.query(
+                  "DROP TRIGGER IF EXISTS block_usage_binding ON entitlement_usage_event",
+                );
+                await barrier.query(
+                  "DROP FUNCTION IF EXISTS block_usage_binding()",
+                );
+              }
+            } finally {
+              barrier.release();
+            }
+          } finally {
+            await barrierPool.end();
+          }
+        } finally {
+          await second.end();
+        }
+      } finally {
+        await first.end();
       }
-      const sharedTenant = randomUUID();
-      const holds = await Promise.all([
-        seedHold(first, "active", sharedTenant),
-        seedHold(first, "active", sharedTenant),
-      ]);
-      const sharedSource = `provider-${randomUUID()}`;
-      await barrier.query("SELECT pg_advisory_lock($1)", [barrierKey]);
-      const competingHolds = Promise.allSettled(
-        services.map((usage, index) =>
-          usage.ensureUsageEventForHold({
-            tenantId: holds[index]?.tenantId ?? "",
-            holdId: holds[index]?.holdId ?? "",
-            sourceEventId: sharedSource,
-          }),
-        ),
-      );
-      inFlight.push(competingHolds);
-      await waitForBlockedInserts(
-        barrier,
-        2,
-        "entitlement_usage_event",
-        barrierPid,
-      );
-      await barrier.query("SELECT pg_advisory_unlock($1)", [barrierKey]);
-      const holdOutcomes = await competingHolds;
-      expect(
-        holdOutcomes.filter((item) => item.status === "fulfilled"),
-      ).toHaveLength(1);
-      expect(
-        holdOutcomes.filter((item) => item.status === "rejected"),
-      ).toHaveLength(1);
     } finally {
-      await barrier
-        .query("SELECT pg_advisory_unlock($1)", [barrierKey])
-        .catch(() => undefined);
-      await Promise.allSettled(inFlight);
-      await barrier.query(
-        "DROP TRIGGER IF EXISTS block_usage_binding ON entitlement_usage_event",
-      );
-      await barrier.query("DROP FUNCTION IF EXISTS block_usage_binding()");
-      barrier.release();
-      await Promise.all([first.end(), second.end(), barrierPool.end()]);
       await fixture.close();
     }
   });
 
   it("replays concurrent settlement after the waiter obtains the hold lock", async () => {
     const fixture = await createUsageHoldDatabaseFixture(adminUrl ?? "");
-    const first = await createBillingConnection(fixture.url);
-    const second = await createBillingConnection(fixture.url);
-    const barrierPool = new Pool({ connectionString: fixture.url });
-    const barrier = await barrierPool.connect();
-    const barrierKey = Math.floor(Math.random() * 1_000_000_000);
-    const barrierPid = (
-      await barrier.query<{ pid: number }>("SELECT pg_backend_pid() pid")
-    ).rows[0]?.pid;
-    if (barrierPid === undefined) throw new Error("barrier backend missing");
-    const inFlight: Promise<unknown>[] = [];
     try {
-      const seeded = await seedSettleableHold(first);
-      const eventId = randomUUID();
-      await createPostgresUsageSettlementService(first).recordUsageEvent({
-        usageEventId: eventId,
-        tenantId: seeded.tenantId,
-        subjectId: seeded.subjectId,
-        sourceEventId: `provider-${randomUUID()}`,
-        featureKey: "model.request",
-        quantityMicros: 10,
-      });
-      await barrier.query("SELECT pg_advisory_lock($1)", [barrierKey]);
-      await barrier.query(
-        `CREATE FUNCTION block_settlement_outbox() RETURNS trigger LANGUAGE plpgsql AS $$
+      const first = await createBillingConnection(fixture.url);
+      try {
+        const second = await createBillingConnection(fixture.url);
+        try {
+          const barrierPool = new Pool({ connectionString: fixture.url });
+          try {
+            const barrier = await barrierPool.connect();
+            try {
+              const barrierKey = Math.floor(Math.random() * 1_000_000_000);
+              const barrierPid = (
+                await barrier.query<{ pid: number }>(
+                  "SELECT pg_backend_pid() pid",
+                )
+              ).rows[0]?.pid;
+              if (barrierPid === undefined)
+                throw new Error("barrier backend missing");
+              const inFlight: Promise<unknown>[] = [];
+              try {
+                const seeded = await seedSettleableHold(first);
+                const eventId = randomUUID();
+                await createPostgresUsageSettlementService(
+                  first,
+                ).recordUsageEvent({
+                  usageEventId: eventId,
+                  tenantId: seeded.tenantId,
+                  subjectId: seeded.subjectId,
+                  sourceEventId: `provider-${randomUUID()}`,
+                  featureKey: "model.request",
+                  quantityMicros: 10,
+                });
+                await barrier.query("SELECT pg_advisory_lock($1)", [
+                  barrierKey,
+                ]);
+                await barrier.query(
+                  `CREATE FUNCTION block_settlement_outbox() RETURNS trigger LANGUAGE plpgsql AS $$
          BEGIN IF NEW.aggregate_type = 'usage_settlement' THEN PERFORM pg_advisory_xact_lock(${barrierKey}); END IF; RETURN NEW; END $$`,
-      );
-      await barrier.query(
-        `CREATE TRIGGER block_settlement_outbox BEFORE INSERT ON entitlement_outbox
+                );
+                await barrier.query(
+                  `CREATE TRIGGER block_settlement_outbox BEFORE INSERT ON entitlement_outbox
          FOR EACH ROW EXECUTE FUNCTION block_settlement_outbox()`,
-      );
-      const settle = (connection: SqlConnection, index: number) =>
-        createPostgresUsageSettlementService(connection).settleUsage({
-          tenantId: seeded.tenantId,
-          holdId: seeded.holdId,
-          usageEventId: eventId,
-          idempotencyKey: `settle-${index}-${randomUUID()}`,
-          actualMicros: 10,
-        });
-      const holder = settle(first, 0);
-      inFlight.push(holder);
-      const holderPid = await waitForBlockedInserts(
-        barrier,
-        1,
-        "entitlement_outbox",
-        barrierPid,
-      );
-      const waiter = settle(second, 1);
-      inFlight.push(waiter);
-      await waitForBlockedHold(barrier, holderPid);
-      await barrier.query("SELECT pg_advisory_unlock($1)", [barrierKey]);
-      const results = await Promise.all([holder, waiter]);
-      expect(results[1]).toEqual(results[0]);
-      const [rows] = await first.query<
-        { credit_hold_id: string; settlements: string; journals: string }[]
-      >(
-        `SELECT e.credit_hold_id,
+                );
+                const settle = (connection: SqlConnection, index: number) =>
+                  createPostgresUsageSettlementService(connection).settleUsage({
+                    tenantId: seeded.tenantId,
+                    holdId: seeded.holdId,
+                    usageEventId: eventId,
+                    idempotencyKey: `settle-${index}-${randomUUID()}`,
+                    actualMicros: 10,
+                  });
+                const holder = settle(first, 0);
+                inFlight.push(holder);
+                const holderPid = await waitForBlockedInserts(
+                  barrier,
+                  1,
+                  "entitlement_outbox",
+                  barrierPid,
+                );
+                const waiter = settle(second, 1);
+                inFlight.push(waiter);
+                await waitForBlockedHold(barrier, holderPid);
+                await barrier.query("SELECT pg_advisory_unlock($1)", [
+                  barrierKey,
+                ]);
+                const results = await Promise.all([holder, waiter]);
+                expect(results[1]).toEqual(results[0]);
+                const [rows] = await first.query<
+                  {
+                    credit_hold_id: string;
+                    settlements: string;
+                    journals: string;
+                  }[]
+                >(
+                  `SELECT e.credit_hold_id,
                 (SELECT COUNT(*) FROM entitlement_usage_settlement s WHERE s.credit_hold_id = $1)::text settlements,
                 (SELECT COUNT(*) FROM entitlement_credit_journal j WHERE j.source_ref = $1)::text journals
            FROM entitlement_usage_event e WHERE e.usage_event_id = $2`,
-        [seeded.holdId, eventId],
-      );
-      expect(rows).toEqual([
-        { credit_hold_id: seeded.holdId, settlements: "1", journals: "1" },
-      ]);
-      await first.execute(
-        "UPDATE entitlement_usage_event SET credit_hold_id = NULL WHERE usage_event_id = $1",
-        [eventId],
-      );
-      await expect(settle(first, 2)).rejects.toThrow(
-        "billing.credit_hold_not_active",
-      );
+                  [seeded.holdId, eventId],
+                );
+                expect(rows).toEqual([
+                  {
+                    credit_hold_id: seeded.holdId,
+                    settlements: "1",
+                    journals: "1",
+                  },
+                ]);
+                await first.execute(
+                  "UPDATE entitlement_usage_event SET credit_hold_id = NULL WHERE usage_event_id = $1",
+                  [eventId],
+                );
+                await expect(settle(first, 2)).rejects.toThrow(
+                  "billing.credit_hold_not_active",
+                );
+              } finally {
+                await barrier
+                  .query("SELECT pg_advisory_unlock($1)", [barrierKey])
+                  .catch(() => undefined);
+                await Promise.allSettled(inFlight);
+                await barrier.query(
+                  "DROP TRIGGER IF EXISTS block_settlement_outbox ON entitlement_outbox",
+                );
+                await barrier.query(
+                  "DROP FUNCTION IF EXISTS block_settlement_outbox()",
+                );
+              }
+            } finally {
+              barrier.release();
+            }
+          } finally {
+            await barrierPool.end();
+          }
+        } finally {
+          await second.end();
+        }
+      } finally {
+        await first.end();
+      }
     } finally {
-      await barrier
-        .query("SELECT pg_advisory_unlock($1)", [barrierKey])
-        .catch(() => undefined);
-      await Promise.allSettled(inFlight);
-      await barrier.query(
-        "DROP TRIGGER IF EXISTS block_settlement_outbox ON entitlement_outbox",
-      );
-      await barrier.query("DROP FUNCTION IF EXISTS block_settlement_outbox()");
-      barrier.release();
-      await Promise.all([first.end(), second.end(), barrierPool.end()]);
       await fixture.close();
     }
   });
@@ -483,57 +551,60 @@ integration("usage event to credit hold binding", () => {
 
   it("rejects an event bound to another active hold before changing funds", async () => {
     const fixture = await createUsageHoldDatabaseFixture(adminUrl ?? "");
-    const connection = await createBillingConnection(fixture.url);
     try {
-      const seeded = await seedSettleableHold(connection);
-      const otherHoldId = randomUUID();
-      await connection.execute(
-        `INSERT INTO entitlement_credit_hold
+      const connection = await createBillingConnection(fixture.url);
+      try {
+        const seeded = await seedSettleableHold(connection);
+        const otherHoldId = randomUUID();
+        await connection.execute(
+          `INSERT INTO entitlement_credit_hold
           (credit_hold_id, tenant_id, credit_account_id, idempotency_key, requested_micros, expires_at, feature_key)
          VALUES ($1, $2, $3, $4, 10, CURRENT_TIMESTAMP + INTERVAL '5 minutes', 'model.request')`,
-        [otherHoldId, seeded.tenantId, seeded.accountId, randomUUID()],
-      );
-      const usage = createPostgresUsageSettlementService(connection);
-      const eventId = randomUUID();
-      await usage.recordUsageEvent({
-        usageEventId: eventId,
-        tenantId: seeded.tenantId,
-        subjectId: seeded.subjectId,
-        sourceEventId: `provider-${randomUUID()}`,
-        featureKey: "model.request",
-        quantityMicros: 10,
-      });
-      await connection.execute(
-        "UPDATE entitlement_usage_event SET credit_hold_id = $1 WHERE usage_event_id = $2",
-        [otherHoldId, eventId],
-      );
-      await connection.execute(
-        "UPDATE entitlement_usage_event SET status = 'settled' WHERE usage_event_id = $1",
-        [eventId],
-      );
-      await expect(
-        usage.settleUsage({
-          tenantId: seeded.tenantId,
-          holdId: seeded.holdId,
+          [otherHoldId, seeded.tenantId, seeded.accountId, randomUUID()],
+        );
+        const usage = createPostgresUsageSettlementService(connection);
+        const eventId = randomUUID();
+        await usage.recordUsageEvent({
           usageEventId: eventId,
-          idempotencyKey: randomUUID(),
-          actualMicros: 10,
-        }),
-      ).rejects.toThrow("billing.usage_event_mismatch");
-      const [state] = await connection.query<
-        { held_micros: string; journals: string; settlements: string }[]
-      >(
-        `SELECT a.held_micros,
+          tenantId: seeded.tenantId,
+          subjectId: seeded.subjectId,
+          sourceEventId: `provider-${randomUUID()}`,
+          featureKey: "model.request",
+          quantityMicros: 10,
+        });
+        await connection.execute(
+          "UPDATE entitlement_usage_event SET credit_hold_id = $1 WHERE usage_event_id = $2",
+          [otherHoldId, eventId],
+        );
+        await connection.execute(
+          "UPDATE entitlement_usage_event SET status = 'settled' WHERE usage_event_id = $1",
+          [eventId],
+        );
+        await expect(
+          usage.settleUsage({
+            tenantId: seeded.tenantId,
+            holdId: seeded.holdId,
+            usageEventId: eventId,
+            idempotencyKey: randomUUID(),
+            actualMicros: 10,
+          }),
+        ).rejects.toThrow("billing.usage_event_mismatch");
+        const [state] = await connection.query<
+          { held_micros: string; journals: string; settlements: string }[]
+        >(
+          `SELECT a.held_micros,
           (SELECT COUNT(*) FROM entitlement_credit_journal j WHERE j.credit_account_id = a.credit_account_id)::text journals,
           (SELECT COUNT(*) FROM entitlement_usage_settlement s WHERE s.credit_hold_id = $1)::text settlements
          FROM entitlement_credit_account a WHERE a.credit_account_id = $2`,
-        [seeded.holdId, seeded.accountId],
-      );
-      expect(state).toEqual([
-        { held_micros: "10", journals: "0", settlements: "0" },
-      ]);
+          [seeded.holdId, seeded.accountId],
+        );
+        expect(state).toEqual([
+          { held_micros: "10", journals: "0", settlements: "0" },
+        ]);
+      } finally {
+        await connection.end();
+      }
     } finally {
-      await connection.end();
       await fixture.close();
     }
   });

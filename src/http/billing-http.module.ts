@@ -1,3 +1,5 @@
+import { CreditAccountController } from "../modules/credit/credit-account.controller.js";
+import { CreditAccountGuard } from "./credit-account.guard.js";
 import { Inject, InternalServerErrorException, Module } from "@nestjs/common";
 import type { DynamicModule, NestModule } from "@nestjs/common";
 import { APP_FILTER, HttpAdapterHost } from "@nestjs/core";
@@ -86,6 +88,7 @@ export class BillingHttpModule implements NestModule {
       imports: [CreditModule, CommerceModule],
       controllers: [
         CreditReadController,
+        CreditAccountController,
         CatalogReadController,
         ServiceProbesController,
       ],
@@ -97,6 +100,7 @@ export class BillingHttpModule implements NestModule {
             createBillingCatalogAuth(resolved),
         },
         CatalogGuard,
+        CreditAccountGuard,
         { provide: BILLING_PERSONAL_HTTP_OPTIONS, useValue: config },
         {
           provide: BILLING_PERSONAL_AUTH,
@@ -124,7 +128,7 @@ export class BillingHttpModule implements NestModule {
               Object.entries(generatedSchemas),
             );
             if (
-              bindings.length !== 42 ||
+              bindings.length !== 43 ||
               exports.size !== bindings.length ||
               new Set(bindings.map(([, exported]) => exported)).size !==
                 exports.size

@@ -44,6 +44,23 @@ export class CreditEffects {
     private readonly repository: CreditRepository,
     private readonly audit: AuditAppender,
   ) {}
+  async openMyAccount(
+    context: CreditReadContext,
+  ): Promise<CreditAccountSnapshot> {
+    this.transactions.requireActiveTransaction(context.tenantId, "write");
+    const result = await this.repository.openMyAccount(context);
+    if (result.created)
+      await this.audit.append({
+        tenantId: context.tenantId,
+        action: "credit.account_open",
+        subjectId: context.subjectId,
+        resourceType: "credit_account",
+        resourceId: result.account.id,
+        reason: "Explicit own credit account opening",
+        payload: {},
+      });
+    return result.account;
+  }
   async grant(input: GrantCreditEffectInput): Promise<GrantCreditResult> {
     const active = this.transactions.requireActive(input.tenantId);
     return this.transactions.run(active.scope, async () => {
@@ -155,6 +172,17 @@ export class CreditService {
     private readonly effects: CreditEffects,
     private readonly repository: CreditRepository,
   ) {}
+  openMyAccount(context: CreditReadContext): Promise<CreditAccountSnapshot> {
+    return this.transactions.runRoot(
+      {
+        tenantId: context.tenantId,
+        actorId: "web-bff",
+        operation: "credit.open_my_account",
+        mode: "write",
+      },
+      () => this.effects.openMyAccount(context),
+    );
+  }
   getMyAccount(
     context: CreditReadContext,
   ): Promise<CreditAccountSnapshot | null> {

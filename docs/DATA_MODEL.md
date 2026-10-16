@@ -1,3 +1,11 @@
+## SET55：本人零余额账户数据设计门（2026-10-16；实施前）
+
+无DDL、表、索引、installer、seed、Prisma schema/client或新持久化系统。唯一canonical仍database/schema.sql。现billing_credit_account的UNIQUE(tenant_id,subject_id)是自然幂等身份；首次创建仅id/tenant_id/subject_id，active、零available/held、generation和时间均沿schema默认，不由浏览器输入。只允许已有Credit事务写边界创建，GET/启动不开户。
+
+顺序为现write事务→同grant主体advisory lock→精确同tenant/subject查询→缺失创建或保留既有→仅created时同事务append信用账户开通audit。audit actor来自已认证web-bff，subject为本人，无敏感凭据payload。disabled不复活；已有余额/generation/created_at不更新；审计失败使首次创建整体回滚。创建账户不产生grant/journal/hold/payment/order/invoice/metering/receipt或任意资金，其他canonical金融事实零差量。
+
+真实PG仅Root拥有的fresh fixture；初次/重复/并发/跨tenant/非零/disabled/grant竞争/审计失败/锁超时必须检查账户唯一、既有值不变与全35表预期差量。正常实例不得SQL补账户或grant0；后继激活正式API后才由显式本人请求开户。现timeout不等于请求取消，响应丢失后读取/重放不产生第二账户或audit。schema和Prisma生成物原hash保持，正式源/构建runtime新增PUT及旧读取语义单独验收。
+
 ## SET49：Billing本人缺账户错误契约
 
 SET49不改变schema/数据/写入：缺CreditAccount仍只读返回404，绝不自动开户/赠送；仅transport专用错误码演进。
