@@ -40,7 +40,7 @@ describe("Billing v2 target OpenAPI", () => {
   it("publishes the complete target major contract with fully resolved refs", async () => {
     const document = await readContract();
     expect(() => assertTargetOpenApi(document)).not.toThrow();
-    expect(record(document.info).version).toBe("3.0.0-experimental.3");
+    expect(record(document.info).version).toBe("4.0.0-experimental.1");
     const operationCount = Object.values(record(document.paths)).reduce<number>(
       (count, path) =>
         count +
@@ -52,9 +52,47 @@ describe("Billing v2 target OpenAPI", () => {
     expect(operationCount).toBe(24);
   });
 
-  it("publishes the clean-slate admission identity correction as experimental.3", async () => {
+  it("publishes the approved usage2 target without changing the personal read surface", async () => {
     const document = await readContract();
-    expect(record(document.info).version).toBe("3.0.0-experimental.3");
+    expect(record(document.info).version).toBe("4.0.0-experimental.1");
+  });
+
+  it("pins usage2 on new commands and returned evidence identities, never a dual-version enum", async () => {
+    const document = await readContract();
+    for (const name of ["AdmissionCreateRequest", "Admission"]) {
+      const properties = schemaProperties(document, name);
+      expect(record(properties.usage_profile_version)).toEqual({
+        type: "string",
+        const: "2.0.0",
+      });
+      expect(record(properties.usage_profile_digest).const).toBe(
+        "552f0d22251837aaf4d83766c7bd91311984f707f9a42950ed53ac7127bb5504",
+      );
+    }
+    for (const name of [
+      "AdmissionCaptureRequest",
+      "AdmissionReleaseRequest",
+      "ExecutionEventRequest",
+      "ExecutionEvent",
+    ]) {
+      expect(
+        record(schemaProperties(document, name).evidence_schema_version),
+      ).toEqual({ type: "string", const: "2.0.0" });
+      for (const invalid of [
+        { type: "string", const: "1.0.0" },
+        { type: "string", enum: ["1.0.0", "2.0.0"] },
+      ]) {
+        expect(
+          mutate(document, (copy) => {
+            schemaProperties(copy, name).evidence_schema_version = invalid;
+          }),
+        ).toContain(
+          name === "ExecutionEvent"
+            ? "ExecutionEvent must echo the pinned Agent usage version"
+            : "strict evidence command must pin Agent usage 2.0.0",
+        );
+      }
+    }
   });
 
   it("uses only trusted producer context and the Agent request reference for admission identity", async () => {
@@ -197,7 +235,7 @@ describe("Billing v2 target OpenAPI", () => {
     });
     expect(
       record(properties("AdmissionCreateRequest").usage_profile_digest).const,
-    ).toBe("eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0");
+    ).toBe("552f0d22251837aaf4d83766c7bd91311984f707f9a42950ed53ac7127bb5504");
     for (const field of [
       "usage_profile_version",
       "usage_profile_digest",
@@ -272,9 +310,9 @@ describe("Billing v2 target OpenAPI", () => {
         record(
           schemaProperties(copy, "ExecutionEventRequest")
             .evidence_schema_version,
-        ).const = "2.0.0";
+        ).const = "1.0.0";
       }),
-    ).toContain("strict evidence command must pin Agent usage 1.0.0");
+    ).toContain("strict evidence command must pin Agent usage 2.0.0");
     expect(
       mutate(document, (copy) => {
         record(
@@ -356,9 +394,9 @@ describe("Billing v2 target OpenAPI", () => {
       billing_subject: { kind: "user", ref: "user-admission-control" },
       planned_binding_ref: "planned-binding-admission-control",
       planned_binding_digest: "a".repeat(64),
-      usage_profile_version: "1.0.0",
+      usage_profile_version: "2.0.0",
       usage_profile_digest:
-        "eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0",
+        "552f0d22251837aaf4d83766c7bd91311984f707f9a42950ed53ac7127bb5504",
       execution_bound_ref: "execution-bound-admission-control",
       execution_bound_digest: "b".repeat(64),
     };
@@ -442,7 +480,7 @@ describe("Billing v2 target OpenAPI", () => {
     expect(admission).not.toHaveProperty("payer_ref");
     expect(admission).not.toHaveProperty("amount_micros");
     expect(record(admission.feature_key).maxLength).toBe(128);
-    expect(record(admission.usage_profile_version).const).toBe("1.0.0");
+    expect(record(admission.usage_profile_version).const).toBe("2.0.0");
     const checkout = schemaProperties(document, "CheckoutCreateRequest");
     expect(Object.keys(checkout)).toEqual(["offer_revision_id"]);
     const settlement = schemaProperties(document, "SettlementCreateRequest");
@@ -1040,7 +1078,7 @@ const personalResponse = (
 // It changes only the approved two-read slice; it is not a replacement checker.
 const withApprovedPersonalReads = (document: JsonObject): JsonObject => {
   const copy = clone(document);
-  record(copy.info).version = "3.0.0-experimental.3";
+  record(copy.info).version = "4.0.0-experimental.1";
   const components = record(copy.components);
   for (const [
     name,
@@ -1116,9 +1154,9 @@ const stableContractJson = (value: unknown): unknown => {
 };
 
 describe("R61 personal-read source contract target", () => {
-  it("publishes the approved experimental 3.0.0-experimental.3 target independently of other fields", async () => {
+  it("publishes the approved experimental 4.0.0-experimental.1 target independently of other fields", async () => {
     expect(record((await readContract()).info).version).toBe(
-      "3.0.0-experimental.3",
+      "4.0.0-experimental.1",
     );
   });
 
@@ -1335,6 +1373,37 @@ describe("R61 personal-read source contract target", () => {
   it("preserves the entire unrelated contract projection, 24 inventory, global schemes and Credit units", async () => {
     const document = await readContract();
     const projection = clone(document);
+    // Invert only the eight approved MC01 literals, after checking their exact
+    // new shapes. Keep the original full R61 digest; do not rebaseline or mask
+    // a schema subtree to accommodate the usage2 target.
+    for (const name of ["AdmissionCreateRequest", "Admission"]) {
+      const properties = schemaProperties(projection, name);
+      expect(properties.usage_profile_version).toEqual({
+        type: "string",
+        const: "2.0.0",
+      });
+      expect(properties.usage_profile_digest).toEqual({
+        type: "string",
+        const:
+          "552f0d22251837aaf4d83766c7bd91311984f707f9a42950ed53ac7127bb5504",
+      });
+      record(properties.usage_profile_version).const = "1.0.0";
+      record(properties.usage_profile_digest).const =
+        "eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0";
+    }
+    for (const name of [
+      "AdmissionCaptureRequest",
+      "AdmissionReleaseRequest",
+      "ExecutionEventRequest",
+      "ExecutionEvent",
+    ]) {
+      const version = schemaProperties(
+        projection,
+        name,
+      ).evidence_schema_version;
+      expect(version).toEqual({ type: "string", const: "2.0.0" });
+      record(version).const = "1.0.0";
+    }
     delete record(projection.info).version;
     for (const path of personalReadPaths)
       delete record(record(projection.paths)[path]).get;
@@ -1835,7 +1904,7 @@ describe("R67 generated schema semantics and provenance", () => {
       );
     }
     const provenance = validProvenance();
-    expect(provenance.source.version).toBe("3.0.0-experimental.3");
+    expect(provenance.source.version).toBe("4.0.0-experimental.1");
     expect(provenance.source.sha256).toBe(
       createHash("sha256").update(sourceText).digest("hex"),
     );
@@ -2207,4 +2276,73 @@ describe("R243 Billing-owned metering policy artifact", () => {
     expect(joint).toContain("FROM billing_metering_policy_revision");
     expect(source).not.toContain("selectActiveRates");
   });
+});
+
+// Exercise the public command against owned input copies, never edit the live
+// owner artifact or accept an import failure as successful pin enforcement.
+describe("public Agent usage consumer pin gate", () => {
+  it.each(["missing", "changed"])(
+    "rejects a %s receipt after a valid public control",
+    async (fault) => {
+      const { cp, mkdir, symlink, unlink } = await import("node:fs/promises");
+      const { spawnSync } = await import("node:child_process");
+      const directory = await mkdtemp(join(tmpdir(), "billing-agent-pin-"));
+      try {
+        await writeFile(join(directory, "package.json"), '{"type":"module"}\n');
+        await cp(join(process.cwd(), "scripts"), join(directory, "scripts"), {
+          recursive: true,
+        });
+        await mkdir(join(directory, "contract/openapi/v1"), {
+          recursive: true,
+        });
+        await mkdir(join(directory, "contract/agent/usage/v2"), {
+          recursive: true,
+        });
+        await cp(target, join(directory, "contract/openapi/v1/openapi.yaml"));
+        await cp(
+          join(process.cwd(), "contract/README.md"),
+          join(directory, "contract/README.md"),
+        );
+        const pinPath = join(
+          directory,
+          "contract/agent/usage/v2/consumer-pin.json",
+        );
+        await cp(
+          join(process.cwd(), "contract/agent/usage/v2/consumer-pin.json"),
+          pinPath,
+        );
+        await symlink(
+          join(process.cwd(), "node_modules"),
+          join(directory, "node_modules"),
+          "dir",
+        );
+        const check = () =>
+          spawnSync(
+            process.execPath,
+            ["--import", "tsx", join(directory, "scripts/verify-openapi.ts")],
+            {
+              cwd: directory,
+              encoding: "utf8",
+              timeout: 10_000,
+            },
+          );
+        const control = check();
+        expect(control.status, control.stderr).toBe(0);
+        if (fault === "missing") await unlink(pinPath);
+        else {
+          const pin = record(
+            JSON.parse(await readFile(pinPath, "utf8")) as unknown,
+          );
+          pin.source_commit = "0".repeat(40);
+          await writeFile(pinPath, JSON.stringify(pin, null, 2) + "\n");
+        }
+        const denied = check();
+        expect(denied.error).toBeUndefined();
+        expect(denied.status).not.toBe(0);
+        expect(denied.stderr).toContain("Agent usage consumer pin");
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
 });

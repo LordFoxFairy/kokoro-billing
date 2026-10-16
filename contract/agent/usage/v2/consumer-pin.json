@@ -1,0 +1,20 @@
+{
+  "owner": "kokoro-agent",
+  "source_commit": "2d5ce12c0eecdecfcdb44a21b69da707d51eb7c7",
+  "http_contract": {
+    "version": "6.0.0",
+    "path": "contract/openapi/v1/openapi.json",
+    "sha256": "e4d30178f2330744b374788abf7e6d23bbf8d7841dcd01537063c705dc18a8db",
+    "provenance_path": "contract/provenance.json",
+    "provenance_sha256": "d6fa5c5cdb0038b471ba523661c0aa8b958e8bb94bbc4e5c54472d6c63fe1791"
+  },
+  "usage_artifact": {
+    "version": "2.0.0",
+    "schema_path": "contract/usage/v2/schema.json",
+    "schema_sha256": "552f0d22251837aaf4d83766c7bd91311984f707f9a42950ed53ac7127bb5504",
+    "manifest_path": "contract/usage/v2/manifest.json",
+    "manifest_sha256": "197aa6f1680e82dad47815903229e20ddaf2e9642f708fada55611e94ea99941",
+    "vectors_path": "contract/usage/v2/vectors.json",
+    "vectors_sha256": "4fbec9f41732032ad28fee132e703c93dc50d09fecd82cb8a7578d90bb826483"
+  }
+}

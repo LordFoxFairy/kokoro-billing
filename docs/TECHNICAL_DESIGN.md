@@ -1,3 +1,15 @@
+## MC01-B1：接收已验证 usage2 发布身份（2026-10-16；既定MC01内的候选）
+
+事实基线Billing1ceeae5：正常Nest只挂probes和Credit两读；未挂载的Admission/Capture/Release/Execution目标仍固定旧usage1/schema摘要，仓内没有正式Agent证据HTTP reader或consumer artifact。这不等于Agent usage2已被Billing接收。Agent本地候选2d5ce12c0eecdecfcdb44a21b69da707d51eb7c7已验HTTP6、usage2新写和sealed v1历史读取，normal Agent/System未切换。
+
+本片沿既定MC01只做消费者发布身份与尚未启用目标的一次原子校正：Billing HTTP artifact版本升至4.0.0-experimental.1（路径仍/v1，24operation/42schema/实际5route不变）；新Admission及它的Capture/Release/Execution输入与表示固定usage2/schema2，禁止旧版本或任意schema摘要进入新资金链。冻结usage1是Agent历史只读事实，不把旧Run重新授权或套新收费。旧财务记录不迁移或重算；未来确有旧Admission时须按其原不可变snapshot恢复，不能由本target常量推断存在或强转。
+
+发布身份固定Agent commit、HTTP6 source/provenance与usage2 schema/manifest/vector摘要。只读owner artifact按固定Git object接收，消费者不编辑或重新发行Agent schema；不导入sibling源码、不增加通用contract中心。本仓只读发布收据固定在`contract/agent/usage/v2/consumer-pin.json`，闭集记录owner/source_commit、HTTP/provenance与usage2 schema/manifest/vectors的原path/SHA；既有`pnpm contract:check`经`scripts/verify-openapi.ts`校验收据及其与新target常量的一致性。收据不是schema或运行时授权；原schema不复制到Billing。`contract/README.md`与canonical source digest同片更新。现Billing唯一canonical YAML由原HeyAPI生成器更新，旧target常量/正向fixture原子切换，新增旧version/错digest/放宽pin负控，原24operation及资金知识断言保留。
+
+本片不引入运行时client/HTTP controller、Schema/Prisma/资金writer、fee/价格/倍率/赠送变化，也不加载密钥/重启进程。后继B2在本Metering模块实现strict owner reader（原bytes、canonical/digest、完整binding、显式version且不fallback），不能以Ajv结构通过代替owner语义；现commandDigest使用localeCompare且把数字转字符串，不能复用为RFC8785证据摘要。再按原设计接正式preauthorization bound/owner技术保证、IAM、Admission预占、single dispatch、sealed实际量capture/release与unknown恢复。没有已发布bound/合法技术保证时继续拒绝真实模型调用；本片不造positive bound或paid permit。源码artifact交付不是余额/聊天/收费完成。
+
+---
+
 ## BILLING-V1-FIX 唯一 v1 与正常 Nest 读取入口（2026-10-13）
 
 Billing 的唯一目标机器源收敛为 24-operation `/v1`；删除旧 17-operation source、`/v2` source、alias 与双轨校验。正常 `createBillingRuntime` 原位组合 Database、Billing HTTP、三项 probe 与已实现的两项本人 Credit GET；其余 19 项不注册空 handler。旧 Fastify transport 不再是正常入口，其仍有价值的资金/provider断言由既有业务测试承接，不据此声称未实现财务能力完成。

@@ -1,3 +1,15 @@
+## MC01-B1：usage2目标契约与发布身份已本地接收（2026-10-16）
+
+用户明确确认“新调用只接受usage2，usage1仅历史读取”，限代码/契约，不启用扣费或发送模型。原分支1ceeae5后原位更新唯一canonical HTTP目标至4.0.0-experimental.1；仍/v1、24operations/42schemas、正常仅5routes。改动严格限六处usage version与两处schema digest和artifact版本；现有Credit两读、controller、财务/数据库/依赖/运行配置不变。只读consumer-pin记录Agent2d5ce12的精确Git对象与HTTP6/usage2来源摘要，公共contract gate固定receipt原字节SHA；不是第二份schema、runtime reader、权限或资金许可。
+
+原HeyAPI流水线重生四文件，index原字节未变、其余三文件更新。新target/pin正反例先2行为RED，公共CLI缺/改receipt在合法control之后先2行为RED，再4GREEN；首次scratch缺ESM package marker导致的fixture错误保留但不当RED。原完整门1416PASS/1FAIL/480资源SKIP唯一失败为R61保护projection包含八处批准literal；未换原SHA/删断言/遮schema，而在同一test先exact核新shape，再只逆回八literal保原完整SHA，独审确认无放宽。原contract suite最终250PASS。
+
+最终Node24.20.0 `pnpm verify` 全部exit0：格式、lint、typecheck、build、SQL、contract及默认1417PASS/480原资源SKIP，26.34秒；默认输出保留原header-cardinality诊断及故意不可用Redis负控日志，不冒日志全净。`pnpm contract:generated:check`另经正规重生比较通过，独审无确定P0–P2。480资源门未运行：本片仅target/pin/派生，无数据库、运行服务或资金写入，不执行installer或正常模型调用。
+
+仍OPEN：Metering strict owner reader与完整canonical/digest/binding语义、正式preauthorization bound/技术保证、IAM fresh准入、Admission原子预占、single dispatch、verified actual capture/release和unknown恢复、正常余额/聊天/流水整链。usage1历史不重写或追收，不把target更新当正式计费已接线；未启用候选、CI/push/PR/merge及Rootgitlink不动。
+
+---
+
 ## R255 财务赠送裁决引用（2026-10-10）
 
 唯一业务裁决与实现边界见 [TECHNICAL_DESIGN](TECHNICAL_DESIGN.md#r255-财务赠送裁决与当前实现边界2026-10-10)。698da77 的依赖裁决已接收；Nest 运行候选、FG2 消费、资金用户旅程尚未接收。本次无运行、SQL、机器契约或资金效果；下方旧报告只作为具日期历史证据。

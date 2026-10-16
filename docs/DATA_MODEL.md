@@ -1,3 +1,11 @@
+## MC01-B1：无数据变更的consumer pin候选（2026-10-16）
+
+本片只接收Agent usage2发布身份并同步未启用目标的wire常量；canonical database/schema.sql、Prisma派生、所有普通列/JSON事实和现账户/余额/流水不变。不重写历史Agent证据或财务snapshot，不将旧planned字段改名后回存，不回填未知归属，不删除或自动replay旧Run，不引入版本表/兼容双写。
+
+新资金链将只接受与新Admission冻结pin相同的usage2；历史usage1只读由Agent按显式version保留，不能被常量切换偷偷当作新收费资格。未来Admission/Capture实现必须在同一owner事务核原snapshot/profile、receipt/idempotency与lease/版本事实，未知保持待核实；本片没有资金写入或可调用新增controller。
+
+---
+
 ## BILLING-V1-FIX 数据边界（2026-10-13）
 
 本切换不修改 canonical SQL、Prisma model、表、索引、资金状态机或 worker。两项 Credit GET 继续只读 `kokoro_billing` owner schema，缺账户为明确 404，不以未注册 route 的 404 伪装业务无账户。

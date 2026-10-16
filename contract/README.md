@@ -2,10 +2,10 @@
 
 ## Current machine artifact
 
-[`openapi/v1/openapi.yaml`](openapi/v1/openapi.yaml) is the only editable Billing HTTP machine source. It defines exactly 24 operations: three unversioned probes and 21 `/v1/**` internal-owner operations. The artifact version remains `3.0.0-experimental.3`; package version and HTTP path version are independent. There is no `/v2` alias, fallback, or second editable contract.
+[`openapi/v1/openapi.yaml`](openapi/v1/openapi.yaml) is the only editable Billing HTTP machine source. It defines exactly 24 operations: three unversioned probes and 21 `/v1/**` internal-owner operations. The artifact version remains `4.0.0-experimental.1`; package version and HTTP path version are independent. There is no `/v2` alias, fallback, or second editable contract.
 
 ```text
-openapi/v1/openapi.yaml  35b4a2d1d178f6a548fe67460c8e8cbba9eb247296f9051f6ec23060235baff8
+openapi/v1/openapi.yaml  9a7048b6afc299ad4a7df8cde2428cb3a471291a764e1161e7d85f77174cb204
 ```
 
 Only the probes and two personal Credit reads are currently mounted by the normal Nest runtime. The other 19 contract operations remain unimplemented and unregistered; their presence in the target artifact is not runtime-completion evidence. Historical candidate narratives and old digests remain in Git history and dated owner documentation.
@@ -39,9 +39,16 @@ execution bound, and a reference to the Agent-owned strict usage artifact.
 Billing pins that artifact rather than copying its schema:
 
 ```text
-Agent artifact version: 1.0.0
-Agent usage schema SHA-256: eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0
+Agent artifact version: 2.0.0
+Agent usage schema SHA-256: 552f0d22251837aaf4d83766c7bd91311984f707f9a42950ed53ac7127bb5504
 ```
+
+The read-only release pointer is `agent/usage/v2/consumer-pin.json`, verified by
+`pnpm contract:check` against its accepted immutable digest. It binds Agent
+commit `2d5ce12c0eecdecfcdb44a21b69da707d51eb7c7`, HTTP6, and the usage2
+schema/manifest/vectors. It is not a runtime reader or billing permission.
+Sealed usage1 remains Agent-owned historical evidence; it does not authorize a
+new admission or retroactive billing without an original financial snapshot.
 
 Durable Admission representations echo the usage artifact identity and
 execution-bound reference/digest so an original-key replay or GET can verify

@@ -139,8 +139,8 @@ export type AdmissionCreateRequest = {
   };
   planned_binding_ref: string;
   planned_binding_digest: string;
-  usage_profile_version: "1.0.0";
-  usage_profile_digest: "eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0";
+  usage_profile_version: "2.0.0";
+  usage_profile_digest: "552f0d22251837aaf4d83766c7bd91311984f707f9a42950ed53ac7127bb5504";
   execution_bound_ref: string;
   execution_bound_digest: string;
 };
@@ -149,7 +149,7 @@ export type AdmissionCaptureRequest = {
   run_id: string;
   call_id: string;
   attempt_id: string;
-  evidence_schema_version: "1.0.0";
+  evidence_schema_version: "2.0.0";
   evidence_ref: string;
   evidence_event_id: string;
   evidence_revision: PositiveDecimal;
@@ -161,7 +161,7 @@ export type AdmissionReleaseRequest = {
   call_id: string;
   attempt_id: string;
   release_basis: "not_dispatched" | "settled_remainder";
-  evidence_schema_version: "1.0.0";
+  evidence_schema_version: "2.0.0";
   evidence_ref: string;
   evidence_event_id: string;
   evidence_revision: PositiveDecimal;
@@ -201,8 +201,8 @@ export type Admission = {
   valid_until: UtcInstant;
   planned_binding_ref: string;
   planned_binding_digest: string;
-  usage_profile_version: "1.0.0";
-  usage_profile_digest: "eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0";
+  usage_profile_version: "2.0.0";
+  usage_profile_digest: "552f0d22251837aaf4d83766c7bd91311984f707f9a42950ed53ac7127bb5504";
   execution_bound_ref: string;
   execution_bound_digest: string;
   hold_id: string | null;
@@ -222,7 +222,7 @@ export type ExecutionEventRequest = {
   attempt_id: string;
   event_type: "model_usage_evidence.sealed";
   occurred_at: UtcInstant;
-  evidence_schema_version: "1.0.0";
+  evidence_schema_version: "2.0.0";
   evidence_ref: string;
   evidence_event_id: string;
   evidence_revision: PositiveDecimal;
@@ -237,7 +237,7 @@ export type ExecutionEvent = {
   request_ref: string;
   call_id: string;
   attempt_id: string;
-  evidence_schema_version: "1.0.0";
+  evidence_schema_version: "2.0.0";
   evidence_ref: string;
   evidence_event_id: string;
   evidence_revision: PositiveDecimal;

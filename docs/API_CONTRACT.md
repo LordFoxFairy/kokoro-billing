@@ -1,3 +1,13 @@
+## MC01-B1：usage2 consumer pin候选（2026-10-16）
+
+本片目标为尚未启用部分的canonical HTTP artifact4.0.0-experimental.1；/v1、24operation、42schema与实际5route不变。AdmissionCreateRequest/Admission固定usage_profile_version=2.0.0及schema SHA552f0d22251837aaf4d83766c7bd91311984f707f9a42950ed53ac7127bb5504；Capture/Release/Execution的evidence_schema_version固定2.0.0。caller仍只提交closed身份/引用，不提交usage JSON或金额。旧1.0.0或错schema摘要不能用于创建新Admission，不在一个enum里不加区分地放行两个收费协议。
+
+精确owner来源为Agent2d5ce12c0eecdecfcdb44a21b69da707d51eb7c7：HTTP6 SHAe4d30178f2330744b374788abf7e6d23bbf8d7841dcd01537063c705dc18a8db、provenance SHAd6fa5c5cdb0038b471ba523661c0aa8b958e8bb94bbc4e5c54472d6c63fe1791；usage2 manifest SHA197aa6f1680e82dad47815903229e20ddaf2e9642f708fada55611e94ea99941，vectors SHA4fbec9f41732032ad28fee132e703c93dc50d09fecd82cb8a7578d90bb826483。Agent冻结v1历史源不重生。后继GET sealed证据按envelope实际artifact_version显式历史/当前解码、保原字节，未知/非法v2不尝试v1；历史读取不等于为无Admission旧调用补收费。
+
+用户确认后已更新canonical target及原生成物、接收只读发布收据并通过本地检查；候选未正常激活，不声称新route可调用。原实际Credit两读/auth/error不改变。正式writer、strict owner reader、技术bound reader、金额计算、预占/结算与消费者配对均仍未交付。
+
+---
+
 ## BILLING-V1-FIX 唯一 HTTP 契约（2026-10-13）
 
 缺失 Credit account 返回 HTTP 404 且稳定码 `billing.credit_account_not_found`、`retryable=false`；普通未注册路径仍是 `billing.not_found`，消费者不得把任意 owner 404 当作业务空账户。

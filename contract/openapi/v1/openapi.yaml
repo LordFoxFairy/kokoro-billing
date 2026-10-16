@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Billing Internal Owner API
-  version: 3.0.0-experimental.3
+  version: 4.0.0-experimental.1
   description: Experimental clean-slate target contract; not deployed.
 servers:
   - url: https://billing.internal
@@ -2943,10 +2943,10 @@ components:
             ref: { type: string, minLength: 1, maxLength: 255 }
         planned_binding_ref: { type: string, minLength: 1, maxLength: 255 }
         planned_binding_digest: { type: string, pattern: "^[0-9a-f]{64}$" }
-        usage_profile_version: { type: string, const: 1.0.0 }
+        usage_profile_version: { type: string, const: 2.0.0 }
         usage_profile_digest:
           type: string
-          const: eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0
+          const: 552f0d22251837aaf4d83766c7bd91311984f707f9a42950ed53ac7127bb5504
         execution_bound_ref: { type: string, minLength: 1, maxLength: 255 }
         execution_bound_digest: { type: string, pattern: "^[0-9a-f]{64}$" }
     AdmissionCaptureRequest:
@@ -2965,7 +2965,7 @@ components:
         run_id: { type: string, minLength: 1, maxLength: 255 }
         call_id: { type: string, format: uuid }
         attempt_id: { type: string, format: uuid }
-        evidence_schema_version: { type: string, const: 1.0.0 }
+        evidence_schema_version: { type: string, const: 2.0.0 }
         evidence_ref: { type: string, minLength: 1, maxLength: 255 }
         evidence_event_id: { type: string, format: uuid }
         evidence_revision: { $ref: "#/components/schemas/PositiveDecimal" }
@@ -2991,7 +2991,7 @@ components:
         release_basis:
           type: string
           enum: [not_dispatched, settled_remainder]
-        evidence_schema_version: { type: string, const: 1.0.0 }
+        evidence_schema_version: { type: string, const: 2.0.0 }
         evidence_ref: { type: string, minLength: 1, maxLength: 255 }
         evidence_event_id: { type: string, format: uuid }
         evidence_revision: { $ref: "#/components/schemas/PositiveDecimal" }
@@ -3083,10 +3083,10 @@ components:
         valid_until: { $ref: "#/components/schemas/UtcInstant" }
         planned_binding_ref: { type: string, minLength: 1, maxLength: 255 }
         planned_binding_digest: { type: string, pattern: "^[0-9a-f]{64}$" }
-        usage_profile_version: { type: string, const: 1.0.0 }
+        usage_profile_version: { type: string, const: 2.0.0 }
         usage_profile_digest:
           type: string
-          const: eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0
+          const: 552f0d22251837aaf4d83766c7bd91311984f707f9a42950ed53ac7127bb5504
         execution_bound_ref: { type: string, minLength: 1, maxLength: 255 }
         execution_bound_digest: { type: string, pattern: "^[0-9a-f]{64}$" }
         hold_id:
@@ -3124,7 +3124,7 @@ components:
         attempt_id: { type: string, format: uuid }
         event_type: { type: string, enum: [model_usage_evidence.sealed] }
         occurred_at: { $ref: "#/components/schemas/UtcInstant" }
-        evidence_schema_version: { type: string, const: 1.0.0 }
+        evidence_schema_version: { type: string, const: 2.0.0 }
         evidence_ref: { type: string, minLength: 1, maxLength: 255 }
         evidence_event_id: { type: string, format: uuid }
         evidence_revision: { $ref: "#/components/schemas/PositiveDecimal" }
@@ -3160,7 +3160,7 @@ components:
         request_ref: { type: string, minLength: 1, maxLength: 255 }
         call_id: { type: string, format: uuid }
         attempt_id: { type: string, format: uuid }
-        evidence_schema_version: { type: string, const: 1.0.0 }
+        evidence_schema_version: { type: string, const: 2.0.0 }
         evidence_ref: { type: string, minLength: 1, maxLength: 255 }
         evidence_event_id: { type: string, format: uuid }
         evidence_revision: { $ref: "#/components/schemas/PositiveDecimal" }

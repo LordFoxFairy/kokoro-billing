@@ -1,9 +1,11 @@
+import {
+  AGENT_USAGE_SCHEMA_VERSION,
+  AGENT_USAGE_SCHEMA_SHA256,
+} from "./agent-usage-consumer-pin.js";
+
 type JsonObject = Record<string, unknown>;
 
 const methods = new Set(["get", "post", "put", "patch", "delete"]);
-const AGENT_USAGE_SCHEMA_VERSION = "1.0.0";
-const AGENT_USAGE_SCHEMA_SHA256 =
-  "eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0";
 const expectedOperations = new Map<string, string>([
   ["get /healthz", "getHealth"],
   ["get /readyz", "getReadiness"],
@@ -462,8 +464,8 @@ export function validateV2OpenApi(document: unknown): string[] {
   if (!root) return ["document must be an object"];
   const errors: string[] = [];
   if (root.openapi !== "3.1.0") errors.push("openapi must be 3.1.0");
-  if (object(root.info)?.version !== "3.0.0-experimental.3")
-    errors.push("info.version must be 3.0.0-experimental.3");
+  if (object(root.info)?.version !== "4.0.0-experimental.1")
+    errors.push("info.version must be 4.0.0-experimental.1");
   validateCreditUnit(root, errors);
   const paths = object(root.paths) ?? {};
   const actual = new Map<string, JsonObject>();
@@ -907,7 +909,7 @@ export function validateV2OpenApi(document: unknown): string[] {
     object(admission.usage_profile_version)?.const !==
     AGENT_USAGE_SCHEMA_VERSION
   )
-    errors.push("AdmissionCreateRequest must pin Agent usage 1.0.0");
+    errors.push("AdmissionCreateRequest must pin Agent usage 2.0.0");
   if (
     object(admission.usage_profile_digest)?.const !== AGENT_USAGE_SCHEMA_SHA256
   )
@@ -917,7 +919,12 @@ export function validateV2OpenApi(document: unknown): string[] {
       object(command.evidence_schema_version)?.const !==
       AGENT_USAGE_SCHEMA_VERSION
     )
-      errors.push("strict evidence command must pin Agent usage 1.0.0");
+      errors.push("strict evidence command must pin Agent usage 2.0.0");
+  if (
+    object(schemaProperties(root, "ExecutionEvent").evidence_schema_version)
+      ?.const !== AGENT_USAGE_SCHEMA_VERSION
+  )
+    errors.push("ExecutionEvent must echo the pinned Agent usage version");
   for (const field of [
     "usage_profile_version",
     "usage_profile_digest",

@@ -1,3 +1,14 @@
+## MC01-B1：usage2发布身份与未启用目标收敛（2026-10-16，用户已确认；本地源码候选已验）
+
+- 基线：Billing1ceeae5 clean；Agent2d5ce12候选已验而normal未激活。承接既有MC01，不新增owner/进程、价格规则或任务中心。
+- 先核本卡及三设计：新Admission及后续commands固定usage2/schema2；Agent sealed1仅历史读取，不发生旧记录迁移或新收费。HTTP artifact4.0.0-experimental.1而/v1、24operations/42schemas/5实际routes保持。
+- 精确新增写区仅只读`contract/agent/usage/v2/consumer-pin.json`（owner/source_commit和原path/SHA闭集），校验接既有`scripts/verify-openapi.ts`/`openapi-target.ts`及既有contract suite；`contract/README.md`同步source digest。收据不作runtime授权，不复制完整schema、不增加服务。
+- 发布身份按固定Git objects与摘要核验；只读owner artifact不另建可编辑schema。canonical Billing YAML、原checker与目标fixture一起修改，再沿原HeyAPI流水线重生四generated files，禁止手改生成物。原个人余额/流水、auth和财务不变量断言保持，正向与旧version/错digest/放宽pin反例均运行。
+- 验证：docs diff/link、原schema/SQL/lock/normal/runtime不变；实施后Node24.20.0格式/lint/type/test/build/sql/contract/generated-drift；本片无数据库变更，不运行installer或付款/充值/模型。不能把本片算严格HTTP reader、Admission或完整用户链完成。
+- 后继：Metering strict owner reader及原字节/digest/identity语义→正式preauthorization bound/技术保证→原子reserve→Agent single dispatch→按verified actual capture/release/unknown恢复→正常App余额/流水/聊天验收。B1通过不放行paid调用或新credential部署，AUTH-P3本地服务身份确认独立。
+
+---
+
 ## BILLING-V1-FIX（P0，2026-10-13）
 
 单一切片：24-operation target 收敛到唯一 `/v1` 并正规生成；正常 Nest 图只挂载 probes 与两项已实现 Credit read；删除 `/v2` 双轨及旧运行 transport。完成证据必须同时包含 `/v1` 认证正控、旧 `/v2` 404、contract/generated drift、source/dist build 与隔离 PostgreSQL read；其余 19 项保持未实现。
