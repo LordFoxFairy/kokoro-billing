@@ -1,3 +1,7 @@
+## MC01-B2b：无数据变化（2026-10-17）
+
+HTTP reader仅返回已验证冻结证据；不写库/缓存/receipt/余额，不新建表或Prisma派生。expected的durable owner及后继Admission事务保持既定设计，不由reader构造资金许可或反推snapshot。所有原SQL/Prisma/canonical资金数据保持。
+
 ## MC01-B2a：无持久化的证据验证（2026-10-16）
 
 本片仅严格解码、摘要、successor知识单调和完整snapshot绑定，返回冻结事实；不新增表/列、JSON回存、receipt/audit、预占或余额写入，不迁移usage1。Count/Ordinal保持十进制字符串，比较和合计使用BigInt；unknown、未报告与明确零互不转换，sealed不推导可扣费。旧canonical-digest与资金计算保持不变。可信snapshot与Admission事务尚未接线，零数据效果。

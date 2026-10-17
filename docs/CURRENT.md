@@ -1,3 +1,13 @@
+## MC01-B2b HTTP reader本地已验（2026-10-17，未装配资金/执行）
+
+沿b9eb92c新增Metering内严格HTTP6读取及窄options/error/response职责，原Module/main/config/SQL/Prisma/HTTP target/资金不改。B1 pin的完整HTTP/provenance从2d5ce12 Git对象逐字分发，现生成器增加两份owner派生，原usage2三输出保持。正常reader尚未装配，零新路由/配置；不能因本片源码存在称为Admission或收费已上线。
+
+损坏HTTP发布物原被忽略的负控实际RED，现摘要拒绝；原evidence文件增加28个用例，最终88 PASS，含真实loopback的服务头/exact URI/完整snapshot克隆绑定、错版本/资源/revision/digest/seal/元数据/时间/额外字段、bad UTF8/重复key/累计字节上限、无redirect/retry、body读取同总deadline、取消/shutdown/提前拒绝及固定错误无secret。HTTP外层可容纳65536原bytes，65537仍拒；合法最大bytes仅改base64未使用位亦拒，保原bytes不重新序列化。未新增测试文件，未将HTTP fixture称真实Agent/IAM或资金链。
+
+主方Node24.20.0/pnpm11.25.0冻结337文件后format/lint/typecheck/build/sql/contract/test七门全exit0；默认1509 PASS/480原资源SKIP（测试32.08秒），仍全部原文件、仅maxWorkers=2。门后337源码字节全保持；随后只改CURRENT和任务板验收事实。独立只读复核无确定P0–P2，不算实际验证。仓外临时目录只带7个compiled runtime、generated JS与依赖链接，42个原发布向量及1次compiled HTTP读取通过，无source/vendor运行依赖；自有目录回收。首次artifact runner误按dist/modules找输出，在拷贝阶段失败，改为现tsconfig实际dist/src后通过；未改构建布局。初次type/lint失败为test使用ES2024 Promise API及无用regex escape，改标准Promise/去转义后通过，不升级target或放宽门。
+
+本片无PG/Redis/Prisma/资金writer变化，480资源SKIP不算通过，不补假预授权/报价/资金许可。正常服务/账号/权限/积分未改，不调用模型/Tool/收费；正式bound、IAM/Admission事务、single dispatch与实际capture/release和产品闭环仍OPEN。远端CI/push/PR/merge与Root index/gitlink继续暂停。
+
 ## MC01-B2a：usage2 纯校验内核已验（2026-10-16）
 
 在B1 af0a531上完成Metering纯decoder、successor与sealed完整snapshot绑定；不新增HTTP、Module接线或资金效果。Agent2d5ce12的schema/vectors/manifest逐字分发且SHA匹配B1 pin，类型沿已锁HeyAPI派生，完整schema编入JS；公共contract门检查原发布物及generated drift。原bytes以严格UTF8的精确originalJson字符串保留，evidence递归冻结；未报告/未知/明确零保持区分，sealed不是charge许可。usage1无fallback。

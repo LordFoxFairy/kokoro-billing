@@ -1,3 +1,7 @@
+## MC01-B2b：内部证据读取（2026-10-17，实施）
+
+不改Billing4.0.0-experimental.1或五个正常route。仅消费B1固定Agent HTTP6的GET /v1/model-call-attempts/{attempt_id}/usage-evidence/{event_id}及BillingModelCallReaderBearer；owner envelope保历史1/2表达，但本新调用reader只接受2.0.0，严格expected全绑定与sealed，usage1无fallback。固定HTTP/provenance只读分发并经原生成门派生，错误不成为资金结论；未装配正式Admission、bound或收费。
+
 ## MC01-B2a：usage2 纯消费者验证（2026-10-16）
 
 本片不新增HTTP route或变更Billing4.0.0-experimental.1机器源。只读Agent发布物按B1 pin原样分发并生成包内类型/schema；源、vectors、manifest任何摘要变化由既有contract门拒绝，不接受静默升级。Metering内部纯API解码原bytes、核successor，或匹配可信snapshot中的完整identity/planned/revision/digest并要求seal；无v1解析/降级，无charge许可。完整binding的可信来源、HTTP6 envelope/原bytes读取及生命周期仍待后继adapter，不能用纯函数测试冒网络验收。

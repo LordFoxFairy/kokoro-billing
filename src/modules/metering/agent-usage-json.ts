@@ -4,12 +4,12 @@ import { AgentUsageEvidenceError } from "./agent-usage-evidence.error.js";
 export type UsageJson =
   null | boolean | string | UsageJson[] | { [key: string]: UsageJson };
 
-/** The published usage2 schema has no JSON numbers. Never round a wire count. */
-export function parseAgentUsageJson(
+// Both pinned wire graphs use only strings, booleans and null, never numbers.
+function parseAgentJson(
   raw: Uint8Array,
+  maxBytes: number,
 ): Readonly<{ text: string; value: UsageJson }> {
-  if (raw.byteLength > agentUsageSchema["x-max-json-bytes"])
-    throw new AgentUsageEvidenceError();
+  if (raw.byteLength > maxBytes) throw new AgentUsageEvidenceError();
   let text: string;
   try {
     text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(
@@ -117,6 +117,16 @@ export function parseAgentUsageJson(
   whitespace();
   if (offset !== text.length) return fail();
   return { text, value: parsed };
+}
+
+/** Preserve the published usage2 budget; the HTTP wrapper never enlarges it. */
+export function parseAgentUsageJson(raw: Uint8Array) {
+  return parseAgentJson(raw, agentUsageSchema["x-max-json-bytes"]);
+}
+
+export const MAX_AGENT_EVIDENCE_RESPONSE_BYTES = 98_304;
+export function parseAgentEvidenceEnvelopeJson(raw: Uint8Array) {
+  return parseAgentJson(raw, MAX_AGENT_EVIDENCE_RESPONSE_BYTES);
 }
 
 /** RFC8785 on the finite, validated usage2 value set; never locale-sort keys. */

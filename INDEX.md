@@ -1,3 +1,7 @@
+## MC01-B2b 内部证据读取（2026-10-17）
+
+`src/modules/metering/agent-usage-evidence-reader.ts`只持有fetch/预算/取消/shutdown，`.options`和`.error`分别持安全配置/固定失败；`agent-usage-evidence-response.ts`核固定owner envelope与完整snapshot，再复用B2a纯codec。`agent-usage-json`共享有限JSON机制但分开HTTP/原证据字节预算。`scripts/agent-evidence-http-artifacts.ts`仅校B1固定HTTP发布物，原generate-agent-usage生成两个HTTP派生文件；原三个usage2输出保持。无新Module/HTTP/资金或正常配置装配，真实loopback只扩原evidence测试文件。
+
 # kokoro-billing 仓库地图
 
 本文描述当前代码与事实边界。进度与缺口见 [`docs/CURRENT.md`](docs/CURRENT.md)，目标字段级wire contract见

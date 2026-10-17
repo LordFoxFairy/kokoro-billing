@@ -1,3 +1,7 @@
+## MC01-B2b（2026-10-17，本地已验，未装配）
+
+主Agent唯一writer：vendor/agent/http/v6、scripts/generate-agent-usage.ts及窄HTTP artifact helper、src/generated/agent-usage-v2两个HTTP派生、src/modules/metering/agent-usage-{json,evidence-reader*}、原test/unit/agent-usage-evidence.test.ts、相邻INDEX与本任务文档。发布物负控RED后已完成生成/strict reader、真实loopback及七owner门；默认1509 PASS/480原资源SKIP、compiled42向量+1HTTP通过，详细范围见CURRENT；不动Module/main/config、canonical SQL/Prisma、资金writer或正常进程。正式bound/IAM/Admission/dispatch/capture/release仍后继；当前不启用收费或模型。
+
 ## MC01-B2a：严格 usage2 纯内核（2026-10-16，既定MC01内实施）
 
 - 基线Billing af0a531 clean，主Agent唯一writer。设计见三设计同名前缀；只读审查员核边界，无并行写入。

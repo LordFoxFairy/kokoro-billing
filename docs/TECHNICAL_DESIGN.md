@@ -1,3 +1,11 @@
+## MC01-B2b：HTTP6 exact usage2 reader（2026-10-17，实施边界）
+
+沿已批MC01/B2，在现Metering内补独立AgentUsageEvidenceReader及窄options/error/response codec；无新Module/route/配置装配。继续B1唯一2d5ce12 pin，从精确Git object分发HTTP/provenance到只读vendor/agent/http/v6（HTTP与组合7ed07f9同字节），沿原generate-agent-usage工具链生成HTTP窄类型与包内owner schema，不手写第二份wire事实。原usage2三输出保持，新增两个HTTP派生文件，原contract门同时校验全部artifact。只有主Agent写入。
+
+Reader只用部署侧专用Billing reader bearer；URI来自可信origin及expected完整snapshot中的attempt/event，tenant同样来自expected。先克隆可信expected，防调用期间变动；它必须来自后继durable snapshot，不从响应反建。原生fetch单次请求，无redirect/retry；总deadline涵盖headers/body，body上限98304，严格UTF8/重复key/BOM/number拒绝；exact response request ID/no-store/content-type/envelope、无padding且round-trip canonical base64url、usage2且sealed、attempt/event/revision/digest和完整identity/planned绑定。复用B2a原bytes codec，不把解码事实当收费/授权/零金额。
+
+调用取消、deadline及Nest shutdown统一abort并settle本实例请求；错误只固定code/message，不带URL/token/raw/cause。404/拒绝/依赖坏包都不释放资金；不向上返回未经验证的错误文案。原JSON有限类型parser共享机制但usage2原65536/16边界不变，HTTP外层独立98304预算。测试沿原evidence suite扩真实loopback、坏绑定/版本/base64/字节/超时/取消/关闭/无重试与发布物负控；无真实模型/资金/PG/Redis必要I/O。
+
 ## MC01-B2a：Metering 严格 usage2 纯解码边界（2026-10-16）
 
 承接用户已确认MC01与B1 af0a531；先完成B2 reader的纯验证内核，不把它宣称为HTTP reader或Admission。唯一writer为主Agent。采用现`src/modules/metering/`普通codec/parser文件，不增加Module/controller/进程；淘汰复用旧commandDigest（非RFC8785）与手写第二份schema。Agent2d5ce12的schema、vectors、manifest从固定Git object逐字分发到只读`vendor/agent/usage/v2/`，SHA受既有consumer-pin约束；B1“不复制schema”仅描述B1已交付范围，本片明确增加不可编辑的发布物副本。类型经已锁HeyAPI从该schema派生，runtime schema为逐字事实的生成TS常量；编译后不依赖sibling或运行目录外文件。生成器与drift检查接既有contract门。

@@ -31,6 +31,10 @@ not accepted from command bodies. Browser traffic continues through Web and
 BFF; an IAM user/BFF authentication alternative does not make this an externally
 public contract.
 
+## MC01-B2b exact Agent HTTP consumer
+
+The existing usage2 consumer receipt also fixes the read-only HTTP6 OpenAPI and provenance distributed under `vendor/agent/http/v6/`. They are immutable Agent `2d5ce12` Git blobs, not editable Billing contracts. The existing generator checks both digests and derives the exact final-evidence envelope types/schema into two additional `src/generated/agent-usage-v2` files. Runtime reads only usage2 and bind sealed original bytes to a complete trusted snapshot; historical usage1 in the owner envelope is not a fallback. This adds no Billing route, financial permission, configured credential or model dispatch.
+
 ## Target per-attempt usage contract
 
 The target Admission and Execution shapes bind one physical model attempt. The

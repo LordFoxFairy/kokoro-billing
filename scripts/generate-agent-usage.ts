@@ -18,8 +18,15 @@ import {
   AGENT_USAGE_SCHEMA_SHA256,
 } from "./agent-usage-consumer-pin.js";
 import { billingApiGenerator } from "./billing-api-artifacts.js";
+import { readAgentEvidenceHttpArtifacts } from "./agent-evidence-http-artifacts.js";
 
-const artifactNames = ["index.ts", "types.gen.ts", "schema.gen.ts"] as const;
+const artifactNames = [
+  "index.ts",
+  "types.gen.ts",
+  "schema.gen.ts",
+  "evidence-http.gen.ts",
+  "evidence-http-schema.gen.ts",
+] as const;
 const release = z.object({
   usage_artifact: z.object({
     schema_sha256: z.string(),
@@ -29,7 +36,7 @@ const release = z.object({
 });
 
 /** Consume immutable owner bytes, never the live Agent checkout. */
-export async function readAgentUsageArtifacts(root: string): Promise<string> {
+export async function readAgentUsageArtifacts(root: string) {
   const pin = await readFile(
     join(root, "contract/agent/usage/v2/consumer-pin.json"),
   );
@@ -49,14 +56,14 @@ export async function readAgentUsageArtifacts(root: string): Promise<string> {
       );
     if (name === "schema") schema = bytes.toString("utf8");
   }
-  return schema;
+  return { schema, http: await readAgentEvidenceHttpArtifacts(root, pin) };
 }
 
 export async function generateAgentUsageArtifacts(
   root: string,
   check: boolean,
 ): Promise<void> {
-  const schema = await readAgentUsageArtifacts(root);
+  const { schema, http } = await readAgentUsageArtifacts(root);
   for (const [name, version] of [
     ["@hey-api/openapi-ts", billingApiGenerator.version],
     ["prettier", billingApiGenerator.formatter.version],
@@ -98,11 +105,44 @@ export async function generateAgentUsageArtifacts(
       output: { path: output, importFileExtension: ".js" },
       plugins: [{ name: "@hey-api/typescript" }],
     });
+    const httpInput = join(scratch, "http.json");
+    const httpOutput = join(scratch, "http-output");
+    await writeFile(
+      httpInput,
+      JSON.stringify({
+        openapi: "3.1.0",
+        info: { title: "Agent HTTP6 exact evidence", version: "6.0.0" },
+        paths: {},
+        components: { schemas: http.schemas },
+      }),
+    );
+    await createClient({
+      input: httpInput,
+      logs: { level: "silent", file: false },
+      output: { path: httpOutput, importFileExtension: ".js" },
+      plugins: [{ name: "@hey-api/typescript" }],
+    });
+    const envelopeSchema = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $ref: "#/$defs/FinalModelCallUsageEvidenceEnvelope",
+      $defs: JSON.parse(
+        JSON.stringify(http.schemas).replaceAll(
+          '"#/components/schemas/',
+          '"#/$defs/',
+        ),
+      ) as unknown,
+    };
+    const httpSchema = `// Generated from immutable Agent HTTP6 schema. Do not edit.\nexport const SOURCE_SHA256 = ${JSON.stringify(http.sha256)};\nexport const agentEvidenceEnvelopeSchema = ${JSON.stringify(envelopeSchema)} as const;\n`;
     const rawSchema = `// Generated from immutable Agent usage2 schema. Do not edit.\nexport const SOURCE_SHA256 = ${JSON.stringify(AGENT_USAGE_SCHEMA_SHA256)};\nexport const agentUsageSchema = ${schema.trim()} as const;\n`;
     const files = {
       "index.ts": await readFile(join(output, "index.ts"), "utf8"),
       "types.gen.ts": await readFile(join(output, "types.gen.ts"), "utf8"),
       "schema.gen.ts": rawSchema,
+      "evidence-http.gen.ts": await readFile(
+        join(httpOutput, "types.gen.ts"),
+        "utf8",
+      ),
+      "evidence-http-schema.gen.ts": httpSchema,
     };
     const destination = join(root, "src/generated/agent-usage-v2");
     if (!check) await mkdir(destination, { recursive: true });
