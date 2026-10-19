@@ -3,9 +3,11 @@ import Stripe from "stripe";
 import { z } from "zod";
 import { describe, expect, it } from "vitest";
 import { assertDefined } from "../assert-defined.js";
-import { createBillingRuntime } from "../../src/bootstrap/create-billing-runtime.js";
-import type { BillingRuntime } from "../../src/bootstrap/create-billing-runtime.js";
-import { readBillingRuntimeConfig } from "../../src/config/runtime-config.js";
+import {
+  parseProviderWebhook,
+  verifyProviderWebhook,
+} from "../../src/application/payment/ports/provider-registry.js";
+
 import {
   createBillingConnection,
   runWithBillingContext,
@@ -13,6 +15,7 @@ import {
 import { OutboxWorker } from "../../src/infrastructure/postgres/outbox-worker.js";
 import { createProviderRegistry } from "../../src/infrastructure/providers/payment/provider-registry.js";
 import {
+  createPostgresProviderEventInboxService,
   createPostgresCheckoutService,
   createPostgresProviderEventProcessor,
   createPostgresBillingSettlementService,
@@ -21,15 +24,12 @@ import {
 } from "../../src/infrastructure/postgres/create-postgres-services.js";
 
 const databaseUrl = process.env.DATABASE_URL;
-const redisUrl = process.env.REDIS_TEST_URL;
-const accepted = z.object({
-  data: z.object({ event_id: z.string(), status: z.string() }),
-});
+
 const outboxPayload = z.object({ providerEventId: z.string() });
 
-// Real local PostgreSQL + runtime HTTP injection + official SDK test signatures.
+// Real local PostgreSQL + retained provider/service boundaries + official SDK test signatures.
 // No Stripe API key/session creation or platform request: this is not a Stripe sandbox.
-describe.skipIf(!databaseUrl || !redisUrl)(
+describe.skipIf(!databaseUrl)(
   "Stripe payment gating through the durable receipt chain",
   () => {
     it("ignores unpaid, fulfills later paid once, and survives replay/late unpaid without credit changes", async () => {
@@ -38,7 +38,7 @@ describe.skipIf(!databaseUrl || !redisUrl)(
       );
       let leaseConnection:
         Awaited<ReturnType<typeof createBillingConnection>> | undefined;
-      let runtime: BillingRuntime | undefined;
+
       const tenantId = randomUUID();
       const subjectId = randomUUID();
       const offerId = randomUUID();
@@ -83,20 +83,8 @@ describe.skipIf(!databaseUrl || !redisUrl)(
           "UPDATE payment_checkout SET provider = 'stripe', provider_account_ref = $1, provider_session_id = $2, status = 'pending_payment' WHERE tenant_id = $3 AND checkout_id = $4",
           [accountRef, sessionId, tenantId, checkout.checkoutId],
         );
-        runtime = await createBillingRuntime(
-          readBillingRuntimeConfig({
-            DATABASE_URL: assertDefined(databaseUrl),
-            REDIS_URL: assertDefined(redisUrl),
-            BILLING_AUTH_MODE: "jwks",
-            BILLING_AUTH_JWKS_URL: "http://127.0.0.1:1/unused-jwks",
-            INTERNAL_SERVICE_SECRET: randomUUID(),
-            BILLING_BFF_SERVICE_TOKEN: randomUUID(),
-            BILLING_OPERATOR_PROXY_SECRET: randomUUID(),
-            BILLING_ENABLED_PROVIDERS: "stripe",
-            PROVIDER_WEBHOOK_SECRETS_JSON: JSON.stringify({ stripe: secret }),
-          }),
-        );
-        const server = runtime.server;
+        const registry = createProviderRegistry(["stripe"]);
+        const inbox = createPostgresProviderEventInboxService(connection);
         const processor = createPostgresProviderEventProcessor(
           connection,
           createProviderRegistry(["stripe"]),
@@ -141,17 +129,31 @@ describe.skipIf(!databaseUrl || !redisUrl)(
           signingSecret = secret,
         ) => {
           const body = JSON.stringify(payload);
-          return server.inject({
-            method: "POST",
-            url: "/v1/webhooks/payment/stripe",
-            headers: {
-              "content-type": "application/json",
-              "stripe-signature": stripe.webhooks.generateTestHeaderString({
-                payload: body,
-                secret: signingSecret,
-              }),
-            },
-            payload: body,
+          const headers = {
+            "stripe-signature": stripe.webhooks.generateTestHeaderString({
+              payload: body,
+              secret: signingSecret,
+            }),
+          };
+          if (
+            !verifyProviderWebhook(
+              registry,
+              "stripe",
+              headers,
+              Buffer.from(body),
+              secret,
+            )
+          )
+            return null;
+          const parsed = parseProviderWebhook(registry, "stripe", payload);
+          return inbox.accept({
+            tenantId,
+            provider: "stripe",
+            providerAccountRef: accountRef,
+            externalEventId: parsed.eventId,
+            eventType: parsed.eventType,
+            rawPayload: payload,
+            signatureValid: true,
           });
         };
         const effects = async () => {
@@ -225,7 +227,7 @@ describe.skipIf(!databaseUrl || !redisUrl)(
           event("checkout.session.completed", "paid"),
           "incorrect-secret",
         );
-        expect(invalid.statusCode).toBe(401);
+        expect(invalid).toBeNull();
         const [invalidInbox] = await connection.query<{ count: number }[]>(
           "SELECT count(*)::integer AS count FROM payment_provider_event WHERE tenant_id = $1",
           [tenantId],
@@ -234,7 +236,9 @@ describe.skipIf(!databaseUrl || !redisUrl)(
         expect(await effects()).toEqual(empty);
 
         const unpaid = event("checkout.session.completed", "unpaid");
-        expect((await send(unpaid)).statusCode).toBe(202);
+        expect(await send(unpaid)).toMatchObject({
+          processingStatus: "received",
+        });
         expect(await effects()).toEqual(empty);
         expect(await dispatch()).toBe("published");
         expect(
@@ -252,8 +256,8 @@ describe.skipIf(!databaseUrl || !redisUrl)(
 
         const paid = event("checkout.session.async_payment_succeeded", "paid");
         const paidResponse = await send(paid);
-        expect(paidResponse.statusCode).toBe(202);
-        const paidReceipt = accepted.parse(paidResponse.json<unknown>()).data;
+        expect(paidResponse).toMatchObject({ processingStatus: "received" });
+        const paidReceipt = assertDefined(paidResponse ?? undefined);
         expect(await effects()).toEqual(empty);
         expect(await dispatch()).toBe("published");
         expect(await effects()).toEqual(once);
@@ -279,7 +283,7 @@ describe.skipIf(!databaseUrl || !redisUrl)(
         expect(settlements).toEqual([
           {
             checkout_id: checkout.checkoutId,
-            provider_event_id: paidReceipt.event_id,
+            provider_event_id: paidReceipt.providerEventId,
             external_payment_ref: paymentIntent,
             amount_minor: "1999",
             currency: "USD",
@@ -297,10 +301,10 @@ describe.skipIf(!databaseUrl || !redisUrl)(
         const postPaymentState = await checkoutState();
 
         const replay = await send(paid);
-        expect(replay.statusCode).toBe(202);
-        expect(accepted.parse(replay.json<unknown>()).data).toEqual({
-          event_id: paidReceipt.event_id,
-          status: "processed",
+        expect(replay).not.toBeNull();
+        expect(replay).toEqual({
+          providerEventId: paidReceipt.providerEventId,
+          processingStatus: "processed",
         });
         expect(await dispatch()).toBe(false);
         expect(await effects()).toEqual(once);
@@ -311,7 +315,9 @@ describe.skipIf(!databaseUrl || !redisUrl)(
         });
 
         const late = event("checkout.session.completed", "unpaid");
-        expect((await send(late)).statusCode).toBe(202);
+        expect(await send(late)).toMatchObject({
+          processingStatus: "received",
+        });
         expect(await dispatch()).toBe("published");
         expect(await effects()).toEqual(once);
         expect(await receipt(late.id)).toEqual({
@@ -324,11 +330,7 @@ describe.skipIf(!databaseUrl || !redisUrl)(
         expect(await checkoutState()).toBe(postPaymentState);
         expect(await dispatch()).toBe(false);
       } finally {
-        await Promise.all([
-          runtime?.close(),
-          leaseConnection?.end(),
-          connection.end(),
-        ]);
+        await Promise.all([leaseConnection?.end(), connection.end()]);
       }
     });
   },

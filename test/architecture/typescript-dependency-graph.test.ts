@@ -226,14 +226,14 @@ describe("Billing dependency policy", () => {
     "export { runWithBillingContext } from '../../infrastructure/postgres/connection.js';",
     "import { runWithBillingContext, connection } from '../../infrastructure/postgres/connection.js';",
     "const context = import('../../infrastructure/postgres/connection.js');",
-  ])("keeps the HTTP context exception symbol-bounded: %s", (source) => {
+  ])("rejects every legacy HTTP database import: %s", (source) => {
     const files = {
       "src/interfaces/http/server.ts":
         "import { runWithBillingContext as scope } from '../../infrastructure/postgres/connection.js';",
       "src/infrastructure/postgres/connection.ts":
         "export const runWithBillingContext = 1; export const connection = 1;",
     };
-    expect(checkBillingDependencies(graph(files))).toEqual([]);
+    expectPolicy(files, "interfaces-database");
     expectPolicy(
       { ...files, "src/interfaces/http/server.ts": source },
       "interfaces-database",

@@ -126,6 +126,7 @@ export class ErrorFilter implements ExceptionFilter {
     const status = statusOf(error);
     const response: ErrorResponse = {
       error:
+        status === 404 &&
         error instanceof CreditError &&
         error.code === "CREDIT_ACCOUNT_NOT_FOUND"
           ? {

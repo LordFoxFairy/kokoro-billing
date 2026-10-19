@@ -1,3 +1,7 @@
+## 2026-10-19 main 配对集成（隔离候选）
+
+仅合并已有两路能力：main 的唯一 Nest runtime、Catalog offer_key/u1 机器可选subject、本人五因素与缺账户404，保留本地唯一 /v1 canonical、PostgreSQL-only readiness、usage2 固定证据与未装配 reader。新唯一 experimental artifact 为 4.0.0-experimental.2；Catalog 两处事实并入本地 canonical 后正规生成。保持 main Fastify 5.12.4/lock，无 Schema/Prisma/DDL、角色、运行配置或收费装配变化。保留原 source/dist drain/启动清理，不恢复旧 HTTP runner、/v2 alias 或旧资金表。现有 main 历史 integration 失败须如实保留，不以默认 SKIP 替代；最终 BFF 的旧 Billing pin/窄 SDK 必须配对，正常模型/工具/扣费保持暂停。
+
 ## MC01-B2b：无数据变化（2026-10-17）
 
 HTTP reader仅返回已验证冻结证据；不写库/缓存/receipt/余额，不新建表或Prisma派生。expected的durable owner及后继Admission事务保持既定设计，不由reader构造资金许可或反推snapshot。所有原SQL/Prisma/canonical资金数据保持。
@@ -19,6 +23,32 @@ HTTP reader仅返回已验证冻结证据；不写库/缓存/receipt/余额，�
 ## BILLING-V1-FIX 数据边界（2026-10-13）
 
 本切换不修改 canonical SQL、Prisma model、表、索引、资金状态机或 worker。两项 Credit GET 继续只读 `kokoro_billing` owner schema，缺账户为明确 404，不以未注册 route 的 404 伪装业务无账户。
+
+## SET49：Billing本人缺账户错误契约
+
+SET49不改变schema/数据/写入：缺CreditAccount仍只读返回404，绝不自动开户/赠送；仅transport专用错误码演进。
+
+## SET-15 Catalog实现候选（待Root资源验收）
+
+已按本文件SET15设计门接入五commerce文件、窄CatalogGuard及正常BillingHttpModule；CatalogService沿同一TransactionService readOnlySnapshot，repository使用parameterized Prisma tagged SQL，先取事务DB instant，检查本tenant otherwise-eligible revision parent完整性，再bounded latest eligible目录查询。无SQL/Prisma/seed/provider/资金修改；machine可无subject，若有仍由原personal严格codec/五因素验证，事务actor始终authenticated web-bff。cursor绑定tenant identity digest、scope和稳定排序tuple，最大合法Unicode边界仍在2048wire预算；不持久化业务事实。
+
+CatalogItem required offer_key和u1 transport以3.0.0-experimental.4正规生成，现closed schema registry新增CatalogResponse允许名。历史v1及无关wire保留，消费者必须Root精确commit/digest成对承接。当前候选六GET及HEAD不代表其它18operation或正式商品发布/支付/本人订阅完成。测试用合成商品仅隔离fixture，不进入正常产品目录。
+
+## SET-15：商品目录canonical只读数据门（2026-10-13）
+
+无DDL、Prisma schema/client、索引、installer、seed、业务写或资金变化。事实仅billing_offer与billing_offer_revision，同owner允许关联；不查询entitlement_*或payment_*旧表，不跨owner JOIN。Prisma查询沿既有TransactionService readOnlySnapshot/Repeatable Read及tenant上下文，root只读事务有界取消/timeout，不创建第二pool。
+
+仅同tenant active offer和其同tenant published、deleted_at为空、published_at非空且<=同一事务DB instant的revision；每offer选此集合中revision最大项（稳定ID排序防御）。未来发布、draft、disabled、soft deleted不可售。No-FK下必须验证拟可售revision parent存在且tenant一致；损坏关系不能通过JOIN/过滤静默丢失为成功空页，也不能读取/返回他tenant业务事实。canonical amount_minor/credit_micros转decimal string，不过Number，不补0；name/currency/interval/UUID/revision等非法fail closed。
+
+cursor只承载有界tenant+catalog scope+稳定排序位置，strict/base64url canonical解码；不创建持久cursor表、缓存或报价/当前订阅投影。读取不会自动发布商品、开户、订阅或增加receipt/audit。普通租户未发布商品时返回真实空目录，不拿测试fixture当正常在售商品；非空产品发布要求后继权威产品数据与正式owner发布用例，旧seed禁止执行。
+
+真实PG只用Root创建的隔离fixture，覆盖多tenant/多revision/软删除/未来发布/大整数/稳定分页/cursor越界/parent损坏；请求前后35表全行零差量与connection清理必须证明。源schema及Prisma派生hash保持，本片API生成只由catalog字段/身份说明/version的正式owner源驱动。
+
+## SET-10：唯一正常 Nest 读取入口候选（待 Root 验收）
+
+沿既有 R255 增量门原位切换 main/createBillingRuntime；正常 source/dist 只装 DatabaseModule + BillingHttpModule/CreditModule，注册两本人 GET 与三 probes。旧 interfaces/http/server.ts 和 v1 runtime parity已删除，无第二runner、模式、旧表alias或proxy；19项未承接operation保持未注册，完整C3/收费/worker退出线不变。
+
+SQL、Prisma/generated、installer、owner schema与业务service/provider均冻结；读取保持Repeatable Read只读事务，无账户404且零创建。窄readiness只做SELECT1，不读owner事实。真实source/dist回归使用自有canonical参照库，合法CreditService grant仅准备隔离fixture；请求前后35表全行相等与child退出后连接归零由Root实跑证明，不影响正常账户或支付。
 
 ## R255 财务赠送裁决引用（2026-10-10）
 

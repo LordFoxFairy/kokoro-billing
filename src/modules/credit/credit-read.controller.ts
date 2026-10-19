@@ -17,8 +17,8 @@ import type {
   CreditLedgerResponse,
 } from "../../generated/billing-api/types.gen.js";
 import { PersonalGuard } from "../../http/personal.guard.js";
-import { CreditService } from "./credit.service.js";
 import { CreditError } from "./credit.error.js";
+import { CreditService } from "./credit.service.js";
 import { mapCreditAccount, mapCreditLedger } from "./credit-read.mapper.js";
 import {
   assertCreditAccountQuery,
@@ -47,7 +47,7 @@ export class CreditReadController {
     if (account === null)
       throw new CreditError(
         "CREDIT_ACCOUNT_NOT_FOUND",
-        "Credit account was not found",
+        "Credit account not found",
       );
     const response = mapCreditAccount(account);
     this.schemas.assert("CreditAccountResponse", response);

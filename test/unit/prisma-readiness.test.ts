@@ -13,12 +13,10 @@ vi.mock("pg", () => ({
     connect() {
       state.connect();
       return Promise.resolve({
-        query: (
-          config: { text: string; query_timeout: number },
-          callback: (error: Error | null) => void,
-        ) => {
+        query: (config: { text: string; query_timeout: number }) => {
           state.query(config);
-          callback(state.queryError ?? null);
+          if (state.queryError) return Promise.reject(state.queryError);
+          return Promise.resolve({ rows: [{ "?column?": 1 }] });
         },
         release: state.release,
       });
@@ -60,25 +58,23 @@ describe("Prisma readiness ping", () => {
 
   it("uses an exclusive client with a client-side deadline and releases it", async () => {
     const service = await create();
-    await expect(service.pingForReadiness()).resolves.toBeUndefined();
+    await expect(service.ping()).resolves.toBeUndefined();
     expect(state.query).toHaveBeenCalledWith({
       text: "SELECT 1",
       query_timeout: 1_000,
     });
-    expect(state.release).toHaveBeenCalledWith(false);
+    expect(state.release).toHaveBeenCalledWith(undefined);
   });
 
   it("destroys a timed-out client before a later readiness retry", async () => {
     const service = await create();
     state.queryError = new Error("query read timeout");
-    await expect(service.pingForReadiness()).rejects.toThrow(
-      "query read timeout",
-    );
-    expect(state.release).toHaveBeenLastCalledWith(true);
+    await expect(service.ping()).rejects.toThrow("query read timeout");
+    expect(state.release).toHaveBeenLastCalledWith(state.queryError);
 
     state.queryError = undefined;
-    await expect(service.pingForReadiness()).resolves.toBeUndefined();
+    await expect(service.ping()).resolves.toBeUndefined();
     expect(state.connect).toHaveBeenCalledTimes(2);
-    expect(state.release).toHaveBeenLastCalledWith(false);
+    expect(state.release).toHaveBeenLastCalledWith(undefined);
   });
 });

@@ -233,14 +233,20 @@ describe("billing ownership architecture", () => {
     expect(graph.cycles.all).toEqual(graph.cycles.type);
   });
 
-  it("keeps SQL out of Application and Interfaces and database types out of Application", async () => {
+  it("keeps SQL out of Application and active HTTP adapters and database types out of Application", async () => {
     await expect(
       access(join(process.cwd(), "src/application/ports/database.ts")),
+    ).rejects.toThrow();
+    await expect(
+      access(join(process.cwd(), "src/interfaces")),
     ).rejects.toThrow();
     const applicationFiles = await sourceFiles("src/application");
     const files = [
       ...applicationFiles,
-      ...(await sourceFiles("src/interfaces")),
+      ...(await sourceFiles("src/http")),
+      ...(await sourceFiles("src/modules")).filter((path) =>
+        path.endsWith(".controller.ts"),
+      ),
     ];
     const sqlLiteral =
       /(?:`|"|')\s*(?:SELECT\b|INSERT\s+INTO\b|UPDATE\s+[a-z0-9_]+\s+SET\b|DELETE\s+FROM\b|WITH\s+[a-z0-9_]+\s+AS\b)/iu;
@@ -321,7 +327,7 @@ describe("billing ownership architecture", () => {
     const stripe = await text(
       "src/infrastructure/providers/stripe-checkout-provider.ts",
     );
-    const server = await text("src/interfaces/http/server.ts");
+    const server = `${await text("src/bootstrap/create-billing-runtime.ts")}\n${await text("src/http/billing-http.module.ts")}`;
     const ci = await text(".github/workflows/ci.yml");
     const release = await text(".github/workflows/release-image.yml");
 
@@ -344,7 +350,7 @@ describe("billing ownership architecture", () => {
       "request_id",
       "trace_id",
       "result",
-      "duration_ms",
+      "duration",
     ]) {
       expect(server, field).toContain(field);
     }
@@ -395,7 +401,7 @@ describe("billing ownership architecture", () => {
   });
 
   it("keeps transport aliases and test doubles outside production composition", async () => {
-    const server = await text("src/interfaces/http/server.ts");
+    const server = `${await text("src/bootstrap/create-billing-runtime.ts")}\n${await text("src/http/billing-http.module.ts")}`;
     const main = await text("src/main.ts");
     const bootstrap = await text("src/bootstrap/create-billing-runtime.ts");
     const production = (
@@ -409,6 +415,16 @@ describe("billing ownership architecture", () => {
     expect(bootstrap).toContain("NestFactory.create");
     expect(bootstrap).toContain("AppModule.register");
     expect(bootstrap).not.toContain("createBillingServer");
+
+    expect(bootstrap).not.toContain("createBillingConnection");
+    expect(bootstrap).not.toContain("createBillingServer");
+    expect(bootstrap).toContain("AppModule.register");
+    expect(await text("src/app.module.ts")).toContain(
+      "DatabaseModule.register",
+    );
+    expect(await text("src/app.module.ts")).toContain(
+      "BillingHttpModule.register",
+    );
     expect(production).not.toMatch(
       /MockWebhookProvider|mock-checkout|InMemory|Fixture|Fake/u,
     );

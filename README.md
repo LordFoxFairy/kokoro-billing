@@ -7,7 +7,7 @@ Reconcile 与 Billing command receipt；不拥有 Tenant、Identity、Agent Run�
 > 表述为生产证据。
 
 当前规范化分支的[任务板](docs/IMPLEMENTATION_PLAN.md)与[ADR-0003](docs/ADR/0003-nestjs-prisma-sql-first-alignment.md)
-记录Nest/Prisma目标与分阶段验收；Prisma生成/隔离验证已接入，生产仍Fastify/pg。
+记录Nest/Prisma目标与分阶段验收；唯一正常入口现使用 canonical Nest module graph，当前仅个人余额/流水及三项 probe，完整 Billing 业务与收费仍待验收。
 
 ## 边界
 
@@ -21,47 +21,32 @@ Reconcile 与 Billing command receipt；不拥有 Tenant、Identity、Agent Run�
 - 唯一 canonical Schema 是 [`database/schema.sql`](database/schema.sql)；installer 只要求同一应用数据库中的
   `kokoro_billing` owner schema 为空，不扫描或读取相邻 owner schema，也不维护 migration 链。
 
-## 五分钟启动
+## 正常开发启动
 
-要求 Node.js 24.20.0（见仓根 `.node-version`）、`pnpm@11.25.0`，并复用 Root 的 PostgreSQL 与 Redis。Billing 在共享应用
-database 中只拥有 `kokoro_billing` schema；示例使用共享 Redis logical DB `4`，业务隔离依赖 Billing key namespace，不依赖该 DB 编号。
-`engineStrict` 会拒绝不匹配的 Node；安装与验证前切换到仓库固定版本。
+要求 `.node-version` 的 Node24.20.0 和 pnpm11.25.0。使用 `.env.example` 的显式 normal 配置；三个 service credential 必须各自独立、至少32个 printable 字符。JWKS/issuer/audience 指向正式 IAM profile；正常入口只接受 jwks，不提供 internal-header fallback。
 
 ```bash
-cd /Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/apps/kokoro-billing
 pnpm install --frozen-lockfile
-cp .env.example .env.local
+pnpm prisma:generate
+# 按本地环境准备 .env.local；不将凭据提交到仓库。
+set -a; source .env.local; set +a
 ```
 
-将 `.env.local` 中的 `DATABASE_URL`、`REDIS_URL` 和凭据占位符替换为本地值。连接 URL 必须显式且仅指定
-`schema=kokoro_billing`；`db:apply-schema` 在该 owner schema 非空时 fail closed，相邻 owner schema 不影响安装：
+复用共享 PostgreSQL 应用数据库；Billing 只拥有 `kokoro_billing`。`DATABASE_URL` 必须恰有一个 `schema=kokoro_billing` 且没有 options。只在该 owner schema 为空时首次执行 installer，已有 schema 的正常启动不执行 installer、不迁移或重置数据：
 
 ```bash
-set -a; source .env.local; set +a
-pnpm db:apply-schema
-```
-
-首次安装成功后，正常启动只加载同一份显式环境，不重复运行 installer：
-
-```bash
-set -a; source .env.local; set +a
+pnpm db:apply-schema # 仅首次空 owner schema
 pnpm dev
+# 或构建后使用同一入口图：pnpm build && pnpm start
 ```
 
-结构验收使用 `pnpm db:verify-schema`：另行提供同实例管理连接 `SCHEMA_ADMIN_URL`（需要 CREATEDB），目标 `DATABASE_URL` 只读；
-仅创建/清理本轮参照库，详见 [数据库说明](database/README.md)。管理凭据不进入应用配置。
+`GET /healthz` 为 liveness，`GET /readyz` 只验证 canonical PostgreSQL，`GET /metrics` 为现 Prometheus registry。初始 graph 不装 Redis/provider，不需要支付凭据、赠送、价格或 Redis 配置；健康成功不表示业务或收费成功。
 
-默认监听 `127.0.0.1:4245`：
+当前只注册 `/v2/billing/me/credit-account` 和 `/v2/billing/me/credit-ledger` 两项本人 GET。账户不存在返回404，不创建或假报零余额。受信 BFF 同时携带 `web-bff`、internal secret、独立 BFF bearer 及 canonical `u1` tenant/subject header；浏览器不持有这些凭据。BFF 对应配置是 `KOKORO_BILLING_BASE_URL`、`KOKORO_INTERNAL_SECRET_BFF`、`KOKORO_BILLING_BFF_SERVICE_TOKEN`。
 
-```bash
-curl --fail http://127.0.0.1:4245/healthz
-curl --fail http://127.0.0.1:4245/readyz
-```
+其余19项 v2 operation 尚未接入，旧 v1 transport 已删除；catalog/subscription/支付/结算等路由不代理旧服务、不注册假 handler。worker、seed、收费全链仍为后继。
 
-正常开发使用 IAM 的 EdDSA JWKS（`http://127.0.0.1:3310/iam/jwks`）、同源 issuer
-`http://127.0.0.1:3310/iam` 与固定 Billing resource audience。`BILLING_AUTH_MODE=internal-header` 只用于明确的测试 fixture；
-`NODE_ENV=production` 强制使用 `jwks`。
-`/readyz` 只以 PostgreSQL 是否可用决定 200/503；Redis hint 不可用时返回 200 且 `data.dependencies.redis=degraded`。
+结构验收使用 `pnpm db:verify-schema`，另行提供只供工具使用、可创建本轮参照库的 `SCHEMA_ADMIN_URL`；不进入应用配置。真实源码/dist进程测试见 `test/integration/billing-runtime.test.ts`，由拥有隔离资源的 Root执行；纯测试与健康检查不能替代它。
 
 ## 契约
 
@@ -70,16 +55,13 @@ Canonical machine-readable source 是
 [`contract/README.md`](contract/README.md)。Billing 的全部 HTTP operation 都是 `internal-owner`；即使 storefront route
 可由受信 BFF 代调用，也不是 Root Developer API 门户的 `public` Product API。
 
-当前实现包含 17 个 HTTP operation：3 个运行探针/指标、5 个用户或 BFF surface、4 个 execution/admission surface、
-2 个 payment worker surface、1 个 Scheduler command、1 个 provider webhook 和 1 个 admin refund command。
-字段级请求/响应以 OpenAPI 为准；人类可读的身份、幂等、错误与分页规则见
-[`docs/API_CONTRACT.md`](docs/API_CONTRACT.md)。
+v2 target artifact `contract/openapi/v2/openapi.yaml` 仍描述24项 operation；当前运行仅注册3 probes与2本人读取。v1 artifact 作为历史契约治理保留，不是可调用的兼容入口；contract检查不再读取已删除旧server做v1 runtime parity。实际路由和源码/dist生命周期单独验收。
 
-## 运行单元
+## 运行单元与尚未切换的旧业务工具
 
 | 单元 | 源码入口 | 当前职责 |
 |---|---|---|
-| Billing API | `src/main.ts` | Fastify v1 transport、auth、PostgreSQL/Redis/provider 装配、health/ready/metrics |
+| Billing API | `src/main.ts` | Nest/FastifyAdapter canonical graph、PostgreSQL、两本人GET与三probe |
 | Payment event worker | `scripts/process-payment-events.ts` | 领取 `payment_outbox`，处理 provider event，重试或 dead-letter |
 | Execution event batch | `scripts/process-execution-events.ts` | 处理 `entitlement_execution_event.status=received` |
 | Credit expiry worker | `scripts/expire-credit-holds.ts` | tenant-scoped batch；Redis lease 只协调，PostgreSQL receipt/事务决定结果 |

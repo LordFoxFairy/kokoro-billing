@@ -39,38 +39,28 @@ export class PrismaService implements PrismaLifecycleGate {
     if (this.#state !== "ready") throw new Error("PRISMA_SERVICE_NOT_READY");
   }
 
-  async pingForReadiness(): Promise<void> {
-    this.assertReady();
-    const client = await this.#pool.connect();
-    let destroy = false;
-    try {
-      await new Promise<void>((resolve, reject) => {
-        const deadlineClient = client as unknown as {
-          query(
-            config: { text: string; query_timeout: number },
-            callback: (error: Error | null) => void,
-          ): void;
-        };
-        deadlineClient.query(
-          { text: "SELECT 1", query_timeout: 1_000 },
-          (error: Error | null) => {
-            if (error === null) resolve();
-            else reject(error);
-          },
-        );
-      });
-    } catch (error) {
-      destroy = true;
-      throw error;
-    } finally {
-      client.release(destroy);
-    }
-  }
-
   clientForDatabaseInfrastructure(): PrismaClient {
     if (this.#state === "closing" || this.#state === "closed")
       throw new Error("PRISMA_SERVICE_CLOSED");
     return this.#client;
+  }
+
+  async ping(): Promise<void> {
+    this.assertReady();
+    const connection = await this.#pool.connect();
+    let failure: Error | undefined;
+    try {
+      const probe = { text: "SELECT 1", query_timeout: 1_000 };
+      await connection.query(probe);
+    } catch (error) {
+      failure =
+        error instanceof Error
+          ? error
+          : new Error("Billing PostgreSQL ping failed");
+      throw error;
+    } finally {
+      connection.release(failure);
+    }
   }
 
   onModuleInit(): Promise<void> {

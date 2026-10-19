@@ -231,16 +231,8 @@ export function checkBillingDependencies(
       report("layer-boundary");
     if (/^src\/application\//.test(edge.source) && database(edge))
       report("application-database");
-    if (/^src\/interfaces\//.test(edge.source) && database(edge)) {
-      const contextOnly =
-        edge.source === "src/interfaces/http/server.ts" &&
-        edge.target === "src/infrastructure/postgres/connection.ts" &&
-        edge.form === "import" &&
-        edge.kind === "value" &&
-        edge.symbols.length === 1 &&
-        edge.symbols[0] === "runWithBillingContext";
-      if (!contextOnly) report("interfaces-database");
-    }
+    if (/^src\/interfaces\//.test(edge.source) && database(edge))
+      report("interfaces-database");
     const sourceFeature = feature(edge.source);
     const targetFeature = feature(edge.target);
     if (

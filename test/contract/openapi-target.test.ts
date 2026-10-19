@@ -40,7 +40,7 @@ describe("Billing v2 target OpenAPI", () => {
   it("publishes the complete target major contract with fully resolved refs", async () => {
     const document = await readContract();
     expect(() => assertTargetOpenApi(document)).not.toThrow();
-    expect(record(document.info).version).toBe("4.0.0-experimental.1");
+    expect(record(document.info).version).toBe("4.0.0-experimental.2");
     const operationCount = Object.values(record(document.paths)).reduce<number>(
       (count, path) =>
         count +
@@ -54,7 +54,7 @@ describe("Billing v2 target OpenAPI", () => {
 
   it("publishes the approved usage2 target without changing the personal read surface", async () => {
     const document = await readContract();
-    expect(record(document.info).version).toBe("4.0.0-experimental.1");
+    expect(record(document.info).version).toBe("4.0.0-experimental.2");
   });
 
   it("pins usage2 on new commands and returned evidence identities, never a dual-version enum", async () => {
@@ -1078,7 +1078,7 @@ const personalResponse = (
 // It changes only the approved two-read slice; it is not a replacement checker.
 const withApprovedPersonalReads = (document: JsonObject): JsonObject => {
   const copy = clone(document);
-  record(copy.info).version = "4.0.0-experimental.1";
+  record(copy.info).version = "4.0.0-experimental.2";
   const components = record(copy.components);
   for (const [
     name,
@@ -1154,9 +1154,9 @@ const stableContractJson = (value: unknown): unknown => {
 };
 
 describe("R61 personal-read source contract target", () => {
-  it("publishes the approved experimental 4.0.0-experimental.1 target independently of other fields", async () => {
+  it("publishes the approved experimental 4.0.0-experimental.2 target independently of other fields", async () => {
     expect(record((await readContract()).info).version).toBe(
-      "4.0.0-experimental.1",
+      "4.0.0-experimental.2",
     );
   });
 
@@ -1410,6 +1410,26 @@ describe("R61 personal-read source contract target", () => {
     for (const [name] of personalIdentityParameters)
       delete record(record(projection.components).parameters)[name];
     delete record(record(projection.components).headers).CacheControlNoStore;
+    // SET15 changes only catalog transport and required business key. Normalize
+    // these approved differences to retain the historical unrelated-byte gate.
+    const historicalCatalog = record(
+      record(record(projection.paths)["/v1/commerce/catalog"]).get,
+    );
+    delete historicalCatalog.description;
+    delete historicalCatalog["x-kokoro-identity-transport"];
+    delete historicalCatalog["x-kokoro-auth-selection"];
+    historicalCatalog.parameters = [
+      { $ref: "#/components/parameters/TenantId" },
+      { $ref: "#/components/parameters/Limit" },
+      { $ref: "#/components/parameters/Cursor" },
+    ];
+    const historicalItem = record(
+      record(record(projection.components).schemas).CatalogItem,
+    );
+    delete record(historicalItem.properties).offer_key;
+    historicalItem.required = (historicalItem.required as string[]).filter(
+      (name) => name !== "offer_key",
+    );
     const { createHash } = await import("node:crypto");
     expect(
       createHash("sha256")
@@ -1904,7 +1924,7 @@ describe("R67 generated schema semantics and provenance", () => {
       );
     }
     const provenance = validProvenance();
-    expect(provenance.source.version).toBe("4.0.0-experimental.1");
+    expect(provenance.source.version).toBe("4.0.0-experimental.2");
     expect(provenance.source.sha256).toBe(
       createHash("sha256").update(sourceText).digest("hex"),
     );
@@ -2375,4 +2395,45 @@ describe("public Agent usage consumer pin gate", () => {
       }
     },
   );
+});
+
+describe("SET15 breaking canonical Catalog contract", () => {
+  it("requires the real business offer key and publishes optional-subject u1 machine identity without altering personal five factors", async () => {
+    const document = await readContract();
+    expect(record(document.info).version).toBe("4.0.0-experimental.2");
+    const item = record(
+      record(record(document.components).schemas).CatalogItem,
+    );
+    expect(item.required).toContain("offer_key");
+    expect(record(item.properties).offer_key).toEqual({
+      type: "string",
+      minLength: 1,
+      maxLength: 255,
+    });
+    const operation = record(
+      record(record(document.paths)["/v1/commerce/catalog"]).get,
+    );
+    expect(operation["x-kokoro-auth-selection"]).toEqual(
+      approvedPersonalAuthSelection,
+    );
+    expect(operation["x-kokoro-identity-transport"]).toBe(
+      "catalog-identity-u1",
+    );
+    expect(() => assertTargetOpenApi(document)).not.toThrow();
+    for (const change of ["key", "selection", "transport", "body"] as const) {
+      const candidate = clone(document);
+      const catalog = record(
+        record(record(candidate.paths)["/v1/commerce/catalog"]).get,
+      );
+      if (change === "key")
+        record(
+          record(record(candidate.components).schemas).CatalogItem,
+        ).required = ["offer_revision_id"];
+      if (change === "selection") delete catalog["x-kokoro-auth-selection"];
+      if (change === "transport")
+        catalog["x-kokoro-identity-transport"] = "personal-identity-u1";
+      if (change === "body") catalog.requestBody = {};
+      expect(() => assertTargetOpenApi(candidate)).toThrow();
+    }
+  });
 });

@@ -1,14 +1,35 @@
+## 2026-10-19 唯一当前集成候选
+
+canonical `openapi/v1/openapi.yaml`，版本 `4.0.0-experimental.2`；下方旧版本记录仅是历史。组合 main Catalog/u1 和缺账户404、本地 usage2 固定目标；无 /v2 alias、未装配资金写入，正常模型和扣费不启用。当前源码六个 GET（probes、Catalog、本人 Credit 两读）不代表其他目标操作已上线。
+
+SHA256 `9ff84d5f473e2f161f5d0c496db4cee175e2b032e836e97c7e23b9576a0af3e6`。消费者必须固定正式 commit/version/digest 后正规生成。
+
+## 历史 SET49 publication（后继见当前集成）
+
+正规v2推进3.0.0-experimental.5，仅本人两读404专用code变化；Catalog/u1/offer_key保留，v1不可变。消费者必须更新正式commit/digest并正常生成，不以不可取得的v1 pin冒provenance。
+
+## SET-15 Catalog owner候选生成（待Root验收）
+
+当前正规生成源为v2 `3.0.0-experimental.4`，required `offer_key`及canonical u1 catalog transport是明确strict消费breaking；只允许Root按正式owner commit及本页current digest成对刷新消费者。v1历史artifact及其digest未修改。候选正常Nest graph已注册六GET及HEAD，目录只读且不证明checkout、subscriptions或商品发布可用；正式PG/source/dist/浏览器证据仍待Root。
+
+## SET-15 catalog候选裁决（2026-10-13）
+
+本节覆盖下表旧current Fastify已部署状态：正常Nest入口已交付五GET及HEAD。下一canonical catalog候选将现v2 artifact从3.0.0-experimental.3推进为3.0.0-experimental.4，承认required offer_key及catalog身份transport的strict消费breaking；只自有开发成对固定immutable commit/digest，现Credit wire与operation数24不变。三个设计面SET15门为当前方案，catalog未实现/未启动前不宣称部署；历史表格保留作前态，非当前激活证据。不得手改生成物、旧hash或借beta例外。
+
 # kokoro-billing contract governance
 
 ## Current machine artifact
 
-[`openapi/v1/openapi.yaml`](openapi/v1/openapi.yaml) is the only editable Billing HTTP machine source. It defines exactly 24 operations: three unversioned probes and 21 `/v1/**` internal-owner operations. The artifact version remains `4.0.0-experimental.1`; package version and HTTP path version are independent. There is no `/v2` alias, fallback, or second editable contract.
+[`openapi/v1/openapi.yaml`](openapi/v1/openapi.yaml) is the only editable Billing HTTP machine source. It defines exactly 24 operations: three unversioned probes and 21 `/v1/**` internal-owner operations. The artifact version is `4.0.0-experimental.2`; package version and HTTP path version are independent. There is no `/v2` alias, fallback, or second editable contract.
 
 ```text
 openapi/v1/openapi.yaml  9a7048b6afc299ad4a7df8cde2428cb3a471291a764e1161e7d85f77174cb204
+
+openapi/v1/openapi.yaml  fbe34c188cf4a9f08955e4b94ceab40d63a41156a3106fae6ab939a4190612b7
+openapi/v2/openapi.yaml  b413db8965ed60683435adb7f2ce8650a7ca7bf7bee0989e8f83afc3d9f846af
 ```
 
-Only the probes and two personal Credit reads are currently mounted by the normal Nest runtime. The other 19 contract operations remain unimplemented and unregistered; their presence in the target artifact is not runtime-completion evidence. Historical candidate narratives and old digests remain in Git history and dated owner documentation.
+Only the probes, canonical Catalog and two personal Credit reads are mounted by this source candidate. The other 18 contract operations remain unimplemented and unregistered; their presence in the target artifact is not runtime-completion evidence. Historical candidate narratives and old digests remain in Git history and dated owner documentation.
 
 ## Owner, visibility, and authority
 

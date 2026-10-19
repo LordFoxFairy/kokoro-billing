@@ -1,93 +1,98 @@
-import { z } from "zod";
-import { describe, expect, it } from "vitest";
-import {
-  createBillingServer,
-  type BillingHttpDependencies,
-} from "../../src/interfaces/http/server.js";
+import "reflect-metadata";
+import { Test } from "@nestjs/testing";
+import { FastifyAdapter } from "@nestjs/platform-fastify";
+import type { NestFastifyApplication } from "@nestjs/platform-fastify";
+import { describe, expect, it, vi } from "vitest";
+import { AppModule } from "../../src/app.module.js";
+import { PrismaService } from "../../src/database/prisma.service.js";
+import { readBillingRuntimeConfig } from "../../src/config/runtime-config.js";
 
-const dataEnvelope = z.object({ data: z.record(z.string(), z.unknown()) });
-const errorEnvelope = z.object({ error: z.record(z.string(), z.unknown()) });
-
-const dependencies = (
-  health: NonNullable<BillingHttpDependencies["health"]>,
-): BillingHttpDependencies => ({
-  checkout: {
-    create: async () =>
-      Promise.resolve({
-        checkoutId: "unused",
-        status: "created",
-        amountMinor: 1,
-        currency: "USD",
-        expiresAt: new Date("2030-01-01T00:00:00Z"),
-      }),
-  },
-  usage: {
-    expireExpiredHolds: async (input) =>
-      Promise.resolve({ batchId: input.batchId, expiredHoldIds: [] }),
-  },
-  settlement: {
-    recordSettlement: async (input) =>
-      Promise.resolve({ settlementId: input.settlementId, accepted: true }),
-  },
-  reversal: { recordReversal: async () => Promise.resolve("unused") },
-  webhook: {
-    accept: async () =>
-      Promise.resolve({
-        providerEventId: "unused",
-        processingStatus: "received",
-      }),
-  },
-  account: { getForSubject: async () => Promise.resolve(null) },
-  auth: {
-    user: async () => Promise.resolve(null),
-    bff: async () => Promise.resolve(null),
-    internal: async () => Promise.resolve(null),
-    admin: async () => Promise.resolve(null),
-    webhook: async () => Promise.resolve(false),
-  },
-  health,
+const config = readBillingRuntimeConfig({
+  DATABASE_URL: "postgresql://unused@localhost/unused?schema=kokoro_billing",
+  BILLING_AUTH_MODE: "jwks",
+  BILLING_AUTH_JWKS_URL: "https://iam.example.test/iam/jwks",
+  BILLING_AUTH_JWT_ISSUER: "https://iam.example.test/iam",
+  BILLING_AUTH_JWT_AUDIENCE: "https://kokoro.dev/resources/billing",
+  INTERNAL_SERVICE_SECRET: "fixture-internal-secret-000000000001",
+  BILLING_BFF_SERVICE_TOKEN: "fixture-bff-service-secret-000000001",
+  BILLING_OPERATOR_PROXY_SECRET: "fixture-operator-secret-000000000001",
 });
 
-describe("Billing readiness dependency authority", () => {
-  it("remains ready with Redis marked degraded when PostgreSQL is healthy", async () => {
-    const server = createBillingServer(
-      dependencies({
-        postgres: async () => Promise.resolve(undefined),
-        redis: async () => {
-          return Promise.reject(new Error("redis unavailable"));
-        },
-      }),
-    );
+describe("canonical runtime probe authority and retired route removal", () => {
+  it("exposes only PostgreSQL readiness, liveness and metrics; does not register retired or unfinished operations", async () => {
+    const ping = vi.fn(() => Promise.resolve());
+    const module = await Test.createTestingModule({
+      imports: [AppModule.register(config)],
+    })
+      .overrideProvider(PrismaService)
+      .useValue({ ping, clientForDatabaseInfrastructure: () => ({}) })
+      .compile();
+    const adapter = new FastifyAdapter();
+    const routes: string[] = [];
+    adapter.getInstance().addHook("onRoute", (route) => {
+      for (const method of Array.isArray(route.method)
+        ? route.method
+        : [route.method])
+        routes.push(`${method} ${route.url}`);
+    });
+    const app = module.createNestApplication<NestFastifyApplication>(adapter, {
+      logger: false,
+    });
+    await app.init();
     try {
-      const response = await server.inject({ method: "GET", url: "/readyz" });
-      expect(response.statusCode).toBe(200);
-      expect(dataEnvelope.parse(response.json<unknown>()).data).toEqual({
-        module: "kokoro-billing",
-        status: "ready",
-        dependencies: { postgres: "ok", redis: "degraded" },
-      });
-    } finally {
-      await server.close();
-    }
-  });
-
-  it("is not ready when the PostgreSQL authority is unavailable", async () => {
-    const server = createBillingServer(
-      dependencies({
-        postgres: async () => {
-          return Promise.reject(new Error("postgres unavailable"));
-        },
-        redis: async () => Promise.resolve(undefined),
-      }),
-    );
-    try {
-      const response = await server.inject({ method: "GET", url: "/readyz" });
-      expect(response.statusCode).toBe(503);
-      expect(errorEnvelope.parse(response.json<unknown>()).error.code).toBe(
-        "billing.dependencies_not_ready",
+      const expectedPaths = [
+        "/healthz",
+        "/readyz",
+        "/metrics",
+        "/v1/commerce/catalog",
+        "/v1/billing/me/credit-account",
+        "/v1/billing/me/credit-ledger",
+      ];
+      expect(routes.sort()).toEqual(
+        expectedPaths.flatMap((path) => [`GET ${path}`, `HEAD ${path}`]).sort(),
       );
+      const live = await app.inject({ method: "GET", url: "/healthz" });
+      expect(live.statusCode).toBe(200);
+      expect(ping).not.toHaveBeenCalled();
+      const ready = await app.inject({ method: "GET", url: "/readyz" });
+      expect(ready.statusCode).toBe(200);
+      expect(ready.json()).toEqual({
+        data: {
+          status: "ready",
+          dependencies: { postgres: "ok" },
+        },
+      });
+      expect(ready.headers["cache-control"]).toBe("no-store");
+      expect(ready.headers["x-request-id"]).toBeTruthy();
+      const metrics = await app.inject({ method: "GET", url: "/metrics" });
+      expect(metrics.statusCode).toBe(200);
+      expect(metrics.headers["content-type"]).toContain("text/plain");
+      expect(metrics.body).toContain("billing_http_requests_total");
+      ping.mockRejectedValueOnce(new Error("private database diagnostic"));
+      const failed = await app.inject({ method: "GET", url: "/readyz" });
+      expect(failed.statusCode).toBe(503);
+      expect(failed.json()).toEqual({
+        data: {
+          status: "not_ready",
+          dependencies: { postgres: "unavailable" },
+        },
+      });
+      expect(failed.body).not.toContain("private database diagnostic");
+      for (const url of [
+        "/v2/billing/me/credit-account",
+        "/v2/commerce/catalog",
+        "/v1/webhooks/payment/stripe",
+        "/v1/billing/me/subscriptions",
+        "/credit-account",
+      ]) {
+        const response = await app.inject({ method: "GET", url });
+        expect(response.statusCode, url).toBe(404);
+        expect(response.json()).toMatchObject({
+          error: { code: "billing.not_found" },
+        });
+      }
     } finally {
-      await server.close();
+      await app.close();
     }
   });
 });

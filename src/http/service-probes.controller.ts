@@ -1,35 +1,24 @@
 import { Controller, Get, Inject, Res } from "@nestjs/common";
 import type { FastifyReply } from "fastify";
-
-export const BILLING_READINESS = Symbol("BILLING_READINESS");
-export type BillingReadiness = Readonly<{ pingForReadiness(): Promise<void> }>;
-type ReadyResponse = Readonly<{
-  data: {
-    status: "ready" | "not_ready";
-    dependencies: { postgres: "ok" | "unavailable" };
-  };
-}>;
+import {
+  BILLING_PG_READINESS,
+  type BillingPgReadiness,
+} from "./service-probes.options.js";
+import { collectBillingMetrics } from "../infrastructure/metrics.js";
 
 @Controller()
 export class ServiceProbesController {
   constructor(
-    @Inject(BILLING_READINESS) private readonly readiness: BillingReadiness,
+    @Inject(BILLING_PG_READINESS) private readonly database: BillingPgReadiness,
   ) {}
-
   @Get("healthz")
-  health(): Readonly<{ data: { status: "ok" } }> {
+  health() {
     return { data: { status: "ok" } };
   }
-
   @Get("readyz")
-  async ready(
-    @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<ReadyResponse> {
+  async ready(@Res({ passthrough: true }) reply: FastifyReply) {
     try {
-      await this.readiness.pingForReadiness();
-      return {
-        data: { status: "ready", dependencies: { postgres: "ok" } },
-      };
+      await this.database.ping();
     } catch {
       reply.status(503);
       return {
@@ -39,5 +28,16 @@ export class ServiceProbesController {
         },
       };
     }
+    return {
+      data: {
+        status: "ready",
+        dependencies: { postgres: "ok" },
+      },
+    };
+  }
+  @Get("metrics")
+  async metrics(@Res() reply: FastifyReply) {
+    const metrics = await collectBillingMetrics();
+    return reply.header("content-type", metrics.contentType).send(metrics.body);
   }
 }

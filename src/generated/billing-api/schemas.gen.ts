@@ -152,6 +152,7 @@ export const CatalogItemSchema = {
   type: "object",
   additionalProperties: false,
   required: [
+    "offer_key",
     "offer_revision_id",
     "name",
     "amount_minor",
@@ -160,6 +161,11 @@ export const CatalogItemSchema = {
     "billing_interval",
   ],
   properties: {
+    offer_key: {
+      type: "string",
+      minLength: 1,
+      maxLength: 255,
+    },
     offer_revision_id: {
       $ref: "#/components/schemas/Uuid",
     },

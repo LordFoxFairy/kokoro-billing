@@ -1,3 +1,17 @@
+## 2026-10-19 main 集成 owner 验收（正常未切换）
+
+双父0c4ae32/f7e138c：保main唯一Nest启动/先HTTP drain后销毁DB/异常清理、Catalog/u1/offer_key和缺账户404，保本地唯一/v1、PostgreSQL-only readiness、usage2固定证据与未装配reader。唯一正规生成目标4.0.0-experimental.2，精确语义为本地全文加main完整Catalog pathItem/Item。SQL/Prisma两父逐字相同，Fastify5.12.4和lock保main，无DDL/新权限/收费装配或兼容路由；PrismaService逐字main，只保ping一个探针方法。
+
+350输入冻结（SHA25611c0c2ef0d6995838791649f5acc0067d16250f2cd9a8393fc4449c5bc1467a6）。format/lint/type/build/sql/contract（含全部usage派生）/官方API生成drift/default八门全0，1527 PASS/492资源SKIP，SKIP不算真实资源通过。另3套真实PG/HTTP36 PASS/0SKIP，覆盖source与dist正常只读零写/在途drain、初始PG失败、listen失败清理、Catalog/本人Credit鉴权和真实锁503后恢复；正规fresh canonical introspection/Prisma drift0，所有自有reference库回收、catalog94→94 exact。不需要Redis或模型/收费请求。
+
+首default1524 PASS/3 FAIL和随后单条fake query require-await lint失败保留：三个既有测试按正式/v1与canonical probe shape配对，退休负控改/v2，SQL扫描迁到现http/controllers且明确旧interfaces不可存在；原保护不删。重复pingForReadiness退休，原两超时测试承接到唯一main ping，保1000ms、原Error销毁和后继复用断言。独审无剩余确定P0–P2，最终Promise写法仅为lint修正且另核349文件保持。
+
+当前不宣称全部Billing integration绿：main既有完整资源355 PASS/157 FAIL尚未本轮重跑或修复，不恢复旧资金表、不启worker来消绿。正常服务/账号/余额/积分和配置未改，BFF旧/v2发布物必须后继正规配对；源码main合入不是正常组合已上线。门后仅两份当前事实文档单独冻结，运行/Schema/契约/测试输入不变。
+
+## 2026-10-19 main 配对集成（隔离候选）
+
+仅合并已有两路能力：main 的唯一 Nest runtime、Catalog offer_key/u1 机器可选subject、本人五因素与缺账户404，保留本地唯一 /v1 canonical、PostgreSQL-only readiness、usage2 固定证据与未装配 reader。新唯一 experimental artifact 为 4.0.0-experimental.2；Catalog 两处事实并入本地 canonical 后正规生成。保持 main Fastify 5.12.4/lock，无 Schema/Prisma/DDL、角色、运行配置或收费装配变化。保留原 source/dist drain/启动清理，不恢复旧 HTTP runner、/v2 alias 或旧资金表。现有 main 历史 integration 失败须如实保留，不以默认 SKIP 替代；最终 BFF 的旧 Billing pin/窄 SDK 必须配对，正常模型/工具/扣费保持暂停。
+
 ## MC01-B2b（2026-10-17，本地已验，未装配）
 
 主Agent唯一writer：vendor/agent/http/v6、scripts/generate-agent-usage.ts及窄HTTP artifact helper、src/generated/agent-usage-v2两个HTTP派生、src/modules/metering/agent-usage-{json,evidence-reader*}、原test/unit/agent-usage-evidence.test.ts、相邻INDEX与本任务文档。发布物负控RED后已完成生成/strict reader、真实loopback及七owner门；默认1509 PASS/480原资源SKIP、compiled42向量+1HTTP通过，详细范围见CURRENT；不动Module/main/config、canonical SQL/Prisma、资金writer或正常进程。正式bound/IAM/Admission/dispatch/capture/release仍后继；当前不启用收费或模型。
@@ -26,6 +40,26 @@
 ## BILLING-V1-FIX（P0，2026-10-13）
 
 单一切片：24-operation target 收敛到唯一 `/v1` 并正规生成；正常 Nest 图只挂载 probes 与两项已实现 Credit read；删除 `/v2` 双轨及旧运行 transport。完成证据必须同时包含 `/v1` 认证正控、旧 `/v2` 404、contract/generated drift、source/dist build 与隔离 PostgreSQL read；其余 19 项保持未实现。
+
+## SET-15 Catalog实现候选（待Root资源验收）
+
+已按本文件SET15设计门接入五commerce文件、窄CatalogGuard及正常BillingHttpModule；CatalogService沿同一TransactionService readOnlySnapshot，repository使用parameterized Prisma tagged SQL，先取事务DB instant，检查本tenant otherwise-eligible revision parent完整性，再bounded latest eligible目录查询。无SQL/Prisma/seed/provider/资金修改；machine可无subject，若有仍由原personal严格codec/五因素验证，事务actor始终authenticated web-bff。cursor绑定tenant identity digest、scope和稳定排序tuple，最大合法Unicode边界仍在2048wire预算；不持久化业务事实。
+
+CatalogItem required offer_key和u1 transport以3.0.0-experimental.4正规生成，现closed schema registry新增CatalogResponse允许名。历史v1及无关wire保留，消费者必须Root精确commit/digest成对承接。当前候选六GET及HEAD不代表其它18operation或正式商品发布/支付/本人订阅完成。测试用合成商品仅隔离fixture，不进入正常产品目录。
+
+## SET-10：HTTP drain 生命周期复审修正（候选）
+
+复审确认 Nest close 先销毁 provider、后关闭 adapter，原调用顺序无法保证请求继续使用数据库。现唯一 runtime 显式关闭并 drain HTTP adapter 后才调用 Nest close，仍共享 close promise、保 primary failure 和 main deadline；若HTTP drain失败仍执行provider cleanup，双失败以HTTP为cause。
+
+回归包含受控adapter drain期间实际Fastify请求仍pending、database destroy不得提前的RED→GREEN；实际注册route由Fastify onRoute收集method/path，精确五GET及其HEAD，无源码regex。source/dist真实PG候选再以自有账户表ACCESS EXCLUSIVE锁确认请求正在等待，发送SIGTERM，释放锁后必须读200再退出；这项真实进程回归由Root执行，writer未启动DB或进程。前一轮Root已通过的真实读取与prisma校验不替代此次新增drain验收。
+
+## SET-10：唯一正常 Nest 读取入口候选（待 Root 验收）
+
+沿既有 R255 增量门原位切换 main/createBillingRuntime；正常 source/dist 只装 DatabaseModule + BillingHttpModule/CreditModule，注册两本人 GET 与三 probes。旧 interfaces/http/server.ts 和 v1 runtime parity已删除，无第二runner、模式、旧表alias或proxy；19项未承接operation保持未注册，完整C3/收费/worker退出线不变。
+
+本片唯一writer settings Billing，Root负责依赖版本、Git/PR与真实资源/进程验收。新增src/http/service-probes.options.ts是既有D0窄readiness接口的必要放置，不增加module/framework。
+
+旧测试承接：server/readiness的personal/probe/auth/error由现credit-read矩阵与新Nest probe测试承接；Alipay signed-body/unsigned-body与unsupported provider迁原registry。target-v1的snake_case/envelope/alias/mock transport映射随v1退休，不能作为v2成功证据；未实现的tenant-resolver/webhook输入、checkout/admin/admission/expiry HTTP映射留对应v2 operation后继。checkout-http-replay保offer disabled后的canonical reordered replay、drift拒绝、唯一checkout，改direct CheckoutService；admission-command-receipts保capture/release/event identity/replay/drift/唯一receipt及原完整rollback/余额/流水断言，改direct AdmissionService；durable-result-http保corrupt durable receipt rejection，generic500由真实ErrorFilter测试承接；stripe-payment-gating保official签名拒绝前零inbox、unpaid/paid/replay/late事件、outbox receipt、唯一settlement/实际Credit recipients，改现provider+inbox+worker边界。不得把这些旧service依赖entitlement/payment表的历史集成当canonical新入口成功；此次未改SQL/业务，它们需Root另核合法fixture前置。
 
 ## R255 财务赠送裁决引用（2026-10-10）
 
