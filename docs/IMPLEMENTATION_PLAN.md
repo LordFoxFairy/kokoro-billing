@@ -1,3 +1,46 @@
+## 2026-10-19 main 集成 owner 验收（正常未切换）
+
+双父0c4ae32/f7e138c：保main唯一Nest启动/先HTTP drain后销毁DB/异常清理、Catalog/u1/offer_key和缺账户404，保本地唯一/v1、PostgreSQL-only readiness、usage2固定证据与未装配reader。唯一正规生成目标4.0.0-experimental.2，精确语义为本地全文加main完整Catalog pathItem/Item。SQL/Prisma两父逐字相同，Fastify5.12.4和lock保main，无DDL/新权限/收费装配或兼容路由；PrismaService逐字main，只保ping一个探针方法。
+
+350输入冻结（SHA25611c0c2ef0d6995838791649f5acc0067d16250f2cd9a8393fc4449c5bc1467a6）。format/lint/type/build/sql/contract（含全部usage派生）/官方API生成drift/default八门全0，1527 PASS/492资源SKIP，SKIP不算真实资源通过。另3套真实PG/HTTP36 PASS/0SKIP，覆盖source与dist正常只读零写/在途drain、初始PG失败、listen失败清理、Catalog/本人Credit鉴权和真实锁503后恢复；正规fresh canonical introspection/Prisma drift0，所有自有reference库回收、catalog94→94 exact。不需要Redis或模型/收费请求。
+
+首default1524 PASS/3 FAIL和随后单条fake query require-await lint失败保留：三个既有测试按正式/v1与canonical probe shape配对，退休负控改/v2，SQL扫描迁到现http/controllers且明确旧interfaces不可存在；原保护不删。重复pingForReadiness退休，原两超时测试承接到唯一main ping，保1000ms、原Error销毁和后继复用断言。独审无剩余确定P0–P2，最终Promise写法仅为lint修正且另核349文件保持。
+
+当前不宣称全部Billing integration绿：main既有完整资源355 PASS/157 FAIL尚未本轮重跑或修复，不恢复旧资金表、不启worker来消绿。正常服务/账号/余额/积分和配置未改，BFF旧/v2发布物必须后继正规配对；源码main合入不是正常组合已上线。门后仅两份当前事实文档单独冻结，运行/Schema/契约/测试输入不变。
+
+## 2026-10-19 main 配对集成（隔离候选）
+
+仅合并已有两路能力：main 的唯一 Nest runtime、Catalog offer_key/u1 机器可选subject、本人五因素与缺账户404，保留本地唯一 /v1 canonical、PostgreSQL-only readiness、usage2 固定证据与未装配 reader。新唯一 experimental artifact 为 4.0.0-experimental.2；Catalog 两处事实并入本地 canonical 后正规生成。保持 main Fastify 5.12.4/lock，无 Schema/Prisma/DDL、角色、运行配置或收费装配变化。保留原 source/dist drain/启动清理，不恢复旧 HTTP runner、/v2 alias 或旧资金表。现有 main 历史 integration 失败须如实保留，不以默认 SKIP 替代；最终 BFF 的旧 Billing pin/窄 SDK 必须配对，正常模型/工具/扣费保持暂停。
+
+## MC01-B2b（2026-10-17，本地已验，未装配）
+
+主Agent唯一writer：vendor/agent/http/v6、scripts/generate-agent-usage.ts及窄HTTP artifact helper、src/generated/agent-usage-v2两个HTTP派生、src/modules/metering/agent-usage-{json,evidence-reader*}、原test/unit/agent-usage-evidence.test.ts、相邻INDEX与本任务文档。发布物负控RED后已完成生成/strict reader、真实loopback及七owner门；默认1509 PASS/480原资源SKIP、compiled42向量+1HTTP通过，详细范围见CURRENT；不动Module/main/config、canonical SQL/Prisma、资金writer或正常进程。正式bound/IAM/Admission/dispatch/capture/release仍后继；当前不启用收费或模型。
+
+## MC01-B2a：严格 usage2 纯内核（2026-10-16，既定MC01内实施）
+
+- 基线Billing af0a531 clean，主Agent唯一writer。设计见三设计同名前缀；只读审查员核边界，无并行写入。
+- 写区：只读`vendor/agent/usage/v2/{schema,vectors,manifest}.json`、既有consumer-pin脚本扩展及新正规生成器、`src/generated/agent-usage-v2/`只读生成物、现Metering内纯parser/codec/error、单一focused suite；既有contract门接drift。无package/lock、SQL/Prisma、HTTP target或Module接线。
+- 顺序：固定Git objects/SHA→先写owner conformance与重复JSON/UTF8/深度/完整binding/不可变等行为RED→实现有限RFC8785+Ajv扩展/owner语义/successor→全部focused GREEN→只读复核→Node24全门与dist真实执行。生成文件只由脚本写，不手修。
+- 本片已验：有效9行为RED→focused314PASS（60内核+254原contract）；全门1481PASS/480原资源SKIP，format/lint/type/build/sql/contract全0；隔离compiled-only42原向量通过，独审Approved。首次lint4失败与fixture矛盾已修且保留日志，不放宽门。具体当前边界见CURRENT同名前缀。
+- 完成仅B2纯内核；HTTP6服务身份/原字节envelope/lifecycle、正式bound/技术保证、Admission/资金事务与真实聊天后继保持OPEN。零模型请求/资金写入/正常重启/远程Git；不以本片代替完整reader或收费闭环。
+
+---
+
+## MC01-B1：usage2发布身份与未启用目标收敛（2026-10-16，用户已确认；本地源码候选已验）
+
+- 基线：Billing1ceeae5 clean；Agent2d5ce12候选已验而normal未激活。承接既有MC01，不新增owner/进程、价格规则或任务中心。
+- 先核本卡及三设计：新Admission及后续commands固定usage2/schema2；Agent sealed1仅历史读取，不发生旧记录迁移或新收费。HTTP artifact4.0.0-experimental.1而/v1、24operations/42schemas/5实际routes保持。
+- 精确新增写区仅只读`contract/agent/usage/v2/consumer-pin.json`（owner/source_commit和原path/SHA闭集），校验接既有`scripts/verify-openapi.ts`/`openapi-target.ts`及既有contract suite；`contract/README.md`同步source digest。收据不作runtime授权，不复制完整schema、不增加服务。
+- 发布身份按固定Git objects与摘要核验；只读owner artifact不另建可编辑schema。canonical Billing YAML、原checker与目标fixture一起修改，再沿原HeyAPI流水线重生四generated files，禁止手改生成物。原个人余额/流水、auth和财务不变量断言保持，正向与旧version/错digest/放宽pin反例均运行。
+- 验证：docs diff/link、原schema/SQL/lock/normal/runtime不变；实施后Node24.20.0格式/lint/type/test/build/sql/contract/generated-drift；本片无数据库变更，不运行installer或付款/充值/模型。不能把本片算严格HTTP reader、Admission或完整用户链完成。
+- 后继：Metering strict owner reader及原字节/digest/identity语义→正式preauthorization bound/技术保证→原子reserve→Agent single dispatch→按verified actual capture/release/unknown恢复→正常App余额/流水/聊天验收。B1通过不放行paid调用或新credential部署，AUTH-P3本地服务身份确认独立。
+
+---
+
+## BILLING-V1-FIX（P0，2026-10-13）
+
+单一切片：24-operation target 收敛到唯一 `/v1` 并正规生成；正常 Nest 图只挂载 probes 与两项已实现 Credit read；删除 `/v2` 双轨及旧运行 transport。完成证据必须同时包含 `/v1` 认证正控、旧 `/v2` 404、contract/generated drift、source/dist build 与隔离 PostgreSQL read；其余 19 项保持未实现。
+
 ## SET-15 Catalog实现候选（待Root资源验收）
 
 已按本文件SET15设计门接入五commerce文件、窄CatalogGuard及正常BillingHttpModule；CatalogService沿同一TransactionService readOnlySnapshot，repository使用parameterized Prisma tagged SQL，先取事务DB instant，检查本tenant otherwise-eligible revision parent完整性，再bounded latest eligible目录查询。无SQL/Prisma/seed/provider/资金修改；machine可无subject，若有仍由原personal严格codec/五因素验证，事务actor始终authenticated web-bff。cursor绑定tenant identity digest、scope和稳定排序tuple，最大合法Unicode边界仍在2048wire预算；不持久化业务事实。

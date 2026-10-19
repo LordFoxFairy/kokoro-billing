@@ -1,10 +1,4 @@
-import {
-  Controller,
-  Get,
-  Inject,
-  Res,
-  ServiceUnavailableException,
-} from "@nestjs/common";
+import { Controller, Get, Inject, Res } from "@nestjs/common";
 import type { FastifyReply } from "fastify";
 import {
   BILLING_PG_READINESS,
@@ -19,18 +13,23 @@ export class ServiceProbesController {
   ) {}
   @Get("healthz")
   health() {
-    return { data: { module: "kokoro-billing", status: "ok" } };
+    return { data: { status: "ok" } };
   }
   @Get("readyz")
-  async ready() {
+  async ready(@Res({ passthrough: true }) reply: FastifyReply) {
     try {
       await this.database.ping();
     } catch {
-      throw new ServiceUnavailableException();
+      reply.status(503);
+      return {
+        data: {
+          status: "not_ready",
+          dependencies: { postgres: "unavailable" },
+        },
+      };
     }
     return {
       data: {
-        module: "kokoro-billing",
         status: "ready",
         dependencies: { postgres: "ok" },
       },

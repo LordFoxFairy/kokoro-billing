@@ -16,7 +16,7 @@ import type { CatalogResponse } from "../../generated/billing-api/types.gen.js";
 import { CatalogService } from "./catalog.service.js";
 import { parseCatalogQuery } from "./catalog.query.js";
 
-@Controller("v2/commerce")
+@Controller("v1/commerce")
 @UseGuards(CatalogGuard)
 export class CatalogReadController {
   constructor(

@@ -1,3 +1,7 @@
+## MC01-B2b 内部证据读取（2026-10-17）
+
+`src/modules/metering/agent-usage-evidence-reader.ts`只持有fetch/预算/取消/shutdown，`.options`和`.error`分别持安全配置/固定失败；`agent-usage-evidence-response.ts`核固定owner envelope与完整snapshot，再复用B2a纯codec。`agent-usage-json`共享有限JSON机制但分开HTTP/原证据字节预算。`scripts/agent-evidence-http-artifacts.ts`仅校B1固定HTTP发布物，原generate-agent-usage生成两个HTTP派生文件；原三个usage2输出保持。无新Module/HTTP/资金或正常配置装配，真实loopback只扩原evidence测试文件。
+
 ## SET-15 canonical目录读取候选
 
 `src/modules/commerce/`：commerce.module仅DI；catalog-read.controller仅HTTP/guard/generated响应；catalog.service只读事务；catalog.repository canonical查询/映射；catalog.query strict GET/tenant-scoped cursor。`src/http/catalog.guard.ts`与现auth能力区分machine optional subject和本人五因素。新unit/query/auth/repository、HTTP normal graph、canonical PG tests对应证据；source/dist沿现runtime集成承接。没有mapper/port/第二pool。

@@ -65,7 +65,7 @@ describe("canonical Catalog HTTP without user subject fabrication", () => {
       ).toBe(200);
       const response = await app.inject({
         method: "GET",
-        url: "/v2/commerce/catalog",
+        url: "/v1/commerce/catalog",
         headers,
       });
       expect(response.statusCode).toBe(200);
@@ -76,7 +76,7 @@ describe("canonical Catalog HTTP without user subject fabrication", () => {
       expect(response.headers["x-request-id"]).toBeTruthy();
       const withSubject = await app.inject({
         method: "GET",
-        url: "/v2/commerce/catalog",
+        url: "/v1/commerce/catalog",
         headers: { ...headers, "x-kokoro-subject": "u1.c3ViamVjdC1h" },
       });
       expect(withSubject.statusCode).toBe(200);
@@ -119,7 +119,7 @@ describe("canonical Catalog HTTP without user subject fabrication", () => {
           (
             await app.inject({
               method: "GET",
-              url: "/v2/commerce/catalog",
+              url: "/v1/commerce/catalog",
               headers: partial,
             })
           ).statusCode,
@@ -134,7 +134,7 @@ describe("canonical Catalog HTTP without user subject fabrication", () => {
           (
             await app.inject({
               method: "GET",
-              url: "/v2/commerce/catalog",
+              url: "/v1/commerce/catalog",
               headers: { ...headers, [name]: value },
             })
           ).statusCode,
@@ -149,7 +149,7 @@ describe("canonical Catalog HTTP without user subject fabrication", () => {
           (
             await app.inject({
               method: "GET",
-              url: "/v2/commerce/catalog",
+              url: "/v1/commerce/catalog",
               headers: { ...headers, ...patch },
             })
           ).statusCode,
@@ -166,7 +166,7 @@ describe("canonical Catalog HTTP without user subject fabrication", () => {
           (
             await app.inject({
               method: "GET",
-              url: "/v2/commerce/catalog" + suffix,
+              url: "/v1/commerce/catalog" + suffix,
               headers,
             })
           ).statusCode,
@@ -175,14 +175,14 @@ describe("canonical Catalog HTTP without user subject fabrication", () => {
         (
           await app.inject({
             method: "GET",
-            url: "/v2/commerce/catalog",
+            url: "/v1/commerce/catalog",
             headers: { ...headers, "content-length": "0" },
           })
         ).statusCode,
       ).toBe(400);
       expect(query.mock.calls.length).toBe(before);
       expect(
-        (await app.inject({ method: "GET", url: "/v2/commerce/catalog" }))
+        (await app.inject({ method: "GET", url: "/v1/commerce/catalog" }))
           .statusCode,
       ).toBe(401);
       // Catalog's optional subject never relaxes personal five-factor routes.
@@ -190,7 +190,7 @@ describe("canonical Catalog HTTP without user subject fabrication", () => {
         (
           await app.inject({
             method: "GET",
-            url: "/v2/billing/me/credit-account",
+            url: "/v1/billing/me/credit-account",
             headers,
           })
         ).statusCode,

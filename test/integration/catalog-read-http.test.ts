@@ -108,7 +108,7 @@ describe.skipIf(admin === undefined)(
     async function get(tenant: string, suffix = "") {
       return app.inject({
         method: "GET",
-        url: "/v2/commerce/catalog" + suffix,
+        url: "/v1/commerce/catalog" + suffix,
         headers: headers(tenant),
       });
     }

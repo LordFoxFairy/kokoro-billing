@@ -124,15 +124,11 @@ export const ReadyResponseSchema = {
         dependencies: {
           type: "object",
           additionalProperties: false,
-          required: ["postgres", "redis"],
+          required: ["postgres"],
           properties: {
             postgres: {
               type: "string",
               enum: ["ok", "unavailable"],
-            },
-            redis: {
-              type: "string",
-              enum: ["ok", "degraded"],
             },
           },
         },
@@ -470,11 +466,11 @@ export const AdmissionCreateRequestSchema = {
     },
     usage_profile_version: {
       type: "string",
-      const: "1.0.0",
+      const: "2.0.0",
     },
     usage_profile_digest: {
       type: "string",
-      const: "eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0",
+      const: "552f0d22251837aaf4d83766c7bd91311984f707f9a42950ed53ac7127bb5504",
     },
     execution_bound_ref: {
       type: "string",
@@ -517,7 +513,7 @@ export const AdmissionCaptureRequestSchema = {
     },
     evidence_schema_version: {
       type: "string",
-      const: "1.0.0",
+      const: "2.0.0",
     },
     evidence_ref: {
       type: "string",
@@ -573,7 +569,7 @@ export const AdmissionReleaseRequestSchema = {
     },
     evidence_schema_version: {
       type: "string",
-      const: "1.0.0",
+      const: "2.0.0",
     },
     evidence_ref: {
       type: "string",
@@ -757,11 +753,11 @@ export const AdmissionSchema = {
     },
     usage_profile_version: {
       type: "string",
-      const: "1.0.0",
+      const: "2.0.0",
     },
     usage_profile_digest: {
       type: "string",
-      const: "eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0",
+      const: "552f0d22251837aaf4d83766c7bd91311984f707f9a42950ed53ac7127bb5504",
     },
     execution_bound_ref: {
       type: "string",
@@ -846,7 +842,7 @@ export const ExecutionEventRequestSchema = {
     },
     evidence_schema_version: {
       type: "string",
-      const: "1.0.0",
+      const: "2.0.0",
     },
     evidence_ref: {
       type: "string",
@@ -925,7 +921,7 @@ export const ExecutionEventSchema = {
     },
     evidence_schema_version: {
       type: "string",
-      const: "1.0.0",
+      const: "2.0.0",
     },
     evidence_ref: {
       type: "string",

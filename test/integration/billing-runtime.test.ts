@@ -292,7 +292,7 @@ describe.skipIf(admin === undefined)(
           };
           const catalogHeaders: Record<string, string> = { ...headers };
           delete catalogHeaders["x-kokoro-subject"];
-          const catalog = await fetch(base + "/v2/commerce/catalog", {
+          const catalog = await fetch(base + "/v1/commerce/catalog", {
             headers: catalogHeaders,
           });
           expect(catalog.status).toBe(200);
@@ -312,7 +312,7 @@ describe.skipIf(admin === undefined)(
               page: { next_cursor: null },
             },
           });
-          const account = await fetch(base + "/v2/billing/me/credit-account", {
+          const account = await fetch(base + "/v1/billing/me/credit-account", {
             headers,
           });
           expect(account.status).toBe(200);
@@ -324,7 +324,7 @@ describe.skipIf(admin === undefined)(
             "runtime-read-proof",
           );
           const ledger = await fetch(
-            base + "/v2/billing/me/credit-ledger?limit=1",
+            base + "/v1/billing/me/credit-ledger?limit=1",
             { headers },
           );
           expect(ledger.status).toBe(200);
@@ -334,7 +334,7 @@ describe.skipIf(admin === undefined)(
               page: { next_cursor: null },
             },
           });
-          const absent = await fetch(base + "/v2/billing/me/credit-account", {
+          const absent = await fetch(base + "/v1/billing/me/credit-account", {
             headers: { ...headers, "x-kokoro-subject": encode(randomUUID()) },
           });
           expect(absent.status).toBe(404);
@@ -348,17 +348,17 @@ describe.skipIf(admin === undefined)(
             const wrong: Record<string, string> = { ...headers };
             delete wrong[key];
             const rejected = await fetch(
-              base + "/v2/billing/me/credit-account",
+              base + "/v1/billing/me/credit-account",
               { headers: wrong },
             );
             expect([401, 403]).toContain(rejected.status);
           }
           expect(
-            (await fetch(base + "/v1/billing/me/credit-account", { headers }))
+            (await fetch(base + "/v2/billing/me/credit-account", { headers }))
               .status,
           ).toBe(404);
           expect(
-            (await fetch(base + "/v2/billing/me/subscriptions", { headers }))
+            (await fetch(base + "/v1/billing/me/subscriptions", { headers }))
               .status,
           ).toBe(404);
           expect(await facts()).toEqual(before);
@@ -372,7 +372,7 @@ describe.skipIf(admin === undefined)(
             await lock.query(
               "LOCK TABLE kokoro_billing.billing_credit_account IN ACCESS EXCLUSIVE MODE",
             );
-            pending = fetch(base + "/v2/billing/me/credit-account", {
+            pending = fetch(base + "/v1/billing/me/credit-account", {
               headers,
               signal: AbortSignal.timeout(8_000),
             });
