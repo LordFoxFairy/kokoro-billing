@@ -1,3 +1,4 @@
+import { creditAccountBaselineSource } from "../../scripts/credit-account-contract.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Ajv2020 } from "ajv/dist/2020.js";
@@ -21,7 +22,11 @@ const record = (value: unknown): JsonObject => {
   return value as JsonObject;
 };
 const readContract = async (): Promise<JsonObject> =>
-  record(parse(await readFile(target, "utf8")) as unknown);
+  record(
+    parse(
+      creditAccountBaselineSource(await readFile(target, "utf8")),
+    ) as unknown,
+  );
 const clone = (value: JsonObject): JsonObject => structuredClone(value);
 const schemaProperties = (document: JsonObject, name: string): JsonObject =>
   record(record(record(document.components).schemas)[name])
@@ -1912,7 +1917,7 @@ describe("R67 generated schema semantics and provenance", () => {
       pathToFileURL(join(directory, "schemas.gen.ts")).href
     );
     const schemaExports = record(exports);
-    expect(Object.keys(schemas)).toHaveLength(42);
+    expect(Object.keys(schemas)).toHaveLength(43);
     expect(Object.keys(schemaExports).sort()).toEqual(
       Object.keys(schemas)
         .map((name) => name + "Schema")
@@ -1924,7 +1929,7 @@ describe("R67 generated schema semantics and provenance", () => {
       );
     }
     const provenance = validProvenance();
-    expect(provenance.source.version).toBe("4.0.0-experimental.2");
+    expect(provenance.source.version).toBe("4.0.0-experimental.3");
     expect(provenance.source.sha256).toBe(
       createHash("sha256").update(sourceText).digest("hex"),
     );

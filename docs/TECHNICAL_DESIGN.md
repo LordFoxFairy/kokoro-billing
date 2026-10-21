@@ -1,3 +1,7 @@
+## 2026-10-20 PR #2 main integration
+
+Retain main Nest bootstrap, current /v1 canonical and usage2 reader; merge the existing SET55 machine-only zero-account command without another module, schema, account implementation or compatibility route. Exact current-main contract inverse preserves every unrelated operation. Existing source/dist and HTTP/PG account tests move to /v1; retired /v2 must remain unavailable. BFF will orchestrate hidden initialization after trusted product admission; this owner PR does not claim that consumer path. No normal service restart or financial execution in this merge slice.
+
 ## 2026-10-19 main 配对集成（隔离候选）
 
 仅合并已有两路能力：main 的唯一 Nest runtime、Catalog offer_key/u1 机器可选subject、本人五因素与缺账户404，保留本地唯一 /v1 canonical、PostgreSQL-only readiness、usage2 固定证据与未装配 reader。新唯一 experimental artifact 为 4.0.0-experimental.2；Catalog 两处事实并入本地 canonical 后正规生成。保持 main Fastify 5.12.4/lock，无 Schema/Prisma/DDL、角色、运行配置或收费装配变化。保留原 source/dist drain/启动清理，不恢复旧 HTTP runner、/v2 alias 或旧资金表。现有 main 历史 integration 失败须如实保留，不以默认 SKIP 替代；最终 BFF 的旧 Billing pin/窄 SDK 必须配对，正常模型/工具/扣费保持暂停。
@@ -37,6 +41,25 @@ Reader只用部署侧专用Billing reader bearer；URI来自可信origin及expec
 ## BILLING-V1-FIX 唯一 v1 与正常 Nest 读取入口（2026-10-13）
 
 Billing 的唯一目标机器源收敛为 24-operation `/v1`；删除旧 17-operation source、`/v2` source、alias 与双轨校验。正常 `createBillingRuntime` 原位组合 Database、Billing HTTP、三项 probe 与已实现的两项本人 Credit GET；其余 19 项不注册空 handler。旧 Fastify transport 不再是正常入口，其仍有价值的资金/provider断言由既有业务测试承接，不据此声称未实现财务能力完成。
+
+## SET55：本人显式零余额开户设计门（2026-10-16；phaseR已批准）
+
+当前正式 main f7e138c04e5314543519433a27c8e6b53d6250e2 的 Nest graph 仅六 GET/HEAD，无开户 API；GET 缺账户仍专用404。canonical account 默认零余额且 tenant/subject 唯一，grant 内部正额开户不能替代本用例。目标是本人经受信 BFF 显式创建默认账户，不赠送、不充值、不启用 disabled 账户。Root 管设计/Git/资源；Billing 负责人为后继批准文件集唯一实现 writer。
+
+| 项 | 采用方案 |
+|---|---|
+| Owner/职责 | Billing Credit 拥有账户创建、原样读取及唯一审计；BFF 代当前已准入用户调用，Web 只显式手势发请求。|
+| 位置比较 | 采用现 modules/credit 平铺具名 credit-account.controller.ts/input.ts，前者只HTTP后者只边界解析；淘汰新增 account 一级模块（同一Credit事实），淘汰复活旧application/pg runner或把写动作塞只读controller。|
+| 认证 | 新 http/credit-account.guard.ts 是本操作窄 guard，先要求完整 machine 标记，再复用 BILLING_PERSONAL_AUTH 的五因素校验。只认 web-bff 委托本人；不让 direct-user 或operator取得新写权限，不放松现PersonalGuard/CatalogGuard。无新 IAM scope/secret/进程。|
+| 事务 | CreditService.openMyAccount 用现 TransactionService write 根事务，actorId 固定已认证web-bff，subjectId 是被委托本人。CreditEffects 同事务调用现repository开户并仅首次 append credit.account_open audit。现 CreditModule DI 无需改动；必要具名context/result type归 credit.types.ts。|
+| 并发 | Repository先获取与 grant 完全相同 credit:subject:tenant:subject advisory transaction lock，再按精确tenant/subject查找；不存在只创建默认列，存在保持ID/余额/创建时间/generation。disabled 403，其他损坏安全失败。最后唯一约束兜底，无新receipt或进程mutex。|
+| 失败恢复 | owner沿现bounded Prisma/statement/lock timeout，事务错误回滚，不建立新全局取消框架；网络断连不保证已派发事务未提交。PUT自然幂等，未知结果先GET核实，同一身份显式重放返回同账户，绝不自动赠送或重置。|
+| 依赖/接线 | 正常 BillingHttpModule 注册本 controller/guard，现生成 CreditAccountResponse mapper/schema校验、ErrorFilter、no-store/request-id延续。无浏览器直连owner、跨库或新pool。|
+| 删除 | 无替代旧API或兼容路径；GET继续只读，历史v1不注册。不得新增startup seed/自动注册开户/环境开关。|
+
+契约增量门采用 scripts/credit-account-contract.ts：此普通文件只拥有exp6新增操作校验及精确exp5原文逆投影，再委托不变的openapi-v2-target基线门；淘汰直接放宽旧24门和第二契约文件。正常generator/verify经该门读取当前canonical，所有生成物仍是exp6，历史投影只用于构建/测试保护，不是runtime fallback。原contract测试仅历史loader使用投影，当前生成/provenance门按真实43 schemas/exp6验证，新contract测试保护旧面篡改及新增面闭集。
+
+机器契约先由本仓 exp6 正规生成并完成审查/测试/提交，后继BFF才能固定commit/digest消费，再发布public16.1并由Web承接。初次开户只变account和首次audit，所有金融表必须零差量。测试先对旧正常HTTP得到404 RED，再覆盖真实HTTP严格空请求/机器身份负控，以及真实PG并发首次、非零原样、disabled、grant竞争、审计回滚、锁超时、响应丢失后重放和跨tenant。现有route inventory仅增PUT，不改旧GET/HEAD断言；保持旧artifact面逆投影。真实资源及source/dist门由Root串行执行，纯门/跳过项不替代资源验收。
 
 ## SET49：Billing本人缺账户错误契约
 

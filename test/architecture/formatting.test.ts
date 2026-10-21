@@ -107,6 +107,6 @@ describe("repository formatting governance", () => {
 
 it("validates the single target contract instead of source-text route parity", async () => {
   const source = await readFile("scripts/verify-openapi.ts", "utf8");
-  expect(source).toContain("assertTargetOpenApi");
+  expect(source).toContain("assertCreditAccountContract");
   expect(source).not.toContain("routePattern");
 });

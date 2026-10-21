@@ -245,6 +245,12 @@ export const CreditAccountResponseSchema = {
   },
 } as const;
 
+export const OpenCreditAccountRequestSchema = {
+  type: "object",
+  properties: {},
+  additionalProperties: false,
+} as const;
+
 export const LedgerEntrySchema = {
   type: "object",
   additionalProperties: false,

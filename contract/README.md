@@ -1,3 +1,9 @@
+## 2026-10-20 PR #2 current integration
+
+Canonical `openapi/v1/openapi.yaml` advances to `4.0.0-experimental.3`: 25 operations / 43 schemas. `PUT /v1/billing/me/credit-account` reuses the approved machine-only naturally idempotent zero-account command. No `/v2` alias; no grants, journals, payments or schema changes. The exact inverse restores main experimental.2 bytes and runs its unchanged validator. This is an internal lifecycle operation, not a user-facing account-opening step. BFF/App consumption is separate.
+
+SHA256 `f934d6f81842fafaec2e3e64cca6bd4669f86601979bd737941a5695506814fe`.
+
 ## 2026-10-19 唯一当前集成候选
 
 canonical `openapi/v1/openapi.yaml`，版本 `4.0.0-experimental.2`；下方旧版本记录仅是历史。组合 main Catalog/u1 和缺账户404、本地 usage2 固定目标；无 /v2 alias、未装配资金写入，正常模型和扣费不启用。当前源码六个 GET（probes、Catalog、本人 Credit 两读）不代表其他目标操作已上线。
@@ -20,7 +26,7 @@ SHA256 `9ff84d5f473e2f161f5d0c496db4cee175e2b032e836e97c7e23b9576a0af3e6`。消�
 
 ## Current machine artifact
 
-[`openapi/v1/openapi.yaml`](openapi/v1/openapi.yaml) is the only editable Billing HTTP machine source. It defines exactly 24 operations: three unversioned probes and 21 `/v1/**` internal-owner operations. The artifact version is `4.0.0-experimental.2`; package version and HTTP path version are independent. There is no `/v2` alias, fallback, or second editable contract.
+[`openapi/v1/openapi.yaml`](openapi/v1/openapi.yaml) is the only editable Billing HTTP machine source. It defines exactly 25 operations: three unversioned probes and 22 `/v1/**` internal-owner operations. The artifact version is `4.0.0-experimental.3`; package version and HTTP path version are independent. There is no `/v2` alias, fallback, or second editable contract.
 
 ```text
 openapi/v1/openapi.yaml  9a7048b6afc299ad4a7df8cde2428cb3a471291a764e1161e7d85f77174cb204
@@ -29,7 +35,7 @@ openapi/v1/openapi.yaml  fbe34c188cf4a9f08955e4b94ceab40d63a41156a3106fae6ab939a
 openapi/v2/openapi.yaml  b413db8965ed60683435adb7f2ce8650a7ca7bf7bee0989e8f83afc3d9f846af
 ```
 
-Only the probes, canonical Catalog and two personal Credit reads are mounted by this source candidate. The other 18 contract operations remain unimplemented and unregistered; their presence in the target artifact is not runtime-completion evidence. Historical candidate narratives and old digests remain in Git history and dated owner documentation.
+The probes, canonical Catalog, two personal Credit reads and the machine-only account initialization PUT are mounted by this source candidate. The other 18 contract operations remain unimplemented and unregistered; their presence in the target artifact is not runtime-completion evidence. Historical candidate narratives and old digests remain in Git history and dated owner documentation.
 
 ## Owner, visibility, and authority
 

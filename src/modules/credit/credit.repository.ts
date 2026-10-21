@@ -4,6 +4,7 @@ import type { TransactionClient } from "../../database/transaction.types.js";
 import { CreditError } from "./credit.error.js";
 import { encodeCreditLedgerCursor } from "./credit-ledger-cursor.js";
 import type {
+  OpenCreditAccountResult,
   CaptureCreditInput,
   CreditAccountSnapshot,
   CreditReadContext,
@@ -32,6 +33,59 @@ type PersistedCreditGrant = Awaited<
 
 export class CreditRepository {
   constructor(private readonly transactions: TransactionService) {}
+
+  async openMyAccount(
+    context: CreditReadContext,
+  ): Promise<OpenCreditAccountResult> {
+    const client = this.transactions.requireActiveTransaction(
+      context.tenantId,
+      "write",
+    );
+    // The same lock as grant serializes both account-creating paths.
+    await client.$queryRaw`SELECT 1::int AS locked FROM pg_advisory_xact_lock(hashtextextended(${`credit:subject:${context.tenantId}:${context.subjectId}`}, 0))`;
+    let row = await client.billing_credit_account.findFirst({
+      where: { tenant_id: context.tenantId, subject_id: context.subjectId },
+    });
+    const created = row === null;
+    if (row === null)
+      row = await client.billing_credit_account.create({
+        data: {
+          id: randomUUID(),
+          tenant_id: context.tenantId,
+          subject_id: context.subjectId,
+        },
+      });
+    if (
+      row.tenant_id !== context.tenantId ||
+      row.subject_id !== context.subjectId ||
+      (row.status !== "active" && row.status !== "disabled") ||
+      typeof row.available_micros !== "bigint" ||
+      row.available_micros < 0n ||
+      typeof row.held_micros !== "bigint" ||
+      row.held_micros < 0n ||
+      row.generation < 1n
+    )
+      throw new CreditError(
+        "CREDIT_READ_CORRUPT",
+        "Credit account facts are invalid",
+      );
+    if (row.status === "disabled")
+      throw new CreditError(
+        "CREDIT_ACCOUNT_DISABLED",
+        "Credit account is disabled",
+      );
+    return {
+      created,
+      account: {
+        id: row.id,
+        tenantId: row.tenant_id,
+        subjectId: row.subject_id,
+        status: row.status,
+        availableMicros: row.available_micros,
+        heldMicros: row.held_micros,
+      },
+    };
+  }
 
   async findMyAccount(
     context: CreditReadContext,

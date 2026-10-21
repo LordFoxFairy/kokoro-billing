@@ -191,7 +191,7 @@ describe("billing ownership architecture", () => {
         ).length,
       0,
     );
-    expect(operationCount).toBe(24);
+    expect(operationCount).toBe(25);
   });
 
   it("binds contract governance documentation to the current OpenAPI digest", async () => {

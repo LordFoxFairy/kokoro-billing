@@ -1,3 +1,11 @@
+## 2026-10-20 PR #2 main integration verified (normal environment unchanged)
+
+Existing colleague zero-account initialization is paired to current canonical PUT /v1/billing/me/credit-account, artifact 4.0.0-experimental.3 / 25 operations / 43 schemas; no /v2 alias. The complete inverse restores main experimental.2 SHA256 9ff84d5f473e2f161f5d0c496db4cee175e2b032e836e97c7e23b9576a0af3e6 and its unchanged validator. SQL, generated Prisma schema, lock, main bootstrap and usage2 reader remain unchanged. No second account implementation, grants, journals, payments or normal rollout.
+
+Frozen final 334 non-document inputs: pnpm verify exit0 (format/lint/types/build/sql/contract, 1571 PASS / 501 resource SKIP). Independently affected real PG/source-dist tests 15 PASS / 0 SKIP; prisma:check, fresh db:apply-schema → db:verify-schema and official generated drift all exit0. Self-owned fixture database inventory restored exactly. Independent readonly final review Approved, no definite P0–P2. Default SKIP is not real resource evidence; broad historical integration failures remain outside this slice and are not claimed fixed.
+
+Initial integration verify had three stale contract/route oracles (24→25 inventory, explicit PUT path, validator function); they were paired without removing risk assertions. First PG run had two failures because an overbroad route replacement changed the existing retired-route negative; the exact main prefix was restored before the final real pass. Original failure logs retained privately. Final runtime/test/tool inputs stayed byte-identical after verification; only this receipt changed. BFF/App hidden initialization remains a separate consumer slice; no normal account or balance changes in this merge. Remote push/merge is recorded by Root after GitHub confirms it.
+
 ## 2026-10-19 main 集成 owner 验收（正常未切换）
 
 双父0c4ae32/f7e138c：保main唯一Nest启动/先HTTP drain后销毁DB/异常清理、Catalog/u1/offer_key和缺账户404，保本地唯一/v1、PostgreSQL-only readiness、usage2固定证据与未装配reader。唯一正规生成目标4.0.0-experimental.2，精确语义为本地全文加main完整Catalog pathItem/Item。SQL/Prisma两父逐字相同，Fastify5.12.4和lock保main，无DDL/新权限/收费装配或兼容路由；PrismaService逐字main，只保ping一个探针方法。
@@ -39,6 +47,26 @@
 仍OPEN：Metering strict owner reader与完整canonical/digest/binding语义、正式preauthorization bound/技术保证、IAM fresh准入、Admission原子预占、single dispatch、verified actual capture/release和unknown恢复、正常余额/聊天/流水整链。usage1历史不重写或追收，不把target更新当正式计费已接线；未启用候选、CI/push/PR/merge及Rootgitlink不动。
 
 ---
+
+## SET55 本人零积分账户 owner实现与Root验收（2026-10-16）
+
+正常Nest新增PUT /v2/billing/me/credit-account，五因素web-bff机器边界，严格必需空JSON且无query；同subject advisory lock，缺账户只创建默认0账户与首次credit.account_open审计，已有账户原事实保持、disabled专用403，无grant/journal/payment/SQL/Prisma/依赖变更。exp6/43schema canonical SHA256 41bb19f8a14b2f78049b7e5bcda8e5e9db47ed92ff80a0dc9a024147d10b75fc；正常生成及exp5完整逆恢复保持。当前只交付owner，BFF固定消费者、Web按钮与正常浏览器仍未接通；旧3313不宣新开户可用。
+
+Root独立真实PG/source-dist两文件15PASS（12.00s），包含并发唯一、余额/35表差量、审计回滚、disabled、同锁和超时/丢ACK核实。完整pnpm verify自然exit0：1477PASS/501SKIP（资源未配置，不能作资源通过），format/lint/type/build/sql/contract全部0。随后完整资源门364PASS/157FAIL；首次四旧fixture建库后初始化抛错导致遗留，原resources_restored=false收据保留，Root确认四库无连接/35表全空后精确清理，非用户数据。三现测试清理修复未改97处名称/timeout/断言调用，原25源/契约hash全保持；修后完整integration仍364PASS/157FAIL/521（101.129s），PG/Redis库存精确恢复，完整资源门依然FAILED。四例现在进入旧entitlement表缺失分支，不能称业务修完。
+
+最终prisma:check、db:apply-schema→db:verify-schema、contract:generated:check均exit0，分别自有fixture/资源库存恢复，所有冻结源和保护hash精确。phaseR2作者format/lint/type0；纯verify在phaseR2前执行，后继仅integration fixture清理三文件，不冒称新树重新全verify。独立phaseC/phaseR审查无确定P1/P2；phaseR2另核清理。只作可审查Draft交付，禁止以局部门通过称全仓/完整产品通过。未知网络结果必须GET核实，再用户显式相同PUT重放，取消不保证owner事务回滚。
+
+## SET55 Root第一轮验证与清理修复（2026-10-16）
+
+15项真实PG/source-dist专项PASS；完整verify exit0（1477PASS/501SKIP，资源未配置）；全integration364PASS/157FAIL。四个旧UsageHold fixture在连接初始化失败前已建库，因try位置错误未close；Root精确清理四新增且35表皆空、无连接的临时库，原始库存失败receipt保留，另记恢复证据。按IMPLEMENTATION_PLAN批准三现测试文件清理修复，正式开户25writer源码/契约冻结不变。完整资源门仍失败，未声称旧业务已修或正常页面可用。
+
+## SET55 phaseC结果与phaseR范围（2026-10-16）
+
+契约阶段263PASS；正常生成/check、contract、lint、typecheck exit0。exp6 canonical SHA256 41bb19f8a14b2f78049b7e5bcda8e5e9db47ed92ff80a0dc9a024147d10b75fc，43 schema；exp5原文逆恢复及旧validator原字节验证通过。Root/独立只读审查无确定P1/P2。HTTP尚未注册，开户尚不可用。phaseR按唯一IMPLEMENTATION_PLAN 14文件闭集实施，Root保留真实资源/source-dist与Git；未执行项不得算通过。
+
+## SET55本人开户准备（2026-10-16；实施前）
+
+已只读确认现schema可正规创建默认零账户，但正式API缺失；禁止grant0/SQL补账户或假余额。Root三设计及阶段卡已收敛，先exp6增量契约，仍无新运行操作或实际开户。旧完整资源门失败保持；后继必须以真实PG/HTTP证明唯一开户、幂等、零金融事实差量，不把网络取消当数据库撤销。
 
 ## SET49完整隔离资源门终态
 

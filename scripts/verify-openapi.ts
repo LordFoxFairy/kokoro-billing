@@ -1,8 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { parse } from "yaml";
-import { assertTargetOpenApi } from "./openapi-target.js";
+import { assertCreditAccountContract } from "./credit-account-contract.js";
 import { assertAgentUsageConsumerPin } from "./agent-usage-consumer-pin.js";
 import { generateAgentUsageArtifacts } from "./generate-agent-usage.js";
 
@@ -21,6 +20,6 @@ const readme = await readFile(resolve(root, "contract/README.md"), "utf8");
 const digest = createHash("sha256").update(source).digest("hex");
 if (!readme.includes(digest))
   throw new Error(`contract/README.md provenance digest must be ${digest}`);
-assertTargetOpenApi(parse(source) as Record<string, unknown>);
+assertCreditAccountContract(source);
 await generateAgentUsageArtifacts(root, true);
-process.stdout.write("Billing OpenAPI v1 contract is valid: 24 operations\n");
+process.stdout.write("Billing OpenAPI v1 contract is valid: 25 operations\n");

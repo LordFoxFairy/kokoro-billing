@@ -1,3 +1,4 @@
+import { request as httpRequest } from "node:http";
 import "reflect-metadata";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createConnection, createServer, type Server } from "node:net";
@@ -518,6 +519,136 @@ describe.skipIf(admin === undefined)(
         }
       },
       30_000,
+    );
+  },
+);
+
+// Explicit opening uses the same canonical entry points and owned fixture seam.
+describe.skipIf(admin === undefined)(
+  "source/dist explicit zero-account HTTP",
+  () => {
+    it.each(["source", "dist"] as const)(
+      "opens and reconciles without financial facts through %s",
+      async (entry) => {
+        if (!admin) throw new Error("SCHEMA_ADMIN_URL required");
+        const fixture = await createPrismaDatabaseFixture(admin);
+        let child: ChildProcess | undefined;
+        try {
+          const port = await availablePort();
+          const run = failureChild(entry, fixture.url, port);
+          child = run.child;
+          const base = `http://127.0.0.1:${port}`;
+          const deadline = performance.now() + 20000;
+          while (true) {
+            if (child.exitCode !== null)
+              throw new Error("Owner exited before readiness");
+            try {
+              if (
+                (
+                  await fetch(base + "/readyz", {
+                    signal: AbortSignal.timeout(500),
+                  })
+                ).status === 200
+              )
+                break;
+            } catch {
+              /* finite readiness only */
+            }
+            if (performance.now() >= deadline)
+              throw new Error("Owner readiness deadline");
+            await sleep(30);
+          }
+          const tenant = randomUUID(),
+            subject = randomUUID();
+          const headers = {
+            authorization: `Bearer ${run.secrets[1]}`,
+            "x-kokoro-internal-secret": run.secrets[0] ?? "",
+            "x-kokoro-service": "web-bff",
+            "x-kokoro-tenant-id":
+              "u1." + Buffer.from(tenant).toString("base64url"),
+            "x-kokoro-subject":
+              "u1." + Buffer.from(subject).toString("base64url"),
+            "content-type": "application/json",
+          };
+          const url = base + "/v1/billing/me/credit-account";
+          const missing = await fetch(url, {
+            headers,
+            signal: AbortSignal.timeout(5000),
+          });
+          expect(missing.status).toBe(404);
+          await missing.text();
+          // Drop the real HTTP response body after headers: the application has
+          // no account ACK to apply, although the owner may already have committed.
+          const status = await new Promise<number | undefined>(
+            (resolve, reject) => {
+              const request = httpRequest(
+                url,
+                { method: "PUT", headers },
+                (response) => {
+                  const status = response.statusCode;
+                  response.destroy();
+                  resolve(status);
+                },
+              );
+              request.once("error", reject);
+              request.setTimeout(5000, () =>
+                request.destroy(new Error("Owned response deadline")),
+              );
+              request.end("{}");
+            },
+          );
+          expect(status).toBe(200);
+          const reconciled = await fetch(url, {
+            headers,
+            signal: AbortSignal.timeout(5000),
+          });
+          expect(reconciled.status).toBe(200);
+          const result: unknown = await reconciled.json();
+          expect(result).toMatchObject({
+            data: { available_micros: "0", held_micros: "0" },
+          });
+          const replay = await fetch(url, {
+            method: "PUT",
+            headers,
+            body: "{}",
+            signal: AbortSignal.timeout(5000),
+          });
+          expect(replay.status).toBe(200);
+          expect(await replay.json()).toEqual(result);
+          const ledger = await fetch(base + "/v1/billing/me/credit-ledger", {
+            headers,
+            signal: AbortSignal.timeout(5000),
+          });
+          expect(ledger.status).toBe(200);
+          expect(await ledger.json()).toMatchObject({ data: { items: [] } });
+          const counts = await fixture.pool.query<{
+            name: string;
+            count: string;
+          }>(
+            "SELECT tablename AS name, '0' AS count FROM pg_tables WHERE schemaname='kokoro_billing' ORDER BY tablename",
+          );
+          expect(counts.rows).toHaveLength(35);
+          for (const { name } of counts.rows) {
+            if (!/^[a-z][a-z0-9_]*$/u.test(name))
+              throw new Error("Invalid owner table");
+            const row = await fixture.pool.query<{ count: string }>(
+              `SELECT count(*)::text AS count FROM kokoro_billing."${name}"`,
+            );
+            expect(row.rows[0]?.count, name).toBe(
+              ["billing_credit_account", "billing_audit_event"].includes(name)
+                ? "1"
+                : "0",
+            );
+          }
+        } finally {
+          try {
+            if (child) await stop(child);
+          } finally {
+            await fixture.close();
+          }
+        }
+      },
+      30000,
     );
   },
 );

@@ -1,3 +1,7 @@
+## 2026-10-20 PR #2 main pairing
+
+Only the approved SET55 account initialization command moves to the current canonical PUT /v1/billing/me/credit-account; operationId, strict empty object, five-factor machine-only auth, response, disabled error and inherent idempotency remain. Artifact 4.0.0-experimental.3 / 25 operations / 43 schemas; no v2 alias. Exact removal of only the PUT/schema/version restores the complete main experimental.2 source. Consumer auto-initialization is a separate BFF/App slice; no user opening control is required.
+
 ## 2026-10-19 main 配对集成（隔离候选）
 
 仅合并已有两路能力：main 的唯一 Nest runtime、Catalog offer_key/u1 机器可选subject、本人五因素与缺账户404，保留本地唯一 /v1 canonical、PostgreSQL-only readiness、usage2 固定证据与未装配 reader。新唯一 experimental artifact 为 4.0.0-experimental.2；Catalog 两处事实并入本地 canonical 后正规生成。保持 main Fastify 5.12.4/lock，无 Schema/Prisma/DDL、角色、运行配置或收费装配变化。保留原 source/dist drain/启动清理，不恢复旧 HTTP runner、/v2 alias 或旧资金表。现有 main 历史 integration 失败须如实保留，不以默认 SKIP 替代；最终 BFF 的旧 Billing pin/窄 SDK 必须配对，正常模型/工具/扣费保持暂停。
@@ -27,6 +31,14 @@
 缺失 Credit account 返回 HTTP 404 且稳定码 `billing.credit_account_not_found`、`retryable=false`；普通未注册路径仍是 `billing.not_found`，消费者不得把任意 owner 404 当作业务空账户。
 
 唯一可编辑机器源为 `contract/openapi/v1/openapi.yaml`，精确定义 3 probes 与 21 个 `/v1` internal-owner operation；不存在 `/v2` alias/fallback。当前正常运行图只实现 probes 与 `GET /v1/billing/me/credit-account`、`GET /v1/billing/me/credit-ledger`，旧 `/v2` 必须真实 404；其余目标 operation 的契约存在不等于 handler 或财务语义完成。
+
+## SET55：本人开户契约设计门（2026-10-16；实施前）
+
+唯一机器源 contract/openapi/v2/openapi.yaml 将从3.0.0-experimental.5增量至3.0.0-experimental.6，新增 internal-owner PUT /v2/billing/me/credit-account，operationId openMyCreditAccount；原24operation及其wire保持。PUT按受信tenant/subject自然幂等，无Idempotency-Key、新receipt或调用方可指定ID。仅完整web-bff service/internal secret/service Bearer/唯一canonical u1 tenant与subject认证；direct-user不得调用。BFF必须先完成当前Product准入，再由权威身份映射委托本人，浏览器不得提供tenant/subject/actor。
+
+请求必须application/json且严格空对象{}；不接受query、额外字段、身份、金额、status、null/array、缺正文或任意扩展配置。具名input仅解析这一边界，错误走既有安全400。200复用CreditAccountResponse，不增加created/replayed等字段；初次返回真实零余额账户，重复返回当前原账户（非零亦不重置）。disabled账户403 billing.credit_account_disabled、retryable=false；身份拒绝沿现401/403，未知路由仍generic404，数据库预算/依赖错误沿现503，其他损坏500。仅新增CreditError disabled精确映射，不能把任意对象当受信异常。所有响应沿现no-store、x-request-id及生成schema校验。
+
+GET仍不创建，无账户404 billing.credit_account_not_found不变。未知写结果由消费者GET核实；已有dispatch在网络断连后可能提交，自然幂等处理重放，不承诺HTTP abort撤销COMMIT。请求schema如新增组件必须由正规生成链更新closed registry数量/测试，不手改generated；历史v1及无关v2面原字节逆恢复保护。BFF固定已提交owner artifact后才能实现公开PUT，Web仅消费BFF，当前本门尚未实现/发布。
 
 ## SET49：Billing本人缺账户错误契约
 

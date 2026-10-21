@@ -1,3 +1,7 @@
+## 2026-10-20 PR #2 main pairing
+
+The existing zero-account creation shares the grant subject advisory lock and commits the first account plus audit atomically; repeat requests return the actual account without resetting balances. SQL and generated Prisma schema remain byte-identical to both parents. No grants, journals, payment or normal data changes. Wire now uses canonical /v1; historical SET55 /v2 notes below are not the runtime.
+
 ## 2026-10-19 main 配对集成（隔离候选）
 
 仅合并已有两路能力：main 的唯一 Nest runtime、Catalog offer_key/u1 机器可选subject、本人五因素与缺账户404，保留本地唯一 /v1 canonical、PostgreSQL-only readiness、usage2 固定证据与未装配 reader。新唯一 experimental artifact 为 4.0.0-experimental.2；Catalog 两处事实并入本地 canonical 后正规生成。保持 main Fastify 5.12.4/lock，无 Schema/Prisma/DDL、角色、运行配置或收费装配变化。保留原 source/dist drain/启动清理，不恢复旧 HTTP runner、/v2 alias 或旧资金表。现有 main 历史 integration 失败须如实保留，不以默认 SKIP 替代；最终 BFF 的旧 Billing pin/窄 SDK 必须配对，正常模型/工具/扣费保持暂停。
@@ -23,6 +27,14 @@ HTTP reader仅返回已验证冻结证据；不写库/缓存/receipt/余额，�
 ## BILLING-V1-FIX 数据边界（2026-10-13）
 
 本切换不修改 canonical SQL、Prisma model、表、索引、资金状态机或 worker。两项 Credit GET 继续只读 `kokoro_billing` owner schema，缺账户为明确 404，不以未注册 route 的 404 伪装业务无账户。
+
+## SET55：本人零余额账户数据设计门（2026-10-16；实施前）
+
+无DDL、表、索引、installer、seed、Prisma schema/client或新持久化系统。唯一canonical仍database/schema.sql。现billing_credit_account的UNIQUE(tenant_id,subject_id)是自然幂等身份；首次创建仅id/tenant_id/subject_id，active、零available/held、generation和时间均沿schema默认，不由浏览器输入。只允许已有Credit事务写边界创建，GET/启动不开户。
+
+顺序为现write事务→同grant主体advisory lock→精确同tenant/subject查询→缺失创建或保留既有→仅created时同事务append信用账户开通audit。audit actor来自已认证web-bff，subject为本人，无敏感凭据payload。disabled不复活；已有余额/generation/created_at不更新；审计失败使首次创建整体回滚。创建账户不产生grant/journal/hold/payment/order/invoice/metering/receipt或任意资金，其他canonical金融事实零差量。
+
+真实PG仅Root拥有的fresh fixture；初次/重复/并发/跨tenant/非零/disabled/grant竞争/审计失败/锁超时必须检查账户唯一、既有值不变与全35表预期差量。正常实例不得SQL补账户或grant0；后继激活正式API后才由显式本人请求开户。现timeout不等于请求取消，响应丢失后读取/重放不产生第二账户或audit。schema和Prisma生成物原hash保持，正式源/构建runtime新增PUT及旧读取语义单独验收。
 
 ## SET49：Billing本人缺账户错误契约
 
