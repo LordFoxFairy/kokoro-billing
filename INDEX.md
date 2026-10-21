@@ -1,3 +1,11 @@
+## 2026-10-20 PR #2 integration (current)
+
+Current account initialization uses PUT /v1/billing/me/credit-account and canonical 4.0.0-experimental.3. Reuses SET55 owner implementation; no user-facing opening step, /v2 fallback, schema or financial mutations. Earlier dated SET55 v2 receipts remain historical. Final local verify and affected real PG/source-dist verification passed; final readonly review Approved. See CURRENT for exact evidence and limits.
+
+## MC01-B2b 内部证据读取（2026-10-17）
+
+`src/modules/metering/agent-usage-evidence-reader.ts`只持有fetch/预算/取消/shutdown，`.options`和`.error`分别持安全配置/固定失败；`agent-usage-evidence-response.ts`核固定owner envelope与完整snapshot，再复用B2a纯codec。`agent-usage-json`共享有限JSON机制但分开HTTP/原证据字节预算。`scripts/agent-evidence-http-artifacts.ts`仅校B1固定HTTP发布物，原generate-agent-usage生成两个HTTP派生文件；原三个usage2输出保持。无新Module/HTTP/资金或正常配置装配，真实loopback只扩原evidence测试文件。
+
 ## SET55当前设计入口
 
 本人零余额账户的三设计SET55前缀和IMPLEMENTATION_PLAN阶段卡为当前裁决。phaseC正规exp6契约与43schema已通过纯门；phaseR候选已注册PUT，真实PG/source-dist尚待Root验证，未部署或声称页面开户可用。下方旧Fastify/v1/24operation叙述是历史。

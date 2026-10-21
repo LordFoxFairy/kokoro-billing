@@ -32,7 +32,7 @@ class R73RegistrationControlController {
 }
 
 describe("R73 personal Credit HTTP registration prerequisite only", () => {
-  it.each(["/v2/billing/me/credit-account", "/v2/billing/me/credit-ledger"])(
+  it.each(["/v1/billing/me/credit-account", "/v1/billing/me/credit-ledger"])(
     "registers %s after a real Nest adapter control",
     async (path) => {
       const readDouble: Pick<CreditService, "getMyAccount" | "listMyLedger"> = {
@@ -92,6 +92,14 @@ describe("R73 personal Credit HTTP registration prerequisite only", () => {
         expect(readDouble.getMyAccount).not.toHaveBeenCalled();
         expect(readDouble.listMyLedger).not.toHaveBeenCalled();
 
+        const retired = await app.inject({
+          method: "GET",
+          url: path.replace("/v1/", "/v2/"),
+        });
+        expect(retired.statusCode).toBe(404);
+        expect(readDouble.getMyAccount).not.toHaveBeenCalled();
+        expect(readDouble.listMyLedger).not.toHaveBeenCalled();
+
         const response = await app.inject({
           method: "GET",
           url: path,
@@ -118,8 +126,8 @@ describe("R73 personal Credit HTTP registration prerequisite only", () => {
 // R74 full HTTP matrix. JWKS is a local real EdDSA fixture; all personal
 // requests use the production Controller/Guard/Filter/module, never a fake route.
 describe("R74 production personal Credit HTTP", () => {
-  const accountPath = "/v2/billing/me/credit-account";
-  const ledgerPath = "/v2/billing/me/credit-ledger";
+  const accountPath = "/v1/billing/me/credit-account";
+  const ledgerPath = "/v1/billing/me/credit-ledger";
   const encode = (value: string) =>
     "u1." + Buffer.from(value, "utf8").toString("base64url");
   const profile = {

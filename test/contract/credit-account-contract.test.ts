@@ -14,12 +14,12 @@ type Document = {
   paths: Record<string, Record<string, unknown>>;
   components: { schemas: Record<string, unknown> };
 };
-const source = () => readFile("contract/openapi/v2/openapi.yaml", "utf8");
+const source = () => readFile("contract/openapi/v1/openapi.yaml", "utf8");
 describe("SET55 explicit own account contract", () => {
   it("publishes the machine-only naturally idempotent opening operation", async () => {
     const raw = await source();
     const doc = parse(raw) as Document;
-    const op = doc.paths["/v2/billing/me/credit-account"]?.put as Record<
+    const op = doc.paths["/v1/billing/me/credit-account"]?.put as Record<
       string,
       unknown
     >;
@@ -56,13 +56,13 @@ describe("SET55 explicit own account contract", () => {
     expect(() => assertCreditAccountContract(raw)).not.toThrow();
     expect(Object.keys(doc.components.schemas)).toHaveLength(43);
   });
-  it("restores the complete immutable exp5 source and its old 24 operations", async () => {
+  it("restores the complete immutable main experimental.2 source and its old 24 operations", async () => {
     const old = creditAccountBaselineSource(await source());
     expect(createHash("sha256").update(old).digest("hex")).toBe(
       creditAccountBaselineDigest,
     );
     const doc = parse(old) as Document;
-    expect(doc.info.version).toBe("3.0.0-experimental.5");
+    expect(doc.info.version).toBe("4.0.0-experimental.2");
     expect(
       Object.values(doc.paths).flatMap((path) =>
         Object.keys(path).filter((key) =>
@@ -121,7 +121,7 @@ describe("SET55 explicit own account contract", () => {
   ] as const)
     it(`rejects missing or expanded ${kind}`, async () => {
       const doc = parse(await source()) as Document;
-      const path = doc.paths["/v2/billing/me/credit-account"];
+      const path = doc.paths["/v1/billing/me/credit-account"];
       if (path === undefined) throw new Error("Missing account path");
       const op = path.put as {
         responses: Record<string, { headers?: unknown }>;

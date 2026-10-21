@@ -14,7 +14,7 @@ import type { CreditAccountResponse } from "../../generated/billing-api/types.ge
 import { CreditService } from "./credit.service.js";
 import { mapCreditAccount } from "./credit-read.mapper.js";
 import { assertOpenCreditAccountInput } from "./credit-account.input.js";
-@Controller("v2/billing/me")
+@Controller("v1/billing/me")
 @UseGuards(CreditAccountGuard)
 export class CreditAccountController {
   constructor(

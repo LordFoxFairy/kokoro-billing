@@ -36,8 +36,8 @@ describe.skipIf(adminUrl === undefined)(
     let schemas: BillingSchemaValidator;
     let jwksServer: Server;
     let signingKey: Awaited<ReturnType<typeof generateKeyPair>>["privateKey"];
-    const accountPath = "/v2/billing/me/credit-account";
-    const ledgerPath = "/v2/billing/me/credit-ledger";
+    const accountPath = "/v1/billing/me/credit-account";
+    const ledgerPath = "/v1/billing/me/credit-ledger";
     const profile = {
       mode: "jwks" as const,
       internalServiceSecret: "r74-http-pg-service-secret-0000000001",
@@ -236,7 +236,7 @@ describe.skipIf(adminUrl === undefined)(
       };
       const catalog = await app.inject({
         method: "GET",
-        url: "/v2/commerce/catalog",
+        url: "/v1/commerce/catalog",
         headers: userHeaders,
       });
       check(catalog, 200);
@@ -251,7 +251,7 @@ describe.skipIf(adminUrl === undefined)(
         check(
           await app.inject({
             method: "GET",
-            url: "/v2/commerce/catalog",
+            url: "/v1/commerce/catalog",
             headers: { ...userHeaders, ...patch },
           }),
           403,
@@ -266,7 +266,7 @@ describe.skipIf(adminUrl === undefined)(
         check(
           await app.inject({
             method: "GET",
-            url: "/v2/commerce/catalog",
+            url: "/v1/commerce/catalog",
             headers: {
               ...userHeaders,
               authorization: `Bearer ${await signUser(patch)}`,

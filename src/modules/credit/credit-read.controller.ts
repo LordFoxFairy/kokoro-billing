@@ -25,7 +25,7 @@ import {
   parseCreditLedgerQuery,
 } from "./credit-read.query.js";
 
-@Controller("v2/billing/me")
+@Controller("v1/billing/me")
 @UseGuards(PersonalGuard)
 export class CreditReadController {
   constructor(

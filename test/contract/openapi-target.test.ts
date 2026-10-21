@@ -6,15 +6,15 @@ import formatsModule from "ajv-formats";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import {
-  assertV2OpenApi,
+  assertTargetOpenApi,
   validateV2OpenApi,
-} from "../../scripts/openapi-v2-target.js";
+} from "../../scripts/openapi-target.js";
 
 import { verifyMeteringPolicyArtifact } from "../../src/modules/metering/metering-policy-artifact.js";
 import { meteringPricingPublicationResultCodec } from "../../src/modules/metering/metering-pricing-publication-result-codec.js";
 
 type JsonObject = Record<string, unknown>;
-const target = join(process.cwd(), "contract/openapi/v2/openapi.yaml");
+const target = join(process.cwd(), "contract/openapi/v1/openapi.yaml");
 const record = (value: unknown): JsonObject => {
   expect(value).not.toBeNull();
   expect(typeof value).toBe("object");
@@ -44,8 +44,8 @@ const mutate = (
 describe("Billing v2 target OpenAPI", () => {
   it("publishes the complete target major contract with fully resolved refs", async () => {
     const document = await readContract();
-    expect(() => assertV2OpenApi(document)).not.toThrow();
-    expect(record(document.info).version).toBe("3.0.0-experimental.5");
+    expect(() => assertTargetOpenApi(document)).not.toThrow();
+    expect(record(document.info).version).toBe("4.0.0-experimental.2");
     const operationCount = Object.values(record(document.paths)).reduce<number>(
       (count, path) =>
         count +
@@ -57,9 +57,47 @@ describe("Billing v2 target OpenAPI", () => {
     expect(operationCount).toBe(24);
   });
 
-  it("publishes the clean-slate admission identity correction as experimental.3", async () => {
+  it("publishes the approved usage2 target without changing the personal read surface", async () => {
     const document = await readContract();
-    expect(record(document.info).version).toBe("3.0.0-experimental.5");
+    expect(record(document.info).version).toBe("4.0.0-experimental.2");
+  });
+
+  it("pins usage2 on new commands and returned evidence identities, never a dual-version enum", async () => {
+    const document = await readContract();
+    for (const name of ["AdmissionCreateRequest", "Admission"]) {
+      const properties = schemaProperties(document, name);
+      expect(record(properties.usage_profile_version)).toEqual({
+        type: "string",
+        const: "2.0.0",
+      });
+      expect(record(properties.usage_profile_digest).const).toBe(
+        "552f0d22251837aaf4d83766c7bd91311984f707f9a42950ed53ac7127bb5504",
+      );
+    }
+    for (const name of [
+      "AdmissionCaptureRequest",
+      "AdmissionReleaseRequest",
+      "ExecutionEventRequest",
+      "ExecutionEvent",
+    ]) {
+      expect(
+        record(schemaProperties(document, name).evidence_schema_version),
+      ).toEqual({ type: "string", const: "2.0.0" });
+      for (const invalid of [
+        { type: "string", const: "1.0.0" },
+        { type: "string", enum: ["1.0.0", "2.0.0"] },
+      ]) {
+        expect(
+          mutate(document, (copy) => {
+            schemaProperties(copy, name).evidence_schema_version = invalid;
+          }),
+        ).toContain(
+          name === "ExecutionEvent"
+            ? "ExecutionEvent must echo the pinned Agent usage version"
+            : "strict evidence command must pin Agent usage 2.0.0",
+        );
+      }
+    }
   });
 
   it("uses only trusted producer context and the Agent request reference for admission identity", async () => {
@@ -202,7 +240,7 @@ describe("Billing v2 target OpenAPI", () => {
     });
     expect(
       record(properties("AdmissionCreateRequest").usage_profile_digest).const,
-    ).toBe("eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0");
+    ).toBe("552f0d22251837aaf4d83766c7bd91311984f707f9a42950ed53ac7127bb5504");
     for (const field of [
       "usage_profile_version",
       "usage_profile_digest",
@@ -277,9 +315,9 @@ describe("Billing v2 target OpenAPI", () => {
         record(
           schemaProperties(copy, "ExecutionEventRequest")
             .evidence_schema_version,
-        ).const = "2.0.0";
+        ).const = "1.0.0";
       }),
-    ).toContain("strict evidence command must pin Agent usage 1.0.0");
+    ).toContain("strict evidence command must pin Agent usage 2.0.0");
     expect(
       mutate(document, (copy) => {
         record(
@@ -361,9 +399,9 @@ describe("Billing v2 target OpenAPI", () => {
       billing_subject: { kind: "user", ref: "user-admission-control" },
       planned_binding_ref: "planned-binding-admission-control",
       planned_binding_digest: "a".repeat(64),
-      usage_profile_version: "1.0.0",
+      usage_profile_version: "2.0.0",
       usage_profile_digest:
-        "eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0",
+        "552f0d22251837aaf4d83766c7bd91311984f707f9a42950ed53ac7127bb5504",
       execution_bound_ref: "execution-bound-admission-control",
       execution_bound_digest: "b".repeat(64),
     };
@@ -447,7 +485,7 @@ describe("Billing v2 target OpenAPI", () => {
     expect(admission).not.toHaveProperty("payer_ref");
     expect(admission).not.toHaveProperty("amount_micros");
     expect(record(admission.feature_key).maxLength).toBe(128);
-    expect(record(admission.usage_profile_version).const).toBe("1.0.0");
+    expect(record(admission.usage_profile_version).const).toBe("2.0.0");
     const checkout = schemaProperties(document, "CheckoutCreateRequest");
     expect(Object.keys(checkout)).toEqual(["offer_revision_id"]);
     const settlement = schemaProperties(document, "SettlementCreateRequest");
@@ -479,28 +517,28 @@ describe("Billing v2 target OpenAPI", () => {
       record(record(operation(path).responses)[status]);
 
     expect(
-      record(response("/v2/internal/billing/execution-events", "202").headers),
+      record(response("/v1/internal/billing/execution-events", "202").headers),
     ).toHaveProperty("Location");
     for (const path of [
-      "/v2/internal/billing/admissions",
-      "/v2/billing/checkouts",
-      "/v2/internal/payment/settlements",
-      "/v2/internal/payment/refunds",
-      "/v2/admin/billing/refunds",
+      "/v1/internal/billing/admissions",
+      "/v1/billing/checkouts",
+      "/v1/internal/payment/settlements",
+      "/v1/internal/payment/refunds",
+      "/v1/admin/billing/refunds",
     ]) {
       expect(record(response(path, "201").headers)).toHaveProperty("Location");
     }
-    expect(response("/v2/webhooks/payment/stripe", "200")).not.toHaveProperty(
+    expect(response("/v1/webhooks/payment/stripe", "200")).not.toHaveProperty(
       "content",
     );
-    expect(response("/v2/webhooks/payment/wechat", "204")).not.toHaveProperty(
+    expect(response("/v1/webhooks/payment/wechat", "204")).not.toHaveProperty(
       "content",
     );
     expect(
       record(
         record(
           record(
-            record(response("/v2/webhooks/payment/alipay", "200").content)[
+            record(response("/v1/webhooks/payment/alipay", "200").content)[
               "text/plain"
             ],
           ).schema,
@@ -514,7 +552,7 @@ describe("Billing v2 target OpenAPI", () => {
     expect(
       mutate(document, (copy) => {
         record(
-          record(record(copy.paths)["/v2/billing/checkouts"]).post,
+          record(record(copy.paths)["/v1/billing/checkouts"]).post,
         ).operationId = "getCheckout";
       }),
     ).toEqual(
@@ -563,7 +601,7 @@ describe("Billing v2 target OpenAPI", () => {
     expect(
       mutate(document, (copy) => {
         record(
-          record(record(record(copy.paths)["/v2/billing/checkouts"]).post)
+          record(record(record(copy.paths)["/v1/billing/checkouts"]).post)
             .responses,
         )["400"] = {
           description: "bad",
@@ -603,25 +641,25 @@ describe("Billing v2 target OpenAPI", () => {
       );
 
     rejected((copy) => {
-      post(copy, "/v2/internal/billing/admissions").security = [];
+      post(copy, "/v1/internal/billing/admissions").security = [];
     }, "requires authenticated service security");
     rejected((copy) => {
-      const admission = post(copy, "/v2/internal/billing/admissions");
+      const admission = post(copy, "/v1/internal/billing/admissions");
       admission.parameters = (admission.parameters as unknown[]).filter(
         (parameter) =>
           record(parameter).$ref !== "#/components/parameters/ConsumptionToken",
       );
     }, "requires ConsumptionToken");
     rejected((copy) => {
-      const checkout = post(copy, "/v2/billing/checkouts");
+      const checkout = post(copy, "/v1/billing/checkouts");
       delete record(record(checkout.responses)["201"]).content;
     }, "missing success representation");
     rejected((copy) => {
-      delete record(post(copy, "/v2/webhooks/payment/stripe").responses)["200"];
+      delete record(post(copy, "/v1/webhooks/payment/stripe").responses)["200"];
     }, "must define a 200 ACK");
     rejected((copy) => {
       const operation = record(
-        record(paths(copy)["/v2/billing/checkouts/{checkout_id}"]).get,
+        record(paths(copy)["/v1/billing/checkouts/{checkout_id}"]).get,
       );
       const parameter = (operation.parameters as unknown[])
         .map(record)
@@ -629,11 +667,11 @@ describe("Billing v2 target OpenAPI", () => {
       record(parameter).schema = { type: "string" };
     }, "must be UUID");
     rejected((copy) => {
-      post(copy, "/v2/internal/payment/settlements")["x-kokoro-permission"] =
+      post(copy, "/v1/internal/payment/settlements")["x-kokoro-permission"] =
         "none";
     }, "invalid permission");
     rejected((copy) => {
-      record(record(post(copy, "/v2/billing/checkouts").responses)["403"])[
+      record(record(post(copy, "/v1/billing/checkouts").responses)["403"])[
         "x-kokoro-errors"
       ] = [];
     }, "missing explicit error semantics");
@@ -651,7 +689,7 @@ describe("Billing v2 target OpenAPI", () => {
       );
     }, "Admission.hold_id must be required and nullable");
     rejected((copy) => {
-      const checkout = post(copy, "/v2/billing/checkouts");
+      const checkout = post(copy, "/v1/billing/checkouts");
       checkout.security = (checkout.security as unknown[]).filter(
         (alternative) => !Object.hasOwn(record(alternative), "subjectContext"),
       );
@@ -970,8 +1008,8 @@ it("rejects a shared Credit reference at an extra YAML alias occurrence", async 
 
 // R61 target assertions are append-only; the original 72-test prefix is frozen.
 const personalReadPaths = [
-  "/v2/billing/me/credit-account",
-  "/v2/billing/me/credit-ledger",
+  "/v1/billing/me/credit-account",
+  "/v1/billing/me/credit-ledger",
 ] as const;
 const personalReadStatuses = ["200", "400", "401", "403", "404", "500", "503"];
 const personalReadSecurity = [
@@ -1045,7 +1083,7 @@ const personalResponse = (
 // It changes only the approved two-read slice; it is not a replacement checker.
 const withApprovedPersonalReads = (document: JsonObject): JsonObject => {
   const copy = clone(document);
-  record(copy.info).version = "3.0.0-experimental.5";
+  record(copy.info).version = "4.0.0-experimental.2";
   const components = record(copy.components);
   for (const [
     name,
@@ -1121,9 +1159,9 @@ const stableContractJson = (value: unknown): unknown => {
 };
 
 describe("R61 personal-read source contract target", () => {
-  it("publishes the approved experimental 3.0.0-experimental.5 target independently of other fields", async () => {
+  it("publishes the approved experimental 4.0.0-experimental.2 target independently of other fields", async () => {
     expect(record((await readContract()).info).version).toBe(
-      "3.0.0-experimental.5",
+      "4.0.0-experimental.2",
     );
   });
 
@@ -1340,6 +1378,37 @@ describe("R61 personal-read source contract target", () => {
   it("preserves the entire unrelated contract projection, 24 inventory, global schemes and Credit units", async () => {
     const document = await readContract();
     const projection = clone(document);
+    // Invert only the eight approved MC01 literals, after checking their exact
+    // new shapes. Keep the original full R61 digest; do not rebaseline or mask
+    // a schema subtree to accommodate the usage2 target.
+    for (const name of ["AdmissionCreateRequest", "Admission"]) {
+      const properties = schemaProperties(projection, name);
+      expect(properties.usage_profile_version).toEqual({
+        type: "string",
+        const: "2.0.0",
+      });
+      expect(properties.usage_profile_digest).toEqual({
+        type: "string",
+        const:
+          "552f0d22251837aaf4d83766c7bd91311984f707f9a42950ed53ac7127bb5504",
+      });
+      record(properties.usage_profile_version).const = "1.0.0";
+      record(properties.usage_profile_digest).const =
+        "eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0";
+    }
+    for (const name of [
+      "AdmissionCaptureRequest",
+      "AdmissionReleaseRequest",
+      "ExecutionEventRequest",
+      "ExecutionEvent",
+    ]) {
+      const version = schemaProperties(
+        projection,
+        name,
+      ).evidence_schema_version;
+      expect(version).toEqual({ type: "string", const: "2.0.0" });
+      record(version).const = "1.0.0";
+    }
     delete record(projection.info).version;
     for (const path of personalReadPaths)
       delete record(record(projection.paths)[path]).get;
@@ -1349,7 +1418,7 @@ describe("R61 personal-read source contract target", () => {
     // SET15 changes only catalog transport and required business key. Normalize
     // these approved differences to retain the historical unrelated-byte gate.
     const historicalCatalog = record(
-      record(record(projection.paths)["/v2/commerce/catalog"]).get,
+      record(record(projection.paths)["/v1/commerce/catalog"]).get,
     );
     delete historicalCatalog.description;
     delete historicalCatalog["x-kokoro-identity-transport"];
@@ -1371,7 +1440,7 @@ describe("R61 personal-read source contract target", () => {
       createHash("sha256")
         .update(JSON.stringify(stableContractJson(projection)))
         .digest("hex"),
-    ).toBe("3e846a6a39a69b0dfe7186c6de496f27d902f53a494625abf1954fa1da874892");
+    ).toBe("634da300906670a4b7612cb4bf736d28706dbc92968cfff7b44b7b9c91ea393e");
     const count = Object.values(record(document.paths)).reduce<number>(
       (total, item) =>
         total +
@@ -1572,7 +1641,7 @@ describe("R61 production validator personal-read guards", () => {
     rejectPersonalReadMutation(
       withApprovedPersonalReads(await readContract()),
       (copy) => {
-        personalRead(copy, "/v2/billing/me/subscriptions")[
+        personalRead(copy, "/v1/billing/me/subscriptions")[
           "x-kokoro-identity-transport"
         ] = "personal-identity-u1";
       },
@@ -1775,7 +1844,7 @@ describe("R64 personal-read auth-selection machine facts", () => {
     rejectPersonalReadMutation(
       withApprovedPersonalAuthSelection(await readContract()),
       (copy) => {
-        personalRead(copy, "/v2/billing/me/subscriptions")[
+        personalRead(copy, "/v1/billing/me/subscriptions")[
           personalAuthSelectionExtension
         ] = structuredClone(approvedPersonalAuthSelection);
       },
@@ -1860,7 +1929,7 @@ describe("R67 generated schema semantics and provenance", () => {
       );
     }
     const provenance = validProvenance();
-    expect(provenance.source.version).toBe("3.0.0-experimental.6");
+    expect(provenance.source.version).toBe("4.0.0-experimental.3");
     expect(provenance.source.sha256).toBe(
       createHash("sha256").update(sourceText).digest("hex"),
     );
@@ -2234,10 +2303,109 @@ describe("R243 Billing-owned metering policy artifact", () => {
   });
 });
 
+// Exercise the public command against owned input copies, never edit the live
+// owner artifact or accept an import failure as successful pin enforcement.
+describe("public Agent usage consumer pin gate", () => {
+  it.each(["missing", "changed", "schema", "vectors", "manifest", "generated"])(
+    "rejects a %s receipt after a valid public control",
+    async (fault) => {
+      const { cp, mkdir, symlink, unlink } = await import("node:fs/promises");
+      const { spawnSync } = await import("node:child_process");
+      const directory = await mkdtemp(join(tmpdir(), "billing-agent-pin-"));
+      try {
+        await writeFile(join(directory, "package.json"), '{"type":"module"}\n');
+        await cp(join(process.cwd(), "scripts"), join(directory, "scripts"), {
+          recursive: true,
+        });
+        await mkdir(join(directory, "contract/openapi/v1"), {
+          recursive: true,
+        });
+        await mkdir(join(directory, "contract/agent/usage/v2"), {
+          recursive: true,
+        });
+        await cp(target, join(directory, "contract/openapi/v1/openapi.yaml"));
+        await cp(
+          join(process.cwd(), "contract/README.md"),
+          join(directory, "contract/README.md"),
+        );
+        const pinPath = join(
+          directory,
+          "contract/agent/usage/v2/consumer-pin.json",
+        );
+        await cp(
+          join(process.cwd(), "contract/agent/usage/v2/consumer-pin.json"),
+          pinPath,
+        );
+        await symlink(
+          join(process.cwd(), "node_modules"),
+          join(directory, "node_modules"),
+          "dir",
+        );
+        await cp(
+          join(process.cwd(), ".prettierrc.json"),
+          join(directory, ".prettierrc.json"),
+        );
+        await cp(
+          join(process.cwd(), "vendor/agent"),
+          join(directory, "vendor/agent"),
+          { recursive: true },
+        );
+        await cp(
+          join(process.cwd(), "src/generated/agent-usage-v2"),
+          join(directory, "src/generated/agent-usage-v2"),
+          { recursive: true },
+        );
+        const check = () =>
+          spawnSync(
+            process.execPath,
+            ["--import", "tsx", join(directory, "scripts/verify-openapi.ts")],
+            {
+              cwd: directory,
+              encoding: "utf8",
+              timeout: 10_000,
+            },
+          );
+        const control = check();
+        expect(control.status, control.stderr).toBe(0);
+        if (fault === "missing") await unlink(pinPath);
+        else if (fault === "changed") {
+          const pin = record(
+            JSON.parse(await readFile(pinPath, "utf8")) as unknown,
+          );
+          pin.source_commit = "0".repeat(40);
+          await writeFile(pinPath, JSON.stringify(pin, null, 2) + "\n");
+        } else if (fault === "generated") {
+          await writeFile(
+            join(directory, "src/generated/agent-usage-v2/schema.gen.ts"),
+            "export const wrong = true;\n",
+          );
+        } else {
+          await writeFile(
+            join(directory, `vendor/agent/usage/v2/${fault}.json`),
+            "{}\n",
+          );
+        }
+        const denied = check();
+        expect(denied.error).toBeUndefined();
+        expect(denied.status).not.toBe(0);
+        expect(denied.stderr).toContain(
+          fault === "missing" || fault === "changed"
+            ? "Agent usage consumer pin"
+            : fault === "generated"
+              ? "Agent usage generated artifact drift"
+              : "Agent usage distributed artifact differs from accepted release",
+        );
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
+});
+
 describe("SET15 breaking canonical Catalog contract", () => {
   it("requires the real business offer key and publishes optional-subject u1 machine identity without altering personal five factors", async () => {
     const document = await readContract();
-    expect(record(document.info).version).toBe("3.0.0-experimental.5");
+    expect(record(document.info).version).toBe("4.0.0-experimental.2");
     const item = record(
       record(record(document.components).schemas).CatalogItem,
     );
@@ -2248,7 +2416,7 @@ describe("SET15 breaking canonical Catalog contract", () => {
       maxLength: 255,
     });
     const operation = record(
-      record(record(document.paths)["/v2/commerce/catalog"]).get,
+      record(record(document.paths)["/v1/commerce/catalog"]).get,
     );
     expect(operation["x-kokoro-auth-selection"]).toEqual(
       approvedPersonalAuthSelection,
@@ -2256,11 +2424,11 @@ describe("SET15 breaking canonical Catalog contract", () => {
     expect(operation["x-kokoro-identity-transport"]).toBe(
       "catalog-identity-u1",
     );
-    expect(() => assertV2OpenApi(document)).not.toThrow();
+    expect(() => assertTargetOpenApi(document)).not.toThrow();
     for (const change of ["key", "selection", "transport", "body"] as const) {
       const candidate = clone(document);
       const catalog = record(
-        record(record(candidate.paths)["/v2/commerce/catalog"]).get,
+        record(record(candidate.paths)["/v1/commerce/catalog"]).get,
       );
       if (change === "key")
         record(
@@ -2270,7 +2438,7 @@ describe("SET15 breaking canonical Catalog contract", () => {
       if (change === "transport")
         catalog["x-kokoro-identity-transport"] = "personal-identity-u1";
       if (change === "body") catalog.requestBody = {};
-      expect(() => assertV2OpenApi(candidate)).toThrow();
+      expect(() => assertTargetOpenApi(candidate)).toThrow();
     }
   });
 });

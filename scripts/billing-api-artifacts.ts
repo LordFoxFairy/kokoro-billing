@@ -243,7 +243,7 @@ export function createBillingApiProvenance(input: ArtifactInput) {
   return {
     owner: "@kokoro/billing",
     source: {
-      path: "contract/openapi/v2/openapi.yaml",
+      path: "contract/openapi/v1/openapi.yaml",
       version: object(document.info).version,
       ...fingerprint(input.sourceText),
     },

@@ -11,7 +11,7 @@ import { AuditAppender } from "../../src/database/audit-appender.js";
 import { createPrismaDatabaseFixture } from "./prisma-database.fixture.js";
 import type { PrismaDatabaseFixture } from "./prisma-database.fixture.js";
 const admin = process.env.SCHEMA_ADMIN_URL;
-const path = "/v2/billing/me/credit-account";
+const path = "/v1/billing/me/credit-account";
 const auth = {
   mode: "jwks" as const,
   internalServiceSecret: "opening-pg-internal-secret-000000001",

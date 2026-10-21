@@ -1,3 +1,53 @@
+## 2026-10-20 PR #2 main integration verified (normal environment unchanged)
+
+Existing colleague zero-account initialization is paired to current canonical PUT /v1/billing/me/credit-account, artifact 4.0.0-experimental.3 / 25 operations / 43 schemas; no /v2 alias. The complete inverse restores main experimental.2 SHA256 9ff84d5f473e2f161f5d0c496db4cee175e2b032e836e97c7e23b9576a0af3e6 and its unchanged validator. SQL, generated Prisma schema, lock, main bootstrap and usage2 reader remain unchanged. No second account implementation, grants, journals, payments or normal rollout.
+
+Frozen final 334 non-document inputs: pnpm verify exit0 (format/lint/types/build/sql/contract, 1571 PASS / 501 resource SKIP). Independently affected real PG/source-dist tests 15 PASS / 0 SKIP; prisma:check, fresh db:apply-schema → db:verify-schema and official generated drift all exit0. Self-owned fixture database inventory restored exactly. Independent readonly final review Approved, no definite P0–P2. Default SKIP is not real resource evidence; broad historical integration failures remain outside this slice and are not claimed fixed.
+
+Initial integration verify had three stale contract/route oracles (24→25 inventory, explicit PUT path, validator function); they were paired without removing risk assertions. First PG run had two failures because an overbroad route replacement changed the existing retired-route negative; the exact main prefix was restored before the final real pass. Original failure logs retained privately. Final runtime/test/tool inputs stayed byte-identical after verification; only this receipt changed. BFF/App hidden initialization remains a separate consumer slice; no normal account or balance changes in this merge. Remote push/merge is recorded by Root after GitHub confirms it.
+
+## 2026-10-19 main 集成 owner 验收（正常未切换）
+
+双父0c4ae32/f7e138c：保main唯一Nest启动/先HTTP drain后销毁DB/异常清理、Catalog/u1/offer_key和缺账户404，保本地唯一/v1、PostgreSQL-only readiness、usage2固定证据与未装配reader。唯一正规生成目标4.0.0-experimental.2，精确语义为本地全文加main完整Catalog pathItem/Item。SQL/Prisma两父逐字相同，Fastify5.12.4和lock保main，无DDL/新权限/收费装配或兼容路由；PrismaService逐字main，只保ping一个探针方法。
+
+350输入冻结（SHA25611c0c2ef0d6995838791649f5acc0067d16250f2cd9a8393fc4449c5bc1467a6）。format/lint/type/build/sql/contract（含全部usage派生）/官方API生成drift/default八门全0，1527 PASS/492资源SKIP，SKIP不算真实资源通过。另3套真实PG/HTTP36 PASS/0SKIP，覆盖source与dist正常只读零写/在途drain、初始PG失败、listen失败清理、Catalog/本人Credit鉴权和真实锁503后恢复；正规fresh canonical introspection/Prisma drift0，所有自有reference库回收、catalog94→94 exact。不需要Redis或模型/收费请求。
+
+首default1524 PASS/3 FAIL和随后单条fake query require-await lint失败保留：三个既有测试按正式/v1与canonical probe shape配对，退休负控改/v2，SQL扫描迁到现http/controllers且明确旧interfaces不可存在；原保护不删。重复pingForReadiness退休，原两超时测试承接到唯一main ping，保1000ms、原Error销毁和后继复用断言。独审无剩余确定P0–P2，最终Promise写法仅为lint修正且另核349文件保持。
+
+当前不宣称全部Billing integration绿：main既有完整资源355 PASS/157 FAIL尚未本轮重跑或修复，不恢复旧资金表、不启worker来消绿。正常服务/账号/余额/积分和配置未改，BFF旧/v2发布物必须后继正规配对；源码main合入不是正常组合已上线。门后仅两份当前事实文档单独冻结，运行/Schema/契约/测试输入不变。
+
+## MC01-B2b HTTP reader本地已验（2026-10-17，未装配资金/执行）
+
+沿b9eb92c新增Metering内严格HTTP6读取及窄options/error/response职责，原Module/main/config/SQL/Prisma/HTTP target/资金不改。B1 pin的完整HTTP/provenance从2d5ce12 Git对象逐字分发，现生成器增加两份owner派生，原usage2三输出保持。正常reader尚未装配，零新路由/配置；不能因本片源码存在称为Admission或收费已上线。
+
+损坏HTTP发布物原被忽略的负控实际RED，现摘要拒绝；原evidence文件增加28个用例，最终88 PASS，含真实loopback的服务头/exact URI/完整snapshot克隆绑定、错版本/资源/revision/digest/seal/元数据/时间/额外字段、bad UTF8/重复key/累计字节上限、无redirect/retry、body读取同总deadline、取消/shutdown/提前拒绝及固定错误无secret。HTTP外层可容纳65536原bytes，65537仍拒；合法最大bytes仅改base64未使用位亦拒，保原bytes不重新序列化。未新增测试文件，未将HTTP fixture称真实Agent/IAM或资金链。
+
+主方Node24.20.0/pnpm11.25.0冻结337文件后format/lint/typecheck/build/sql/contract/test七门全exit0；默认1509 PASS/480原资源SKIP（测试32.08秒），仍全部原文件、仅maxWorkers=2。门后337源码字节全保持；随后只改CURRENT和任务板验收事实。独立只读复核无确定P0–P2，不算实际验证。仓外临时目录只带7个compiled runtime、generated JS与依赖链接，42个原发布向量及1次compiled HTTP读取通过，无source/vendor运行依赖；自有目录回收。首次artifact runner误按dist/modules找输出，在拷贝阶段失败，改为现tsconfig实际dist/src后通过；未改构建布局。初次type/lint失败为test使用ES2024 Promise API及无用regex escape，改标准Promise/去转义后通过，不升级target或放宽门。
+
+本片无PG/Redis/Prisma/资金writer变化，480资源SKIP不算通过，不补假预授权/报价/资金许可。正常服务/账号/权限/积分未改，不调用模型/Tool/收费；正式bound、IAM/Admission事务、single dispatch与实际capture/release和产品闭环仍OPEN。远端CI/push/PR/merge与Root index/gitlink继续暂停。
+
+## MC01-B2a：usage2 纯校验内核已验（2026-10-16）
+
+在B1 af0a531上完成Metering纯decoder、successor与sealed完整snapshot绑定；不新增HTTP、Module接线或资金效果。Agent2d5ce12的schema/vectors/manifest逐字分发且SHA匹配B1 pin，类型沿已锁HeyAPI派生，完整schema编入JS；公共contract门检查原发布物及generated drift。原bytes以严格UTF8的精确originalJson字符串保留，evidence递归冻结；未报告/未知/明确零保持区分，sealed不是charge许可。usage1无fallback。
+
+先9行为RED/49PASS，再修正大整数正控fixture内自身reasoning>output矛盾（未放宽校验）后全部GREEN。原样owner3positive/29negative/10successor，另核UTF8/BOM、decoded重复键、原型/深度/字节边界、UTF16、完整identity/planned绑定和失败脱敏；现focused60项与扩展后的原contract254项合314PASS。第一完整门4项lint失败保留，机械修复后Node24.20.0/pnpm11.25.0 `pnpm verify` exit0：format/lint/type/build/sql/contract、1481PASS/480原资源SKIP，32.71秒。日志保留原header诊断/故意Redis拒绝负控，不称全净。隔离temp只拷compiled codec/schema与node_modules链接，无source/vendor运行依赖，42个原发布向量再次全部通过；临时目录已清理。独立只读复核Approved，无确定P0–P2。
+
+数据库/Prisma/依赖/HTTP target/Module/正常进程和现余额原样；纯codec无I/O，480资源门未运行且不算通过。后继B2仍需正式HTTP6 reader、服务身份/envelope原bytes/预算与取消生命周期；正式bound/技术保证、IAM与Admission事务、single dispatch、实际结算和产品旅程均OPEN。零充值/扣费/真实模型调用/远程Git，不把内核交付冒成完整Billing上线。
+
+---
+
+## MC01-B1：usage2目标契约与发布身份已本地接收（2026-10-16）
+
+用户明确确认“新调用只接受usage2，usage1仅历史读取”，限代码/契约，不启用扣费或发送模型。原分支1ceeae5后原位更新唯一canonical HTTP目标至4.0.0-experimental.1；仍/v1、24operations/42schemas、正常仅5routes。改动严格限六处usage version与两处schema digest和artifact版本；现有Credit两读、controller、财务/数据库/依赖/运行配置不变。只读consumer-pin记录Agent2d5ce12的精确Git对象与HTTP6/usage2来源摘要，公共contract gate固定receipt原字节SHA；不是第二份schema、runtime reader、权限或资金许可。
+
+原HeyAPI流水线重生四文件，index原字节未变、其余三文件更新。新target/pin正反例先2行为RED，公共CLI缺/改receipt在合法control之后先2行为RED，再4GREEN；首次scratch缺ESM package marker导致的fixture错误保留但不当RED。原完整门1416PASS/1FAIL/480资源SKIP唯一失败为R61保护projection包含八处批准literal；未换原SHA/删断言/遮schema，而在同一test先exact核新shape，再只逆回八literal保原完整SHA，独审确认无放宽。原contract suite最终250PASS。
+
+最终Node24.20.0 `pnpm verify` 全部exit0：格式、lint、typecheck、build、SQL、contract及默认1417PASS/480原资源SKIP，26.34秒；默认输出保留原header-cardinality诊断及故意不可用Redis负控日志，不冒日志全净。`pnpm contract:generated:check`另经正规重生比较通过，独审无确定P0–P2。480资源门未运行：本片仅target/pin/派生，无数据库、运行服务或资金写入，不执行installer或正常模型调用。
+
+仍OPEN：Metering strict owner reader与完整canonical/digest/binding语义、正式preauthorization bound/技术保证、IAM fresh准入、Admission原子预占、single dispatch、verified actual capture/release和unknown恢复、正常余额/聊天/流水整链。usage1历史不重写或追收，不把target更新当正式计费已接线；未启用候选、CI/push/PR/merge及Rootgitlink不动。
+
+---
+
 ## SET55 本人零积分账户 owner实现与Root验收（2026-10-16）
 
 正常Nest新增PUT /v2/billing/me/credit-account，五因素web-bff机器边界，严格必需空JSON且无query；同subject advisory lock，缺账户只创建默认0账户与首次credit.account_open审计，已有账户原事实保持、disabled专用403，无grant/journal/payment/SQL/Prisma/依赖变更。exp6/43schema canonical SHA256 41bb19f8a14b2f78049b7e5bcda8e5e9db47ed92ff80a0dc9a024147d10b75fc；正常生成及exp5完整逆恢复保持。当前只交付owner，BFF固定消费者、Web按钮与正常浏览器仍未接通；旧3313不宣新开户可用。

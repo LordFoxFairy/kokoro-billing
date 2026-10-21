@@ -25,7 +25,7 @@ const auth = {
   issuer: "https://iam.example.test/iam",
   audience: "https://kokoro.dev/resources/billing",
 };
-const path = "/v2/billing/me/credit-account";
+const path = "/v1/billing/me/credit-account";
 const account = {
   id: "11111111-1111-4111-8111-111111111111",
   tenantId: "tenant-a",

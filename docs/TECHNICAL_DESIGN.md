@@ -1,3 +1,47 @@
+## 2026-10-20 PR #2 main integration
+
+Retain main Nest bootstrap, current /v1 canonical and usage2 reader; merge the existing SET55 machine-only zero-account command without another module, schema, account implementation or compatibility route. Exact current-main contract inverse preserves every unrelated operation. Existing source/dist and HTTP/PG account tests move to /v1; retired /v2 must remain unavailable. BFF will orchestrate hidden initialization after trusted product admission; this owner PR does not claim that consumer path. No normal service restart or financial execution in this merge slice.
+
+## 2026-10-19 main 配对集成（隔离候选）
+
+仅合并已有两路能力：main 的唯一 Nest runtime、Catalog offer_key/u1 机器可选subject、本人五因素与缺账户404，保留本地唯一 /v1 canonical、PostgreSQL-only readiness、usage2 固定证据与未装配 reader。新唯一 experimental artifact 为 4.0.0-experimental.2；Catalog 两处事实并入本地 canonical 后正规生成。保持 main Fastify 5.12.4/lock，无 Schema/Prisma/DDL、角色、运行配置或收费装配变化。保留原 source/dist drain/启动清理，不恢复旧 HTTP runner、/v2 alias 或旧资金表。现有 main 历史 integration 失败须如实保留，不以默认 SKIP 替代；最终 BFF 的旧 Billing pin/窄 SDK 必须配对，正常模型/工具/扣费保持暂停。
+
+## MC01-B2b：HTTP6 exact usage2 reader（2026-10-17，实施边界）
+
+沿已批MC01/B2，在现Metering内补独立AgentUsageEvidenceReader及窄options/error/response codec；无新Module/route/配置装配。继续B1唯一2d5ce12 pin，从精确Git object分发HTTP/provenance到只读vendor/agent/http/v6（HTTP与组合7ed07f9同字节），沿原generate-agent-usage工具链生成HTTP窄类型与包内owner schema，不手写第二份wire事实。原usage2三输出保持，新增两个HTTP派生文件，原contract门同时校验全部artifact。只有主Agent写入。
+
+Reader只用部署侧专用Billing reader bearer；URI来自可信origin及expected完整snapshot中的attempt/event，tenant同样来自expected。先克隆可信expected，防调用期间变动；它必须来自后继durable snapshot，不从响应反建。原生fetch单次请求，无redirect/retry；总deadline涵盖headers/body，body上限98304，严格UTF8/重复key/BOM/number拒绝；exact response request ID/no-store/content-type/envelope、无padding且round-trip canonical base64url、usage2且sealed、attempt/event/revision/digest和完整identity/planned绑定。复用B2a原bytes codec，不把解码事实当收费/授权/零金额。
+
+调用取消、deadline及Nest shutdown统一abort并settle本实例请求；错误只固定code/message，不带URL/token/raw/cause。404/拒绝/依赖坏包都不释放资金；不向上返回未经验证的错误文案。原JSON有限类型parser共享机制但usage2原65536/16边界不变，HTTP外层独立98304预算。测试沿原evidence suite扩真实loopback、坏绑定/版本/base64/字节/超时/取消/关闭/无重试与发布物负控；无真实模型/资金/PG/Redis必要I/O。
+
+## MC01-B2a：Metering 严格 usage2 纯解码边界（2026-10-16）
+
+承接用户已确认MC01与B1 af0a531；先完成B2 reader的纯验证内核，不把它宣称为HTTP reader或Admission。唯一writer为主Agent。采用现`src/modules/metering/`普通codec/parser文件，不增加Module/controller/进程；淘汰复用旧commandDigest（非RFC8785）与手写第二份schema。Agent2d5ce12的schema、vectors、manifest从固定Git object逐字分发到只读`vendor/agent/usage/v2/`，SHA受既有consumer-pin约束；B1“不复制schema”仅描述B1已交付范围，本片明确增加不可编辑的发布物副本。类型经已锁HeyAPI从该schema派生，runtime schema为逐字事实的生成TS常量；编译后不依赖sibling或运行目录外文件。生成器与drift检查接既有contract门。
+
+原字节<=65536、root=1深度<=16、严格UTF8、无BOM/解码后重复key/控制字符/DEL/孤立surrogate；空原型对象避免特殊key。批准schema无number，纯JSON parser拒number，仅在该有限类型集实现RFC8785：UTF16码元排序、ECMAScript JSON字符串转义、原值不规范化，domain-separated SHA256去除唯一digest字段。Count/Ordinal按BigInt核INT63及加法，专用Ajv2020使用完整owner schema及其UTF8/decimal/calendar扩展，无coerce/default/remove。复现全部owner语义与successor知识单调规则，不猜测额外usage或补零。返回递归冻结的验证事实，不返回授权/金额。
+
+明确API为原bytes解码、两份原bytes successor核验、原bytes与后继可信snapshot的完整identity/planned/revision/digest逐字段绑定且要求sealed；不能从被核验body反向构建可信snapshot。解码允许合法unsealed或非首revision，sealed不代表known/free/可结算。expected包含actor/subject/assertion/session/lease/input_digest/peer_path等完整identity，不只tenant/model。只提供校验，不创建snapshot或假信任。所有失败只抛固定错误且不带raw/cause。后继HTTP6 adapter仍需明确服务身份、响应envelope与base64原bytes、预算/timeout/cancel/shutdown、无redirect/retry及完整binding；本片不实现或接线这些网络行为。
+
+无资金/数据库/HTTP target/配置/normal运行变更；新调用仅usage2，usage1历史由Agent提供，本codec无fallback。无可用正式preauthorization bound/技术保证仍零模型调用。验收先owner3正/29负/10pair及字节/完整binding/不可变/数值边界RED，再GREEN；生成物drift、打包执行、原Billing全门。复用原suite，不恢复UI锁样式测试。
+
+---
+
+## MC01-B1：接收已验证 usage2 发布身份（2026-10-16；既定MC01内的候选）
+
+事实基线Billing1ceeae5：正常Nest只挂probes和Credit两读；未挂载的Admission/Capture/Release/Execution目标仍固定旧usage1/schema摘要，仓内没有正式Agent证据HTTP reader或consumer artifact。这不等于Agent usage2已被Billing接收。Agent本地候选2d5ce12c0eecdecfcdb44a21b69da707d51eb7c7已验HTTP6、usage2新写和sealed v1历史读取，normal Agent/System未切换。
+
+本片沿既定MC01只做消费者发布身份与尚未启用目标的一次原子校正：Billing HTTP artifact版本升至4.0.0-experimental.1（路径仍/v1，24operation/42schema/实际5route不变）；新Admission及它的Capture/Release/Execution输入与表示固定usage2/schema2，禁止旧版本或任意schema摘要进入新资金链。冻结usage1是Agent历史只读事实，不把旧Run重新授权或套新收费。旧财务记录不迁移或重算；未来确有旧Admission时须按其原不可变snapshot恢复，不能由本target常量推断存在或强转。
+
+发布身份固定Agent commit、HTTP6 source/provenance与usage2 schema/manifest/vector摘要。只读owner artifact按固定Git object接收，消费者不编辑或重新发行Agent schema；不导入sibling源码、不增加通用contract中心。本仓只读发布收据固定在`contract/agent/usage/v2/consumer-pin.json`，闭集记录owner/source_commit、HTTP/provenance与usage2 schema/manifest/vectors的原path/SHA；既有`pnpm contract:check`经`scripts/verify-openapi.ts`校验收据及其与新target常量的一致性。收据不是schema或运行时授权；原schema不复制到Billing。`contract/README.md`与canonical source digest同片更新。现Billing唯一canonical YAML由原HeyAPI生成器更新，旧target常量/正向fixture原子切换，新增旧version/错digest/放宽pin负控，原24operation及资金知识断言保留。
+
+本片不引入运行时client/HTTP controller、Schema/Prisma/资金writer、fee/价格/倍率/赠送变化，也不加载密钥/重启进程。后继B2在本Metering模块实现strict owner reader（原bytes、canonical/digest、完整binding、显式version且不fallback），不能以Ajv结构通过代替owner语义；现commandDigest使用localeCompare且把数字转字符串，不能复用为RFC8785证据摘要。再按原设计接正式preauthorization bound/owner技术保证、IAM、Admission预占、single dispatch、sealed实际量capture/release与unknown恢复。没有已发布bound/合法技术保证时继续拒绝真实模型调用；本片不造positive bound或paid permit。源码artifact交付不是余额/聊天/收费完成。
+
+---
+
+## BILLING-V1-FIX 唯一 v1 与正常 Nest 读取入口（2026-10-13）
+
+Billing 的唯一目标机器源收敛为 24-operation `/v1`；删除旧 17-operation source、`/v2` source、alias 与双轨校验。正常 `createBillingRuntime` 原位组合 Database、Billing HTTP、三项 probe 与已实现的两项本人 Credit GET；其余 19 项不注册空 handler。旧 Fastify transport 不再是正常入口，其仍有价值的资金/provider断言由既有业务测试承接，不据此声称未实现财务能力完成。
+
 ## SET55：本人显式零余额开户设计门（2026-10-16；phaseR已批准）
 
 当前正式 main f7e138c04e5314543519433a27c8e6b53d6250e2 的 Nest graph 仅六 GET/HEAD，无开户 API；GET 缺账户仍专用404。canonical account 默认零余额且 tenant/subject 唯一，grant 内部正额开户不能替代本用例。目标是本人经受信 BFF 显式创建默认账户，不赠送、不充值、不启用 disabled 账户。Root 管设计/Git/资源；Billing 负责人为后继批准文件集唯一实现 writer。

@@ -1,8 +1,16 @@
-## SET55 contract-only candidate
+## 2026-10-20 PR #2 current integration
 
-Canonical v2 is `3.0.0-experimental.6`, 25 operations / 43 schemas. The new machine-only naturally idempotent PUT opens a real own zero-balance account; runtime registration is not yet implemented. Normal generation consumes this current source. The outer account-opening gate restores the complete immutable experimental.5 source and delegates to its unchanged 24-operation validator. Consumers must pin the eventual formal owner commit and this exact current digest; no rollout is claimed.
+Canonical `openapi/v1/openapi.yaml` advances to `4.0.0-experimental.3`: 25 operations / 43 schemas. `PUT /v1/billing/me/credit-account` reuses the approved machine-only naturally idempotent zero-account command. No `/v2` alias; no grants, journals, payments or schema changes. The exact inverse restores main experimental.2 bytes and runs its unchanged validator. This is an internal lifecycle operation, not a user-facing account-opening step. BFF/App consumption is separate.
 
-## SET49 current publication
+SHA256 `f934d6f81842fafaec2e3e64cca6bd4669f86601979bd737941a5695506814fe`.
+
+## 2026-10-19 唯一当前集成候选
+
+canonical `openapi/v1/openapi.yaml`，版本 `4.0.0-experimental.2`；下方旧版本记录仅是历史。组合 main Catalog/u1 和缺账户404、本地 usage2 固定目标；无 /v2 alias、未装配资金写入，正常模型和扣费不启用。当前源码六个 GET（probes、Catalog、本人 Credit 两读）不代表其他目标操作已上线。
+
+SHA256 `9ff84d5f473e2f161f5d0c496db4cee175e2b032e836e97c7e23b9576a0af3e6`。消费者必须固定正式 commit/version/digest 后正规生成。
+
+## 历史 SET49 publication（后继见当前集成）
 
 正规v2推进3.0.0-experimental.5，仅本人两读404专用code变化；Catalog/u1/offer_key保留，v1不可变。消费者必须更新正式commit/digest并正常生成，不以不可取得的v1 pin冒provenance。
 
@@ -16,39 +24,18 @@ Canonical v2 is `3.0.0-experimental.6`, 25 operations / 43 schemas. The new mach
 
 # kokoro-billing contract governance
 
-## Current and target artifacts
+## Current machine artifact
 
-Billing owns both machine sources in this directory. They describe two distinct
-states; they are not interchangeable versions of one deployed surface.
-
-| State           | Machine source                                       | Operations | Transport                                 | Artifact status                                              |
-| --------------- | ---------------------------------------------------- | ---------: | ----------------------------------------- | ------------------------------------------------------------ |
-| Current runtime | [`openapi/v1/openapi.yaml`](openapi/v1/openapi.yaml) |         17 | existing `/v1/**` plus unversioned probes | `stable`, used for current Fastify route parity              |
-| Target          | [`openapi/v2/openapi.yaml`](openapi/v2/openapi.yaml) |         24 | `/v2/**` plus unversioned probes          | `3.0.0-experimental.3`, not published, deployed, or consumed |
-
-The target artifact SemVer and the HTTP transport prefix are independent. The
-breaking clean-slate artifact is `3.0.0-experimental.3`; its routes intentionally
-remain under `/v2`. The private package version is not a wire version. Human
-semantics live in [`../docs/API_CONTRACT.md`](../docs/API_CONTRACT.md), which is
-not a second editable field-level contract.
-
-Current source digests:
+[`openapi/v1/openapi.yaml`](openapi/v1/openapi.yaml) is the only editable Billing HTTP machine source. It defines exactly 25 operations: three unversioned probes and 22 `/v1/**` internal-owner operations. The artifact version is `4.0.0-experimental.3`; package version and HTTP path version are independent. There is no `/v2` alias, fallback, or second editable contract.
 
 ```text
+openapi/v1/openapi.yaml  9a7048b6afc299ad4a7df8cde2428cb3a471291a764e1161e7d85f77174cb204
+
 openapi/v1/openapi.yaml  fbe34c188cf4a9f08955e4b94ceab40d63a41156a3106fae6ab939a4190612b7
-openapi/v2/openapi.yaml  41bb19f8a14b2f78049b7e5bcda8e5e9db47ed92ff80a0dc9a024147d10b75fc
+openapi/v2/openapi.yaml  b413db8965ed60683435adb7f2ce8650a7ca7bf7bee0989e8f83afc3d9f846af
 ```
 
-The current v1 source contains an authentication-breaking replacement that is
-not deployed: its two security
-descriptions identify IAM EdDSA/JWKS `user_delegated` tokens, the namespaced
-tenant claim, fixed Billing resource audience, and complete Billing scope
-profile. The digest above is the direct SHA-256 of that source; this edit does
-not claim generated-artifact publication or runtime rollout.
-
-Historical candidate narratives and old validation counts are available in Git
-history and the owner [`../docs/CURRENT.md`](../docs/CURRENT.md). They are not
-current generation or runtime evidence.
+The probes, canonical Catalog, two personal Credit reads and the machine-only account initialization PUT are mounted by this source candidate. The other 18 contract operations remain unimplemented and unregistered; their presence in the target artifact is not runtime-completion evidence. Historical candidate narratives and old digests remain in Git history and dated owner documentation.
 
 ## Owner, visibility, and authority
 
@@ -71,6 +58,10 @@ not accepted from command bodies. Browser traffic continues through Web and
 BFF; an IAM user/BFF authentication alternative does not make this an externally
 public contract.
 
+## MC01-B2b exact Agent HTTP consumer
+
+The existing usage2 consumer receipt also fixes the read-only HTTP6 OpenAPI and provenance distributed under `vendor/agent/http/v6/`. They are immutable Agent `2d5ce12` Git blobs, not editable Billing contracts. The existing generator checks both digests and derives the exact final-evidence envelope types/schema into two additional `src/generated/agent-usage-v2` files. Runtime reads only usage2 and bind sealed original bytes to a complete trusted snapshot; historical usage1 in the owner envelope is not a fallback. This adds no Billing route, financial permission, configured credential or model dispatch.
+
 ## Target per-attempt usage contract
 
 The target Admission and Execution shapes bind one physical model attempt. The
@@ -79,9 +70,16 @@ execution bound, and a reference to the Agent-owned strict usage artifact.
 Billing pins that artifact rather than copying its schema:
 
 ```text
-Agent artifact version: 1.0.0
-Agent usage schema SHA-256: eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0
+Agent artifact version: 2.0.0
+Agent usage schema SHA-256: 552f0d22251837aaf4d83766c7bd91311984f707f9a42950ed53ac7127bb5504
 ```
+
+The read-only release pointer is `agent/usage/v2/consumer-pin.json`, verified by
+`pnpm contract:check` against its accepted immutable digest. It binds Agent
+commit `2d5ce12c0eecdecfcdb44a21b69da707d51eb7c7`, HTTP6, and the usage2
+schema/manifest/vectors. It is not a runtime reader or billing permission.
+Sealed usage1 remains Agent-owned historical evidence; it does not authorize a
+new admission or retroactive billing without an original financial snapshot.
 
 Durable Admission representations echo the usage artifact identity and
 execution-bound reference/digest so an original-key replay or GET can verify
@@ -130,7 +128,7 @@ revisions with integer/exact arithmetic; consumers display owner results.
 
 ## Generation and read-only outputs
 
-`contract/openapi/v2/openapi.yaml` is the only editable target machine source.
+`contract/openapi/v1/openapi.yaml` is the only editable target machine source.
 The pinned local toolchain is:
 
 ```text
@@ -168,8 +166,7 @@ The target currently contains 42 schema components. The present personal HTTP
 bootstrap uses Ajv 8.20.0 with ajv-formats 3.0.1 and compiles the exact
 42-component generated registry. It rejects missing, extra, duplicate-target,
 or uncompiled bindings and keeps coercion, defaults, and removal of additional
-properties disabled. This bootstrap evidence does not mean the 24 target v2
-operations are implemented.
+properties disabled. This bootstrap evidence does not mean the 24 target operations are implemented.
 
 Generated files are never edited by hand. A source change must regenerate all
 affected outputs and update this README's target digest in the same reviewed
@@ -185,9 +182,7 @@ pnpm contract:check
 pnpm contract:generated:check
 ```
 
-`contract:check` preserves exact parity for the current 17-operation v1
-runtime and independently verifies the target 24-operation v2 source. Target
-checks cover OpenAPI syntax, local references, operation IDs and governance,
+`contract:check` preserves exact parity for the single 24-operation v1 source. Checks cover OpenAPI syntax, local references, operation IDs and governance,
 tenant/request identity, permission and idempotency metadata, closed command
 and response shapes, explicit errors, webhook signature/ACK differences,
 strict Agent artifact identity, immutable Admission/evidence references,
@@ -248,3 +243,26 @@ The current target has not been published or pinned by Agent. Still open are:
 Until those owner slices pass, the target artifact and generated registry are
 machine-contract candidates, not evidence that a new Billing API or charging
 flow is live.
+
+## Distributed Agent usage2 validation kernel
+
+`agent/usage/v2/consumer-pin.json` remains the immutable release receipt. B2a now
+also distributes the exact Agent schema, vectors and manifest under
+`vendor/agent/usage/v2/`; these are read-only owner artifacts, not editable
+Billing schemas. The normal contract command checks all three accepted hashes
+and byte-exact generated drift:
+
+```bash
+pnpm contract:check
+pnpm exec tsx scripts/generate-agent-usage.ts --check
+```
+
+After an explicitly approved owner release update, the same generator without
+`--check` produces `src/generated/agent-usage-v2/`. Types use the existing pinned
+HeyAPI generator; a compiled schema constant keeps the decoder independent of
+source/vendor files at runtime. Do not edit generated output or change the
+receipt to silence a failed check. The pure Metering kernel validates original
+UTF-8 JSON, domain digest, successor knowledge and complete sealed snapshot
+binding. It performs no HTTP or database I/O and grants no financial permission;
+the authenticated HTTP reader and Admission/settlement remain separate open
+implementation work.

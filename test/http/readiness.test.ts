@@ -44,14 +44,14 @@ describe("canonical runtime probe authority and retired route removal", () => {
         "/healthz",
         "/readyz",
         "/metrics",
-        "/v2/commerce/catalog",
-        "/v2/billing/me/credit-account",
-        "/v2/billing/me/credit-ledger",
+        "/v1/commerce/catalog",
+        "/v1/billing/me/credit-account",
+        "/v1/billing/me/credit-ledger",
       ];
       expect(routes.sort()).toEqual(
         [
           ...expectedPaths.flatMap((path) => [`GET ${path}`, `HEAD ${path}`]),
-          "PUT /v2/billing/me/credit-account",
+          "PUT /v1/billing/me/credit-account",
         ].sort(),
       );
       const live = await app.inject({ method: "GET", url: "/healthz" });
@@ -61,7 +61,6 @@ describe("canonical runtime probe authority and retired route removal", () => {
       expect(ready.statusCode).toBe(200);
       expect(ready.json()).toEqual({
         data: {
-          module: "kokoro-billing",
           status: "ready",
           dependencies: { postgres: "ok" },
         },
@@ -75,15 +74,18 @@ describe("canonical runtime probe authority and retired route removal", () => {
       ping.mockRejectedValueOnce(new Error("private database diagnostic"));
       const failed = await app.inject({ method: "GET", url: "/readyz" });
       expect(failed.statusCode).toBe(503);
-      expect(failed.json()).toMatchObject({
-        error: { code: "billing.dependency_unavailable", retryable: true },
+      expect(failed.json()).toEqual({
+        data: {
+          status: "not_ready",
+          dependencies: { postgres: "unavailable" },
+        },
       });
       expect(failed.body).not.toContain("private database diagnostic");
       for (const url of [
-        "/v1/billing/me/credit-account",
-        "/v1/commerce/catalog",
+        "/v2/billing/me/credit-account",
+        "/v2/commerce/catalog",
         "/v1/webhooks/payment/stripe",
-        "/v2/billing/me/subscriptions",
+        "/v1/billing/me/subscriptions",
         "/credit-account",
       ]) {
         const response = await app.inject({ method: "GET", url });

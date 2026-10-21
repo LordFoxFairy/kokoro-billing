@@ -4,10 +4,6 @@ export type ClientOptions = {
   baseUrl: "https://billing.internal" | (string & {});
 };
 
-export type OpenCreditAccountRequest = {
-  [key: string]: never;
-};
-
 export type Uuid = string;
 
 export type UtcInstant = string;
@@ -46,7 +42,6 @@ export type ReadyResponse = {
     status: "ready" | "not_ready";
     dependencies: {
       postgres: "ok" | "unavailable";
-      redis: "ok" | "degraded";
     };
   };
 };
@@ -81,6 +76,10 @@ export type CreditAccount = {
 
 export type CreditAccountResponse = {
   data: CreditAccount;
+};
+
+export type OpenCreditAccountRequest = {
+  [key: string]: never;
 };
 
 export type LedgerEntry = {
@@ -145,8 +144,8 @@ export type AdmissionCreateRequest = {
   };
   planned_binding_ref: string;
   planned_binding_digest: string;
-  usage_profile_version: "1.0.0";
-  usage_profile_digest: "eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0";
+  usage_profile_version: "2.0.0";
+  usage_profile_digest: "552f0d22251837aaf4d83766c7bd91311984f707f9a42950ed53ac7127bb5504";
   execution_bound_ref: string;
   execution_bound_digest: string;
 };
@@ -155,7 +154,7 @@ export type AdmissionCaptureRequest = {
   run_id: string;
   call_id: string;
   attempt_id: string;
-  evidence_schema_version: "1.0.0";
+  evidence_schema_version: "2.0.0";
   evidence_ref: string;
   evidence_event_id: string;
   evidence_revision: PositiveDecimal;
@@ -167,7 +166,7 @@ export type AdmissionReleaseRequest = {
   call_id: string;
   attempt_id: string;
   release_basis: "not_dispatched" | "settled_remainder";
-  evidence_schema_version: "1.0.0";
+  evidence_schema_version: "2.0.0";
   evidence_ref: string;
   evidence_event_id: string;
   evidence_revision: PositiveDecimal;
@@ -207,8 +206,8 @@ export type Admission = {
   valid_until: UtcInstant;
   planned_binding_ref: string;
   planned_binding_digest: string;
-  usage_profile_version: "1.0.0";
-  usage_profile_digest: "eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0";
+  usage_profile_version: "2.0.0";
+  usage_profile_digest: "552f0d22251837aaf4d83766c7bd91311984f707f9a42950ed53ac7127bb5504";
   execution_bound_ref: string;
   execution_bound_digest: string;
   hold_id: string | null;
@@ -228,7 +227,7 @@ export type ExecutionEventRequest = {
   attempt_id: string;
   event_type: "model_usage_evidence.sealed";
   occurred_at: UtcInstant;
-  evidence_schema_version: "1.0.0";
+  evidence_schema_version: "2.0.0";
   evidence_ref: string;
   evidence_event_id: string;
   evidence_revision: PositiveDecimal;
@@ -243,7 +242,7 @@ export type ExecutionEvent = {
   request_ref: string;
   call_id: string;
   attempt_id: string;
-  evidence_schema_version: "1.0.0";
+  evidence_schema_version: "2.0.0";
   evidence_ref: string;
   evidence_event_id: string;
   evidence_revision: PositiveDecimal;
@@ -475,7 +474,7 @@ export type GetCatalogData = {
     limit?: number;
     cursor?: string;
   };
-  url: "/v2/commerce/catalog";
+  url: "/v1/commerce/catalog";
 };
 
 export type GetCatalogErrors = {
@@ -525,7 +524,7 @@ export type GetMyCreditAccountData = {
   };
   path?: never;
   query?: never;
-  url: "/v2/billing/me/credit-account";
+  url: "/v1/billing/me/credit-account";
 };
 
 export type GetMyCreditAccountErrors = {
@@ -577,7 +576,7 @@ export type OpenMyCreditAccountData = {
   };
   path?: never;
   query?: never;
-  url: "/v2/billing/me/credit-account";
+  url: "/v1/billing/me/credit-account";
 };
 
 export type OpenMyCreditAccountErrors = {
@@ -628,7 +627,7 @@ export type GetMyCreditLedgerData = {
     limit?: number;
     cursor?: string;
   };
-  url: "/v2/billing/me/credit-ledger";
+  url: "/v1/billing/me/credit-ledger";
 };
 
 export type GetMyCreditLedgerErrors = {
@@ -681,7 +680,7 @@ export type GetMySubscriptionsData = {
     limit?: number;
     cursor?: string;
   };
-  url: "/v2/billing/me/subscriptions";
+  url: "/v1/billing/me/subscriptions";
 };
 
 export type GetMySubscriptionsErrors = {
@@ -733,7 +732,7 @@ export type CreateAdmissionData = {
   };
   path?: never;
   query?: never;
-  url: "/v2/internal/billing/admissions";
+  url: "/v1/internal/billing/admissions";
 };
 
 export type CreateAdmissionErrors = {
@@ -793,7 +792,7 @@ export type GetAdmissionData = {
     admission_id: Uuid;
   };
   query?: never;
-  url: "/v2/internal/billing/admissions/{admission_id}";
+  url: "/v1/internal/billing/admissions/{admission_id}";
 };
 
 export type GetAdmissionErrors = {
@@ -845,7 +844,7 @@ export type CaptureAdmissionData = {
     admission_id: Uuid;
   };
   query?: never;
-  url: "/v2/internal/billing/admissions/{admission_id}/capture";
+  url: "/v1/internal/billing/admissions/{admission_id}/capture";
 };
 
 export type CaptureAdmissionErrors = {
@@ -906,7 +905,7 @@ export type ReleaseAdmissionData = {
     admission_id: Uuid;
   };
   query?: never;
-  url: "/v2/internal/billing/admissions/{admission_id}/release";
+  url: "/v1/internal/billing/admissions/{admission_id}/release";
 };
 
 export type ReleaseAdmissionErrors = {
@@ -965,7 +964,7 @@ export type AcceptExecutionEventData = {
   };
   path?: never;
   query?: never;
-  url: "/v2/internal/billing/execution-events";
+  url: "/v1/internal/billing/execution-events";
 };
 
 export type AcceptExecutionEventErrors = {
@@ -1025,7 +1024,7 @@ export type GetExecutionEventData = {
     execution_event_id: Uuid;
   };
   query?: never;
-  url: "/v2/internal/billing/execution-events/{execution_event_id}";
+  url: "/v1/internal/billing/execution-events/{execution_event_id}";
 };
 
 export type GetExecutionEventErrors = {
@@ -1076,7 +1075,7 @@ export type CreateCheckoutData = {
   };
   path?: never;
   query?: never;
-  url: "/v2/billing/checkouts";
+  url: "/v1/billing/checkouts";
 };
 
 export type CreateCheckoutErrors = {
@@ -1136,7 +1135,7 @@ export type GetCheckoutData = {
     checkout_id: Uuid;
   };
   query?: never;
-  url: "/v2/billing/checkouts/{checkout_id}";
+  url: "/v1/billing/checkouts/{checkout_id}";
 };
 
 export type GetCheckoutErrors = {
@@ -1186,7 +1185,7 @@ export type CreateSettlementData = {
   };
   path?: never;
   query?: never;
-  url: "/v2/internal/payment/settlements";
+  url: "/v1/internal/payment/settlements";
 };
 
 export type CreateSettlementErrors = {
@@ -1246,7 +1245,7 @@ export type GetSettlementData = {
     settlement_id: Uuid;
   };
   query?: never;
-  url: "/v2/internal/payment/settlements/{settlement_id}";
+  url: "/v1/internal/payment/settlements/{settlement_id}";
 };
 
 export type GetSettlementErrors = {
@@ -1296,7 +1295,7 @@ export type CreateInternalRefundData = {
   };
   path?: never;
   query?: never;
-  url: "/v2/internal/payment/refunds";
+  url: "/v1/internal/payment/refunds";
 };
 
 export type CreateInternalRefundErrors = {
@@ -1356,7 +1355,7 @@ export type GetRefundData = {
     refund_id: Uuid;
   };
   query?: never;
-  url: "/v2/internal/payment/refunds/{refund_id}";
+  url: "/v1/internal/payment/refunds/{refund_id}";
 };
 
 export type GetRefundErrors = {
@@ -1405,7 +1404,7 @@ export type CreateAdminRefundData = {
   };
   path?: never;
   query?: never;
-  url: "/v2/admin/billing/refunds";
+  url: "/v1/admin/billing/refunds";
 };
 
 export type CreateAdminRefundErrors = {
@@ -1464,7 +1463,7 @@ export type ExpireCreditHoldsData = {
   };
   path?: never;
   query?: never;
-  url: "/v2/internal/credit-holds/expire";
+  url: "/v1/internal/credit-holds/expire";
 };
 
 export type ExpireCreditHoldsErrors = {
@@ -1519,7 +1518,7 @@ export type AcceptStripeWebhookData = {
   body: ProviderJsonPayload;
   path?: never;
   query?: never;
-  url: "/v2/webhooks/payment/stripe";
+  url: "/v1/webhooks/payment/stripe";
 };
 
 export type AcceptStripeWebhookErrors = {
@@ -1555,7 +1554,7 @@ export type AcceptAlipayWebhookData = {
   body: AlipayWebhookForm;
   path?: never;
   query?: never;
-  url: "/v2/webhooks/payment/alipay";
+  url: "/v1/webhooks/payment/alipay";
 };
 
 export type AcceptAlipayWebhookErrors = {
@@ -1598,7 +1597,7 @@ export type AcceptWechatWebhookData = {
   };
   path?: never;
   query?: never;
-  url: "/v2/webhooks/payment/wechat";
+  url: "/v1/webhooks/payment/wechat";
 };
 
 export type AcceptWechatWebhookErrors = {

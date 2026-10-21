@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { parse } from "yaml";
-import { assertV2OpenApi } from "./openapi-v2-target.js";
+import { assertTargetOpenApi } from "./openapi-target.js";
 const expectedOperation: unknown = {
   operationId: "openMyCreditAccount",
   "x-kokoro-owner": "kokoro-billing",
@@ -216,7 +216,7 @@ const expectedRequest: unknown = {
   additionalProperties: false,
 };
 export const creditAccountBaselineDigest =
-  "b413db8965ed60683435adb7f2ce8650a7ca7bf7bee0989e8f83afc3d9f846af";
+  "9ff84d5f473e2f161f5d0c496db4cee175e2b032e836e97c7e23b9576a0af3e6";
 /** Current-only gate; the projection is a test/build historical oracle, never runtime wire. */
 export function creditAccountBaselineSource(source: string): string {
   const doc = parse(source) as {
@@ -225,9 +225,9 @@ export function creditAccountBaselineSource(source: string): string {
     components?: { schemas?: Record<string, unknown> };
   };
   if (
-    doc.info?.version !== "3.0.0-experimental.6" ||
+    doc.info?.version !== "4.0.0-experimental.3" ||
     !isDeepStrictEqual(
-      doc.paths?.["/v2/billing/me/credit-account"]?.put,
+      doc.paths?.["/v1/billing/me/credit-account"]?.put,
       expectedOperation,
     ) ||
     !isDeepStrictEqual(
@@ -237,9 +237,9 @@ export function creditAccountBaselineSource(source: string): string {
   )
     throw new Error("Invalid explicit account opening contract");
   const baseline = source
-    .replace("version: 3.0.0-experimental.6", "version: 3.0.0-experimental.5")
+    .replace("version: 4.0.0-experimental.3", "version: 4.0.0-experimental.2")
     .replace(
-      /(?<= {2}\/v2\/billing\/me\/credit-account:\n) {4}put:\n[\s\S]*?(?= {4}get:\n)/u,
+      /(?<= {2}\/v1\/billing\/me\/credit-account:\n) {4}put:\n[\s\S]*?(?= {4}get:\n)/u,
       "",
     )
     .replace(
@@ -250,8 +250,8 @@ export function creditAccountBaselineSource(source: string): string {
     createHash("sha256").update(baseline).digest("hex") !==
     creditAccountBaselineDigest
   )
-    throw new Error("Historical Billing exp5 bytes changed");
-  assertV2OpenApi(parse(baseline) as unknown);
+    throw new Error("Billing main experimental.2 baseline bytes changed");
+  assertTargetOpenApi(parse(baseline) as unknown);
   return baseline;
 }
 export function assertCreditAccountContract(source: string): void {

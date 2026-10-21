@@ -24,12 +24,12 @@ describe("Catalog bounded query and tenant-scoped cursor", () => {
       decodeCatalogCursor(encodeCatalogCursor(cursor), "tenant-a"),
     ).toEqual(cursor);
     expect(
-      parseCatalogQuery(request("/v2/commerce/catalog"), "tenant-a"),
+      parseCatalogQuery(request("/v1/commerce/catalog"), "tenant-a"),
     ).toEqual({ limit: 50 });
     expect(
       parseCatalogQuery(
         request(
-          "/v2/commerce/catalog?limit=100&cursor=" +
+          "/v1/commerce/catalog?limit=100&cursor=" +
             encodeCatalogCursor(cursor),
         ),
         "tenant-a",
@@ -59,7 +59,7 @@ describe("Catalog bounded query and tenant-scoped cursor", () => {
     "unknown=x",
   ])("rejects %s", (query) => {
     expect(() =>
-      parseCatalogQuery(request("/v2/commerce/catalog?" + query), "tenant-a"),
+      parseCatalogQuery(request("/v1/commerce/catalog?" + query), "tenant-a"),
     ).toThrow();
   });
   it.each(["content-length", "transfer-encoding"])(
@@ -67,7 +67,7 @@ describe("Catalog bounded query and tenant-scoped cursor", () => {
     (name) => {
       expect(() =>
         parseCatalogQuery(
-          request("/v2/commerce/catalog", { [name]: "0" }),
+          request("/v1/commerce/catalog", { [name]: "0" }),
           "tenant-a",
         ),
       ).toThrow();
@@ -75,7 +75,7 @@ describe("Catalog bounded query and tenant-scoped cursor", () => {
   );
   it("rejects body and cross-tenant/noncanonical/foreign-scope cursor before any database work", () => {
     expect(() =>
-      parseCatalogQuery(request("/v2/commerce/catalog", {}, {}), "tenant-a"),
+      parseCatalogQuery(request("/v1/commerce/catalog", {}, {}), "tenant-a"),
     ).toThrow();
     const wire = encodeCatalogCursor(cursor);
     for (const value of [

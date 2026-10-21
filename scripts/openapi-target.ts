@@ -1,43 +1,45 @@
+import {
+  AGENT_USAGE_SCHEMA_VERSION,
+  AGENT_USAGE_SCHEMA_SHA256,
+} from "./agent-usage-consumer-pin.js";
+
 type JsonObject = Record<string, unknown>;
 
 const methods = new Set(["get", "post", "put", "patch", "delete"]);
-const AGENT_USAGE_SCHEMA_VERSION = "1.0.0";
-const AGENT_USAGE_SCHEMA_SHA256 =
-  "eb3e226f2c5ede407b61558c0375a373a8a7985f333b3d62a6c2b148469043d0";
 const expectedOperations = new Map<string, string>([
   ["get /healthz", "getHealth"],
   ["get /readyz", "getReadiness"],
   ["get /metrics", "getMetrics"],
-  ["get /v2/commerce/catalog", "getCatalog"],
-  ["get /v2/billing/me/credit-account", "getMyCreditAccount"],
-  ["get /v2/billing/me/credit-ledger", "getMyCreditLedger"],
-  ["get /v2/billing/me/subscriptions", "getMySubscriptions"],
-  ["post /v2/internal/billing/admissions", "createAdmission"],
-  ["get /v2/internal/billing/admissions/{admission_id}", "getAdmission"],
+  ["get /v1/commerce/catalog", "getCatalog"],
+  ["get /v1/billing/me/credit-account", "getMyCreditAccount"],
+  ["get /v1/billing/me/credit-ledger", "getMyCreditLedger"],
+  ["get /v1/billing/me/subscriptions", "getMySubscriptions"],
+  ["post /v1/internal/billing/admissions", "createAdmission"],
+  ["get /v1/internal/billing/admissions/{admission_id}", "getAdmission"],
   [
-    "post /v2/internal/billing/admissions/{admission_id}/capture",
+    "post /v1/internal/billing/admissions/{admission_id}/capture",
     "captureAdmission",
   ],
   [
-    "post /v2/internal/billing/admissions/{admission_id}/release",
+    "post /v1/internal/billing/admissions/{admission_id}/release",
     "releaseAdmission",
   ],
-  ["post /v2/internal/billing/execution-events", "acceptExecutionEvent"],
+  ["post /v1/internal/billing/execution-events", "acceptExecutionEvent"],
   [
-    "get /v2/internal/billing/execution-events/{execution_event_id}",
+    "get /v1/internal/billing/execution-events/{execution_event_id}",
     "getExecutionEvent",
   ],
-  ["post /v2/billing/checkouts", "createCheckout"],
-  ["get /v2/billing/checkouts/{checkout_id}", "getCheckout"],
-  ["post /v2/internal/payment/settlements", "createSettlement"],
-  ["get /v2/internal/payment/settlements/{settlement_id}", "getSettlement"],
-  ["post /v2/internal/payment/refunds", "createInternalRefund"],
-  ["get /v2/internal/payment/refunds/{refund_id}", "getRefund"],
-  ["post /v2/admin/billing/refunds", "createAdminRefund"],
-  ["post /v2/internal/credit-holds/expire", "expireCreditHolds"],
-  ["post /v2/webhooks/payment/stripe", "acceptStripeWebhook"],
-  ["post /v2/webhooks/payment/alipay", "acceptAlipayWebhook"],
-  ["post /v2/webhooks/payment/wechat", "acceptWechatWebhook"],
+  ["post /v1/billing/checkouts", "createCheckout"],
+  ["get /v1/billing/checkouts/{checkout_id}", "getCheckout"],
+  ["post /v1/internal/payment/settlements", "createSettlement"],
+  ["get /v1/internal/payment/settlements/{settlement_id}", "getSettlement"],
+  ["post /v1/internal/payment/refunds", "createInternalRefund"],
+  ["get /v1/internal/payment/refunds/{refund_id}", "getRefund"],
+  ["post /v1/admin/billing/refunds", "createAdminRefund"],
+  ["post /v1/internal/credit-holds/expire", "expireCreditHolds"],
+  ["post /v1/webhooks/payment/stripe", "acceptStripeWebhook"],
+  ["post /v1/webhooks/payment/alipay", "acceptAlipayWebhook"],
+  ["post /v1/webhooks/payment/wechat", "acceptWechatWebhook"],
 ]);
 const expectedPermissionByOperation = new Map<string, string>([
   ["getHealth", "none"],
@@ -138,8 +140,8 @@ const hasExactRefs = (value: unknown, refs: readonly string[]): boolean =>
   });
 
 const personalReadKeys = [
-  "get /v2/billing/me/credit-account",
-  "get /v2/billing/me/credit-ledger",
+  "get /v1/billing/me/credit-account",
+  "get /v1/billing/me/credit-ledger",
 ] as const;
 const personalIdentityPattern =
   "^u1\\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\\s\\S])";
@@ -246,7 +248,7 @@ function validatePersonalReads(
     "503": ["billing.dependency_unavailable", true],
   };
   for (const [key, operation] of operations) {
-    if (key === "get /v2/commerce/catalog") {
+    if (key === "get /v1/commerce/catalog") {
       if (
         !matchesContractValue(operation["x-kokoro-auth-selection"], {
           machine_markers: [
@@ -511,8 +513,8 @@ export function validateV2OpenApi(document: unknown): string[] {
     !catalogItem.required.includes("offer_key")
   )
     errors.push("catalog must require the bounded canonical offer_key");
-  if (object(root.info)?.version !== "3.0.0-experimental.5")
-    errors.push("info.version must be 3.0.0-experimental.5");
+  if (object(root.info)?.version !== "4.0.0-experimental.2")
+    errors.push("info.version must be 4.0.0-experimental.2");
   validateCreditUnit(root, errors);
   const paths = object(root.paths) ?? {};
   const actual = new Map<string, JsonObject>();
@@ -584,19 +586,19 @@ export function validateV2OpenApi(document: unknown): string[] {
     const responses = object(operation.responses) ?? {};
     if (responses["202"]) {
       accepted++;
-      if (key !== "post /v2/internal/billing/execution-events")
+      if (key !== "post /v1/internal/billing/execution-events")
         errors.push(`${key} must not return 202`);
     }
   }
   if (accepted !== 1)
     errors.push("exactly execution event POST must return 202");
   for (const key of [
-    "post /v2/internal/billing/admissions",
-    "post /v2/internal/billing/execution-events",
-    "post /v2/billing/checkouts",
-    "post /v2/internal/payment/settlements",
-    "post /v2/internal/payment/refunds",
-    "post /v2/admin/billing/refunds",
+    "post /v1/internal/billing/admissions",
+    "post /v1/internal/billing/execution-events",
+    "post /v1/billing/checkouts",
+    "post /v1/internal/payment/settlements",
+    "post /v1/internal/payment/refunds",
+    "post /v1/admin/billing/refunds",
   ]) {
     const status = key.includes("execution-events") ? "202" : "201";
     const response = object(object(actual.get(key)?.responses)?.[status]);
@@ -608,7 +610,7 @@ export function validateV2OpenApi(document: unknown): string[] {
     )
       errors.push(`${key} ${status} missing success representation`);
   }
-  const admissionPost = actual.get("post /v2/internal/billing/admissions");
+  const admissionPost = actual.get("post /v1/internal/billing/admissions");
   if (
     !Array.isArray(admissionPost?.security) ||
     admissionPost.security.length === 0
@@ -624,7 +626,7 @@ export function validateV2OpenApi(document: unknown): string[] {
     errors.push("admission POST requires ConsumptionToken");
   const expectedSecurity = new Map<string, readonly (readonly string[])[]>([
     [
-      "get /v2/commerce/catalog",
+      "get /v1/commerce/catalog",
       [
         ["tenantContext", "userBearer"],
         ["internalSecret", "serviceBearer", "serviceCaller", "tenantContext"],
@@ -643,9 +645,9 @@ export function validateV2OpenApi(document: unknown): string[] {
         ],
       ],
     ]),
-    ["get /v2/billing/me/subscriptions", [["tenantContext", "userBearer"]]],
+    ["get /v1/billing/me/subscriptions", [["tenantContext", "userBearer"]]],
     [
-      "post /v2/billing/checkouts",
+      "post /v1/billing/checkouts",
       [
         ["tenantContext", "userBearer"],
         [
@@ -658,7 +660,7 @@ export function validateV2OpenApi(document: unknown): string[] {
       ],
     ],
     [
-      "get /v2/billing/checkouts/{checkout_id}",
+      "get /v1/billing/checkouts/{checkout_id}",
       [
         ["tenantContext", "userBearer"],
         [
@@ -671,7 +673,7 @@ export function validateV2OpenApi(document: unknown): string[] {
       ],
     ],
     [
-      "post /v2/admin/billing/refunds",
+      "post /v1/admin/billing/refunds",
       [
         [
           "adminRole",
@@ -683,7 +685,7 @@ export function validateV2OpenApi(document: unknown): string[] {
       ],
     ],
     [
-      "get /v2/internal/payment/refunds/{refund_id}",
+      "get /v1/internal/payment/refunds/{refund_id}",
       [
         ["internalSecret", "serviceCaller", "tenantContext"],
         [
@@ -956,7 +958,7 @@ export function validateV2OpenApi(document: unknown): string[] {
     object(admission.usage_profile_version)?.const !==
     AGENT_USAGE_SCHEMA_VERSION
   )
-    errors.push("AdmissionCreateRequest must pin Agent usage 1.0.0");
+    errors.push("AdmissionCreateRequest must pin Agent usage 2.0.0");
   if (
     object(admission.usage_profile_digest)?.const !== AGENT_USAGE_SCHEMA_SHA256
   )
@@ -966,7 +968,12 @@ export function validateV2OpenApi(document: unknown): string[] {
       object(command.evidence_schema_version)?.const !==
       AGENT_USAGE_SCHEMA_VERSION
     )
-      errors.push("strict evidence command must pin Agent usage 1.0.0");
+      errors.push("strict evidence command must pin Agent usage 2.0.0");
+  if (
+    object(schemaProperties(root, "ExecutionEvent").evidence_schema_version)
+      ?.const !== AGENT_USAGE_SCHEMA_VERSION
+  )
+    errors.push("ExecutionEvent must echo the pinned Agent usage version");
   for (const field of [
     "usage_profile_version",
     "usage_profile_digest",
@@ -1069,13 +1076,13 @@ export function validateV2OpenApi(document: unknown): string[] {
     )
       errors.push(`${schema}.${property} must be UUID`);
   const stripe = object(
-    object(actual.get("post /v2/webhooks/payment/stripe")?.responses)?.["200"],
+    object(actual.get("post /v1/webhooks/payment/stripe")?.responses)?.["200"],
   );
   if (!stripe) errors.push("Stripe webhook must define a 200 ACK");
   if (stripe?.content !== undefined)
     errors.push("Stripe ACK must have an empty body");
   const wechat = object(
-    object(actual.get("post /v2/webhooks/payment/wechat")?.responses)?.["204"],
+    object(actual.get("post /v1/webhooks/payment/wechat")?.responses)?.["204"],
   );
   if (wechat?.content !== undefined)
     errors.push("WeChat ACK must have an empty body");
@@ -1083,7 +1090,7 @@ export function validateV2OpenApi(document: unknown): string[] {
     object(
       object(
         object(
-          object(actual.get("post /v2/webhooks/payment/alipay")?.responses)?.[
+          object(actual.get("post /v1/webhooks/payment/alipay")?.responses)?.[
             "200"
           ],
         )?.content,
@@ -1129,7 +1136,7 @@ export function validateV2OpenApi(document: unknown): string[] {
   return errors;
 }
 
-export function assertV2OpenApi(document: unknown): void {
+export function assertTargetOpenApi(document: unknown): void {
   const errors = validateV2OpenApi(document);
   if (errors.length > 0)
     throw new Error(`v2 target OpenAPI invalid:\n- ${errors.join("\n- ")}`);

@@ -1,3 +1,37 @@
+## 2026-10-20 PR #2 main pairing
+
+Only the approved SET55 account initialization command moves to the current canonical PUT /v1/billing/me/credit-account; operationId, strict empty object, five-factor machine-only auth, response, disabled error and inherent idempotency remain. Artifact 4.0.0-experimental.3 / 25 operations / 43 schemas; no v2 alias. Exact removal of only the PUT/schema/version restores the complete main experimental.2 source. Consumer auto-initialization is a separate BFF/App slice; no user opening control is required.
+
+## 2026-10-19 main 配对集成（隔离候选）
+
+仅合并已有两路能力：main 的唯一 Nest runtime、Catalog offer_key/u1 机器可选subject、本人五因素与缺账户404，保留本地唯一 /v1 canonical、PostgreSQL-only readiness、usage2 固定证据与未装配 reader。新唯一 experimental artifact 为 4.0.0-experimental.2；Catalog 两处事实并入本地 canonical 后正规生成。保持 main Fastify 5.12.4/lock，无 Schema/Prisma/DDL、角色、运行配置或收费装配变化。保留原 source/dist drain/启动清理，不恢复旧 HTTP runner、/v2 alias 或旧资金表。现有 main 历史 integration 失败须如实保留，不以默认 SKIP 替代；最终 BFF 的旧 Billing pin/窄 SDK 必须配对，正常模型/工具/扣费保持暂停。
+
+## MC01-B2b：内部证据读取（2026-10-17，实施）
+
+不改Billing4.0.0-experimental.1或五个正常route。仅消费B1固定Agent HTTP6的GET /v1/model-call-attempts/{attempt_id}/usage-evidence/{event_id}及BillingModelCallReaderBearer；owner envelope保历史1/2表达，但本新调用reader只接受2.0.0，严格expected全绑定与sealed，usage1无fallback。固定HTTP/provenance只读分发并经原生成门派生，错误不成为资金结论；未装配正式Admission、bound或收费。
+
+## MC01-B2a：usage2 纯消费者验证（2026-10-16）
+
+本片不新增HTTP route或变更Billing4.0.0-experimental.1机器源。只读Agent发布物按B1 pin原样分发并生成包内类型/schema；源、vectors、manifest任何摘要变化由既有contract门拒绝，不接受静默升级。Metering内部纯API解码原bytes、核successor，或匹配可信snapshot中的完整identity/planned/revision/digest并要求seal；无v1解析/降级，无charge许可。完整binding的可信来源、HTTP6 envelope/原bytes读取及生命周期仍待后继adapter，不能用纯函数测试冒网络验收。
+
+---
+
+## MC01-B1：usage2 consumer pin候选（2026-10-16）
+
+本片目标为尚未启用部分的canonical HTTP artifact4.0.0-experimental.1；/v1、24operation、42schema与实际5route不变。AdmissionCreateRequest/Admission固定usage_profile_version=2.0.0及schema SHA552f0d22251837aaf4d83766c7bd91311984f707f9a42950ed53ac7127bb5504；Capture/Release/Execution的evidence_schema_version固定2.0.0。caller仍只提交closed身份/引用，不提交usage JSON或金额。旧1.0.0或错schema摘要不能用于创建新Admission，不在一个enum里不加区分地放行两个收费协议。
+
+精确owner来源为Agent2d5ce12c0eecdecfcdb44a21b69da707d51eb7c7：HTTP6 SHAe4d30178f2330744b374788abf7e6d23bbf8d7841dcd01537063c705dc18a8db、provenance SHAd6fa5c5cdb0038b471ba523661c0aa8b958e8bb94bbc4e5c54472d6c63fe1791；usage2 manifest SHA197aa6f1680e82dad47815903229e20ddaf2e9642f708fada55611e94ea99941，vectors SHA4fbec9f41732032ad28fee132e703c93dc50d09fecd82cb8a7578d90bb826483。Agent冻结v1历史源不重生。后继GET sealed证据按envelope实际artifact_version显式历史/当前解码、保原字节，未知/非法v2不尝试v1；历史读取不等于为无Admission旧调用补收费。
+
+用户确认后已更新canonical target及原生成物、接收只读发布收据并通过本地检查；候选未正常激活，不声称新route可调用。原实际Credit两读/auth/error不改变。正式writer、strict owner reader、技术bound reader、金额计算、预占/结算与消费者配对均仍未交付。
+
+---
+
+## BILLING-V1-FIX 唯一 HTTP 契约（2026-10-13）
+
+缺失 Credit account 返回 HTTP 404 且稳定码 `billing.credit_account_not_found`、`retryable=false`；普通未注册路径仍是 `billing.not_found`，消费者不得把任意 owner 404 当作业务空账户。
+
+唯一可编辑机器源为 `contract/openapi/v1/openapi.yaml`，精确定义 3 probes 与 21 个 `/v1` internal-owner operation；不存在 `/v2` alias/fallback。当前正常运行图只实现 probes 与 `GET /v1/billing/me/credit-account`、`GET /v1/billing/me/credit-ledger`，旧 `/v2` 必须真实 404；其余目标 operation 的契约存在不等于 handler 或财务语义完成。
+
 ## SET55：本人开户契约设计门（2026-10-16；实施前）
 
 唯一机器源 contract/openapi/v2/openapi.yaml 将从3.0.0-experimental.5增量至3.0.0-experimental.6，新增 internal-owner PUT /v2/billing/me/credit-account，operationId openMyCreditAccount；原24operation及其wire保持。PUT按受信tenant/subject自然幂等，无Idempotency-Key、新receipt或调用方可指定ID。仅完整web-bff service/internal secret/service Bearer/唯一canonical u1 tenant与subject认证；direct-user不得调用。BFF必须先完成当前Product准入，再由权威身份映射委托本人，浏览器不得提供tenant/subject/actor。
