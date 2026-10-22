@@ -39,14 +39,23 @@ export function verifyMeteringPolicyArtifact(
   return Object.freeze({ version: "1.0.0", artifactDigest: POLICY_SHA256 });
 }
 
+export const currentMeteringProfileRef: MeteringRevisionReference =
+  Object.freeze({
+    version: "2.0.0",
+    artifactDigest: AGENT_USAGE_SHA256,
+  });
+export function currentMeteringFailurePolicyRef(): MeteringRevisionReference {
+  return verifyMeteringPolicyArtifact(
+    readFileSync(resolve("contract/metering-policy/v1/policy.json")),
+  );
+}
+
 export function assertExecutableMeteringPolicy(
   draft: MeteringPolicyRevisionDraft,
 ): void {
-  const reference = verifyMeteringPolicyArtifact(
-    readFileSync(resolve("contract/metering-policy/v1/policy.json")),
-  );
+  const reference = currentMeteringFailurePolicyRef();
   if (
-    draft.profileRef.version !== "2.0.0" ||
+    draft.profileRef.version !== currentMeteringProfileRef.version ||
     draft.profileRef.artifactDigest !== AGENT_USAGE_SHA256 ||
     draft.failurePolicyRef?.version !== reference.version ||
     draft.failurePolicyRef.artifactDigest !== reference.artifactDigest ||

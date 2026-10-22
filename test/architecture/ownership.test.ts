@@ -70,6 +70,18 @@ const openApiSchema = z
 const operationGovernance: Readonly<
   Record<string, Readonly<{ idempotency: string; permission: string }>>
 > = {
+  "get /v1/admin/billing/metering/pricing": {
+    idempotency: "read-only",
+    permission: "web-bff-billing-admin-proxy",
+  },
+  "post /v1/admin/billing/metering/rate-revisions": {
+    idempotency: "required",
+    permission: "web-bff-billing-admin-proxy",
+  },
+  "post /v1/admin/billing/metering/policy-revisions": {
+    idempotency: "required",
+    permission: "web-bff-billing-admin-proxy",
+  },
   "get /healthz": { idempotency: "inherent", permission: "none" },
   "get /readyz": { idempotency: "inherent", permission: "none" },
   "get /metrics": { idempotency: "inherent", permission: "none" },
@@ -230,7 +242,7 @@ describe("billing ownership architecture", () => {
     expect([...actualOperations].sort()).toEqual(
       Object.keys(operationGovernance).sort(),
     );
-    expect(operationCount).toBe(26);
+    expect(operationCount).toBe(29);
   });
 
   it("binds contract governance documentation to the current OpenAPI digest", async () => {

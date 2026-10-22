@@ -1,3 +1,7 @@
+## 当前计价管理候选（2026-10-22）
+
+canonical 4.0.0-experimental.5，29操作／56schema；SHA256 `8005cff204976ca681653565fb8b6b098bc195cc70049743f70ae85989df35ab`。现Metering发布两POST与最新配置RR单体GET；当前协议绑定owner固定，非生效报价，无资金效果。正式生成与精确逆恢复保护旧26操作/45schema；无runtime旧wire回退。源码候选不等于正常部署。
+
 ## CREDIT-1：非现金管理员积分发放（2026-10-22，未正常激活）
 
 canonical `openapi/v1/openapi.yaml` 为4.0.0-experimental.4，26 operations／45 schemas；新增POST /v1/admin/billing/credit-grants及严格请求/响应。web-bff当前管理员代理与同tenant接收者资格由BFF核实，Billing另核service bearer/internal secret/operatorProxySecret与u1 tenant/operator；不接受body tenant/actor/role、用户Bearer或旧admin header分支。正常资金未写入，消费者及实际用量结算仍待完整接线；无现金支付。

@@ -1,5 +1,8 @@
+import { MeteringModule } from "../modules/metering/metering.module.js";
+import { MeteringPricingController } from "../modules/metering/metering-pricing.controller.js";
+import { parseMeteringPricingJson } from "../modules/metering/metering-pricing-json.js";
 import { CreditGrantController } from "../modules/credit/credit-grant.controller.js";
-import { CreditGrantGuard } from "./credit-grant.guard.js";
+import { BillingOperatorGuard } from "./billing-operator.guard.js";
 import { parseAdminCreditGrantJson } from "../modules/credit/credit-grant.input.js";
 import { CreditAccountController } from "../modules/credit/credit-account.controller.js";
 import { CreditAccountGuard } from "./credit-account.guard.js";
@@ -71,6 +74,19 @@ export class BillingHttpModule implements NestModule {
           } catch {
             done(new BadRequestException());
           }
+        } else if (
+          request.method === "POST" &&
+          [
+            "/v1/admin/billing/metering/rate-revisions",
+            "/v1/admin/billing/metering/policy-revisions",
+          ].includes(request.routeOptions.url ?? "")
+        ) {
+          try {
+            if (!Buffer.isBuffer(body)) throw new BadRequestException();
+            done(null, parseMeteringPricingJson(body));
+          } catch {
+            done(new BadRequestException());
+          }
         } else void json(request, body.toString("utf8"), done);
       },
     );
@@ -112,11 +128,12 @@ export class BillingHttpModule implements NestModule {
     const config = validateBillingPersonalHttpOptions(options);
     return {
       module: BillingHttpModule,
-      imports: [CreditModule, CommerceModule],
+      imports: [CreditModule, CommerceModule, MeteringModule],
       controllers: [
         CreditReadController,
         CreditAccountController,
         CreditGrantController,
+        MeteringPricingController,
         CatalogReadController,
         ServiceProbesController,
       ],
@@ -129,7 +146,7 @@ export class BillingHttpModule implements NestModule {
         },
         CatalogGuard,
         CreditAccountGuard,
-        CreditGrantGuard,
+        BillingOperatorGuard,
         { provide: BILLING_PERSONAL_HTTP_OPTIONS, useValue: config },
         {
           provide: BILLING_PERSONAL_AUTH,
@@ -157,7 +174,7 @@ export class BillingHttpModule implements NestModule {
               Object.entries(generatedSchemas),
             );
             if (
-              bindings.length !== 45 ||
+              bindings.length !== 56 ||
               exports.size !== bindings.length ||
               new Set(bindings.map(([, exported]) => exported)).size !==
                 exports.size

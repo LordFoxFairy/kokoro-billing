@@ -1,6 +1,6 @@
 import { Controller, Inject, Post, Req, UseGuards } from "@nestjs/common";
 import type { FastifyRequest } from "fastify";
-import { CreditGrantGuard } from "../../http/credit-grant.guard.js";
+import { BillingOperatorGuard } from "../../http/billing-operator.guard.js";
 import { BILLING_SCHEMA_VALIDATOR } from "../../infrastructure/auth/billing-auth.types.js";
 import type { BillingSchemaValidator } from "../../infrastructure/auth/billing-auth.types.js";
 import type { AdminCreditGrantResponse } from "../../generated/billing-api/types.gen.js";
@@ -8,7 +8,7 @@ import { CreditService } from "./credit.service.js";
 import { readAdminCreditGrantInput } from "./credit-grant.input.js";
 
 @Controller("v1/admin/billing/credit-grants")
-@UseGuards(CreditGrantGuard)
+@UseGuards(BillingOperatorGuard)
 export class CreditGrantController {
   constructor(
     @Inject(CreditService) private readonly credit: CreditService,

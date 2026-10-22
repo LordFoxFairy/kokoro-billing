@@ -1,3 +1,4 @@
+import type { TransactionMode } from "../../database/transaction.types.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { TransactionService } from "../../database/transaction.service.js";
 import { assertExecutableMeteringPolicy } from "./metering-policy-artifact.js";
@@ -7,6 +8,7 @@ import {
   encodeMeteringRateRevisionDraft,
 } from "./metering-pricing-revision-codec.js";
 import type {
+  MeteringLatestPricing,
   MeteringPolicyRevisionDraft,
   MeteringRateApplicability,
   MeteringRateRevisionDraft,
@@ -52,6 +54,49 @@ export type MeteringPricingPublicationEffect<Kind extends "rate" | "policy"> =
 
 export class MeteringPricingRevisionRepository {
   constructor(private readonly transactions: TransactionService) {}
+
+  /** Latest published configurations, not active-price selection. */
+  async readLatest(tenantId: string): Promise<MeteringLatestPricing> {
+    const client = this.transactions.requireActiveTransaction(
+      tenantId,
+      "readOnlySnapshot",
+    );
+    const rate = await client.billing_metering_rate_revision.findFirst({
+      where: { tenant_id: tenantId },
+      orderBy: { revision: "desc" },
+      select: { revision: true },
+    });
+    const policy = await client.billing_metering_policy_revision.findFirst({
+      where: { tenant_id: tenantId },
+      orderBy: { revision: "desc" },
+      select: { revision: true },
+    });
+    return Object.freeze({
+      rate:
+        rate === null
+          ? null
+          : Object.freeze({
+              ...(await this.#readRateRevision(
+                tenantId,
+                rate.revision,
+                () => this.#selectionCorrupt(),
+                "readOnlySnapshot",
+              )),
+              revision: rate.revision.toString(),
+            }),
+      policy:
+        policy === null
+          ? null
+          : Object.freeze({
+              ...(await this.#readPolicyRevision(
+                tenantId,
+                policy.revision,
+                "readOnlySnapshot",
+              )),
+              revision: policy.revision.toString(),
+            }),
+    });
+  }
 
   async publishRate(
     draft: MeteringRateRevisionDraft,
@@ -424,6 +469,7 @@ export class MeteringPricingRevisionRepository {
   async #readPolicyRevision(
     tenantId: string,
     revision: bigint,
+    mode: TransactionMode = "write",
   ): Promise<
     Readonly<{
       revisionId: string;
@@ -432,10 +478,7 @@ export class MeteringPricingRevisionRepository {
       draft: MeteringPolicyRevisionDraft;
     }>
   > {
-    const client = this.transactions.requireActiveTransaction(
-      tenantId,
-      "write",
-    );
+    const client = this.transactions.requireActiveTransaction(tenantId, mode);
     const row = await client.billing_metering_policy_revision.findUnique({
       where: { tenant_id_revision: { tenant_id: tenantId, revision } },
     });
@@ -493,6 +536,7 @@ export class MeteringPricingRevisionRepository {
     tenantId: string,
     revision: bigint,
     corrupt: () => never,
+    mode: TransactionMode = "write",
   ): Promise<
     Readonly<{
       revisionId: string;
@@ -501,10 +545,7 @@ export class MeteringPricingRevisionRepository {
       draft: MeteringRateRevisionDraft;
     }>
   > {
-    const client = this.transactions.requireActiveTransaction(
-      tenantId,
-      "write",
-    );
+    const client = this.transactions.requireActiveTransaction(tenantId, mode);
     const header = await client.billing_metering_rate_revision.findUnique({
       where: { tenant_id_revision: { tenant_id: tenantId, revision } },
     });

@@ -1,3 +1,4 @@
+import { MeteringError } from "../modules/metering/metering.error.js";
 import { CommandReceiptError } from "../database/command-receipt.error.js";
 import { Catch, HttpException, Inject, Injectable } from "@nestjs/common";
 import type { ArgumentsHost, ExceptionFilter } from "@nestjs/common";
@@ -95,6 +96,12 @@ function statusOf(error: unknown): Status {
     error.code === "COMMAND_IDEMPOTENCY_CONFLICT"
   )
     return 409;
+  if (error instanceof MeteringError) {
+    if (error.code === "METERING_PUBLICATION_FORBIDDEN") return 403;
+    if (error.code === "METERING_PUBLICATION_CONFLICT") return 409;
+    if (error.code === "METERING_PUBLICATION_UNAVAILABLE") return 503;
+    return 500;
+  }
   if (error instanceof CreditError) {
     if (["CREDIT_INVALID_QUERY", "CREDIT_INVALID_CURSOR"].includes(error.code))
       return 400;

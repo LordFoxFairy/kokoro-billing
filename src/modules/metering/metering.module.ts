@@ -1,3 +1,4 @@
+import { MeteringPricingReadService } from "./metering-pricing-read.service.js";
 import { Module } from "@nestjs/common";
 import type { DynamicModule } from "@nestjs/common";
 import { TransactionService } from "../../database/transaction.service.js";
@@ -21,6 +22,14 @@ import {
 @Module({
   imports: [CreditModule],
   providers: [
+    {
+      provide: MeteringPricingReadService,
+      inject: [TransactionService, MeteringPricingRevisionRepository],
+      useFactory: (
+        transactions: TransactionService,
+        repository: MeteringPricingRevisionRepository,
+      ) => new MeteringPricingReadService(transactions, repository),
+    },
     {
       provide: MeteringRepository,
       inject: [TransactionService],
@@ -70,7 +79,11 @@ import {
         new MeteringPricingSelectionService(repository),
     },
   ],
-  exports: [MeteringService],
+  exports: [
+    MeteringService,
+    MeteringPricingPublicationService,
+    MeteringPricingReadService,
+  ],
 })
 export class MeteringModule {
   static register(options: IamBillingAuthorizationOptions): DynamicModule {

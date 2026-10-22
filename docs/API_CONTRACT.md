@@ -1,3 +1,9 @@
+## AGENT-1／CREDIT-1：计价管理三个操作（2026-10-22）
+
+当前canonical目标4.0.0-experimental.5：POST /v1/admin/billing/metering/{rate-revisions,policy-revisions}及GET /v1/admin/billing/metering/pricing，全部internal-owner且管理代理专用；保原26操作逐字不变。外部JSON snake_case，闭集请求publication_id/reason/configuration，无tenant/actor；configuration的协议绑定由owner固定。POST 201 data包含kind/revision/content_digest/published_at/effective_from；GET 200 data含rate_revision/policy_revision，null表示此tenant尚未发布，最新已发布不等同当前生效。GET不收query/body；未来生效时间不得被误记为已生效。
+
+每响应request-id/no-store。POST严格UTF-8、JSON重复decoded键／深度和1MiB上限、JSON MIME、唯一ASCII幂等key；精确日期、BigInt、约分和64条rate由原codec进一步校验，不猜默认。400输入错、403管理能力拒、409永久identity/key完整payload漂移、503原依赖预算失败，其余损坏500；均固定错误不泄露配置／secret／SQL。owner配置读取无provider请求或资金写入。正规派生并用精确逆恢复保护前26操作，不加runtime旧版兼容。
+
 ## AGENT-1／CREDIT-1：包内policy content2必填预算（2026-10-22）
 
 本片不改HTTP/OpenAPI、生成HTTP DTO或鉴权。包内MeteringPolicyRevisionDraft改schemaVersion="2"，追加maxAttemptCredits正整数字符串（1..9223372036854）；canonical policy tuple由12扩13，末项为预算，policy command/request schema为2，永久identity/key绑定新完整digest。Rate schema/command1和七字段publication result1保持，不能混作policy content版本；当前拒无预算/旧schema1，未知不回退，旧raw只作负控。不因本片宣称新后台/Admission接口已挂载。

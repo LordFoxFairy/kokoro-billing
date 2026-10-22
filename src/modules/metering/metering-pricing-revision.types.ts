@@ -93,3 +93,14 @@ export type MeteringPublicationEncoding = Readonly<{
   contentDigest: string;
   payloadDigest: string;
 }>;
+
+export type MeteringPublishedRevision<Draft> = Readonly<{
+  revision: string;
+  contentDigest: string;
+  publishedAt: string;
+  draft: Draft;
+}>;
+export type MeteringLatestPricing = Readonly<{
+  rate: MeteringPublishedRevision<MeteringRateRevisionDraft> | null;
+  policy: MeteringPublishedRevision<MeteringPolicyRevisionDraft> | null;
+}>;

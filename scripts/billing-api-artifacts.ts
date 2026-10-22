@@ -1,3 +1,7 @@
+import {
+  meteringManagementBaselineSource,
+  meteringManagementSchemas,
+} from "./metering-management-contract.js";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import ts from "typescript";
@@ -34,6 +38,7 @@ export const billingApiGenerator = {
 
 // This is the closed source-component/export binding set, not another schema.
 const componentNames = [
+  ...meteringManagementSchemas,
   "Uuid",
   "UtcInstant",
   "DecimalInteger",
@@ -124,7 +129,9 @@ export function readBillingApiSource(
   sourceText: string,
 ): Record<string, unknown> {
   const document = object(parse(sourceText) as unknown);
-  assertCreditAccountContract(creditFundingBaselineSource(sourceText));
+  assertCreditAccountContract(
+    creditFundingBaselineSource(meteringManagementBaselineSource(sourceText)),
+  );
   const schemas = object(object(document.components).schemas);
   assertKeys(schemas, componentNames, "source components");
   assertSchemaRefs(schemas, componentNames);

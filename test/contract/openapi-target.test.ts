@@ -1,3 +1,4 @@
+import { meteringManagementBaselineSource } from "../../scripts/metering-management-contract.js";
 import { creditFundingBaselineSource } from "../../scripts/credit-funding-contract.js";
 import { creditAccountBaselineSource } from "../../scripts/credit-account-contract.js";
 import { readFile } from "node:fs/promises";
@@ -26,7 +27,9 @@ const readContract = async (): Promise<JsonObject> =>
   record(
     parse(
       creditAccountBaselineSource(
-        creditFundingBaselineSource(await readFile(target, "utf8")),
+        creditFundingBaselineSource(
+          meteringManagementBaselineSource(await readFile(target, "utf8")),
+        ),
       ),
     ) as unknown,
   );
@@ -1920,7 +1923,7 @@ describe("R67 generated schema semantics and provenance", () => {
       pathToFileURL(join(directory, "schemas.gen.ts")).href
     );
     const schemaExports = record(exports);
-    expect(Object.keys(schemas)).toHaveLength(45);
+    expect(Object.keys(schemas)).toHaveLength(56);
     expect(Object.keys(schemaExports).sort()).toEqual(
       Object.keys(schemas)
         .map((name) => name + "Schema")
@@ -1932,7 +1935,7 @@ describe("R67 generated schema semantics and provenance", () => {
       );
     }
     const provenance = validProvenance();
-    expect(provenance.source.version).toBe("4.0.0-experimental.4");
+    expect(provenance.source.version).toBe("4.0.0-experimental.5");
     expect(provenance.source.sha256).toBe(
       createHash("sha256").update(sourceText).digest("hex"),
     );

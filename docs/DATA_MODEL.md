@@ -1,3 +1,7 @@
+## AGENT-1／CREDIT-1：管理HTTP复用现revision（2026-10-22）
+
+本片无SQL/Prisma变化。价格和预算仍只存现Metering不可变revision，POST沿原tenant generation锁、永久command receipt、audit同事务；当前协议绑定服务端固定。GET以原RR readOnlySnapshot复用完整digest重建，只取tenant各自最大revision，并不更改effective_from或运行选价规则；rate/policy可独立为空，损坏明确失败，不合成0／默认预算。不存在新的管理缓存真源或迁移compat入口，正常Schema演进仍待上一片既定核空保护。
+
 ## AGENT-1／CREDIT-1：现policy revision冻结单次预算（2026-10-22）
 
 唯一canonical SQL现billing_metering_policy_revision新增max_attempt_credits BIGINT NOT NULL（credits，不是micros），CHECK 1..9223372036854；schema_version CHECK=2，其余rate/credit/账本/receipt结构保持。Prisma由同canonical fresh安装正式refresh，不手改生成物或另写SQL事实源。预算参与policy canonical bytes/digest、audit、replay损坏验证和joint selection冻结值；不在前端/Agent或新表保存第二份可编辑预算。

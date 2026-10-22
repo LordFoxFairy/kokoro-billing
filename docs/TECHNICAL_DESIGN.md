@@ -1,3 +1,11 @@
+## AGENT-1／CREDIT-1：现计价管理正式HTTP接线（2026-10-22）
+
+Owner仍Billing Metering，沿现不可变rate/policy发布、receipt、审计和选择；不建System价格副本或新服务。新增POST /v1/admin/billing/metering/rate-revisions、POST /v1/admin/billing/metering/policy-revisions及GET /v1/admin/billing/metering/pricing。GET是当前租户“最新已发布配置”单体快照（两者可独立null，含未来生效配置），不是有效价格选择／报价／历史列表；用原readOnlySnapshot一次RR读取，原完整digest损坏校验承接，无写和自动修复。运行选价仍由原selectActivePricing按生效时间、精确绑定和bucket负责。
+
+所有三操作沿现具备web-bff bearer/internal/operator三独立能力及u1 tenant/operator的管理准入，BFF后继每次核平台管理资格，不接受body自报tenant/actor/role；不将旧admin任意header鉴权复活。POST包含publication_id v4 UUID、reason、configuration，Idempotency-Key8..128，命令完整原样冻结；新发布201，重放原结果，漂移409。configuration只收业务价格／生效时点／来源、换算及整数预算，当前usage2、policy schema2、failure-policy1和取整规则由owner固定，不让表单选择过时协议或猜版本。已发表不可更新／删除，以新修订替换生效，不提供任意表CRUD。
+
+写区：canonical HTTP/正规生成及直接门；现Metering module/publication/repository、具名pricing controller/input/mapper/json和read service、原管理guard提取具名共用、HTTP module/error filter及相关unit/HTTP/PG。三面不增加SQL/Prisma或正常DDL；只将私有reader按显式事务mode复用到readonly，原writer模式保持。优先正式契约与TDD，再Nest路由、真实PG幂等/权限/回读/损坏/回滚，完整门后给BFF/Admin固定发行物。正常服务与资金不自动重载，模型／工具真实旅程后继。
+
 ## AGENT-1／CREDIT-1：单次预算进入现不可变policy（2026-10-22）
 
 采用用户已确认预算方案：在现Metering policy revision增加必填maxAttemptCredits（正整数字符串，最多9223372036854），是每attempt支出预算，不是供应商数学成本界。预算与当前usage2 profile、倍率、换算和取整一起纳入原canonical content digest、幂等payload、审计与immutable policy选择；policy content/schemaVersion显式升2并附预算，当前codec拒旧无预算版本，不默认10、不按读取回填、不双轨执行。Rate content/version1及原七字段publication result1保持原字节；policy command/request schema升2，沿原identity/key永久绑定完整命令。

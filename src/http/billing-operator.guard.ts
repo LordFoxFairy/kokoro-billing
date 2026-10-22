@@ -14,7 +14,7 @@ import { billingHeaderCount } from "../infrastructure/auth/billing-identity-head
 
 /** BFF human-admin admission is separate from machine and operator capabilities. */
 @Injectable()
-export class CreditGrantGuard implements CanActivate {
+export class BillingOperatorGuard implements CanActivate {
   constructor(
     @Inject(BILLING_PERSONAL_AUTH) private readonly auth: BillingPersonalAuth,
     @Inject(BILLING_PERSONAL_HTTP_OPTIONS)

@@ -1,10 +1,14 @@
+import { meteringManagementBaselineSource } from "../../scripts/metering-management-contract.js";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { parse } from "yaml";
 import { describe, expect, it } from "vitest";
 import { creditFundingBaselineSource } from "../../scripts/credit-funding-contract.js";
 import { assertCreditAccountContract } from "../../scripts/credit-account-contract.js";
-const source = () => readFile("contract/openapi/v1/openapi.yaml", "utf8");
+const source = async () =>
+  meteringManagementBaselineSource(
+    await readFile("contract/openapi/v1/openapi.yaml", "utf8"),
+  );
 describe("non-cash administrative grant current-only machine contract", () => {
   it("preserves every preceding operation and schema while publishing the closed funding capability", async () => {
     const raw = await source();

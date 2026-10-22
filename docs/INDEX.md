@@ -1,6 +1,6 @@
-## 当前主链：预算预占与真实结算（2026-10-22）
+## 当前主链：预算与正式计价管理（2026-10-22）
 
-现行预算方案及本地验收见[CURRENT](CURRENT.md)首节与[IMPLEMENTATION_PLAN](IMPLEMENTATION_PLAN.md)首卡。policy content/schema2必填整数预算；canonical与正规Prisma派生已验，正常DDL／后台计价／真实资金消费尚未因此启用。下方旧SET候选记录不覆盖此状态。
+现行主链见[CURRENT](CURRENT.md)首节与[IMPLEMENTATION_PLAN](IMPLEMENTATION_PLAN.md)首卡。policy2必填整数预算；正式计价管理三HTTP操作与owner门已本地验收，exp5／29操作／56schema。BFF/Admin/App消费、正常DDL／计价和实际资金消费仍待，不把下方历史候选记录当当前事实。
 
 ## SET55当前设计入口
 

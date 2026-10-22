@@ -1,3 +1,12 @@
+## AGENT-1／CREDIT-1：计价管理HTTP切片执行（2026-10-22）
+
+主方沿codex/integer-credit-metering、基线d19f0bc唯一writer；先三面和canonical三个操作／正规派生，后具名HTTP TDD→原Metering发布与readonly最新配置→真实PG及完整门→固定发行物接BFF/Admin。当前状态：owner本地实现与验收通过；完整verify1728 PASS／520默认资源SKIP，另真实PG57 PASS／0SKIP、source/dist8 PASS／0SKIP、fresh Prisma／生成检查0，351冻结输入无漂移，自有库94→94，独审无P0–P2。范围与失败恢复见三设计首节，不新增服务／Schema／正常资金操作。Admin配置为Kokoro已批准业务管理能力，没有Manus私有后台API证据，不冒称其内部实现一致。
+
+- [x] 契约3操作与正式生成，原26操作／45schema精确逆恢复保护。
+- [x] 管理准入、严格JSON/input及完整wire映射HTTP风险RED→GREEN。
+- [x] 原publication事务＋RR最新配置读取真实PG，含tenant／并发／重放／损坏／回滚。
+- [x] 主方停写完整owner门与只读审查，给消费者固定SHA；不据此标实际扣分完成。
+
 ## AGENT-1／CREDIT-1：已确认预算策略持久化（2026-10-22）
 
 主方沿codex/integer-credit-metering、基线4810a4d唯一writer；写区为现Metering policy types/codec/repository/publication/selection、canonical policy列及正规Prisma派生、直接unit/PG测试和三设计／当前事实。用户已裁决预算方案，不另建服务或重新审批。policy2必填预算固定完整digest并拒无预算旧版，rate与结果wire不变。

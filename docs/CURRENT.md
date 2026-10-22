@@ -1,3 +1,15 @@
+## 2026-10-22 AGENT-1／CREDIT-1：正式计价管理owner HTTP已验，消费者继续
+
+基线d19f0bc，现有Metering接2 POST不可变rate/policy发布和1 GET当前tenant最新已发布配置；不是有效价格报价，rate/policy独立null，未来生效也如实读取。canonical experimental.5／29操作／56schema，SHA256 8005cff204976ca681653565fb8b6b098bc195cc70049743f70ae85989df35ab；正规生成，精确inverse还原exp4原26操作／45schema全文，再承接旧funding保护，无runtime兼容。协议profile2／failure1／取整由owner固定，body只收价格／来源／生效时间／换算／预算，tenant和actor来自原管理上下文。
+
+原CreditGrantGuard仅具名改名BillingOperatorGuard，三独立凭据及u1校验保持，旧admin/role header不能代替；input用同codec在receipt前拒绝错误日期／约分／预算，非法400、永久identity/key漂移409、依赖503、损坏500。仅两新POST挂1MiB／12层／重复decoded键严格JSON，原grant16KiB和其他parser不放宽。GET经单次RR读取最大revision和原完整digest重建；原writer仍默认write严格模式，不自动回退旧版本／零价／空对象。
+
+契约初始2行为FAIL，HTTP在registry配对后真实16行为404 RED，再实现。最终351非文档输入停写无漂移，Node24.20.0完整pnpm verify全0（格式/lint/types/build/SQL/contract及1728 PASS／520默认资源SKIP）；另真实3文件PG57 PASS／0SKIP（其中新8旅程），source/dist8 PASS／0SKIP，fresh Prisma与正式生成检查0，自有库精确94→94。新旅程覆盖最大预算／原价回读、并发单效果／换key重放／漂移、tenant、未来生效、损坏不fallback、RR并发快照及audit失败全回滚后原命令恢复。独立只读两次审查无确定P0–P2。
+
+初始registry与旧contract/runtime集合oracle造成17FAIL，原负控及精确集合断言配对后保留；首次RR进程内inject实证TRANSACTION_ALREADY_ACTIVE，生产保护未改，测试切真正自有loopback HTTP后通过，临时诊断已删。初始schema注册／lint／空query夹具与路径格式化等失败证据仍留ignored；诊断原日志文件名曾复用，单独记录该证据限制，不伪称保留了原始完整诊断文件。无SQL/Prisma变更、正常服务重载／正常配置／正常资金写入或模型／工具调用。
+
+后继固定本owner发行物接BFF/Admin/App具名三操作，必须为合法64-row／1MiB配置单独配对proxy和恢复容量，不泛扩充值16KiB；未知POST只能原publication_id/key/config/time恢复，GET最新不证明未提交。正常policy列演进和计价配置、合法逐attempt资金授权／预占／唯一dispatch／真实usage结算仍未完成，真钱支付不做；不以此API通过勾整个CREDIT-1／AGENT-1或提前集中PR。
+
 ## 2026-10-22 AGENT-1／CREDIT-1：单次预算进入不可变策略，正式管理／资金消费继续
 
 基线4810a4d，按已确认预算预占方案，在现Metering policy content/schema2必填maxAttemptCredits正整数字符串（1..9223372036854）；同一预算进入canonical bytes/digest、policy command/request schema2、数据库、审计、原命令回放完整性及joint selection冻结值。Rate content/command1和七字段publication result1保持；拒旧policy1／缺预算，不注入默认、读取回填或兼容双轨。唯一canonical policy表新增BIGINT列及范围CHECK，Prisma由fresh canonical正式refresh生成。

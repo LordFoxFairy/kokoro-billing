@@ -2,9 +2,9 @@
   "owner": "@kokoro/billing",
   "source": {
     "path": "contract/openapi/v1/openapi.yaml",
-    "version": "4.0.0-experimental.4",
-    "bytes": 122256,
-    "sha256": "a09e00a3d6f602fdaff13a50a5a839c8a989b1a26ab28c43eac314738fcfdef2"
+    "version": "4.0.0-experimental.5",
+    "bytes": 142354,
+    "sha256": "8005cff204976ca681653565fb8b6b098bc195cc70049743f70ae85989df35ab"
   },
   "generator": {
     "package": "@hey-api/openapi-ts",
@@ -26,6 +26,9 @@
   "schema_bindings": {
     "AdminCreditGrantRequest": "AdminCreditGrantRequestSchema",
     "AdminCreditGrantResponse": "AdminCreditGrantResponseSchema",
+    "AdminMeteringPolicyPublishRequest": "AdminMeteringPolicyPublishRequestSchema",
+    "AdminMeteringPricingResponse": "AdminMeteringPricingResponseSchema",
+    "AdminMeteringRatePublishRequest": "AdminMeteringRatePublishRequestSchema",
     "Admission": "AdmissionSchema",
     "AdmissionCaptureRequest": "AdmissionCaptureRequestSchema",
     "AdmissionCreateRequest": "AdmissionCreateRequestSchema",
@@ -52,6 +55,14 @@
     "ExpireCreditHoldsResult": "ExpireCreditHoldsResultSchema",
     "HealthResponse": "HealthResponseSchema",
     "LedgerEntry": "LedgerEntrySchema",
+    "MeteringPolicyConfiguration": "MeteringPolicyConfigurationSchema",
+    "MeteringPolicyRevision": "MeteringPolicyRevisionSchema",
+    "MeteringPublication": "MeteringPublicationSchema",
+    "MeteringPublicationResponse": "MeteringPublicationResponseSchema",
+    "MeteringRate": "MeteringRateSchema",
+    "MeteringRateConfiguration": "MeteringRateConfigurationSchema",
+    "MeteringRateRevision": "MeteringRateRevisionSchema",
+    "MeteringRational": "MeteringRationalSchema",
     "NonNegativeCreditMicros": "NonNegativeCreditMicrosSchema",
     "NonNegativeDecimal": "NonNegativeDecimalSchema",
     "OpenCreditAccountRequest": "OpenCreditAccountRequestSchema",
@@ -72,16 +83,16 @@
   },
   "outputs": {
     "index.ts": {
-      "bytes": 4461,
-      "sha256": "337a3d9e251b1f55789cdacc9874e091ebe38fb43bb2d3a47d97fb4938178e65"
+      "bytes": 5286,
+      "sha256": "3ce98dbdb8e376fe7a29a69c30a3edac10f087b04665ac37177c39b8b1e5f5a1"
     },
     "types.gen.ts": {
-      "bytes": 31881,
-      "sha256": "a8ddb2d1d77eeb4dec54ee8f619c5246dfe56ccb98d4843ef716501959c6e9df"
+      "bytes": 37124,
+      "sha256": "1dd41e4ccabea3cd68e3ce6f8de9f39c30a973e40e2a6832ca57e1f4314c1cbc"
     },
     "schemas.gen.ts": {
-      "bytes": 29918,
-      "sha256": "466979457b11b00fc14785802cc2e1715e4ded693d3542f397e95baf9b9066b5"
+      "bytes": 39186,
+      "sha256": "e43f4c291f5b47485ebba3210db71ea04a2b2b23916ef10f91051afa89c6e36b"
     }
   }
 }
