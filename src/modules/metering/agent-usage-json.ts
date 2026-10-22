@@ -2,12 +2,13 @@ import { agentUsageSchema } from "../../generated/agent-usage-v2/schema.gen.js";
 import { AgentUsageEvidenceError } from "./agent-usage-evidence.error.js";
 
 export type UsageJson =
-  null | boolean | string | UsageJson[] | { [key: string]: UsageJson };
+  null | boolean | string | 1 | UsageJson[] | { [key: string]: UsageJson };
 
-// Both pinned wire graphs use only strings, booleans and null, never numbers.
+// Usage2 and sealed envelopes reject numbers. Only the prepared envelope adds literal numeric version 1.
 function parseAgentJson(
   raw: Uint8Array,
   maxBytes: number,
+  preparedEnvelope = false,
 ): Readonly<{ text: string; value: UsageJson }> {
   if (raw.byteLength > maxBytes) throw new AgentUsageEvidenceError();
   let text: string;
@@ -111,6 +112,16 @@ function parseAgentJson(
         return literal;
       }
     }
+    if (preparedEnvelope) {
+      const lexeme =
+        /^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/u.exec(
+          text.slice(offset),
+        )?.[0];
+      if (lexeme !== undefined && Number(lexeme) === 1) {
+        offset += lexeme.length;
+        return 1;
+      }
+    }
     return fail();
   };
   const parsed = value(1);
@@ -127,6 +138,12 @@ export function parseAgentUsageJson(raw: Uint8Array) {
 export const MAX_AGENT_EVIDENCE_RESPONSE_BYTES = 98_304;
 export function parseAgentEvidenceEnvelopeJson(raw: Uint8Array) {
   return parseAgentJson(raw, MAX_AGENT_EVIDENCE_RESPONSE_BYTES);
+}
+
+export const MAX_AGENT_PREPARED_RESPONSE_BYTES =
+  3 * MAX_AGENT_EVIDENCE_RESPONSE_BYTES;
+export function parseAgentPreparedEnvelopeJson(raw: Uint8Array) {
+  return parseAgentJson(raw, MAX_AGENT_PREPARED_RESPONSE_BYTES, true);
 }
 
 /** RFC8785 on the finite, validated usage2 value set; never locale-sort keys. */

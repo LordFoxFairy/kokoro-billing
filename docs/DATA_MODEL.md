@@ -1,3 +1,10 @@
+## AGENT-1：prepared 读取不写资金事实（2026-10-22）
+
+无Schema／Prisma／正常数据变化。新原始prepared bytes及当前lease观察只在当前私有调用内存保存；
+真正Admission才由Billing冻结到其唯一正式snapshot。不得将读成功当hold，授权未知／409不视为零用量。
+消费bearer不进snapshot、Run、outbox、usage或审计；现App还缺独立Billing grant生命周期及后台关联，
+不得用普通IAM登录bearer、管理员发放权限或稳定Run assertion替代付款授权。
+
 ## 精确模型修订选价绑定（2026-10-22，实施门）
 
 Billing现billing_metering_rate增加model_revision_id UUID NOT NULL和model_revision_digest CHAR(64) NOT NULL＋小写hex CHECK；现billing_metering_rate_revision.schema_version唯一允许2。映射身份进入同一rate canonical content/digest、业务键摘要v2、command schema2/审计和持久重建，映射版本即rate revision，不新建表/JSON稳定身份/第二事实源。商业五维仍ordinary columns，单一技术pair在同一完整配置不得跨商业tuple/币种；应用codec统一验证，既有unique digest仅缩窄索引而非替代full key校验。Prisma仅由canonical SQL临时库正规refresh派生。fresh-only，无旧无绑定rate回填/兼容；本片不执行正常DDL。正常演进须锁内确认rate两表仍为空并保护既有账户/余额/流水，非零或归属不明即停止该DDL。

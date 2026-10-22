@@ -1,3 +1,15 @@
+## 2026-10-22 AGENT-1／CREDIT-1：正式 prepared 消费及真实 owner 配对已验
+
+基线2d3ed0f，固定Agent7e1e068的HTTP7.1原Git对象；唯一vendor升级v7并删除v6，不留alias。usage2 schema／vectors／manifest原字节及原sealed三schema保持。沿现AgentUsageEvidenceReader增加readPrepared，复用专用bearer、总deadline、取消／drain与无重试GET；单独generated envelope，原raw各64KiB／深度／canonical／SHA／base64url严格校验。新首次准入仅收pending／requested_unknown及同request_ref，完整tenant/run/attempt和三摘要绑定、到达时expiry校验；返回原bytes及深冻结事实，不制造预占或dispatch许可。shared Ajv原样提取；原sealed数值域／状态与容量不放宽。
+
+新26例与原88例合计114 PASS；先取得readPrepared缺方法RED，再实现。主方357非文档输入停写，完整Node24.20.0 pnpm verify全0（格式／lint／types／build／SQL／contract及1762 PASS／524默认资源SKIP）；另真实三文件PG61 PASS／0SKIP、source/dist8 PASS／0SKIP，fresh prisma:check及正规生成检查0。原SQL／Prisma／Billing public YAML／依赖及正常配置未变；独立只读审查Approved，无确定P0–P2或多余兼容／抽象。
+
+仓外11项真实配对：actual Agent HTTP＋本owner PG准备事实→compiled-only Billing strict consumer→Billing真实不可变rate／policy发布和精确修订选价；显式QA非生产价格，预算10。覆盖错digest／request_ref／跨tenant／错误BFF bearer拒绝、原bytes深冻结、Agent行xmin不变、租约过期拒绝；10张资金／admission表均0。两owner在同一自建临时库的独立schema，所有自有进程／连接关闭后正常DROP，完整门与pair分别库存94→94精确相等；357输入重核无漂移。
+
+首次pair在仓外cwd读取正式policy资产失败，保留私有日志及不完整六检查／库存恢复收据；仅将验收进程cwd设为Billing正常运行目录后11项通过，未给生产加资产fallback。迭代中的TS泛型深度、requestId漏传、lint与夹具断言问题已修实现／自身设置，未放宽类型、限制或风险断言。证据留Root ignored，不提交真实地址／凭据或机器运行快照。
+
+当前仍是事实读取与选价，不是实际收费。正常Schema／服务／余额及流水未动，零模型／工具／真实结算。下步沿现IAM Billing resource用户grant与在线verify接合法逐attempt首次预算Admission及原回执恢复；App现仅持IAM登录grant，需在其既有服务端加密会话生命周期内持有独立Billing grant，并为异步Run建立无bearer的后台关联。普通Product token、Run assertion、管理员发放权均不替代消费授权；不用新增服务、token-exchange协议、旧成本保证或quantity=1旁路。整链及集中PR尚未完成，真钱支付不做。
+
 ## 2026-10-22 AGENT-1／MODEL-1：精确模型修订选价绑定已本地验收
 
 沿现不可变rate行绑定System修订UUID＋content digest和管理员显式商业五维／币种；无新表、服务或映射生命周期。Rate content/command/key升2，SQL追加两普通列，旧无绑定rate1明确拒绝，不回填／默认／兼容读。选择只收可信技术pair，不收调用方商业tuple，在原单次DB时点和active rate快照内冻结绑定与policy；同pair歧义、缺失、错digest、旧修订均拒绝。发布不是System存在性验证或消费许可，正式Admission仍须核Agent可信prepared快照。

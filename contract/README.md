@@ -73,7 +73,7 @@ public contract.
 
 ## MC01-B2b exact Agent HTTP consumer
 
-The existing usage2 consumer receipt also fixes the read-only HTTP6 OpenAPI and provenance distributed under `vendor/agent/http/v6/`. They are immutable Agent `2d5ce12` Git blobs, not editable Billing contracts. The existing generator checks both digests and derives the exact final-evidence envelope types/schema into two additional `src/generated/agent-usage-v2` files. Runtime reads only usage2 and bind sealed original bytes to a complete trusted snapshot; historical usage1 in the owner envelope is not a fallback. This adds no Billing route, financial permission, configured credential or model dispatch.
+The usage2 consumer receipt now fixes the read-only HTTP7.1 OpenAPI and provenance under `vendor/agent/http/v7/`, from immutable Agent `7e1e068` Git blobs. The old v6 vendor path is removed, not a runtime fallback. The existing generator emits exact sealed/prepared types and separate bounded envelope schemas. Both operations share the existing authenticated reader lifecycle; only pending/current prepared facts can be considered for a new admission. Canonical bytes, ordinary part digests, complete expected binding and arrival-time lease expiry are verified. This read is not a financial permit or hold; existing receipt recovery must not require a live prepared read. Frozen usage2 sources and the original sealed numeric/budget/knowledge semantics remain unchanged.
 
 ## Target per-attempt usage contract
 

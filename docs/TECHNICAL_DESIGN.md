@@ -1,3 +1,21 @@
+## AGENT-1：正式 prepared 消费（2026-10-22，实施设计）
+
+固定已验 Agent7e1e068／HTTP7.1 原Git对象，保现usage2原schema/vectors/manifest字节；
+唯一HTTP vendor改为http/v7，删旧v6路径，不留alias。沿现同一AgentUsageEvidenceReader增加
+readPrepared，复用origin／专用bearer、总deadline、取消／drain和有界无重试GET，不造第二HTTP client。
+当前用途是首次预算Admission前的可信事实读取，不是许可／预占／费用／实际归属；正常Module不自动启用。
+
+生成器从同一固定OpenAPI正规派生prepared envelope类型和schema。解码原base64url／普通SHA256／
+RFC8785字节，binding按usage2 EvidenceIdentity去event_id的精确投影，planned／authorization沿同一
+usage2定义与原扩展词；不复制新editable模型。首次新准入只收authorization_pending／requested_unknown
+及原request_ref，完整匹配受信tenant/run/attempt／三摘要，过期或错误拒绝。prepared／authorized
+不是新预占资格；既有资金恢复先读Billing原回执，不依赖活prepared读。
+
+原sealed reader/profile/unknown/64KiB／深度／禁止数字等保护不扩；仅新prepared envelope支持其
+正式final_request_binding_version数字1。三个原raw各仍≤65536，总envelope单独有界；不把HTTP数字
+放进usage2。共享现Ajv扩展配置，不削弱原codec。返回深冻结、保存原字节，不持久任何Key或token。
+本片不改Billing public YAML／SQL／资金状态，不新增消费凭据或假成本保证；预占与结算后继沿同owner接。
+
 ## AGENT-1／MODEL-1：精确模型修订选价绑定（2026-10-22，本地已验）
 
 状态：本地实现和最终停写验收通过；完整verify1736 PASS／524默认资源SKIP，真实PG61、source/dist8及仓外compiled6通过，fresh Prisma／HTTP生成检查0，353非文档输入零漂移、自有库94→94。独审Approved。正常未激活，后继固定BFF／App／Admin新exp6及Agent实际资金链。详细失败修复和证据限制见CURRENT首节。

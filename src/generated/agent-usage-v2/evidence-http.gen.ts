@@ -20,6 +20,40 @@ export type FinalModelCallUsageEvidence = {
   observed_at: string;
 };
 
+export type PreparedModelCallSnapshotEnvelope = {
+  data: PreparedModelCallSnapshot;
+  meta: Meta;
+};
+
+export type PreparedModelCallSnapshot = {
+  binding_version: "2.0.0";
+  attempt_id: string;
+  status: "prepared" | "authorization_pending" | "authorized";
+  /**
+   * Original canonical RFC8785 UTF-8 JSON bytes, 1..65536, unpadded canonical base64url. Decoded shape is usage/v2 EvidenceIdentity with event_id removed; no other fields added. Its digest is ordinary SHA256 of these exact bytes.
+   */
+  attempt_binding_bytes_base64url: string;
+  attempt_binding_digest: string;
+  /**
+   * Original canonical usage/v2 PlannedBinding bytes; binding_version must be 2.0.0. Ordinary SHA256, not the final evidence digest domain. Never actual commercial attribution.
+   */
+  planned_bytes_base64url: string;
+  planned_digest: string;
+  /**
+   * Current canonical usage/v2 AuthorizationObservation bytes: prepared/not_requested, authorization_pending/requested_unknown with original request_ref, or authorized/granted with original request_ref and admission_ref. This observation changes with state; it is not the creation receipt.
+   */
+  authorization_bytes_base64url: string;
+  authorization_digest: string;
+  final_request_binding_version: 1;
+  final_request_digest: string;
+  prepared_at: string;
+  /**
+   * Database time for the single joined read; lease expiry is observation, never a renewable dispatch permit.
+   */
+  observed_at: string;
+  lease_expires_at: string;
+};
+
 export type Meta = {
   request_id: string;
 };

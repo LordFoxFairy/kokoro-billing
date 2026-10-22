@@ -1,3 +1,21 @@
+## AGENT-1：正式 prepared 消费（2026-10-22，实施设计）
+
+固定已验 Agent7e1e068／HTTP7.1 原Git对象，保现usage2原schema/vectors/manifest字节；
+唯一HTTP vendor改为http/v7，删旧v6路径，不留alias。沿现同一AgentUsageEvidenceReader增加
+readPrepared，复用origin／专用bearer、总deadline、取消／drain和有界无重试GET，不造第二HTTP client。
+当前用途是首次预算Admission前的可信事实读取，不是许可／预占／费用／实际归属；正常Module不自动启用。
+
+生成器从同一固定OpenAPI正规派生prepared envelope类型和schema。解码原base64url／普通SHA256／
+RFC8785字节，binding按usage2 EvidenceIdentity去event_id的精确投影，planned／authorization沿同一
+usage2定义与原扩展词；不复制新editable模型。首次新准入只收authorization_pending／requested_unknown
+及原request_ref，完整匹配受信tenant/run/attempt／三摘要，过期或错误拒绝。prepared／authorized
+不是新预占资格；既有资金恢复先读Billing原回执，不依赖活prepared读。
+
+原sealed reader/profile/unknown/64KiB／深度／禁止数字等保护不扩；仅新prepared envelope支持其
+正式final_request_binding_version数字1。三个原raw各仍≤65536，总envelope单独有界；不把HTTP数字
+放进usage2。共享现Ajv扩展配置，不削弱原codec。返回深冻结、保存原字节，不持久任何Key或token。
+本片不改Billing public YAML／SQL／资金状态，不新增消费凭据或假成本保证；预占与结算后继沿同owner接。
+
 ## 精确模型修订选价绑定（2026-10-22，实施门）
 
 仅将原MeteringRate增加必填model_revision闭集{id: canonical UUID, content_digest: lowercase SHA256}；商业五维仍为管理员核实的显式配置，不从技术名称推导。rate draft/content/request schema2，experimental6；路径、29操作及其他schema语义保持，policy2/回执1不变。旧无绑定rate拒绝，无兼容；GET最新完整回传，同技术pair的五维/币种必须一致。内部选择只消费可信prepared精确修订，返回冻结映射与rate/policy，不接受Agent自报商业价目身份；此内核不自行验证外部owner或给予dispatch许可。原1MiB／12层／64行、三凭据、原命令重放/未知语义保持。发行物及消费者后继逐一固定，正常未激活。

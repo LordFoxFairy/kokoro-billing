@@ -26,6 +26,7 @@ const artifactNames = [
   "schema.gen.ts",
   "evidence-http.gen.ts",
   "evidence-http-schema.gen.ts",
+  "prepared-http-schema.gen.ts",
 ] as const;
 const release = z.object({
   usage_artifact: z.object({
@@ -111,7 +112,7 @@ export async function generateAgentUsageArtifacts(
       httpInput,
       JSON.stringify({
         openapi: "3.1.0",
-        info: { title: "Agent HTTP6 exact evidence", version: "6.0.0" },
+        info: { title: "Agent model-call owner facts", version: http.version },
         paths: {},
         components: { schemas: http.schemas },
       }),
@@ -126,13 +127,38 @@ export async function generateAgentUsageArtifacts(
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $ref: "#/$defs/FinalModelCallUsageEvidenceEnvelope",
       $defs: JSON.parse(
-        JSON.stringify(http.schemas).replaceAll(
-          '"#/components/schemas/',
-          '"#/$defs/',
-        ),
+        JSON.stringify(
+          Object.fromEntries(
+            Object.entries(http.schemas).filter(([name]) =>
+              [
+                "FinalModelCallUsageEvidenceEnvelope",
+                "FinalModelCallUsageEvidence",
+                "Meta",
+              ].includes(name),
+            ),
+          ),
+        ).replaceAll('"#/components/schemas/', '"#/$defs/'),
       ) as unknown,
     };
-    const httpSchema = `// Generated from immutable Agent HTTP6 schema. Do not edit.\nexport const SOURCE_SHA256 = ${JSON.stringify(http.sha256)};\nexport const agentEvidenceEnvelopeSchema = ${JSON.stringify(envelopeSchema)} as const;\n`;
+    const httpSchema = `// Generated from immutable Agent HTTP7.1 schema. Do not edit.\nexport const SOURCE_SHA256 = ${JSON.stringify(http.sha256)};\nexport const agentEvidenceEnvelopeSchema = ${JSON.stringify(envelopeSchema)} as const;\n`;
+    const preparedSchema = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $ref: "#/$defs/PreparedModelCallSnapshotEnvelope",
+      $defs: JSON.parse(
+        JSON.stringify(
+          Object.fromEntries(
+            Object.entries(http.schemas).filter(([name]) =>
+              [
+                "PreparedModelCallSnapshotEnvelope",
+                "PreparedModelCallSnapshot",
+                "Meta",
+              ].includes(name),
+            ),
+          ),
+        ).replaceAll('"#/components/schemas/', '"#/$defs/'),
+      ) as unknown,
+    };
+    const preparedHttpSchema = `// Generated from immutable Agent HTTP7.1 schema. Do not edit.\nexport const SOURCE_SHA256 = ${JSON.stringify(http.sha256)};\nexport const agentPreparedEnvelopeSchema = ${JSON.stringify(preparedSchema)} as const;\n`;
     const rawSchema = `// Generated from immutable Agent usage2 schema. Do not edit.\nexport const SOURCE_SHA256 = ${JSON.stringify(AGENT_USAGE_SCHEMA_SHA256)};\nexport const agentUsageSchema = ${schema.trim()} as const;\n`;
     const files = {
       "index.ts": await readFile(join(output, "index.ts"), "utf8"),
@@ -143,6 +169,7 @@ export async function generateAgentUsageArtifacts(
         "utf8",
       ),
       "evidence-http-schema.gen.ts": httpSchema,
+      "prepared-http-schema.gen.ts": preparedHttpSchema,
     };
     const destination = join(root, "src/generated/agent-usage-v2");
     if (!check) await mkdir(destination, { recursive: true });

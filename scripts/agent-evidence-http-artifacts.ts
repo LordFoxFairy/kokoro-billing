@@ -24,7 +24,7 @@ export async function readAgentEvidenceHttpArtifacts(
     ["openapi", receipt.http_contract.sha256],
     ["provenance", receipt.http_contract.provenance_sha256],
   ] as const) {
-    const raw = await readFile(join(root, `vendor/agent/http/v6/${name}.json`));
+    const raw = await readFile(join(root, `vendor/agent/http/v7/${name}.json`));
     if (createHash("sha256").update(raw).digest("hex") !== digest)
       throw new Error(
         "Agent HTTP distributed artifact differs from accepted release",
@@ -41,6 +41,8 @@ export async function readAgentEvidenceHttpArtifacts(
     [
       "FinalModelCallUsageEvidenceEnvelope",
       "FinalModelCallUsageEvidence",
+      "PreparedModelCallSnapshotEnvelope",
+      "PreparedModelCallSnapshot",
       "Meta",
     ].map((name) => {
       const value = document.components.schemas[name];
@@ -49,5 +51,9 @@ export async function readAgentEvidenceHttpArtifacts(
       return [name, value];
     }),
   );
-  return { schemas, sha256: receipt.http_contract.sha256 };
+  return {
+    schemas,
+    sha256: receipt.http_contract.sha256,
+    version: receipt.http_contract.version,
+  };
 }

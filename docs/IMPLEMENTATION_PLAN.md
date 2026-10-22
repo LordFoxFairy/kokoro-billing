@@ -1,3 +1,14 @@
+## AGENT-1／CREDIT-1：正式 prepared 消费（2026-10-22，本地已验）
+
+状态：主方唯一writer，基线2d3ed0f；新26例及原88例114 PASS，完整verify1762 PASS／524默认资源SKIP、相关真实PG61、source/dist8、fresh Prisma／生成检查均0，357非文档输入无漂移。另仓外actual Agent owner HTTP／PG→compiled Billing consumer／PG选价11检查通过，同库两owner隔离schema，自有进程／连接关闭后库库存精确恢复；QA价目不称真实费用，资金表零写。独审Approved，正常未激活；失败及证据边界见CURRENT首节。
+
+- [x] 固定Agent7e1e068／HTTP7.1原件与原usage2三件，正规生成prepared表示；唯一v7 vendor，旧v6删除。
+- [x] 沿现reader共享总deadline／取消／drain／专用身份，新prepared原bytes和完整受信预期校验；旧sealed保护保持。
+- [x] 停写完整owner门、实际两owner配对及独立只读审查。
+- [ ] 同一主链下一步：合法用户消费grant生命周期及异步Run后台关联→首次预算Admission／永久回执恢复→原single-dispatch→真实usage封口／一次整数结算。先沿现IAM原生Billing resource＋verify，不复用普通IAM登录token、不新建服务或token-exchange；消费bearer不入Run／outbox／usage。资金与HTTP变更先通过现三面门，再TDD与隔离真实I/O验收。
+
+本片不改变public HTTP、SQL／Prisma、Module正常装配或资金，不能据此勾AGENT-1／CREDIT-1整项完成。沿唯一原任务表继续，不开MCP新验收周期。
+
 ## AGENT-1／MODEL-1：精确模型修订选价绑定（2026-10-22，本地已验）
 
 状态：本地实现和最终停写验收通过；完整verify1736 PASS／524默认资源SKIP，真实PG61、source/dist8及仓外compiled6通过，fresh Prisma／HTTP生成检查0，353非文档输入零漂移、自有库94→94。独审Approved。正常未激活，后继固定BFF／App／Admin新exp6及Agent实际资金链。详细失败修复和证据限制见CURRENT首节。
