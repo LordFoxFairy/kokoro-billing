@@ -1,6 +1,14 @@
+import { CreditGrantController } from "../modules/credit/credit-grant.controller.js";
+import { CreditGrantGuard } from "./credit-grant.guard.js";
+import { parseAdminCreditGrantJson } from "../modules/credit/credit-grant.input.js";
 import { CreditAccountController } from "../modules/credit/credit-account.controller.js";
 import { CreditAccountGuard } from "./credit-account.guard.js";
-import { Inject, InternalServerErrorException, Module } from "@nestjs/common";
+import {
+  BadRequestException,
+  Inject,
+  InternalServerErrorException,
+  Module,
+} from "@nestjs/common";
 import type { DynamicModule, NestModule } from "@nestjs/common";
 import { APP_FILTER, HttpAdapterHost } from "@nestjs/core";
 import { FastifyAdapter } from "@nestjs/platform-fastify";
@@ -47,6 +55,25 @@ export class BillingHttpModule implements NestModule {
     if (!(adapter instanceof FastifyAdapter))
       throw new Error("Billing HTTP requires FastifyAdapter");
     const fastify = adapter.getInstance<FastifyInstance>();
+    const json = fastify.getDefaultJsonParser("error", "error");
+    fastify.removeContentTypeParser("application/json");
+    fastify.addContentTypeParser(
+      "application/json",
+      { parseAs: "buffer" },
+      (request, body, done) => {
+        if (
+          request.method === "POST" &&
+          request.routeOptions.url === "/v1/admin/billing/credit-grants"
+        ) {
+          try {
+            if (!Buffer.isBuffer(body)) throw new BadRequestException();
+            done(null, parseAdminCreditGrantJson(body));
+          } catch {
+            done(new BadRequestException());
+          }
+        } else void json(request, body.toString("utf8"), done);
+      },
+    );
     fastify.addHook("onRequest", (request, reply, done) => {
       const supplied = request.headers["x-request-id"];
       request.id =
@@ -89,6 +116,7 @@ export class BillingHttpModule implements NestModule {
       controllers: [
         CreditReadController,
         CreditAccountController,
+        CreditGrantController,
         CatalogReadController,
         ServiceProbesController,
       ],
@@ -101,6 +129,7 @@ export class BillingHttpModule implements NestModule {
         },
         CatalogGuard,
         CreditAccountGuard,
+        CreditGrantGuard,
         { provide: BILLING_PERSONAL_HTTP_OPTIONS, useValue: config },
         {
           provide: BILLING_PERSONAL_AUTH,
@@ -128,7 +157,7 @@ export class BillingHttpModule implements NestModule {
               Object.entries(generatedSchemas),
             );
             if (
-              bindings.length !== 43 ||
+              bindings.length !== 45 ||
               exports.size !== bindings.length ||
               new Set(bindings.map(([, exported]) => exported)).size !==
                 exports.size
@@ -150,6 +179,8 @@ export class BillingHttpModule implements NestModule {
             );
             return Object.freeze({
               names: Object.freeze(bindings.map(([name]) => name)),
+              acceptsRequest: (name, value) =>
+                validators.get(name)?.(value) === true,
               assert: (name, value) => {
                 const validator = validators.get(name);
                 if (validator === undefined || !validator(value))

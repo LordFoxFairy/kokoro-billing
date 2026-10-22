@@ -52,6 +52,7 @@ describe("canonical runtime probe authority and retired route removal", () => {
         [
           ...expectedPaths.flatMap((path) => [`GET ${path}`, `HEAD ${path}`]),
           "PUT /v1/billing/me/credit-account",
+          "POST /v1/admin/billing/credit-grants",
         ].sort(),
       );
       const live = await app.inject({ method: "GET", url: "/healthz" });

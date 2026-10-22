@@ -1,3 +1,9 @@
+## CREDIT-1：后台发放唯一新增owner操作（2026-10-22）
+
+POST /v1/admin/billing/credit-grants是internal-owner，不是直接给浏览器的公共API；当前web-bff机器身份＋专用operatorProxySecret＋受信u1 tenant/operator全部必需，没有用户分支。canonical OpenAPI定义closed请求/响应、正整积分单位、幂等身份、201/400/403/409/500/503；billing.idempotency_conflict是确定不重试的参数漂移，不把未知ACK改为新funding_id。重放返回原201表示。BFF负责当前管理权限和同tenant接收者资格，Billing不信body的tenant/actor/role，不转发用户token。
+
+只复用当前Ledger/Grant单位与流程；不把新操作挂到旧/v2或admin角色header路径。原25操作/43schema在构建契约负控保完整，新增操作/两组件及版本正规生成，不以同一digest覆盖旧发行物。精确wire与版本以canonical为准；Manus后台发放未观测，作为明确业务差异登记。
+
 ## CREDIT-1：内部计价语义（2026-10-22）
 
 HTTP canonical /v1 的25 operations、认证、金额单位和 generated API 不改变；本片不新增route。Metering纯结果及policy draft的内部 `roundingVersion` 固定为 `attempt-credit-ceil-v2`：对同attempt汇总的精确积分成本ceil一次整积分，再乘1,000,000记账。旧 `attempt-ceil-v1` 不能进入当前policy codec；不按旧名称改变历史snapshot含义。不得从纯结果推导已取得消费许可或资金写入成功，正式Admission/Capture仍按其owner证据和持久幂等边界接线。

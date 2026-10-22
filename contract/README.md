@@ -1,3 +1,9 @@
+## CREDIT-1：非现金管理员积分发放（2026-10-22，未正常激活）
+
+canonical `openapi/v1/openapi.yaml` 为4.0.0-experimental.4，26 operations／45 schemas；新增POST /v1/admin/billing/credit-grants及严格请求/响应。web-bff当前管理员代理与同tenant接收者资格由BFF核实，Billing另核service bearer/internal secret/operatorProxySecret与u1 tenant/operator；不接受body tenant/actor/role、用户Bearer或旧admin header分支。正常资金未写入，消费者及实际用量结算仍待完整接线；无现金支付。
+
+SHA256 `a09e00a3d6f602fdaff13a50a5a839c8a989b1a26ab28c43eac314738fcfdef2`。唯一canonical正规生成；构建/测试将新funding profile移除后精确还原此前25操作/43schema全部原字节，历史inverse只作保护性oracle，不是runtime兼容或第二份可编辑契约。
+
 ## 2026-10-20 PR #2 current integration
 
 Canonical `openapi/v1/openapi.yaml` advances to `4.0.0-experimental.3`: 25 operations / 43 schemas. `PUT /v1/billing/me/credit-account` reuses the approved machine-only naturally idempotent zero-account command. No `/v2` alias; no grants, journals, payments or schema changes. The exact inverse restores main experimental.2 bytes and runs its unchanged validator. This is an internal lifecycle operation, not a user-facing account-opening step. BFF/App consumption is separate.
@@ -26,16 +32,13 @@ SHA256 `9ff84d5f473e2f161f5d0c496db4cee175e2b032e836e97c7e23b9576a0af3e6`。消�
 
 ## Current machine artifact
 
-[`openapi/v1/openapi.yaml`](openapi/v1/openapi.yaml) is the only editable Billing HTTP machine source. It defines exactly 25 operations: three unversioned probes and 22 `/v1/**` internal-owner operations. The artifact version is `4.0.0-experimental.3`; package version and HTTP path version are independent. There is no `/v2` alias, fallback, or second editable contract.
+[`openapi/v1/openapi.yaml`](openapi/v1/openapi.yaml) is the only editable Billing HTTP machine source. It defines exactly 26 operations: three unversioned probes and 23 `/v1/**` internal-owner operations. The artifact version is `4.0.0-experimental.4`; package version and HTTP path version are independent. There is no `/v2` alias, fallback, or second editable contract.
 
 ```text
-openapi/v1/openapi.yaml  9a7048b6afc299ad4a7df8cde2428cb3a471291a764e1161e7d85f77174cb204
-
-openapi/v1/openapi.yaml  fbe34c188cf4a9f08955e4b94ceab40d63a41156a3106fae6ab939a4190612b7
-openapi/v2/openapi.yaml  b413db8965ed60683435adb7f2ce8650a7ca7bf7bee0989e8f83afc3d9f846af
+openapi/v1/openapi.yaml  a09e00a3d6f602fdaff13a50a5a839c8a989b1a26ab28c43eac314738fcfdef2
 ```
 
-The probes, canonical Catalog, two personal Credit reads and the machine-only account initialization PUT are mounted by this source candidate. The other 18 contract operations remain unimplemented and unregistered; their presence in the target artifact is not runtime-completion evidence. Historical candidate narratives and old digests remain in Git history and dated owner documentation.
+The probes, canonical Catalog, two personal Credit reads, the machine-only account initialization PUT and the delegated-administrator non-cash credit-grant POST are mounted by this source candidate. The other 18 contract operations remain unimplemented and unregistered; their presence in the target artifact is not runtime-completion evidence. Historical candidate narratives and old digests remain in Git history and dated owner documentation.
 
 ## Owner, visibility, and authority
 

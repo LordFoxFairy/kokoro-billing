@@ -1,3 +1,9 @@
+## CREDIT-1：正式非现金资金入口（2026-10-22）
+
+当前状态：owner实施与本地验收通过。原grant跨effective_at重复计入的P1已先真实PG RED后修复；同一次DB时点决定状态和余额。最终341非文档输入无漂移，完整verify1628 PASS／509默认资源SKIP；相关真实PG133 PASS／0SKIP、source/dist8 PASS／0SKIP，fresh canonical/Prisma drift与官方HTTP artifact drift通过，临时库库存精确恢复。治理map旧别名已由正式26操作全覆盖集合承接，不用continue漏检。源码/契约/Schema与正常激活分开，后继BFF/Admin及Agent主链仍未完成。
+
+主方单writer续用codex/integer-credit-metering，基线b4dda14。先三面门与canonical新增操作/两schema/版本；现HTTP real-positive及身份/输入/幂等负控RED→沿现Credit grant接线→正规生成/契约消费者保护→真实PG及owner全门；owner发行停写后接BFF/Admin同tenant管理入口与正常回读。没有现金渠道、新owner或手工SQL充值；不先跳过Agent资金许可。正常资金/配置/进程不自动切换。
+
 ## CREDIT-1：主链整积分内核（2026-10-22）
 
 主方唯一writer，基线158579f，隔离checkout `codex/integer-credit-metering`。承接Root最新主链与用户整数扣分裁决：先在现pricing suite新增整数边界回归并确认真实RED；再改唯一pricing/type与policy codec/type标识；更新现codec/真实publication fixture，保原负控并补旧版本拒绝；focused→相关format/lint/types/build/contract/default门。只改Metering计价、直接相关测试与这三设计/当前事实，不动旧Admission/Commerce/HTTP/Schema或正常资源。真实模型/资金整链仍由随后逐owner接线，非本纯内核完成条件的替代。

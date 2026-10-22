@@ -1,3 +1,13 @@
+## CREDIT-1：管理员非现金积分发放（2026-10-22，主链内实施）
+
+复用CreditService.grant及现receipt/subject锁/余额/流水/audit，不建第二钱包或支付流程。唯一新增owner POST /v1/admin/billing/credit-grants；Web→BFF必须先核当前平台管理权限与接收者属于当前受信tenant，再以现web-bff bearer、internal secret、专用operatorProxySecret及u1 tenant/operator调用。Billing强制全部服务凭据及唯一header，无用户Bearer/旧admin角色header回退；actor来自已认证上下文，body不收tenant/actor/role。此项为Kokoro已批准后台维护业务差异，未观察到Manus后台发放API，不宣称其私有实现等价。
+
+闭集请求为funding_id（本次v4 UUID）、subject_id、amount_credits（正整数字符串且×1m不越int64）、reason、effective_at（固定UTC毫秒生效时间）。BFF首次提交冻结时间/body/key；重放不得重新采样时间。服务端固定sourceKind=admin_credit、programKey=admin_credit_v1、sourceRef/commandIdentity=funding_id，不接受来源/价格/余额自报。沿grant原事务，幂等键与funding_id均绑定完整payload；并发/换key原结果恢复，漂移409，未知结果仅原命令恢复。返回account_id/grant_id/journal_id；新增发放仅append，不允许编辑/删除账本。发放不是充值支付成功，不发送模型或消费积分。
+
+写区为canonical HTTP/正规生成与相关gate、现Credit controller/input/guard、HTTP module/ErrorFilter和受影响测试/文档。Schema不变；正常配置/资金不因源码变化激活。依赖owner发行物停写验证后才给BFF/Admin消费，不新建临时/legacy端点。验收含三凭据和u1边界、body/金额/时间/重复header/畸形JSON、真实PG并发同funding_id/换key/漂移/禁用/回滚、审计actor/来源/金额和响应ACK恢复；然后完整owner门及消费者真实页面闭环，不能以owner成功代替产品充值入口。
+
+独审已复现原grant在INSERT前后重复采样应用时钟，跨effective_at时会pending且入账，后续激活重复入账。扩现CreditRepository.grant写区：持有账户锁后、写grant前取一次数据库clock_timestamp，同一now决定status与首次余额增量并用于更新时间；pending后继只能由原refreshGrantWindows激活一次。真实PG用仅临时库的延迟INSERT触发器跨生效点复现RED，再核同一grant余额/流水/审计/receipt及重复refresh不加第二次；不靠拒绝未来生效时间或降低断言掩盖。
+
 ## CREDIT-1：整积分取整（2026-10-22，已确认需求内实施）
 
 Billing 现 Metering 是唯一计价 owner。一个 attempt 的已验证实际类别先归一化合计，保留精确有理数费用，应用冻结倍率及 currency→Credit-micros 换算后，以 `ceil(unrounded_micros / 1_000_000) * 1_000_000` 得到账本应扣值。只在此边界取整一次；0仍0，正分数不足1积分扣1积分，取整后溢出int64即拒绝，不截断、不夹到上限。不按stream chunk或重复回执分别计价；去重与single settlement仍归后继Admission事务，不由纯函数冒充。

@@ -1,3 +1,13 @@
+## 2026-10-22 CREDIT-1：正式非现金发放 owner 已验，产品消费者继续
+
+基线b4dda14，新增唯一 POST /v1/admin/billing/credit-grants；复用Credit grant/账本/双身份receipt/audit，不建表或支付流程。canonical 4.0.0-experimental.4，26操作/45schema，SHA256 a09e00a3d6f602fdaff13a50a5a839c8a989b1a26ab28c43eac314738fcfdef2，正规生成且generated drift通过；前25操作/43schema全文逆恢复保护不变。强制web-bff bearer/internal/operator三独立凭据与u1 tenant/operator；金额为正整数字符串、BigInt×1m，来源/program及funding永久身份固定，闭集输入拒tenant/actor/role自报、重复decoded JSON键、重复header与非法字节。
+
+独审P1已真实复现并修复：原grant在INSERT两侧采样时钟，跨effective_at时保存pending却已加余额，后续激活会再加一次。现在锁内一次DB时点同时决定status/首次入账/更新时间；真实PG延迟INSERT跨生效点先RED（期待0实际1m），修后pending余额0、连续两次refresh仅到账1m。8项新真实Nest HTTP+PG验收通过，覆盖多key并发单效果、丢ACK同/换key恢复、完整payload漂移零写、disabled拒绝与旧回执保留、tenant隔离、audit失败全事务回滚后原命令可重试、最大整数精度及累计int64溢出零资金差量。累计超限沿原DB约束返回固定500，不截断/夹上限；没有冒充后台友好业务限额已实现。
+
+主方最终341非文档输入冻结无漂移，Node24.20.0完整pnpm verify exit0（format/lint/types/build/SQL/contract及1628 PASS／509资源SKIP）。独立真实Credit读/计量/新发放三文件133 PASS／0SKIP；原source/dist runtime8 PASS／0SKIP；fresh Prisma canonical/drift检查exit0。每次临时库库存94→94精确恢复，未写正常资金/配置、未重启正常服务或发模型/工具请求。独审最终无确定P0–P2；初次missing test、lint、旧版本和mounted inventory失败日志保留。补齐原治理map的退休路径并覆盖全部26操作，严格集合相等断言不再静默跳过旧键；不是放宽门禁。
+
+本片仅为owner交付证据。BFF当前管理员和收款人tenant资格核验、后台表单及正常充值尚未接线；Agent资金授权、唯一派发、usage封口和实际整数结算继续，不以owner验收宣布CREDIT-1/AGENT-1完成。真钱支付不做；集中PR/merge仍待完整消费者链与自验，不提前改变Root gitlink。
+
 ## 2026-10-22 CREDIT-1：整积分计价内核已验，真实结算接线继续
 
 基线158579f，按用户明确整数扣积分裁决，现Metering唯一内核改为同attempt归一化合计→冻结倍率/精确换算→一次ceil整Credit→×1,000,000账本micros；0仍0，正分数不足1积分收1积分，取整越int64拒绝而不clip。新policy/result标识attempt-credit-ceil-v2；旧v1 immutable bytes保为负控且当前codec拒绝，不重解释历史/增加fallback。无SQL/Prisma/HTTP/依赖或正常数据改动，纯函数不冒资金许可或重复结算防护。

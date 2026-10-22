@@ -1,3 +1,9 @@
+## CREDIT-1：管理员发放复用现资金事实（2026-10-22）
+
+grant首次写入的status与余额增量使用同一次数据库时点；即使INSERT等待跨过effective_at，pending不得提前计入余额，后继正式激活仅计一次。无需DDL或另一份余额字段。
+
+无DDL/新表/Prisma变化。复用credit account/grant/journal、command receipt/key binding及audit；funding_id映射source_ref和command_identity，source_kind=admin_credit、program_key=admin_credit_v1，到账金额为amount_credits×1m。原串行subject锁及账户row lock、receipt双身份和原子audit保护；无手工余额UPDATE旁路，不删除或覆写旧流水，原重放精确匹配生效时间和全部业务参数。当前正常零账户/余额不改，待正式服务与消费者验收后才对明确测试额度发放。
+
 ## CREDIT-1：整积分取整的数据边界（2026-10-22）
 
 无DDL、Prisma/schema、迁移或正常数据写入。现policy普通列 `rounding_version` 存新策略的 `attempt-credit-ceil-v2`，新内容自然有不同canonical digest；不更新既有revision或snapshot。余额/流水仍以int64 Credit micros保存；新计价结果为1,000,000的整倍数，0有效，超出int64可表示整积分上限拒绝。换算中间有理数不提前取整。旧micro-ceil策略不接受为新policy，不建立旧数据兼容执行路径。

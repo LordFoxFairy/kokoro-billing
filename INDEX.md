@@ -1,4 +1,8 @@
-## 2026-10-20 PR #2 integration (current)
+## 2026-10-22 CREDIT-1 当前主链
+
+新增正式非现金发放owner POST /v1/admin/billing/credit-grants，唯一canonical为4.0.0-experimental.4（26操作/45schema）。现Credit内的guard/input/controller复用原账本/审计/双身份幂等；grant状态与首次入账共用一次DB时点，消除跨生效时点重复入账。完整本地门及相关真实PG/source-dist已验；BFF/Admin产品消费者、Agent授权与实际用量扣分继续，正常资金未动。确切证据与限制见docs/CURRENT.md。
+
+## 2026-10-20 PR #2 integration（历史交付）
 
 Current account initialization uses PUT /v1/billing/me/credit-account and canonical 4.0.0-experimental.3. Reuses SET55 owner implementation; no user-facing opening step, /v2 fallback, schema or financial mutations. Earlier dated SET55 v2 receipts remain historical. Final local verify and affected real PG/source-dist verification passed; final readonly review Approved. See CURRENT for exact evidence and limits.
 

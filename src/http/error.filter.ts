@@ -1,3 +1,4 @@
+import { CommandReceiptError } from "../database/command-receipt.error.js";
 import { Catch, HttpException, Inject, Injectable } from "@nestjs/common";
 import type { ArgumentsHost, ExceptionFilter } from "@nestjs/common";
 import type { FastifyReply } from "fastify";
@@ -31,6 +32,11 @@ const errors = {
   404: {
     code: "billing.not_found",
     message: "Resource not found",
+    retryable: false,
+  },
+  409: {
+    code: "billing.idempotency_conflict",
+    message: "Command identity conflicts",
     retryable: false,
   },
   500: {
@@ -84,10 +90,16 @@ function dependency(error: unknown, depth = 0): boolean {
 }
 function statusOf(error: unknown): Status {
   if (dependency(error)) return 503;
+  if (
+    error instanceof CommandReceiptError &&
+    error.code === "COMMAND_IDEMPOTENCY_CONFLICT"
+  )
+    return 409;
   if (error instanceof CreditError) {
     if (["CREDIT_INVALID_QUERY", "CREDIT_INVALID_CURSOR"].includes(error.code))
       return 400;
     if (error.code === "CREDIT_ACCOUNT_DISABLED") return 403;
+    if (error.code === "CREDIT_IDEMPOTENCY_CONFLICT") return 409;
     return error.code === "CREDIT_ACCOUNT_NOT_FOUND" ? 404 : 500;
   }
   if (error instanceof HttpException) {
@@ -96,6 +108,7 @@ function statusOf(error: unknown): Status {
       status === 401 ||
       status === 403 ||
       status === 404 ||
+      status === 409 ||
       status === 503
       ? status
       : 500;

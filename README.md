@@ -7,7 +7,7 @@ Reconcile 与 Billing command receipt；不拥有 Tenant、Identity、Agent Run�
 > 表述为生产证据。
 
 当前规范化分支的[任务板](docs/IMPLEMENTATION_PLAN.md)与[ADR-0003](docs/ADR/0003-nestjs-prisma-sql-first-alignment.md)
-记录Nest/Prisma目标与分阶段验收；唯一正常入口现使用 canonical Nest module graph，当前仅个人余额/流水及三项 probe，完整 Billing 业务与收费仍待验收。
+记录Nest/Prisma目标与分阶段验收；唯一入口使用canonical Nest module graph。已交付目录、本人余额/流水、无感零账户初始化及三项probe；本地候选新增正式非现金管理员发放，相关owner验收已过但正常后台消费者尚待。完整Agent资金授权、实际用量结算与收费仍待接线，不以源码候选冒称正常生效。
 
 ## 边界
 

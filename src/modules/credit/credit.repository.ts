@@ -359,6 +359,14 @@ export class CreditRepository {
     }
     const grantId = randomUUID();
     const journalId = randomUUID();
+    const clock = await client.$queryRaw<
+      Array<{ now: Date }>
+    >`SELECT clock_timestamp() AS now`;
+    const now = clock[0]?.now;
+    if (!now) throw new Error("Database clock unavailable");
+    // INSERT may wait past effective_at. Status and the initial balance must
+    // agree at one instant, or pending activation would credit the grant twice.
+    const active = input.effectiveAt <= now;
     const seq = await this.#nextJournalSeq(input.tenantId, account.id);
     await client.billing_credit_grant.create({
       data: {
@@ -373,16 +381,16 @@ export class CreditRepository {
         effective_at: input.effectiveAt,
         expires_at: input.expiresAt ?? null,
         burn_priority: input.burnPriority ?? 0,
-        status: input.effectiveAt <= new Date() ? "active" : "pending",
+        status: active ? "active" : "pending",
       },
     });
-    if (input.effectiveAt <= new Date())
+    if (active)
       await client.billing_credit_account.update({
         where: { id: account.id },
         data: {
           available_micros: { increment: input.amountMicros },
           generation: { increment: 1 },
-          updated_at: new Date(),
+          updated_at: now,
         },
       });
     await client.billing_credit_journal.create({

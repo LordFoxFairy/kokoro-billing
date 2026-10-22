@@ -4,6 +4,28 @@ export type ClientOptions = {
   baseUrl: "https://billing.internal" | (string & {});
 };
 
+export type AdminCreditGrantRequest = {
+  funding_id: string;
+  subject_id: string;
+  /**
+   * Whole Credits, not micros. Maximum 9223372036854; server multiplies by 1000000 using BigInt and rejects overflow.
+   */
+  amount_credits: string;
+  reason: string;
+  /**
+   * UTC millisecond business intent frozen by the BFF at first submission; never regenerated on retry.
+   */
+  effective_at: string;
+};
+
+export type AdminCreditGrantResponse = {
+  data: {
+    account_id: Uuid;
+    grant_id: Uuid;
+    journal_id: Uuid;
+  };
+};
+
 export type Uuid = string;
 
 export type UtcInstant = string;
@@ -1395,6 +1417,55 @@ export type GetRefundResponses = {
 };
 
 export type GetRefundResponse = GetRefundResponses[keyof GetRefundResponses];
+
+export type CreateAdminCreditGrantData = {
+  body: AdminCreditGrantRequest;
+  headers: {
+    "x-kokoro-tenant-id": string;
+    "x-kokoro-subject": string;
+    "x-kokoro-service": "web-bff";
+    "idempotency-key": string;
+  };
+  path?: never;
+  query?: never;
+  url: "/v1/admin/billing/credit-grants";
+};
+
+export type CreateAdminCreditGrantErrors = {
+  /**
+   * Invalid request
+   */
+  400: ErrorResponse;
+  /**
+   * Privileged service admission denied
+   */
+  403: ErrorResponse;
+  /**
+   * Command identity conflicts
+   */
+  409: ErrorResponse;
+  /**
+   * Internal failure
+   */
+  500: ErrorResponse;
+  /**
+   * Dependency unavailable
+   */
+  503: ErrorResponse;
+};
+
+export type CreateAdminCreditGrantError =
+  CreateAdminCreditGrantErrors[keyof CreateAdminCreditGrantErrors];
+
+export type CreateAdminCreditGrantResponses = {
+  /**
+   * Grant created or exact receipt replay
+   */
+  201: AdminCreditGrantResponse;
+};
+
+export type CreateAdminCreditGrantResponse =
+  CreateAdminCreditGrantResponses[keyof CreateAdminCreditGrantResponses];
 
 export type CreateAdminRefundData = {
   body: RefundCreateRequest;
