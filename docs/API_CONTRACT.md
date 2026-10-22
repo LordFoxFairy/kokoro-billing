@@ -1,3 +1,7 @@
+## AGENT-1／CREDIT-1：可执行 policy 的 usage2 引用（2026-10-22）
+
+本片没有HTTP、请求DTO、响应、鉴权或生成物变更。Metering包内profileRef保持原version＋artifactDigest结构；当前可执行值配对既有固定Agent usage2 version2.0.0与manifest aggregate 7c5fd0b24d0a691cfcf769a981d8b4a8a689534d9b4ae1b5968342bde591094c。不是schema文件摘要，不接受usage1、版本/digest错配或自动回退；独立Billing failure policy仍为1.0.0。当前publisher/selector仍包内API，未因此暴露为已挂载正式资金接口。
+
 ## CREDIT-1：后台发放唯一新增owner操作（2026-10-22）
 
 POST /v1/admin/billing/credit-grants是internal-owner，不是直接给浏览器的公共API；当前web-bff机器身份＋专用operatorProxySecret＋受信u1 tenant/operator全部必需，没有用户分支。canonical OpenAPI定义closed请求/响应、正整积分单位、幂等身份、201/400/403/409/500/503；billing.idempotency_conflict是确定不重试的参数漂移，不把未知ACK改为新funding_id。重放返回原201表示。BFF负责当前管理权限和同tenant接收者资格，Billing不信body的tenant/actor/role，不转发用户token。

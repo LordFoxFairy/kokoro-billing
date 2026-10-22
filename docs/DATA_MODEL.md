@@ -1,3 +1,7 @@
+## AGENT-1／CREDIT-1：当前 profile 配对不迁移历史（2026-10-22）
+
+无DDL、Prisma派生或正常数据变更。沿原policy/rate revision不可变存储及profile_version/profile_artifact_digest字段，后继新发布必须绑定已消费usage2正式aggregate；不改历史行、历史receipt、原始canonical bytes/digest或已有余额。当前选择拒旧/错配可执行policy，不把旧记录在读取时补成新profile。真实验证只用自有fresh fixture，正常已发1000非现金积分不受此纯guard修复改写。
+
 ## CREDIT-1：管理员发放复用现资金事实（2026-10-22）
 
 grant首次写入的status与余额增量使用同一次数据库时点；即使INSERT等待跨过effective_at，pending不得提前计入余额，后继正式激活仅计一次。无需DDL或另一份余额字段。

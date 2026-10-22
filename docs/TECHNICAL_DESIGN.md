@@ -1,3 +1,9 @@
+## AGENT-1／CREDIT-1：当前 usage2 计价策略绑定修复（2026-10-22）
+
+当前 Agent producer／Billing evidence reader 已唯一使用正式 usage2，但 Metering 可执行 policy guard 仍硬绑 usage1 aggregate，导致真实当前 profile 无法发布／选取，而旧 profile 被当作可执行。沿已批准 MC01 usage2 单轨决定，在现 metering-policy-artifact.ts 原位改为固定已消费 owner usage2 的 version 2.0.0／manifest aggregate 7c5fd0b24d0a691cfcf769a981d8b4a8a689534d9b4ae1b5968342bde591094c，不把 schema hash 当 aggregate，不增加reader／服务／配置或fallback。failure policy独立1.0.0、7/5倍率、一次整积分ceil及已验证风险语义保持。
+
+只修改上述guard及针对性unit、现真实PG publication/selection测试和相关文档；复用当前固定Agent发布物，HTTP契约和SQL不变。旧持久policy不重写、不升级或重新解释；当前执行拒旧profile，正式复用须另发当前profile的新不可变policy。验收先证明当前profile拒绝／旧profile误收的RED，再验当前通过、旧版／交叉digest／schema-vs-aggregate／未知版本拒绝及真实PG原幂等、并发、选择、损坏与回滚门。此修复只是Agent资金接线前置，不声称Admission／模型请求／实际扣分已可用。
+
 ## CREDIT-1：管理员非现金积分发放（2026-10-22，主链内实施）
 
 复用CreditService.grant及现receipt/subject锁/余额/流水/audit，不建第二钱包或支付流程。唯一新增owner POST /v1/admin/billing/credit-grants；Web→BFF必须先核当前平台管理权限与接收者属于当前受信tenant，再以现web-bff bearer、internal secret、专用operatorProxySecret及u1 tenant/operator调用。Billing强制全部服务凭据及唯一header，无用户Bearer/旧admin角色header回退；actor来自已认证上下文，body不收tenant/actor/role。此项为Kokoro已批准后台维护业务差异，未观察到Manus后台发放API，不宣称其私有实现等价。

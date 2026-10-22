@@ -1,3 +1,11 @@
+## 2026-10-22 AGENT-1／CREDIT-1：当前 usage2 可执行 policy 已配对
+
+源码实证发现 Agent producer及Billing reader已固定usage2，而Metering policy guard仍接受usage1 aggregate并拒绝当前profile。新风险测试真实RED为2 FAIL／9 PASS；现仅原位改两个版本／aggregate值，usage2固定owner Git原件核等，不混schema hash，不引入旧版fallback或新服务。failure-policy1.0.0／原generic规则保持，历史manifest只保留原发行关联，不作为当前profile支持集；旧行／receipt／digest不升级、不重解释。原publication和joint selection都调用同一guard，当前新策略可正式发布／选取，旧版明确拒绝。
+
+主方停写338非文档输入，完整Node24.20.0 `pnpm verify` 全0（format/lint/types/build/SQL/contract及1639 PASS／509默认资源SKIP）；focused322 PASS，相关真实PG原publication/selection38 PASS／0 SKIP，`prisma:check`与正式HTTP生成检查0。自有临时库库存94→94精确相同，源码门内无漂移。独立只读审查无确定P0–P2；未削弱原并发、审计、幂等、损坏拒绝与回滚断言。证据只留Root ignored目录。
+
+本片无HTTP／SQL／Prisma schema／normal配置或资金写入，未进行模型／工具调用／actual settlement；正常上一片1000非现金充值不能当本片实际扣分证据。后继仍须完成Agent逐attempt bound／Billing资金授权与唯一派发／真实usage封口／正式计量结算；现旧分层Admission和quantity=1 feature quote不作为模型费用旁路复活，缺正式授权仍零派发。真钱支付不做；整个目标和集中PR尚未完成。
+
 ## 2026-10-22 CREDIT-1：正式非现金发放 owner 已验，产品消费者继续
 
 基线b4dda14，新增唯一 POST /v1/admin/billing/credit-grants；复用Credit grant/账本/双身份receipt/audit，不建表或支付流程。canonical 4.0.0-experimental.4，26操作/45schema，SHA256 a09e00a3d6f602fdaff13a50a5a839c8a989b1a26ab28c43eac314738fcfdef2，正规生成且generated drift通过；前25操作/43schema全文逆恢复保护不变。强制web-bff bearer/internal/operator三独立凭据与u1 tenant/operator；金额为正整数字符串、BigInt×1m，来源/program及funding永久身份固定，闭集输入拒tenant/actor/role自报、重复decoded JSON键、重复header与非法字节。

@@ -1,3 +1,7 @@
+## 2026-10-22 AGENT-1／CREDIT-1 usage2 配对
+
+现 `src/modules/metering/metering-policy-artifact.ts` 原位绑定已固定Agent usage2的version及manifest aggregate，拒旧／错配profile，独立failure-policy1.0.0不变。新unit保护当前正控与历史／schema摘要混淆等负控，原真实PG publication/selection承接并发／幂等／审计／回滚；无新服务、HTTP、Schema或正常收费装配。验证及剩余主链见docs/CURRENT.md。
+
 ## 2026-10-22 CREDIT-1 当前主链
 
 新增正式非现金发放owner POST /v1/admin/billing/credit-grants，唯一canonical为4.0.0-experimental.4（26操作/45schema）。现Credit内的guard/input/controller复用原账本/审计/双身份幂等；grant状态与首次入账共用一次DB时点，消除跨生效时点重复入账。完整本地门及相关真实PG/source-dist已验；BFF/Admin产品消费者、Agent授权与实际用量扣分继续，正常资金未动。确切证据与限制见docs/CURRENT.md。

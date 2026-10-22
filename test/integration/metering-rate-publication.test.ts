@@ -1494,9 +1494,9 @@ integration("R230 active metering rate selection", () => {
   });
 
   const profileRef = {
-    version: "1.0.0",
+    version: "2.0.0",
     artifactDigest:
-      "ecd30d1908f410eed29181c9f52669f824312bf3a2e3874153d990b95fe58b91",
+      "7c5fd0b24d0a691cfcf769a981d8b4a8a689534d9b4ae1b5968342bde591094c",
   } as const;
   const binding = {
     providerRef: "Provider-A",
@@ -2321,9 +2321,9 @@ integration("R243 joint pricing policy absence", () => {
     const tenantId = "tenant-r243-joint-policy-absence";
     const actorId = "operator-r243-joint-policy-absence";
     const profileRef = {
-      version: "1.0.0",
+      version: "2.0.0",
       artifactDigest:
-        "ecd30d1908f410eed29181c9f52669f824312bf3a2e3874153d990b95fe58b91",
+        "7c5fd0b24d0a691cfcf769a981d8b4a8a689534d9b4ae1b5968342bde591094c",
     } as const;
     const binding = {
       providerRef: "qa-synthetic-provider",
@@ -2409,9 +2409,9 @@ function syntheticPolicy(
     sourceRef: "QA synthetic policy; not a production price or conversion",
     verifiedAt: "2026-01-01T00:00:00.000Z",
     profileRef: {
-      version: "1.0.0",
+      version: "2.0.0",
       artifactDigest:
-        "ecd30d1908f410eed29181c9f52669f824312bf3a2e3874153d990b95fe58b91",
+        "7c5fd0b24d0a691cfcf769a981d8b4a8a689534d9b4ae1b5968342bde591094c",
     },
     currencyCode: "USD",
     multiplier: { numerator: "7", denominator: "5" },
@@ -2615,6 +2615,13 @@ integration("R243 immutable policy publication and joint pricing", () => {
         failurePolicyRef: { version: "1.0.0", artifactDigest: "a".repeat(64) },
       },
       { profileRef: { version: "other", artifactDigest: "a".repeat(64) } },
+      {
+        profileRef: {
+          version: "1.0.0",
+          artifactDigest:
+            "ecd30d1908f410eed29181c9f52669f824312bf3a2e3874153d990b95fe58b91",
+        },
+      },
       { multiplier: { numerator: "0", denominator: "1" } },
       { multiplier: { numerator: "2", denominator: "2" } },
       { creditMicrosPerMinor: { numerator: "0", denominator: "1" } },
