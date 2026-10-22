@@ -6,23 +6,23 @@ import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import { z } from "zod";
 
-const archive = "vendor/iam/kokoro-iam-client-0.7.0.tgz";
+const archive = "vendor/iam/kokoro-iam-client-0.16.0.tgz";
 const archiveSha256 =
-  "c988e5bd3b234aae0085fced5fcd629bcb3feb3d0fe5ebb5d1a384e44e77c014";
+  "a358795000c022633e187a253e5ef6cb8ae8dc6330eade4f29aa38b932e49a89";
 const archiveIntegrity =
-  "sha512-oopYAYcVK0izx1zv4cdO68mGBq9biDRIh4j5kJMmEKxYFN54GP5IcyCqNZlH97pg/lphezhv0ZTT6fDvaFyF3g==";
+  "sha512-pEOmdZbe9wkV/nDeCza8LhB5wrIOrndAIXhdoGb1Xn0tCrIu401vj36Jd06rq7vUusqZ+o15/aXxOHl/9+fL4Q==";
 const provenanceSchema = z
   .object({
     schema_version: z.literal(1),
     package: z
       .object({
         name: z.literal("@kokoro/iam-client"),
-        version: z.literal("0.7.0"),
+        version: z.literal("0.16.0"),
       })
       .strict(),
     source: z
       .object({
-        commit: z.literal("0537b2d033d273f0ef7f5017502ba20e8571aba8"),
+        commit: z.literal("16ee2eb44b967efd604ee38fd82a8b6b462b6294"),
         dirty: z.literal(false),
       })
       .strict(),
@@ -30,7 +30,7 @@ const provenanceSchema = z
       .object({
         path: z.literal("contract/openapi/iam.internal.v1.json"),
         sha256: z.literal(
-          "c8d7af8a365ad5d13eaabccf7f31133e0918ef198bdc3e7c790d90933eae91b2",
+          "30cafb7571d75440c3de9e4e4a5bd22a00d0918ba8f5b23f0ba45e087bdf3dcf",
         ),
       })
       .strict(),
@@ -57,7 +57,7 @@ const provenanceSchema = z
 const packageSchema = z
   .object({
     name: z.literal("@kokoro/iam-client"),
-    version: z.literal("0.7.0"),
+    version: z.literal("0.16.0"),
     type: z.literal("module"),
     license: z.literal("UNLICENSED"),
     engines: z.object({ node: z.literal(">=24 <25") }),
@@ -170,7 +170,7 @@ function assertSingleIamDependency(
 describe("IAM SDK immutable artifact", () => {
   it("pins the only vendor archive by bytes and both digests", () => {
     const bytes = readFileSync(archive);
-    expect(statSync(archive).size).toBe(64_012);
+    expect(statSync(archive).size).toBe(76_008);
     expect(createHash("sha256").update(bytes).digest("hex")).toBe(
       archiveSha256,
     );
@@ -178,7 +178,7 @@ describe("IAM SDK immutable artifact", () => {
       `sha512-${createHash("sha512").update(bytes).digest("base64")}`,
     ).toBe(archiveIntegrity);
     expect(readdirSync("vendor/iam").sort()).toEqual([
-      "kokoro-iam-client-0.7.0.tgz",
+      "kokoro-iam-client-0.16.0.tgz",
       "provenance.json",
     ]);
   });
@@ -212,7 +212,7 @@ describe("IAM SDK immutable artifact", () => {
       .trim()
       .split("\n")
       .sort();
-    expect(entries).toHaveLength(96);
+    expect(entries).toHaveLength(104);
     expect(entries).toContain("package/dist/index.js");
     expect(entries).toContain("package/dist/index.d.ts");
     expect(entries).toContain("package/README.md");
@@ -236,12 +236,15 @@ describe("IAM SDK immutable artifact", () => {
     const lock = readFileSync("pnpm-lock.yaml", "utf8");
     const parsedLock: unknown = parse(lock);
     assertSingleIamDependency(manifest, parsedLock);
-    expect(lock.match(/kokoro-iam-client-0\.7\.0\.tgz/gu)).toHaveLength(5);
+    expect(lock.match(/kokoro-iam-client-0\.16\.0\.tgz/gu)).toHaveLength(5);
+    expect(lock.match(/kokoro-iam-client-0\.7\.0\.tgz/gu) ?? []).toHaveLength(
+      0,
+    );
     expect(lock.match(/kokoro-iam-client-0\.6\.0\.tgz/gu) ?? []).toHaveLength(
       0,
     );
     expect(lock).toContain(`integrity: ${archiveIntegrity}`);
-    expect(lock).toContain("    version: 0.7.0");
+    expect(lock).toContain("    version: 0.16.0");
     expect(lock).toContain("    engines: {node: '>=24 <25'}");
     expect(lock).toContain("      zod: 4.5.4");
 
@@ -249,7 +252,7 @@ describe("IAM SDK immutable artifact", () => {
       ["dependencies", "workspace:../kokoro-iam/sdk"],
       ["devDependencies", "link:../kokoro-iam/sdk"],
       ["optionalDependencies", "file:../kokoro-iam/sdk"],
-      ["peerDependencies", "file:/tmp/kokoro-iam-client-0.7.0.tgz"],
+      ["peerDependencies", "file:/tmp/kokoro-iam-client-0.16.0.tgz"],
     ] as const) {
       const mutant = structuredClone(record(manifest));
       const dependencies =

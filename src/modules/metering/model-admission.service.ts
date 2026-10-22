@@ -40,7 +40,7 @@ export class ModelAdmissionService {
   async create(
     context: ModelAdmissionContext,
     command: ModelAdmissionCommand,
-    consumptionToken: string,
+    executionProof: string,
   ): Promise<ModelAdmissionResult> {
     const intent = modelAdmissionIntent(context, command);
     const { expected, receipt } = intent;
@@ -69,7 +69,7 @@ export class ModelAdmissionService {
       });
       checkCancelled();
       if (previous !== null) return previous;
-      // Existing results above survive peer/token expiry. New reservations require fresh owner checks.
+      // Existing results above survive peer/proof expiry. New reservations require fresh owner checks.
       const prepared = await this.agent.readPrepared({
         expected,
         requestId,
@@ -84,10 +84,29 @@ export class ModelAdmissionService {
         BigInt(prepared.identity.attempt_ordinal) > 9223372036854775807n
       )
         throw new ModelAdmissionError("FORBIDDEN");
+      // Reuse the permanent intent codec, but derive its facts from the validated owner snapshot.
+      const verifiedIntent = modelAdmissionIntent(
+        { ...intent.context, tenantId: prepared.identity.tenant_ref },
+        {
+          runId: prepared.identity.run_id,
+          attemptId: prepared.identity.attempt_id,
+          requestRef: prepared.authorization.request_ref,
+          attemptBindingDigest: prepared.attemptBindingDigest,
+          plannedDigest: prepared.plannedDigest,
+          finalRequestDigest: prepared.finalRequestDigest,
+          idempotencyKey: receipt.idempotencyKey,
+        },
+      );
+      if (verifiedIntent.receipt.payloadDigest !== receipt.payloadDigest)
+        throw new ModelAdmissionError("FORBIDDEN");
       const authorization = await this.iam.authorize({
         tenantId,
-        billingSubject: { kind: "user", ref: actorId },
-        consumptionToken,
+        payerUserId: actorId,
+        runId: prepared.identity.run_id,
+        executionSessionId: prepared.identity.session_id,
+        leaseGeneration: prepared.identity.lease.generation,
+        requestBindingSha256: verifiedIntent.receipt.payloadDigest,
+        executionProof,
         requestId,
         signal,
       });

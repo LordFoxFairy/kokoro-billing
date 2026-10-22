@@ -1,3 +1,7 @@
+## CREDIT-1：Run消费证明不落资金事实（2026-10-22，已实施）
+
+无SQL／Prisma／表／列／默认／迁移变化。永久model-admit:1 digest、request_schema_version=1、receipt/key身份、原snapshot与hold完整性保持；proof/jti/expiry不进入永久command digest，旧消费token退役且不新增凭据存储。现已校验prepared返回attempt/planned摘要供唯一tuple复算，仅内存投影，不新增wire或事实owner。当前Actor/tenant/Run/session/fence/hash逐项核验，身份和资金事务仍分开，不作跨owner原子承诺；未知提交沿原receipt恢复，不以proof到期释放hold。
+
 ## AGENT-1：预算 HTTP 与只读当前状态（2026-10-22，实施门）
 
 无SQL／Prisma／正常数据变更。沿现billing_admission、hold、account及永久command两表；GET在READ ONLY RR内核原receipt（namespace/name/attempt完整payload digest/result schema）和原canonical snapshot／raw facts及持有关系后投影当前status／updated_at。GET不调用recover绑定新key、不写鉴权或读取标记，不依赖活Agent／IAMgrant，异租户／付款用户不可见。POST永久创建回执与GET当前表示区分，状态变更不改原创建receipt；消费token不持久化或入cache。正常资源激活与三面核空演进仍待同一主链交付。

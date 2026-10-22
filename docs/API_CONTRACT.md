@@ -1,3 +1,9 @@
+## CREDIT-1：Run-proof预算授权HTTP（2026-10-22，已实施）
+
+canonical v1 experimental.8，原29项operation／56schema、POST六字段body及201原held回执／GET本人当前四态不变。唯一POST凭据槽为x-billing-execution-proof（必填、单个header、visible ASCII1..16384），旧x-billing-consumption-token单用／混用一律400，无旧路径alias或默认。proof不属于永久请求摘要；换短时proof不改变同一command恢复，GET仍不需要proof且不触达Agent／IAM。
+
+固定IAM16ee2eb（运行实现67a3c0e，SDK说明修正）／SDK0.16：verifyBillingAuthorization请求为execution_proof＋expected_request_binding_sha256＋固定credit.consume；期望hash从已验证prepared与可信tenant／payer按原model-admit:1 tuple唯一算法生成，并核等永久receipt意图。回包tenant/user/run_id/execution_session_id/lease_generation/request_binding_sha256逐项绑定可信输入，expires_at到达／入账仍有效；旧session_id/client_id回包由正式SDK闭集拒绝，不strip成成功。无重试、现期限／取消／错误信封保持；404当前tenant不存在映射DENIED。BFF与Agent后继必须固定此发行，不能只切IAM或正常服务。
+
 ## AGENT-1：正式预算 Admission HTTP（2026-10-22，已实施）
 
 唯一canonical experimental.7原位替换AdmissionCreateRequest与Admission，不保旧execution_bound／caller billing_subject／固定价或三组伪执行状态。POST闭集仅run_id、attempt_id、request_ref、attempt_binding_digest、planned_digest、final_request_digest；Idempotency-Key8..128、x-billing-consumption-token1..16384单独必需。tenant／actor来自完整BFF服务上下文，不从body自报；正式u1 header及三机器能力显式写contract。原create/get operationId／路径保持，其他pathItem保持原字节；共享Admission表示也为后继capture/release返回当前真实状态，不伪装其已挂载。

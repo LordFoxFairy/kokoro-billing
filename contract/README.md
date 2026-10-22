@@ -1,6 +1,6 @@
 ## 当前精确模型选价绑定候选（2026-10-22）
 
-canonical 4.0.0-experimental.7，29操作／56schema；SHA256 `cdb09146a767a8a1a6d976e2e7d819961a01518370968f671557ff2df4edccc3`。Admission POST/GET 改为真实整次预算资源：BFF 完整 u1 身份、独立消费授权、六项 preparation 绑定；POST 回放原始 held，GET 当前金融状态。移除旧未实现的成本上界与复合伪状态；无运行时兼容。原 MeteringRate 的精确 model_revision、rate2/policy2 保持。选择消费可信prepared精确技术pair，同一次active rate读取得出并冻结商业映射，不接受Agent自报价目身份；无新表／服务／API／默认商业值。正常尚未激活，消费者待固定本发行。
+canonical 4.0.0-experimental.8，29操作／56schema；SHA256 `2c65b64c896a85cb89e6b8f23ee9802b6e5cf2440d9a8debaa23973f5c199b6e`。Admission POST/GET 改为真实整次预算资源：BFF 完整 u1 身份、独立消费授权、六项 preparation 绑定；POST 回放原始 held，GET 当前金融状态。移除旧未实现的成本上界与复合伪状态；无运行时兼容。原 MeteringRate 的精确 model_revision、rate2/policy2 保持。选择消费可信prepared精确技术pair，同一次active rate读取得出并冻结商业映射，不接受Agent自报价目身份；无新表／服务／API／默认商业值。正常尚未激活，消费者待固定本发行。
 
 构建/测试的具名inverse逐字恢复整个exp5（SHA8005cff204976ca681653565fb8b6b098bc195cc70049743f70ae85989df35ab），再承接原26操作/45schema inverse。它不是runtime兼容；旧无技术绑定rate1拒绝。下方记录仅历史，不能覆盖本节当前版本。
 

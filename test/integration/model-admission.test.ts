@@ -57,11 +57,13 @@ describe.skipIf(admin === undefined)(
     let agentCalls: number,
       iamCalls: number,
       peerEnabled: boolean,
-      grantUser: string,
+      payerUser: string,
       expiry: string;
     let authorizationExpiry: string;
     let waitForDisconnect = false;
     let makeReply: (requestId: string) => object;
+    let decisionRunId: string, decisionDigest: string;
+    let decisionDelta: Record<string, unknown>, iamRequests: unknown[];
     const context = () => ({
       tenantId,
       actorId,
@@ -133,6 +135,20 @@ describe.skipIf(admin === undefined)(
         },
         meta: { request_id: requestId },
       });
+      decisionRunId = runId;
+      decisionDigest = sha(
+        JSON.stringify([
+          "kokoro.billing.model-admit:1",
+          tenantId,
+          actorId,
+          runId,
+          attemptId,
+          requestRef,
+          String(identityPart.attempt_binding_digest),
+          String(plannedPart.planned_digest),
+          "d".repeat(64),
+        ]),
+      );
       // Agent HTTP request ID lives in the response header; the envelope uses its published form.
       return {
         runId,
@@ -157,8 +173,10 @@ describe.skipIf(admin === undefined)(
       credit = app.get(CreditService);
       agentCalls = 0;
       iamCalls = 0;
+      iamRequests = [];
+      decisionDelta = {};
       peerEnabled = true;
-      grantUser = actorId;
+      payerUser = actorId;
       expiry = new Date(Date.now() + 60000).toISOString();
       authorizationExpiry = expiry;
       waitForDisconnect = false;
@@ -180,8 +198,13 @@ describe.skipIf(admin === undefined)(
           response.end(JSON.stringify(body));
         } else {
           iamCalls++;
-          request.resume();
+          let raw = "";
+          request.setEncoding("utf8");
+          request.on("data", (chunk: string) => {
+            raw += chunk;
+          });
           request.on("end", () => {
+            iamRequests.push(JSON.parse(raw) as unknown);
             response.writeHead(200, {
               "content-type": "application/json",
               "x-request-id": "iam-fixture",
@@ -191,11 +214,14 @@ describe.skipIf(admin === undefined)(
                 data: {
                   allowed: true,
                   tenant_id: tenantId,
-                  user_id: grantUser,
-                  session_id: "qa-session",
-                  client_id: "qa-client",
+                  user_id: payerUser,
+                  run_id: decisionRunId,
+                  execution_session_id: "qa-session",
+                  lease_generation: 1,
+                  request_binding_sha256: decisionDigest,
                   expires_at: authorizationExpiry,
                   decision_ref: "qa-decision",
+                  ...decisionDelta,
                 },
               }),
             );
@@ -342,7 +368,7 @@ describe.skipIf(admin === undefined)(
       "x-kokoro-subject": "u1." + Buffer.from(who).toString("base64url"),
       "content-type": "application/json",
       "idempotency-key": "http-admission-key",
-      "x-billing-consumption-token": "consumption-fixture",
+      "x-billing-execution-proof": "proof-fixture",
     });
     async function withHttp(
       body: (http: NestFastifyApplication) => Promise<void>,
@@ -396,7 +422,7 @@ describe.skipIf(admin === undefined)(
       final_request_digest: c.finalRequestDigest,
     });
     const create = (input: ModelAdmissionCommand) =>
-      service.create(context(), input, "user-consumption-canary");
+      service.create(context(), input, "run-execution-proof-canary");
     const funds = async () => {
       const f = assertDefined(fixture);
       return {
@@ -428,27 +454,39 @@ describe.skipIf(admin === undefined)(
         held_micros: 10_000_000n,
       });
       expect(state.journals).toBe(1);
+      expect(iamRequests).toEqual([
+        {
+          action: "credit.consume",
+          execution_proof: "run-execution-proof-canary",
+          expected_request_binding_sha256: decisionDigest,
+        },
+      ]);
+      expect(
+        JSON.stringify(state.admissions, (_key, value: unknown) =>
+          typeof value === "bigint" ? value.toString() : value,
+        ),
+      ).not.toContain("run-execution-proof-canary");
       expect(agentCalls).toBe(1);
       expect(iamCalls).toBe(1);
       expect(
         JSON.stringify(state, (_, v: unknown) =>
           typeof v === "bigint" ? v.toString() : v,
         ),
-      ).not.toContain("user-consumption-canary");
+      ).not.toContain("run-execution-proof-canary");
     });
     test("lost ACK recovery and replacement keys return the original reservation with both peers offline", async () => {
       const input = command();
       const original = await create(input);
       peerEnabled = false;
       const before = await funds();
-      expect(await service.create(context(), input, "expired-token")).toEqual(
+      expect(await service.create(context(), input, "expired-proof")).toEqual(
         original,
       );
       expect(
         await service.create(
           context(),
           { ...input, idempotencyKey: "replacement-key" },
-          "expired-token",
+          "expired-proof",
         ),
       ).toEqual(original);
       expect(await funds()).toEqual(before);
@@ -458,7 +496,7 @@ describe.skipIf(admin === undefined)(
         service.create(
           context(),
           { ...input, finalRequestDigest: "f".repeat(64) },
-          "expired-token",
+          "expired-proof",
         ),
       ).rejects.toMatchObject({ code: "CONFLICT" });
     });
@@ -474,17 +512,34 @@ describe.skipIf(admin === undefined)(
     test("payer mismatch and cross-tenant contexts have no financial effect", async () => {
       const input = command();
       const before = await funds();
-      grantUser = "wrong-payer";
+      payerUser = "wrong-payer";
       await expect(create(input)).rejects.toBeDefined();
       expect(await funds()).toEqual(before);
       await expect(
         service.create(
           { ...context(), tenantId: "foreign" },
           input,
-          "user-consumption-canary",
+          "run-execution-proof-canary",
         ),
       ).rejects.toBeDefined();
       expect(await funds()).toEqual(before);
+    });
+    test("a correctly shaped IAM response for another Run, conversation, lease or request creates no financial facts", async () => {
+      const input = command();
+      const before = await funds();
+      for (const wrong of [
+        { run_id: "different-run" },
+        { execution_session_id: "different-conversation" },
+        { lease_generation: 2 },
+        { request_binding_sha256: "0".repeat(64) },
+      ]) {
+        decisionDelta = wrong;
+        await expect(create(input)).rejects.toMatchObject({
+          code: "BINDING_MISMATCH",
+        });
+        expect(await funds()).toEqual(before);
+      }
+      expect(iamCalls).toBe(4);
     });
     test("insufficient balance rolls back admission, hold and command identity", async () => {
       const input = command();
@@ -599,7 +654,7 @@ describe.skipIf(admin === undefined)(
         .create(
           { ...context(), signal: controller.signal },
           input,
-          "user-consumption-canary",
+          "run-execution-proof-canary",
         )
         .then(
           (value) => ({ value, error: undefined }),
@@ -729,7 +784,7 @@ describe.skipIf(admin === undefined)(
           .create(
             { ...context(), signal: controller.signal },
             input,
-            "user-consumption-canary",
+            "run-execution-proof-canary",
           )
           .then(
             (value) => ({ value, error: undefined }),
@@ -823,7 +878,7 @@ describe.skipIf(admin === undefined)(
         const readHeaders = wireHeaders();
         delete (readHeaders as Record<string, unknown>)["idempotency-key"];
         delete (readHeaders as Record<string, unknown>)[
-          "x-billing-consumption-token"
+          "x-billing-execution-proof"
         ];
         const read = await http.inject({
           method: "GET",
@@ -846,7 +901,7 @@ describe.skipIf(admin === undefined)(
           headers: {
             ...wireHeaders(),
             "idempotency-key": "http-recovery-key",
-            "x-billing-consumption-token": "expired-header",
+            "x-billing-execution-proof": "expired-header",
           },
           payload: wireCommand(input),
         });
@@ -904,6 +959,20 @@ describe.skipIf(admin === undefined)(
             payload: bad,
           });
           expect(reply.statusCode).toBe(400);
+        }
+        for (const includeNew of [false, true]) {
+          const old = {
+            ...wireHeaders(),
+            "x-billing-consumption-token": "retired-user-token",
+          } as Record<string, string>;
+          if (!includeNew) delete old["x-billing-execution-proof"];
+          const denied = await http.inject({
+            method: "POST",
+            url: path,
+            headers: old,
+            payload,
+          });
+          expect(denied.statusCode).toBe(400);
         }
         const headers = wireHeaders();
         delete (headers as Record<string, unknown>)["x-kokoro-subject"];
@@ -964,10 +1033,10 @@ describe.skipIf(admin === undefined)(
             headers: wireHeaders(),
             payload: wireCommand(input),
           });
-        grantUser = "other-payer";
+        payerUser = "other-payer";
         const denied = await request();
         expect(denied.statusCode).toBe(403);
-        grantUser = actorId;
+        payerUser = actorId;
         peerEnabled = false;
         expect((await request()).statusCode).toBe(503);
         peerEnabled = true;
@@ -1064,7 +1133,7 @@ describe.skipIf(admin === undefined)(
         competing.create(
           { ...context(), signal: controller.signal },
           { ...input, idempotencyKey: "raced-recovery-key" },
-          "consumption-fixture",
+          "proof-fixture",
         ),
       ).rejects.toMatchObject({ code: "ABORTED" });
       expect(await funds()).toEqual(before);

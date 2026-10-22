@@ -132,6 +132,10 @@ describe("formal current prepared call consumption", () => {
         });
         expect(result.identity).toEqual(f.identity);
         expect(result.planned).toEqual(f.planned);
+        expect(result.attemptBindingDigest).toBe(
+          f.expected.attemptBindingDigest,
+        );
+        expect(result.plannedDigest).toBe(f.expected.plannedDigest);
         expect(result.original.attemptBindingJson).toBe(canonical(f.identity));
         expect(Object.isFrozen(result.identity.actor)).toBe(true);
         expect(requests).toEqual([

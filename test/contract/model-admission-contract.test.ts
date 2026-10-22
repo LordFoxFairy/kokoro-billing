@@ -1,3 +1,5 @@
+import { modelAdmissionProofBaselineSource } from "../../scripts/model-admission-contract.js";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import { parse } from "yaml";
@@ -40,7 +42,7 @@ const admission = {
 };
 describe("current whole-budget model admission HTTP contract", () => {
   test("publishes the original two operation IDs with complete BFF-only u1 context", () => {
-    expect(document.info.version).toBe("4.0.0-experimental.7");
+    expect(document.info.version).toBe("4.0.0-experimental.8");
     for (const [path, method, id] of [
       ["/v1/internal/billing/admissions", "post", "createAdmission"],
       ["/v1/internal/billing/admissions/{admission_id}", "get", "getAdmission"],
@@ -60,6 +62,24 @@ describe("current whole-budget model admission HTTP contract", () => {
         $ref: "#/components/parameters/PersonalTenantId",
       });
     }
+  });
+  test("uses only the short-lived Run execution proof header, not a user consumption grant", () => {
+    const op = document.paths["/v1/internal/billing/admissions"]?.post;
+    expect(op?.parameters).toContainEqual({
+      name: "x-billing-execution-proof",
+      in: "header",
+      required: true,
+      schema: {
+        type: "string",
+        minLength: 1,
+        maxLength: 16384,
+        pattern: "^[\\x21-\\x7e]{1,16384}$(?![\\s\\S])",
+      },
+    });
+    expect(JSON.stringify(op?.parameters)).not.toContain("consumption-token");
+    expect(JSON.stringify(document.components)).not.toContain(
+      "ConsumptionToken",
+    );
   });
   test("accepts only bound preparation facts, not caller payer, price or old guarantees", () => {
     expect(accepts("AdmissionCreateRequest", create)).toBe(true);
@@ -166,4 +186,21 @@ describe("current whole-budget model admission HTTP contract", () => {
         accepts("AdmissionResponse", { data: { ...admission, created_at } }),
       ).toBe(false);
   });
+});
+
+test("Run-proof replacement restores the complete exp7 canonical and rejects unrelated drift", () => {
+  const previous = modelAdmissionProofBaselineSource(source);
+  expect(createHash("sha256").update(previous).digest("hex")).toBe(
+    "cdb09146a767a8a1a6d976e2e7d819961a01518370968f671557ff2df4edccc3",
+  );
+  expect(() => modelAdmissionProofBaselineSource(previous)).toThrow();
+  for (const [from, to] of [
+    ["x-billing-execution-proof", "x-arbitrary-proof"],
+    ["web-bff-model-admission", "any-caller"],
+    ["budget_credits:", "guessed_credits:"],
+  ] as const) {
+    const mutant = source.replace(from, to);
+    expect(mutant).not.toBe(source);
+    expect(() => modelAdmissionProofBaselineSource(mutant)).toThrow();
+  }
 });

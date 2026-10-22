@@ -4,15 +4,14 @@ export const IAM_BILLING_AUTHORIZATION_OPTIONS = Symbol(
   "IAM_BILLING_AUTHORIZATION_OPTIONS",
 );
 
-export type IamBillingSubject = Readonly<{
-  kind: "user" | "project" | "organization" | "service";
-  ref: string;
-}>;
-
 export type AuthorizeIamBillingInput = Readonly<{
   tenantId: string;
-  billingSubject: IamBillingSubject;
-  consumptionToken: string;
+  payerUserId: string;
+  runId: string;
+  executionSessionId: string;
+  leaseGeneration: string;
+  requestBindingSha256: string;
+  executionProof: string;
   requestId: string;
   signal: AbortSignal;
 }>;

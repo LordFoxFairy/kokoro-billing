@@ -2,15 +2,15 @@
   "schema_version": 1,
   "package": {
     "name": "@kokoro/iam-client",
-    "version": "0.7.0"
+    "version": "0.16.0"
   },
   "source": {
-    "commit": "0537b2d033d273f0ef7f5017502ba20e8571aba8",
+    "commit": "16ee2eb44b967efd604ee38fd82a8b6b462b6294",
     "dirty": false
   },
   "contract": {
     "path": "contract/openapi/iam.internal.v1.json",
-    "sha256": "c8d7af8a365ad5d13eaabccf7f31133e0918ef198bdc3e7c790d90933eae91b2"
+    "sha256": "30cafb7571d75440c3de9e4e4a5bd22a00d0918ba8f5b23f0ba45e087bdf3dcf"
   },
   "generator": {
     "package": "@hey-api/openapi-ts",

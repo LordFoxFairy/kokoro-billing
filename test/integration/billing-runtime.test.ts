@@ -527,7 +527,7 @@ describe.skipIf(admin === undefined)(
             "x-kokoro-subject": identity("runtime-admission-user"),
             "content-type": "application/json",
             "idempotency-key": "runtime-admission-command",
-            "x-billing-consumption-token": "runtime-consumption-canary",
+            "x-billing-execution-proof": "runtime-proof-canary",
           };
           const response = await fetch(
             base + "/v1/internal/billing/admissions",

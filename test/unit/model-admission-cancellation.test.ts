@@ -49,7 +49,7 @@ describe("model admission cancellation after awaited recovery or hidden reads", 
                 finalRequestDigest: "c".repeat(64),
                 idempotencyKey: "cancel-command-key",
               },
-              "unused-consumption",
+              "unused-proof",
             );
       await expect(call).rejects.toMatchObject({ code: "ABORTED" });
       expect(readPrepared).not.toHaveBeenCalled();

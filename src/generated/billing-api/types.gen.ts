@@ -476,8 +476,6 @@ export type TenantId = string;
 
 export type IdempotencyKey = string;
 
-export type ConsumptionToken = string;
-
 export type OperatorId = string;
 
 export type Limit = number;
@@ -814,7 +812,7 @@ export type CreateAdmissionData = {
     "x-kokoro-subject": string;
     "x-kokoro-service": "web-bff";
     "idempotency-key": string;
-    "x-billing-consumption-token": string;
+    "x-billing-execution-proof": string;
   };
   path?: never;
   query?: never;

@@ -67,7 +67,7 @@ export class ModelAdmissionController {
       const result = await this.service.create(
         modelAdmissionContext(request, signal),
         input.command,
-        input.consumptionToken,
+        input.executionProof,
       );
       const response = mapModelAdmission({
         ...result,

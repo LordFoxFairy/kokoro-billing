@@ -3,6 +3,10 @@
 验收必须在待交付 commit 的干净工作树上重新执行。历史报告、旧 CI、Agent 自报、被 skip 的 integration 和本地 fixture
 均不等于生产证据。
 
+## CREDIT-1 Run-proof预算消费者（2026-10-22）
+
+现有IAM HTTP／prepared／model-admission及contract、artifact回归覆盖精确身份／请求／safe fence、旧header拒绝、取消／expiry、资金回滚和原回执恢复。主方378输入冻结，完整verify1786 PASS／561资源SKIP；相关真实PG228、source/dist10、fresh Prisma／生成检查通过。actual Agent＋Billing＋IAM隔离22检查、QA一次预占及资源清理的证据边界见[当前事实首节](CURRENT.md)。不等于正常BFF执行／真实usage结算通过，不以默认SKIP冒真实集成。
+
 ## B8-S4 usage–hold 与最大长度 invocation
 
 可执行回归入口：`test/integration/usage-hold-binding.test.ts`、`admission-command-receipts.test.ts`、`usage-settlement.test.ts`。

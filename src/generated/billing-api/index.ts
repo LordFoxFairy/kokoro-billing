@@ -42,7 +42,6 @@ export type {
   CheckoutCreateRequest,
   CheckoutResponse,
   ClientOptions,
-  ConsumptionToken,
   CreateAdminCreditGrantData,
   CreateAdminCreditGrantError,
   CreateAdminCreditGrantErrors,

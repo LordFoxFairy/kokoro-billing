@@ -1,3 +1,15 @@
+## CREDIT-1：Run-proof预算消费者已本地验收（2026-10-22）
+
+沿f61a5d2原Metering／ModelAdmission原位配对IAM具名Run授权，不新增服务、用户消费grant或App token broker。唯一SDK0.16固定clean来源16ee2eb（实现67a3c0e，16ee仅修SDK README）；archive SHA256 a358795000c022633e187a253e5ef6cb8ae8dc6330eade4f29aa38b932e49a89，76008字节／104项，原contract SHA30cafb75保持。唯一旧0.7包删除，manifest／lock／严格artifact门一致。新proof＋expected hash按已验证Agent prepared与可信payer重新复用唯一model-admit:1 codec；核tenant/user/Run/conversation/fence/hash及expiry，不存用户token或proof。SDK旧Session回包拒绝，safe fence无盲转Number。
+
+canonical experimental.8／29操作／56schema，raw SHA256 2c65b64c896a85cb89e6b8f23ee9802b6e5cf2440d9a8debaa23973f5c199b6e。POST唯一x-billing-execution-proof，旧header单用／混用拒绝、日志仍脱敏；无alias。原永久回执先恢复、GET当前四态只读，预算事务／取消／双expiry／无TTL hold／永久request_ref和SQL／Prisma原样。exp8→exp7全文SHA逆证明及既有逆证明保留，仅build/test使用。
+
+主方停写378非文档输入、前后无漂移。Node24.20.0完整pnpm verify全0（格式／lint／typecheck／build／SQL／contract，1786 PASS／561默认资源SKIP）；另8文件真实PG／HTTP228 PASS／0SKIP、source/dist10 PASS／0SKIP、fresh prisma:check与contract:generated:check全0，自有库库存94→94、正常node_modules原包hash不变。候选依赖由原共享symlink改为本工作树独立安装，不写正常依赖。独立只读终审Approved，无确定P0–P2。
+
+仓外actual Agent HTTP／PG→compiled Billing→actual IAM Nest／PG／Redis共22检查通过：错请求proof拒绝／旧header拒绝，QA100只预占10，可用90／冻结10，唯一hold／admission／发放流水；当前成员撤销拒绝新授权，Agent过期及成员已撤销后原回执仍恢复、资金不变；Agent xmin不变，零usage／capture，自有IAM Redis prefix清理且库库存94→94。Agent签名JWKS与BFF live binding为具名IAM HTTP peer，不冒真实Agent签名供应商／BFF入口已接；显式QA费率不作生产费用证据。
+
+保留初始26FAIL的TDD及safe fence／旧回包／字段错位负控；本轮全门首次verify／真实PG／source-dist均0，但prisma检查P1010失败。诊断确认无用户名管理URL由pg使用OS角色、Prisma使用另一默认角色；仅仓外验收配置明确相同OS角色，独立dbpull0并清自有库，再新冻结完整重跑全0，不改业务／Schema／门禁消绿。正常余额、服务和模型／工具均未触动。Root＋12子仓非递归fetch成功，main无新增；未push／PR／merge。下一步同一主链的Agent→BFF专用内部预算入口／可信已提交Run来源→唯一dispatch→真实usage整数结算，不恢复旧App grant前置。
+
 ## 2026-10-22 AGENT-1／CREDIT-1：正式预算 HTTP 已本地验收
 
 基线9cc7af1；沿已裁决预算业务原位挂载BFF专用Admission POST／GET，不新增服务、Schema或认证协议。完整机器bearer＋internal secret＋web-bff标记和u1 tenant／subject，六项prepared绑定闭集、独立消费header及原命令key；严格16KiB flat JSON保留原UTF-8和重复字段防护，原grant parser仅移至共用HTTP边界，无旧导出／fallback。GET拒query、编码别名及正文framing，RR本人范围只读当前四态／updated_at，不要求消费token或触达Agent／IAM，也不绑定新key。POST／原命令回放201＋Location始终原held创建表示，绝不把当前状态改写原回执。

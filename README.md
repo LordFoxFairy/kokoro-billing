@@ -9,7 +9,7 @@ Reconcile 与 Billing command receipt；不拥有 Tenant、Identity、Agent Run�
 当前规范化分支的[任务板](docs/IMPLEMENTATION_PLAN.md)与[ADR-0003](docs/ADR/0003-nestjs-prisma-sql-first-alignment.md)
 记录Nest/Prisma目标与分阶段验收；唯一入口使用canonical Nest module graph。已交付目录、本人余额/流水、无感零账户初始化及三项probe；本地候选新增正式非现金管理员发放，相关owner验收已过但正常后台消费者尚待。完整Agent资金授权、实际用量结算与收费仍待接线，不以源码候选冒称正常生效。
 
-本地计价候选已完成正式管理三HTTP操作、policy2单次整数预算和rate2精确System修订绑定；exp7新增BFF预算Admission创建／原命令恢复和本人当前状态读取；完整验证与真实PG证据见CURRENT首节。消费者及Agent逐attempt资金接线仍需完成，正常环境未因本片变化。
+本地计价候选已完成正式管理三HTTP操作、policy2单次整数预算和rate2精确System修订绑定；exp8以Run执行证明替换额外用户消费token，BFF预算Admission创建／原命令恢复和本人当前状态读取；完整验证与真实PG证据见CURRENT首节。消费者及Agent逐attempt资金接线仍需完成，正常环境未因本片变化。
 
 ## 边界
 
@@ -63,13 +63,13 @@ peer 单次读取各 2 秒、零重试；`BILLING_MODEL_ADMISSION_DEADLINE_MS` �
 设置错误时启动失败；凭据不写日志或回传。原默认图不因这些变量的存在而隐式启用。
 
 - `POST /v1/internal/billing/admissions`：完整 BFF 机器身份＋u1 tenant／subject，
-  独立消费 token header、原命令 key 及六项 prepared 绑定；先正式读 Agent 与 IAM，再原子预占配置的整次预算。
+  独立短时 Run execution proof header、原命令 key 及六项 prepared 绑定；先正式读 Agent 与 IAM，再原子预占配置的整次预算。
 - `GET /v1/internal/billing/admissions/{admission_id}`：同一 BFF／本人范围的 RR 只读当前状态；
-  不要求消费 token、不触达 Agent／IAM、不绑定新 key。
+  不要求 proof、不触达 Agent／IAM、不绑定新 key。
 - POST 的永久回执始终返回原始 `held` 创建结果；当前状态只由 GET 表示。
   503／ACK 不明只用原命令恢复，不换 body／attempt 自动重发。预算 hold 无 TTL；不猜价、补零或自动派发。
 
-此开关不接入 provider 执行、capture／release 或真实使用扣分。正常环境激活仍需受保护的 Schema 配对与 App 正式消费授权生命周期；本片只在自有隔离资源验收。
+此开关不接入 provider 执行、capture／release 或真实使用扣分。正常环境激活仍需受保护的 Schema 配对、可信 Run 消费绑定与 BFF／Agent 正式消费者；本片只在自有隔离资源验收。
 
 ## 契约
 

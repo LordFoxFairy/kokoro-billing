@@ -80,35 +80,39 @@ describe("IAM Billing authorization client boundary", () => {
     expect(new IamBillingAuthorizationError("DENIED").retryable).toBe(false);
   });
 
-  it("rejects invalid input before transport and remains closed after shutdown", async () => {
+  it("rejects malformed identity/proof and inexact lease generations before transport", async () => {
     const client = new IamBillingAuthorizationClient(options());
-    await expect(
-      client.authorize({
-        tenantId: "",
-        billingSubject: { kind: "user", ref: "user-a" },
-        consumptionToken: "user-secret-canary",
-        requestId: "request-a",
-        signal: new AbortController().signal,
-      }),
-    ).rejects.toMatchObject({ code: "AUTHORIZATION_INVALID" });
-    await expect(
-      client.authorize({
-        tenantId: "tenant-a",
-        billingSubject: { kind: "user", ref: "😀".repeat(256) },
-        consumptionToken: "user-secret-canary",
-        requestId: "request-a",
-        signal: new AbortController().signal,
-      }),
-    ).rejects.toMatchObject({ code: "AUTHORIZATION_INVALID" });
+    const valid = {
+      tenantId: "tenant-a",
+      payerUserId: "user-a",
+      runId: "run-a",
+      executionSessionId: "conversation-a",
+      leaseGeneration: "7",
+      requestBindingSha256: "a".repeat(64),
+      executionProof: "proof-canary",
+      requestId: "request-a",
+      signal: new AbortController().signal,
+    };
+    for (const delta of [
+      { tenantId: "" },
+      { payerUserId: "😀".repeat(256) },
+      { runId: "" },
+      { executionSessionId: "\u0000" },
+      { leaseGeneration: "0" },
+      { leaseGeneration: "01" },
+      { leaseGeneration: "9007199254740992" },
+      { leaseGeneration: "18446744073709551615" },
+      { requestBindingSha256: "F".repeat(64) },
+      { executionProof: " " },
+      { executionProof: "a".repeat(16385) },
+    ]) {
+      await expect(
+        client.authorize({ ...valid, ...delta }),
+      ).rejects.toMatchObject({ code: "AUTHORIZATION_INVALID" });
+    }
     await client.onModuleDestroy();
-    await expect(
-      client.authorize({
-        tenantId: "tenant-a",
-        billingSubject: { kind: "user", ref: "user-a" },
-        consumptionToken: "user-secret-canary",
-        requestId: "request-a",
-        signal: new AbortController().signal,
-      }),
-    ).rejects.toMatchObject({ code: "SHUTTING_DOWN" });
+    await expect(client.authorize(valid)).rejects.toMatchObject({
+      code: "SHUTTING_DOWN",
+    });
   });
 });

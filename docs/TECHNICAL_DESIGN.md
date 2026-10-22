@@ -1,3 +1,13 @@
+## CREDIT-1：固定Run-proof授权消费者（2026-10-22，已实施）
+
+承接Root最新主链及用户“Run不持用户token”裁决，主方唯一writer、基线f61a5d2。沿现Metering／ModelAdmission／同一IamBillingAuthorizationClient，固定IAM16ee2eb（运行实现67a3c0e，SDK说明修正）的clean SDK0.16及原provenance／archive hash，删除唯一旧0.7包；不新增服务／broker／认证协议或App grant生命周期。SDK来源与原生登录／其他IAM接口不是本片重新设计对象。
+
+首次无已提交receipt时，原Agent reader完成canonical bytes／三摘要／身份／request_ref／当前lease核验。解码结果保留已核对原bytes的attemptBindingDigest、plannedDigest；Service用这些事实、prepared run/attempt/request_ref/final digest及受信tenant/user重新调用同一modelAdmissionIntent，派生原model-admit:1摘要并与命令永久digest核等，不从未验证body直接给IAM期望值。只接当前direct-user actor=subject；IAM输入携短时execution proof＋可信tenant/user/Run/session/lease generation/hash。SDK回包逐项exact核对六绑定、正safe整数generation和未过期UTC期限；Agent generation为十进制字符串，先证可精确表示才比较，不盲转Number。无重试、同取消／shutdown drain，401/403/404/409拒绝不冒依赖成功。
+
+HTTP唯一canonical v1升experimental.8，仅POST消费header改x-billing-execution-proof（visible ASCII1..16384），删除未引用的旧ConsumptionToken component；拒旧header及混用，不留alias。proof为独立短命参数，不进入command、receipt、snapshot、Run、usage或日志。保完整BFF机器u1身份，不让Agent假冒web-bff；Agent→BFF受限内部接缝在后继BFF owner切片补齐，不将此消费者冒整链。日志新旧敏感header均脱敏：旧header仅作为明确拒绝／日志防泄漏，不作兼容入口。
+
+原receipt先恢复／永久payloadDigest和request identity均不变；已提交结果可在新proof过期或peer离线后恢复。资金事务、当前DB时点双expiry／最终取消、预算hold、pricing冻结、永久唯一request_ref、pending阻派发及single-dispatch未改；不把IAM allowed当dispatch许可，不改Schema、余额或正常服务。写区为固定SDK／lock及其严格artifact门、上述现codec/service/client/input/controller、canonical／正规派生／严格逆证明、相关测试及当前文档。验收：wire／旧凭据拒绝／绑定错位／超safe fence先RED，实际PG资金零写负控／幂等恢复，真实IAM host＋SDK及完整owner门；正常模型／tool／actual结算仍需后继主链。
+
 ## AGENT-1：正式预算 Admission HTTP（2026-10-22，已实施）
 
 沿9cc7af1已验业务，在唯一Nest HTTP挂载既有POST /v1/internal/billing/admissions和GET /v1/internal/billing/admissions/{admission_id}，不增服务／表／第二套认证。当前个人钱包路径由web-bff编排：复用CreditAccountGuard的BFF专用bearer＋internal secret＋u1 tenant/subject完整准入，拒普通用户Bearer／部分机器身份fallback；非管理员发放权。POST再将单独消费header交现IAM在线verify，仅首次准入需要活grant；GET只读本人及同tenant。

@@ -60,6 +60,8 @@ export type DecodedPreparedModelCall = Frozen<{
   identity: PreparedCallIdentity;
   planned: PlannedBinding;
   authorization: AuthorizationRequested;
+  attemptBindingDigest: string;
+  plannedDigest: string;
   finalRequestDigest: string;
   preparedAt: string;
   observedAt: string;
@@ -172,6 +174,8 @@ export function decodeAgentPreparedResponse(
       identity: identity.value,
       planned: planned.value,
       authorization: authorization.value,
+      attemptBindingDigest: data.attempt_binding_digest,
+      plannedDigest: data.planned_digest,
       finalRequestDigest: data.final_request_digest,
       preparedAt: data.prepared_at,
       observedAt: data.observed_at,

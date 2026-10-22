@@ -1,3 +1,14 @@
+## CREDIT-1：Run-proof消费者配对（2026-10-22，本地已验）
+
+复用同一Root16项主链；主方唯一writer／Billing f61a5d2基线，相关三面首节已按用户最新裁决收敛。未实施App额外消费grant与BFF回程token broker退出，历史段落中该前置不再执行。
+
+- [x] 固定IAM16ee2eb clean0.16包／provenance与严格artifact门；新proof/hash及可信prepared绑定RED→GREEN。
+- [x] canonical exp8单一proof header、旧／混用拒绝、正规生成及全exp7逆证明；不改资金receipt／Schema。
+- [x] 当前IAM／Agent绑定错位、safe fence、expiry／取消／shutdown、同命令换proof恢复的实际HTTP／PG；真实IAM＋consumer配对。
+- [x] 主方停写全门／source-dist／fresh Prisma／独审，记录正式发行与正常未激活；随后BFF窄入口／Agent唯一dispatch／真实usage整数结算。
+
+- [ ] 后继执行：Agent→BFF独立内部身份及可信已提交Run读取，配对exp8预算API，再接原single-dispatch和真实usage整数结算；不新增App用户token回程。
+
 ## AGENT-1／CREDIT-1：正式预算 HTTP（2026-10-22，本地已验）
 
 主方唯一writer，基线9cc7af1，沿前三面已裁决预算业务；完整verify1779PASS／560默认资源SKIP、真实PG／HTTP222、source/dist10、fresh Prisma／正规生成检查全0，374输入无漂移、独审三P2均实证闭合；actual Agent→compiled canonical Billing HTTP／PG18检查通过、库库存94→94。正常配置／资金不动，详细失败及证据限制见CURRENT首节。
@@ -16,7 +27,7 @@
 - [x] ModelAdmissionService事务外正式prepared／IAM；事务内重新幂等、当前lease／授权／Run阻断核验、账户预占及审计原子落盘。
 - [x] focused和真实PG资金／恢复旅程、完整owner门及独审；记录未装配HTTP／正常服务，不冒实际模型或整链完成。
 
-下一步仍属同一AGENT-1／CREDIT-1：正式HTTP与合法App grant／异步Run消费→原唯一dispatch→真实usage封口／整数结算；不新增MCP验收轮次，不把内部资金Service等同正常产品链。
+下一步仍属同一AGENT-1／CREDIT-1：正式HTTP与内部身份＋可信Run消费→原唯一dispatch→真实usage封口／整数结算；不新增MCP验收轮次，不把内部资金Service等同正常产品链。
 
 ## AGENT-1／CREDIT-1：正式 prepared 消费（2026-10-22，本地已验）
 
@@ -25,7 +36,7 @@
 - [x] 固定Agent7e1e068／HTTP7.1原件与原usage2三件，正规生成prepared表示；唯一v7 vendor，旧v6删除。
 - [x] 沿现reader共享总deadline／取消／drain／专用身份，新prepared原bytes和完整受信预期校验；旧sealed保护保持。
 - [x] 停写完整owner门、实际两owner配对及独立只读审查。
-- [ ] 同一主链下一步：合法用户消费grant生命周期及异步Run后台关联→首次预算Admission／永久回执恢复→原single-dispatch→真实usage封口／一次整数结算。先沿现IAM原生Billing resource＋verify，不复用普通IAM登录token、不新建服务或token-exchange；消费bearer不入Run／outbox／usage。资金与HTTP变更先通过现三面门，再TDD与隔离真实I/O验收。
+- [ ] 同一主链下一步：内部身份及可信Run后台关联→首次预算Admission／永久回执恢复→原single-dispatch→真实usage封口／一次整数结算。沿当前IAM具名Run-proof verify，不新增用户消费grant、服务或token-exchange；proof不入Run／outbox／usage。资金与HTTP变更先通过现三面门，再TDD与隔离真实I/O验收。
 
 本片不改变public HTTP、SQL／Prisma、Module正常装配或资金，不能据此勾AGENT-1／CREDIT-1整项完成。沿唯一原任务表继续，不开MCP新验收周期。
 

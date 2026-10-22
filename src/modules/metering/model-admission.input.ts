@@ -25,7 +25,7 @@ export function readModelAdmissionInput(
   schemas: BillingSchemaValidator,
 ) {
   const key = request.headers["idempotency-key"],
-    token = request.headers["x-billing-consumption-token"],
+    proof = request.headers["x-billing-execution-proof"],
     mime = request.headers["content-type"];
   if (
     request.raw.url !== modelAdmissionPath ||
@@ -34,12 +34,14 @@ export function readModelAdmissionInput(
     billingHeaderCount(request.raw.rawHeaders, "idempotency-key") !== 1 ||
     typeof key !== "string" ||
     !/^[\x21-\x7e]{8,128}$/u.test(key) ||
+    billingHeaderCount(request.raw.rawHeaders, "x-billing-execution-proof") !==
+      1 ||
     billingHeaderCount(
       request.raw.rawHeaders,
       "x-billing-consumption-token",
-    ) !== 1 ||
-    typeof token !== "string" ||
-    !/^[\x21-\x7e]{1,16384}$/u.test(token) ||
+    ) !== 0 ||
+    typeof proof !== "string" ||
+    !/^[\x21-\x7e]{1,16384}$(?![\s\S])/u.test(proof) ||
     !schemas.acceptsRequest("AdmissionCreateRequest", request.body)
   )
     throw new BadRequestException();
@@ -54,7 +56,7 @@ export function readModelAdmissionInput(
       finalRequestDigest: b.final_request_digest,
       idempotencyKey: key,
     },
-    consumptionToken: token,
+    executionProof: proof,
   };
 }
 export function readModelAdmissionId(request: FastifyRequest): string {

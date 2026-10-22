@@ -7,13 +7,16 @@ import type {
   ResolvedIamBillingAuthorizationOptions,
 } from "./iam-billing-authorization.options.js";
 
-const isIdentity = (value: string): boolean => {
-  const length = [...value].length;
+const isIdentity = (value: string, maximum = 255): boolean => {
+  if (typeof value !== "string") return false;
+  const characters = [...value];
   return (
-    length > 0 &&
-    length <= 255 &&
-    !value.includes("\0") &&
-    !/[\uD800-\uDFFF]/u.test(value)
+    characters.length > 0 &&
+    characters.length <= maximum &&
+    characters.every((character) => {
+      const point = character.codePointAt(0) ?? 0;
+      return point >= 32 && point !== 127 && (point < 0xd800 || point > 0xdfff);
+    })
   );
 };
 
@@ -72,7 +75,10 @@ export class IamBillingAuthorizationClient implements OnModuleDestroy {
     const signal = AbortSignal.any([input.signal, this.#shutdown.signal]);
     try {
       const response = await this.#client.verifyBillingAuthorization(
-        { accessToken: input.consumptionToken },
+        {
+          executionProof: input.executionProof,
+          expectedRequestBindingSha256: input.requestBindingSha256,
+        },
         {
           requestId: input.requestId,
           deadlineMs: this.#deadlineMs,
@@ -84,14 +90,12 @@ export class IamBillingAuthorizationClient implements OnModuleDestroy {
         decision.allowed !== true ||
         decision.tenant_id !== input.tenantId ||
         !isIdentity(decision.user_id) ||
-        !isIdentity(decision.session_id) ||
-        !isIdentity(decision.client_id) ||
+        decision.user_id !== input.payerUserId ||
+        decision.run_id !== input.runId ||
+        decision.execution_session_id !== input.executionSessionId ||
+        String(decision.lease_generation) !== input.leaseGeneration ||
+        decision.request_binding_sha256 !== input.requestBindingSha256 ||
         !isIdentity(decision.decision_ref)
-      )
-        throw new IamBillingAuthorizationError("BINDING_MISMATCH");
-      if (
-        input.billingSubject.kind === "user" &&
-        input.billingSubject.ref !== decision.user_id
       )
         throw new IamBillingAuthorizationError("BINDING_MISMATCH");
       const expiry = exactUtcInstant(decision.expires_at);
@@ -121,7 +125,7 @@ export class IamBillingAuthorizationClient implements OnModuleDestroy {
     if (error.kind === "api") {
       if (error.status === 400)
         return new IamBillingAuthorizationError("AUTHORIZATION_INVALID");
-      if ([401, 403, 409].includes(error.status ?? 0))
+      if ([401, 403, 404, 409].includes(error.status ?? 0))
         return new IamBillingAuthorizationError("DENIED");
     }
     return new IamBillingAuthorizationError("UNAVAILABLE");
@@ -130,13 +134,18 @@ export class IamBillingAuthorizationClient implements OnModuleDestroy {
   #validInput(input: AuthorizeIamBillingInput): boolean {
     return (
       isIdentity(input.tenantId) &&
-      isIdentity(input.billingSubject.ref) &&
-      ["user", "project", "organization", "service"].includes(
-        input.billingSubject.kind,
-      ) &&
-      input.consumptionToken.length > 0 &&
-      input.consumptionToken.length <= 16_384 &&
-      /^[A-Za-z0-9._:-]{1,255}$/u.test(input.requestId) &&
+      isIdentity(input.payerUserId) &&
+      isIdentity(input.runId, 512) &&
+      isIdentity(input.executionSessionId, 512) &&
+      typeof input.leaseGeneration === "string" &&
+      /^[1-9][0-9]{0,15}$(?![\s\S])/u.test(input.leaseGeneration) &&
+      BigInt(input.leaseGeneration) <= BigInt(Number.MAX_SAFE_INTEGER) &&
+      /^[0-9a-f]{64}$(?![\s\S])/u.test(input.requestBindingSha256) &&
+      typeof input.executionProof === "string" &&
+      input.executionProof.length > 0 &&
+      input.executionProof.length <= 16_384 &&
+      !/[^\x21-\x7e]/u.test(input.executionProof) &&
+      /^[A-Za-z0-9._:-]{1,255}$(?![\s\S])/u.test(input.requestId) &&
       input.signal instanceof AbortSignal
     );
   }
