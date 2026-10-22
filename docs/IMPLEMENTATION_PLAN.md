@@ -1,3 +1,14 @@
+## AGENT-1／CREDIT-1：首次预算预占业务（2026-10-22，本地已验）
+
+主方唯一writer，基线7412c30。沿用户已确认预算方案与三面首节，无新审批／服务或成本上界前置。 主方最终363输入无漂移，verify1762PASS／551默认资源SKIP、相关真实PG／HTTP215、source/dist8、fresh Prisma／生成检查通过；仓外actual Agent→compiled Billing真实预占／离线回执恢复14检查通过，独审两P2已RED→GREEN并复核。正常未激活，价格／IAM peer明确QA；详细失败及证据限制见CURRENT。
+
+- [x] 原receipt recover行为RED→GREEN，miss零写、永久换key绑定、并发／漂移／损坏及回滚。
+- [x] 精确修订完整rate／policy冻结与持有无TTL模型预算的canonical原表替换／正规Prisma。
+- [x] ModelAdmissionService事务外正式prepared／IAM；事务内重新幂等、当前lease／授权／Run阻断核验、账户预占及审计原子落盘。
+- [x] focused和真实PG资金／恢复旅程、完整owner门及独审；记录未装配HTTP／正常服务，不冒实际模型或整链完成。
+
+下一步仍属同一AGENT-1／CREDIT-1：正式HTTP与合法App grant／异步Run消费→原唯一dispatch→真实usage封口／整数结算；不新增MCP验收轮次，不把内部资金Service等同正常产品链。
+
 ## AGENT-1／CREDIT-1：正式 prepared 消费（2026-10-22，本地已验）
 
 状态：主方唯一writer，基线2d3ed0f；新26例及原88例114 PASS，完整verify1762 PASS／524默认资源SKIP、相关真实PG61、source/dist8、fresh Prisma／生成检查均0，357非文档输入无漂移。另仓外actual Agent owner HTTP／PG→compiled Billing consumer／PG选价11检查通过，同库两owner隔离schema，自有进程／连接关闭后库库存精确恢复；QA价目不称真实费用，资金表零写。独审Approved，正常未激活；失败及证据边界见CURRENT首节。

@@ -1,3 +1,11 @@
+## AGENT-1：预算 Admission 业务边界（2026-10-22，实施门）
+
+本片先实现包内ModelAdmissionService.create，非新增或已挂载HTTP。受信context为tenantId／actorId／requestId／AbortSignal；命令只含runId／attemptId／requestRef／attemptBindingDigest／plannedDigest／finalRequestDigest／idempotencyKey，消费token是单独短命调用参数，不入命令digest／snapshot／日志。原planned bytes中的精确修订与身份是事实源，不收调用方价格／payer／商业tuple／预算或profile版本。
+
+结果为schemaVersion=1、admissionId／tenantId／runId／attemptId／requestRef／holdId／budgetCredits／pricingSnapshotDigest／createdAt；恢复原结果，不生成新价格、时间或额度。后继正式HTTP将原createAdmission／Admission表示原位替换并正规生成，退役execution_bound_ref/digest及固定价字段，不引入兼容wire；在正式契约配对前不挂载或宣称API已交付。资金本地缺口／冲突／拒绝／损坏各稳定包内错误，公开映射归后继正式controller。
+
+恢复先核当前受信服务／人类context及完整命令，旧token过期或Agent租约到期不抹已提交回执；对首次无回执必须实际Agent读取和IAM消费scope验证、payer一致及入账时未过期。读取成功不是预占；只有本地资金事务提交回执才授予后继记录Admission引用的资格，原single-dispatch保持唯一执行边界。
+
 ## AGENT-1：正式 prepared 消费（2026-10-22，实施设计）
 
 固定已验 Agent7e1e068／HTTP7.1 原Git对象，保现usage2原schema/vectors/manifest字节；

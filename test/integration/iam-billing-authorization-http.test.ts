@@ -121,6 +121,7 @@ describe("IAM Billing authorization through the published SDK HTTP transport", (
       const fixture = await setup({ body: allowed() });
       await expect(fixture.client.authorize(input(kind))).resolves.toEqual({
         payerUserId: "user-a",
+        expiresAt: future,
       });
       expect(fixture.requests).toHaveLength(1);
       expect(fixture.requests[0]).toMatchObject({
@@ -139,6 +140,7 @@ describe("IAM Billing authorization through the published SDK HTTP transport", (
       const fixture = await setup({ body: allowed({ expires_at: expiresAt }) });
       await expect(fixture.client.authorize(input())).resolves.toEqual({
         payerUserId: "user-a",
+        expiresAt,
       });
       expect(fixture.requests).toHaveLength(1);
     },

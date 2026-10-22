@@ -1,3 +1,17 @@
+## AGENT-1：首次预算 Admission 与永久回执恢复（2026-10-22，本地业务已验）
+
+沿已确认预算方案，owner为现Metering＋Credit。沿原billing_admission原位替换未装配的feature固定价目标；不建新服务／表／成本保证或第二钱包。此片先交付可由Nest装配的业务Service及真实PG资金效果，HTTP正式挂载和异步App grant消费者随后在同一主链接线，不冒正常开放。
+
+首次流程：冻结受信tenant／actor、run／attempt／request_ref与三摘要及永久idempotency key；先在短本地事务沿原command receipt锁和完整digest恢复已提交结果，成功恢复不要求活Agent快照或新消费token。无回执时离开事务，正式Agent prepared读取及IAM在线消费授权在事务外完成；只接受prepared的user actor＝user subject＝当前受信actor／IAM payer（本轮个人钱包），不扩大project／组织代付。IAM结果只增加原expires_at供入账时检查，不缓存allow；无bearer持久化或摘要。
+
+再开资金事务，原receipt execute重新锁key＋attempt身份；并发先提交则恢复原结果，否则有序持有同Run／request_ref锁，核请求引用永久冲突及已有pending_reconciliation，按同一DB时点检查prepared lease和IAM有效期／取消，再冻结精确System修订的完整当前费率集合＋policy2／整数预算。不能在预占前按未知最终usage挑桶／价格；现选价repository增加完整snapshot读取，与旧具名request选价共享同一次active rate／policy读取，snapshot含同pair所有行（含区间）供后继按真实用量选择，保原missing／歧义／损坏保护。金额仅预算×1m。原Credit auto-init本人账户＋reserve＋admission／snapshot＋audit＋receipt原子提交；异常全回滚，不网络I/O持锁。
+
+恢复沿原command永久identity/key绑定；miss不建receipt，换key恢复成功也永久绑定新key。原execute保效果一次且使用同一查找／校验，不另建幂等表。回执是原始Admission授权事实，不是新的live dispatch lease；Agent仍核当前fence／未sealed和原single-dispatch。所有写／audit／receipt及完整性await完成后，新Admission在根事务callback结束前最终查DB clock／signal；不把此检查冒成原生COMMIT发送后仍保证取消可回滚。进入COMMIT后ACK不明仅原命令恢复，不猜未预占；恢复不套新live bounds。
+
+模型预算hold显式expires_at=null，未知／超预算不因租约或墙钟释放；原有显式到期hold仍保持Date和既有行为，不用远未来时间冒无限。Credit reserve原key完整匹配包含expiry，不重解释原hold。此片不实现capture/release；后继只消费正式sealed usage和已有整数计价／决策，pending阻后续派发。正常Schema／资金／配置不动。
+
+位置：原CommandReceiptRepository具名recover；原Metering pricing selection／revision repository共享完整freeze；新包内model-admission.{service,types,codec,error}职责分开；原Credit expiry类型及reserve匹配；canonical SQL原表／派生Prisma；直接unit／真实PG及现任务文档。不搬公共框架、不恢复旧分层Admission。验收先行为RED，真实PG并发／换key／ACK丢失原命令恢复／expiry／余额不足／审计回滚／tenant和payer错绑零写／不持锁HTTP／未知Run阻断；完整owner门、fresh Schema/Prisma、原消费者保护及独审。
+
 ## AGENT-1：正式 prepared 消费（2026-10-22，实施设计）
 
 固定已验 Agent7e1e068／HTTP7.1 原Git对象，保现usage2原schema/vectors/manifest字节；

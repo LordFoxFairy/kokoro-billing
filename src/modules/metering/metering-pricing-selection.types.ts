@@ -62,3 +62,16 @@ export type MeteringPricingSelectionResult = Readonly<{
     failurePolicyRef: MeteringRevisionReference;
   }>;
 }>;
+
+/** Complete exact-model tariff set frozen before final usage/range is known. */
+export type MeteringPricingFreezeInput = Omit<
+  MeteringPricingSelectionInput,
+  "requests"
+>;
+export type MeteringFrozenPricing = Omit<
+  MeteringPricingSelectionResult,
+  "rates"
+> &
+  Readonly<{
+    rates: readonly MeteringRevisionRate[];
+  }>;

@@ -1,3 +1,9 @@
+## AGENT-1：预算 Admission 数据替换（2026-10-22，实施门）
+
+唯一canonical SQL原billing_admission替换未使用的feature-price／quantity／included目标列：id、tenant_id、run_id、attempt_id、request_ref、actor_ref、payer_ref、call_id、attempt_ordinal、feature_key、attempt_binding_json／digest、planned_json／digest、authorization_json、final_request_digest、prepared_at、observed_at、lease_expires_at、pricing_snapshot_json／digest、budget_credits、hold_id、status、created_at、updated_at。原始canonical bytes按严格UTF8原文TEXT保存而非JSONB重序列化；定价snapshot是严格canonical TEXT＋SHA，包含完整冻结rate／policy与绑定，不放可编辑第二价目或任何token。UNIQUE(tenant_id,attempt_id)、UNIQUE(tenant_id,request_ref)、UNIQUE(tenant_id,hold_id)，status held/captured/released/pending_reconciliation，budget整credits1..9223372036854／ordinal正数／digest hex等CHECK。
+
+账本原Credit hold允许expires_at显式NULL表示仅证据结算／释放，不是未配置默认；普通期限hold仍显式Date。未知和超预算保留hold，禁止TTL自动释放。已存在普通hold不迁移或改时限。剩余amount及terminal约束保留；Prisma只由fresh canonical refresh生成。旧Admission无兼容读取或数据回填；正常演进须锁下再确认原admission为空，保护全部账户／grant／hold／journal／其他owner数据，本片只自有fresh测试资源。receipt仍唯一原command两表，不复制幂等事实。
+
 ## AGENT-1：prepared 读取不写资金事实（2026-10-22）
 
 无Schema／Prisma／正常数据变化。新原始prepared bytes及当前lease观察只在当前私有调用内存保存；

@@ -27,7 +27,8 @@ export type ReserveCreditEffectInput = Readonly<{
   idempotencyKey: string;
   requestedMicros: bigint;
   featureKey?: string;
-  expiresAt: Date;
+  /** null: evidence-controlled model hold, never a TTL release. */
+  expiresAt: Date | null;
 }>;
 export type ReserveCreditInput = ReserveCreditEffectInput & CommandMetadata;
 export type ReserveCreditResult = Readonly<{

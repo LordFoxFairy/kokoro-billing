@@ -424,7 +424,9 @@ export class CreditRepository {
       if (
         prior.credit_account_id !== input.accountId ||
         prior.requested_micros !== input.requestedMicros ||
-        prior.feature_key !== (input.featureKey ?? null)
+        prior.feature_key !== (input.featureKey ?? null) ||
+        (prior.expires_at?.getTime() ?? null) !==
+          (input.expiresAt?.getTime() ?? null)
       )
         throw new CreditError(
           "CREDIT_IDEMPOTENCY_CONFLICT",

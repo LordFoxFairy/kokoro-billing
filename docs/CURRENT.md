@@ -1,3 +1,19 @@
+## 2026-10-22 AGENT-1／CREDIT-1：首次预算预占业务与恢复已本地验收
+
+基线7412c30，沿现Metering／Credit原位实现ModelAdmissionService，不新增Module／服务／钱包／成本保证。先短事务恢复原永久receipt；miss零写，换key成功恢复永久绑定新key。首次才在事务外读取正式Agent prepared与IAM消费授权；个人payer＝prepared user actor/subject＝受信当前actor，IAM原expires_at保持精度供资金提交检查。原command查找／校验共享，无第二幂等表；不持锁HTTP、token不进入digest／DB／审计。
+
+资金事务重新锁原key＋attempt，Run／request_ref有序锁核永久冲突与pending阻断；冻结精确System修订的全部费率行／区间及policy2，不用未知usage提前挑价。原Credit本人账户／预算×1m预占／Admission＋原raw事实＋严格canonical完整价目／审计／receipt同事务；模型hold显式NULL期限，不用假远期时间或TTL释放。canonical原billing_admission删除旧feature-price／quantity目标列，不兼容回填；Prisma经fresh正式refresh。现普通Date hold原义保持，原key还核expiry，拒伪装成NULL模型hold。正式HTTP、Module正常装配及capture/release尚未接，不将内部Service称已挂载API。
+
+TDD：receipt恢复3行为FAIL／3PASS→6PASS（原5回归同跑11）；完整价目freeze正控RED→原46PG通过；IAM expiry返回6行为RED→原18HTTP通过。Admission初始6FAIL／2PASS→8PASS，补实际账户／审计锁下的cancel／双expiry、原auth损坏、request_ref冲突及普通hold身份后20PASS。独审两个P2均实证RED：尾部审计等待后取消／到期仍提交3FAIL，现所有写／audit／receipt／完整性await后仅新Admission最终复核DB时钟＋signal；request_ref永久冲突原误UNAVAILABLE的1FAIL，现具名锁／查询稳定CONFLICT。原回执恢复不套新live lease。最终独审无新增确定P0–P2。
+
+主方363非文档输入停写，Node24.20.0完整pnpm verify全0（格式／lint／types／build／SQL／contract及1762PASS／551默认资源SKIP）；8文件真实PG／HTTP215PASS／0SKIP、source/dist8PASS／0SKIP，fresh prisma:check与正式HTTP生成检查0；363输入前后无漂移，自有库库存94→94。公开YAML／generated HTTP／package／lock与基线原字节保持，不因此要求BFF改pin。
+
+另仓外actual Agent HTTP／PG→compiled-only Billing budget Service／PG 14检查通过：显式QA发放100后仅预占10（可用90／冻结10），唯一hold／admission／原发放journal各1；无TTL，Agent xmin不变；过期Agent及IAM peer不可用时原命令换key恢复仍原结果，余额不变。IAM为具名严格HTTP peer夹具、价格为明确QA，不称正常IAM付款资格或生产费用。两owner同一自建库隔离schema，进程／连接全退出后正常DROP、库存94→94精确恢复，零usage/capture。
+
+初始新测试scope插入错误、期限变量误替换、未约分价格fixture、3个pg row any lint及旧source locator失效均保留诊断，修自身fixture／类型／正确共享选价core定位后新冻结重跑完整门；原clock计数／两个rate-policy查询及旧selector退役断言未删弱。首恢复RED里失败断言早于等待原事务终态造成未处理fixture promise；改始终await两者后取得干净RED，未改生产事务门。两次不完整lint修正／首次scope RED不计业务证明；实际RED日志另保。没有用skip／放宽限制消绿。
+
+正常Schema／配置／服务及资金未动，零模型／工具／真实用量结算；Root＋12子仓已非递归fetch，13成功、远端main无新增，未盲pull混合候选。下一步同主线正式Admission HTTP替换旧未装配target、App消费grant与异步Run关联、Agent原single-dispatch及sealed usage实际结算，集中PR仍待完整链。真钱支付不做。
+
 ## 2026-10-22 AGENT-1／CREDIT-1：正式 prepared 消费及真实 owner 配对已验
 
 基线2d3ed0f，固定Agent7e1e068的HTTP7.1原Git对象；唯一vendor升级v7并删除v6，不留alias。usage2 schema／vectors／manifest原字节及原sealed三schema保持。沿现AgentUsageEvidenceReader增加readPrepared，复用专用bearer、总deadline、取消／drain与无重试GET；单独generated envelope，原raw各64KiB／深度／canonical／SHA／base64url严格校验。新首次准入仅收pending／requested_unknown及同request_ref，完整tenant/run/attempt和三摘要绑定、到达时expiry校验；返回原bytes及深冻结事实，不制造预占或dispatch许可。shared Ajv原样提取；原sealed数值域／状态与容量不放宽。

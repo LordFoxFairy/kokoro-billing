@@ -1,6 +1,8 @@
 import { parseMeteringModelRevision } from "./metering-pricing-revision-codec.js";
 import type { MeteringPricingRevisionRepository } from "./metering-pricing-revision.repository.js";
 import type {
+  MeteringPricingFreezeInput,
+  MeteringFrozenPricing,
   MeteringPricingSelectionInput,
   MeteringPricingSelectionRequest,
   MeteringPricingSelectionResult,
@@ -128,6 +130,19 @@ function parse(input: unknown): MeteringPricingSelectionInput {
   );
   const identities = requests.map((item) => JSON.stringify(item));
   if (new Set(identities).size !== identities.length) invalid();
+  return Object.freeze({
+    ...parseFreeze({
+      tenantId: fields.tenantId,
+      profileRef: profile,
+      modelRevision: fields.modelRevision,
+    }),
+    requests: Object.freeze(requests),
+  });
+}
+
+function parseFreeze(input: unknown): MeteringPricingFreezeInput {
+  const fields = object(input, ["tenantId", "profileRef", "modelRevision"]);
+  const profile = object(fields.profileRef, ["version", "artifactDigest"]);
   const artifactDigest = text(profile.artifactDigest, 64);
   if (!/^[0-9a-f]{64}$/u.test(artifactDigest)) invalid();
   return Object.freeze({
@@ -143,12 +158,17 @@ function parse(input: unknown): MeteringPricingSelectionInput {
         return invalid();
       }
     })(),
-    requests: Object.freeze(requests),
   });
 }
 
 export class MeteringPricingSelectionService {
   constructor(private readonly repository: MeteringPricingRevisionRepository) {}
+
+  freezeActivePricing(
+    input: MeteringPricingFreezeInput,
+  ): Promise<MeteringFrozenPricing> {
+    return this.repository.freezeActivePricing(parseFreeze(input));
+  }
 
   selectActivePricing(
     input: MeteringPricingSelectionInput,

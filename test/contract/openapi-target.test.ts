@@ -2299,7 +2299,7 @@ describe("R243 Billing-owned metering policy artifact", () => {
       "utf8",
     );
     const joint = source.slice(
-      source.indexOf("async selectActivePricing("),
+      source.indexOf("async #selectPricing<"),
       source.indexOf("async publishPolicy("),
     );
     expect(joint.match(/CURRENT_TIMESTAMP\(3\)/gu)).toHaveLength(1);

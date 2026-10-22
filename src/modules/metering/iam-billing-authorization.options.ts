@@ -17,7 +17,10 @@ export type AuthorizeIamBillingInput = Readonly<{
   signal: AbortSignal;
 }>;
 
-export type IamBillingAuthorization = Readonly<{ payerUserId: string }>;
+export type IamBillingAuthorization = Readonly<{
+  payerUserId: string;
+  expiresAt: string;
+}>;
 
 export const iamBillingAuthorizationOptionsSchema = z
   .object({

@@ -2712,6 +2712,93 @@ integration("R243 immutable policy publication and joint pricing", () => {
     }
   });
 
+  test("freezes the full exact-model tariff set before final usage ranges are known", async () => {
+    const common = {
+      schemaVersion: "2" as const,
+      tenantId,
+      effectiveFrom: "2026-01-01T00:00:00.000Z",
+      verifiedAt: "2026-01-01T00:00:00.000Z",
+      sourceRef: "QA complete tariff",
+      profileRef: syntheticPolicy(tenantId).profileRef,
+    };
+    const rates = [
+      {
+        ...binding,
+        bucket: "input",
+        unit: "token",
+        applicability: { kind: "all" as const },
+        currencyCode: "USD",
+        minorPerUnit: { numerator: "1", denominator: "1000" },
+      },
+      ...["0", "100"].map((lowerInclusive, index) => ({
+        ...binding,
+        bucket: "output",
+        unit: "token",
+        applicability: {
+          kind: "range" as const,
+          dimension: "context",
+          unit: "token",
+          lowerInclusive,
+          upperExclusive: index === 0 ? "100" : null,
+        },
+        currencyCode: "USD",
+        minorPerUnit: { numerator: String(index + 2), denominator: "1" },
+      })),
+      {
+        ...binding,
+        modelRevision: {
+          id: "22222222-2222-4222-8222-222222222222",
+          contentDigest: "b".repeat(64),
+        },
+        bucket: "input",
+        unit: "token",
+        applicability: { kind: "all" as const },
+        currencyCode: "USD",
+        minorPerUnit: { numerator: "9", denominator: "1000" },
+      },
+    ];
+    await publisher.publishRate(context(), {
+      tenantId,
+      actorId,
+      publicationIdentity: "full-tariff",
+      idempotencyKey: "full-tariff",
+      reason: "QA complete tariff",
+      draft: { ...common, rates },
+    });
+    await publisher.publishPolicy(context(), command());
+    const freeze = (pair = modelRevision) =>
+      transactions.runRoot(
+        {
+          tenantId,
+          actorId,
+          operation: "metering.freeze_pricing",
+          mode: "write",
+        },
+        () =>
+          selector.freezeActivePricing({
+            tenantId,
+            profileRef: common.profileRef,
+            modelRevision: pair,
+          }),
+      );
+    const snapshot = await freeze();
+    expect(snapshot.rates).toHaveLength(3);
+    expect(
+      snapshot.rates.every((row) => row.modelRevision.id === modelRevision.id),
+    ).toBe(true);
+    expect(
+      snapshot.rates.filter((row) => row.applicability.kind === "range"),
+    ).toHaveLength(2);
+    expect(snapshot.policy.maxAttemptCredits).toBe("10");
+    expect(Object.isFrozen(snapshot.rates[0]?.minorPerUnit)).toBe(true);
+    await expect(
+      freeze({ ...modelRevision, contentDigest: "f".repeat(64) }),
+    ).rejects.toMatchObject({ code: "METERING_RATE_UNAVAILABLE" });
+    await publishRate("replacement-tariff");
+    expect((await freeze()).rates).toHaveLength(1);
+    expect(snapshot.rates).toHaveLength(3);
+  });
+
   test("freezes explicit attempt budgets in persisted policy, original replay and joint selection", async () => {
     await publishRate();
     const maximum = "9223372036854";

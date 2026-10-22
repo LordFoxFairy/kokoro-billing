@@ -16,6 +16,8 @@ import type {
 } from "./metering-pricing-revision.types.js";
 import type { MeteringPricingPublicationResultV1 } from "./metering-pricing-publication-result-codec.js";
 import type {
+  MeteringPricingFreezeInput,
+  MeteringFrozenPricing,
   MeteringPricingSelectionInput,
   MeteringPricingSelectionResult,
 } from "./metering-pricing-selection.types.js";
@@ -229,9 +231,68 @@ export class MeteringPricingRevisionRepository {
       this.#corrupt();
   }
 
-  async selectActivePricing(
+  selectActivePricing(
     input: MeteringPricingSelectionInput,
   ): Promise<MeteringPricingSelectionResult> {
+    return this.#selectPricing(input, (bindingRates) => {
+      return input.requests.map((request) => {
+        const matches = bindingRates.filter((rate) => {
+          if (rate.bucket !== request.bucket || rate.unit !== request.unit)
+            return false;
+          if (rate.applicability.kind === "all") return true;
+          return (
+            request.applicability.kind === "range" &&
+            rate.applicability.dimension === request.applicability.dimension &&
+            rate.applicability.unit === request.applicability.unit &&
+            BigInt(request.applicability.value) >=
+              BigInt(rate.applicability.lowerInclusive) &&
+            (rate.applicability.upperExclusive === null ||
+              BigInt(request.applicability.value) <
+                BigInt(rate.applicability.upperExclusive))
+          );
+        });
+        if (matches.length === 0)
+          throw new MeteringError(
+            "METERING_RATE_UNAVAILABLE",
+            "Metering rate is unavailable",
+          );
+        if (matches.length > 1)
+          throw new MeteringError(
+            "METERING_RATE_AMBIGUOUS",
+            "Metering rate is ambiguous",
+          );
+        const rate = matches[0];
+        if (!rate) this.#selectionCorrupt();
+        return Object.freeze({ request, rate });
+      });
+    });
+  }
+
+  freezeActivePricing(
+    input: MeteringPricingFreezeInput,
+  ): Promise<MeteringFrozenPricing> {
+    return this.#selectPricing(input, (rates) =>
+      Object.freeze(
+        rates.map((rate) =>
+          Object.freeze({
+            ...rate,
+            modelRevision: Object.freeze({ ...rate.modelRevision }),
+            applicability: Object.freeze({ ...rate.applicability }),
+            minorPerUnit: Object.freeze({ ...rate.minorPerUnit }),
+          }),
+        ),
+      ),
+    );
+  }
+
+  async #selectPricing<T>(
+    input: MeteringPricingFreezeInput,
+    selectRates: (rates: readonly MeteringRevisionRate[]) => readonly T[],
+  ): Promise<
+    Omit<MeteringPricingSelectionResult, "rates"> & {
+      readonly rates: readonly T[];
+    }
+  > {
     const client = this.transactions.requireActiveTransaction(
       input.tenantId,
       "write",
@@ -280,42 +341,8 @@ export class MeteringPricingRevisionRepository {
       );
     const currencies = new Set(bindingRates.map((rate) => rate.currencyCode));
     if (currencies.size > 1) this.#selectionCorrupt();
-    const rates = input.requests.map((request) => {
-      const matches = bindingRates.filter((rate) => {
-        if (rate.bucket !== request.bucket || rate.unit !== request.unit)
-          return false;
-        if (rate.applicability.kind === "all") return true;
-        return (
-          request.applicability.kind === "range" &&
-          rate.applicability.dimension === request.applicability.dimension &&
-          rate.applicability.unit === request.applicability.unit &&
-          BigInt(request.applicability.value) >=
-            BigInt(rate.applicability.lowerInclusive) &&
-          (rate.applicability.upperExclusive === null ||
-            BigInt(request.applicability.value) <
-              BigInt(rate.applicability.upperExclusive))
-        );
-      });
-      if (matches.length === 0)
-        throw new MeteringError(
-          "METERING_RATE_UNAVAILABLE",
-          "Metering rate is unavailable",
-        );
-      if (matches.length > 1)
-        throw new MeteringError(
-          "METERING_RATE_AMBIGUOUS",
-          "Metering rate is ambiguous",
-        );
-      const rate = matches[0];
-      if (!rate) this.#selectionCorrupt();
-      return Object.freeze({ request, rate });
-    });
-    const currencyCode = rates[0]?.rate.currencyCode;
-    if (
-      !currencyCode ||
-      rates.some((item) => item.rate.currencyCode !== currencyCode)
-    )
-      this.#selectionCorrupt();
+    const currencyCode = mapped.currencyCode;
+    const rates = selectRates(bindingRates);
     const selectedPolicies = await client.$queryRaw<
       readonly { id: string; revision: bigint }[]
     >`

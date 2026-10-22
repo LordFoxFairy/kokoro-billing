@@ -97,7 +97,10 @@ export class IamBillingAuthorizationClient implements OnModuleDestroy {
       const expiry = exactUtcInstant(decision.expires_at);
       if (expiry === null || expiry <= Date.now())
         throw new IamBillingAuthorizationError("EXPIRED");
-      return Object.freeze({ payerUserId: decision.user_id });
+      return Object.freeze({
+        payerUserId: decision.user_id,
+        expiresAt: decision.expires_at,
+      });
     } catch (error) {
       if (error instanceof IamBillingAuthorizationError) throw error;
       if (this.#shutdown.signal.aborted)
