@@ -1,3 +1,9 @@
+## CREDIT-1：完整proof头容量修复（2026-10-22，本地已验）
+
+运行修复commit d34502595e2cb1ac12e5b57fb372497ef04c90fd，canonical exp8／contract SHA2c65b64c保持。真实Node TCP发现合法16KiB proof叠加服务身份头会触发默认16KiB parser的431，原source/dist样本两FAIL（期待依赖503）。唯一Fastify composition显式http.maxHeaderSize=32KiB，仍保32KiB body和proof16384边界；原source/dist请求改满长proof且核实际canary脱敏，修后4PASS／6名称过滤（非未执行通过），无资金写。
+
+交付commit干净树378非文档输入冻结，完整五阶段全0：pnpm verify1786 PASS／561默认资源SKIP，另真实PG228、完整source/dist10 PASS／0SKIP，fresh Prisma和生成drift通过；自有库94→94、正常依赖原hash保持。新长行初次格式检查失败已保留，只经原formatter修正后提交／完整重验，未放宽期望或parser边界。独审无确定P0–P2。正常配置、Schema、余额与模型／工具不动；BFF消费者固定此producer，前次d65d709业务与协议不变。
+
 ## CREDIT-1：Run-proof预算消费者已本地验收（2026-10-22）
 
 沿f61a5d2原Metering／ModelAdmission原位配对IAM具名Run授权，不新增服务、用户消费grant或App token broker。唯一SDK0.16固定clean来源16ee2eb（实现67a3c0e，16ee仅修SDK README）；archive SHA256 a358795000c022633e187a253e5ef6cb8ae8dc6330eade4f29aa38b932e49a89，76008字节／104项，原contract SHA30cafb75保持。唯一旧0.7包删除，manifest／lock／严格artifact门一致。新proof＋expected hash按已验证Agent prepared与可信payer重新复用唯一model-admit:1 codec；核tenant/user/Run/conversation/fence/hash及expiry，不存用户token或proof。SDK旧Session回包拒绝，safe fence无盲转Number。
