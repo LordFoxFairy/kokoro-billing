@@ -1,3 +1,7 @@
+## AGENT-1：预算 HTTP 与只读当前状态（2026-10-22，实施门）
+
+无SQL／Prisma／正常数据变更。沿现billing_admission、hold、account及永久command两表；GET在READ ONLY RR内核原receipt（namespace/name/attempt完整payload digest/result schema）和原canonical snapshot／raw facts及持有关系后投影当前status／updated_at。GET不调用recover绑定新key、不写鉴权或读取标记，不依赖活Agent／IAMgrant，异租户／付款用户不可见。POST永久创建回执与GET当前表示区分，状态变更不改原创建receipt；消费token不持久化或入cache。正常资源激活与三面核空演进仍待同一主链交付。
+
 ## AGENT-1：预算 Admission 数据替换（2026-10-22，实施门）
 
 唯一canonical SQL原billing_admission替换未使用的feature-price／quantity／included目标列：id、tenant_id、run_id、attempt_id、request_ref、actor_ref、payer_ref、call_id、attempt_ordinal、feature_key、attempt_binding_json／digest、planned_json／digest、authorization_json、final_request_digest、prepared_at、observed_at、lease_expires_at、pricing_snapshot_json／digest、budget_credits、hold_id、status、created_at、updated_at。原始canonical bytes按严格UTF8原文TEXT保存而非JSONB重序列化；定价snapshot是严格canonical TEXT＋SHA，包含完整冻结rate／policy与绑定，不放可编辑第二价目或任何token。UNIQUE(tenant_id,attempt_id)、UNIQUE(tenant_id,request_ref)、UNIQUE(tenant_id,hold_id)，status held/captured/released/pending_reconciliation，budget整credits1..9223372036854／ordinal正数／digest hex等CHECK。

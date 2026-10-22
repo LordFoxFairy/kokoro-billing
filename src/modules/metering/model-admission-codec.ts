@@ -54,6 +54,22 @@ export const modelAdmissionResultCodec: ResultCodec<ModelAdmissionResult> = {
   encode: (value) => resultSchema.parse(value),
   decode: (value) => Object.freeze(resultSchema.parse(value)),
 };
+export function validateModelAdmissionRead(
+  context: ModelAdmissionContext,
+  id: string,
+): void {
+  try {
+    text(191).parse(context.tenantId);
+    text(255).parse(context.actorId);
+    z.string()
+      .regex(/^[A-Za-z0-9._:-]{1,255}$/u)
+      .parse(context.requestId);
+    uuid.parse(id);
+    if (!(context.signal instanceof AbortSignal)) throw new Error();
+  } catch {
+    throw new ModelAdmissionError("INVALID");
+  }
+}
 export function modelAdmissionIntent(
   context: ModelAdmissionContext,
   command: ModelAdmissionCommand,

@@ -19,10 +19,18 @@ describe("Metering module IAM authorization registration", () => {
         DatabaseModule.register({
           databaseUrl: "postgresql://unused.invalid/r201_never_connected",
         }),
-        MeteringModule.register({
-          baseUrl: "http://127.0.0.1:1",
-          machineBearerToken: "machine-secret-canary",
-          deadlineMs: 25,
+        MeteringModule.registerModelAdmission({
+          agent: {
+            baseUrl: "http://127.0.0.1:1",
+            machineBearerToken: "reader-secret-canary",
+            deadlineMs: 25,
+          },
+          iam: {
+            baseUrl: "http://127.0.0.1:1",
+            machineBearerToken: "machine-secret-canary",
+            deadlineMs: 25,
+          },
+          requestDeadlineMs: 1000,
         }),
       ],
     })

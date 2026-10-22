@@ -107,11 +107,11 @@ const operationGovernance: Readonly<
   },
   "post /v1/internal/billing/admissions": {
     idempotency: "required",
-    permission: "agent-model-studio-service",
+    permission: "web-bff-model-admission",
   },
   "get /v1/internal/billing/admissions/{admission_id}": {
     idempotency: "read-only",
-    permission: "agent-model-studio-service",
+    permission: "web-bff-model-admission",
   },
   "post /v1/internal/billing/admissions/{admission_id}/capture": {
     idempotency: "required",

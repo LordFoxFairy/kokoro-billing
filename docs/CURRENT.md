@@ -1,3 +1,19 @@
+## 2026-10-22 AGENT-1／CREDIT-1：正式预算 HTTP 已本地验收
+
+基线9cc7af1；沿已裁决预算业务原位挂载BFF专用Admission POST／GET，不新增服务、Schema或认证协议。完整机器bearer＋internal secret＋web-bff标记和u1 tenant／subject，六项prepared绑定闭集、独立消费header及原命令key；严格16KiB flat JSON保留原UTF-8和重复字段防护，原grant parser仅移至共用HTTP边界，无旧导出／fallback。GET拒query、编码别名及正文framing，RR本人范围只读当前四态／updated_at，不要求消费token或触达Agent／IAM，也不绑定新key。POST／原命令回放201＋Location始终原held创建表示，绝不把当前状态改写原回执。
+
+唯一canonical exp7／29操作／56schema，raw SHA256 `cdb09146a767a8a1a6d976e2e7d819961a01518370968f671557ff2df4edccc3`；正规生成三件及provenance，删除未实现旧bound／自报payer／价格与伪复合状态，无运行兼容。预算正整数字符串严格1..9223372036854、UUID／digest小写完整匹配、UTC毫秒时间；旧exp6全图SHA7044102d精确逆证明仅在build/tests使用四段删除原件，原管理／资金／账户／target完整图保护保持。当前BFF／App／Admin尚固定exp6，后继正式消费者再配对，不能与新正常环境混用。
+
+显式 `BILLING_MODEL_ADMISSION_ENABLED=true` 才注册两条路由和既有reader／IAM client；默认图不因凭据存在而开启。两个peer各2秒、零重试，总请求取消默认10秒可显式有界配置；连接／消费凭据不序列化或回传，header日志增加消费token脱敏。控制器只在真正aborted或未完成reply关闭时取消，清timer／监听；正常body完成不触发取消。原业务失败映射成稳定400／403／404／409／422／500／503，不暴露依赖body，unknown仅原命令恢复。
+
+TDD覆盖旧wire3FAIL、HTTP缺路由2FAIL、预算上限／毫秒格式及持久坏run_id边界。独审发现GET正文被Fastify忽略、await miss取消、第二轮并发回执重放取消三处P2，均留干净RED→GREEN：framing曾返回404现400；两纯取消单元原null／UNAVAILABLE现ABORTED；真实PG模拟首轮miss和第二轮实际receipt重放，取消原resolve预算结果现ABORTED，资金和key数量不变。signal-only保护不重新要求旧lease／grant活跃。最终独审无确定遗留P0–P2。
+
+主方最终374非文档输入停写且无漂移。完整 `pnpm verify` 全0：格式／lint／typecheck／build／SQL／contract及1779PASS／560默认资源SKIP；另8文件真实PG／HTTP222PASS／0SKIP、源码／dist进程10PASS／0SKIP（含新显式装配两入口，依赖失败零预占），fresh `prisma:check` 与 `contract:generated:check` 均0，自有库库存94→94。默认skip不冒真实集成通过。文档新增链接无失效；全量链接探测另发现基线已有跨仓相对链接失效，已单列私有记录，不冒称全量链接通过或扩大修复。第一次完整门因新取消fixture的require-await lint失败、第二次因治理表仍写旧两操作权限失败；只修自身fixture和精确两条期望后新冻结完整重跑，保留失败，不删弱保护／改timeout。缺价fixture误写不存在status、仓外验收重名变量及shell只读status错误均保留，仅修验收自身，无生产fallback。
+
+仓外actual Agent HTTP／PG→compiled canonical Billing runtime HTTP／PG 18检查通过：显式QA发放100后唯一预算10（available90／held10），no TTL；Agent xmin保持。原Agent lease过期及IAM peer离线，原命令换key仍原创建结果；无消费token GET成功且无key写入，跨actor404／缺机器context403。唯一hold／admission／原发放journal各1，零usage／capture；IAM为具名严格HTTP peer夹具、价格为显式QA，不冒正常IAM会话或真实供应商费用。所有自有进程／连接退出后正常DROP，同库两owner隔离schema，库存94→94。
+
+Root＋12子仓非递归fetch全部成功，远端main无新增；未checkout／覆写混合候选、未push／PR／merge或正常激活。正常配置／Schema／余额不动，模型／工具／实际用量扣分本片均0。下一步仍同一主链：App合法消费grant生命周期／异步Run关联→同一正式预算API消费者→原single-dispatch→正式usage封口／一次整数结算；不重开MCP或额外成本保证前置。详细私有证据只存Root ignored记录，公开资料不含URL凭据或会话原件。
+
 ## 2026-10-22 AGENT-1／CREDIT-1：首次预算预占业务与恢复已本地验收
 
 基线7412c30，沿现Metering／Credit原位实现ModelAdmissionService，不新增Module／服务／钱包／成本保证。先短事务恢复原永久receipt；miss零写，换key成功恢复永久绑定新key。首次才在事务外读取正式Agent prepared与IAM消费授权；个人payer＝prepared user actor/subject＝受信当前actor，IAM原expires_at保持精度供资金提交检查。原command查找／校验共享，无第二幂等表；不持锁HTTP、token不进入digest／DB／审计。

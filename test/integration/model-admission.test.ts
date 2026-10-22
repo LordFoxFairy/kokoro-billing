@@ -1,3 +1,8 @@
+import {
+  FastifyAdapter,
+  type NestFastifyApplication,
+} from "@nestjs/platform-fastify";
+import { BillingHttpModule } from "../../src/http/billing-http.module.js";
 import { createHash, randomUUID } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { once } from "node:events";
@@ -55,6 +60,7 @@ describe.skipIf(admin === undefined)(
       grantUser: string,
       expiry: string;
     let authorizationExpiry: string;
+    let waitForDisconnect = false;
     let makeReply: (requestId: string) => object;
     const context = () => ({
       tenantId,
@@ -155,6 +161,7 @@ describe.skipIf(admin === undefined)(
       grantUser = actorId;
       expiry = new Date(Date.now() + 60000).toISOString();
       authorizationExpiry = expiry;
+      waitForDisconnect = false;
       server = createServer((request, response) => {
         if (!peerEnabled) {
           response.writeHead(503);
@@ -163,6 +170,7 @@ describe.skipIf(admin === undefined)(
         }
         if (request.method === "GET") {
           agentCalls++;
+          if (waitForDisconnect) return;
           const body = makeReply(String(request.headers["x-request-id"]));
           response.writeHead(200, {
             "content-type": "application/json",
@@ -316,6 +324,76 @@ describe.skipIf(admin === undefined)(
       }
       await fixture?.close();
       fixture = undefined;
+    });
+    const wireAuth = {
+      mode: "jwks" as const,
+      internalServiceSecret: "admission-test-internal-secret-000000001",
+      bffServiceToken: "admission-test-bff-bearer-token-00000001",
+      operatorProxySecret: "admission-test-operator-secret-000000001",
+      jwksUrl: "https://iam.example.test/iam/jwks",
+      issuer: "https://iam.example.test/iam",
+      audience: "https://kokoro.dev/resources/billing",
+    };
+    const wireHeaders = (who = actorId) => ({
+      authorization: `Bearer ${wireAuth.bffServiceToken}`,
+      "x-kokoro-service": "web-bff",
+      "x-kokoro-internal-secret": wireAuth.internalServiceSecret,
+      "x-kokoro-tenant-id": "u1." + Buffer.from(tenantId).toString("base64url"),
+      "x-kokoro-subject": "u1." + Buffer.from(who).toString("base64url"),
+      "content-type": "application/json",
+      "idempotency-key": "http-admission-key",
+      "x-billing-consumption-token": "consumption-fixture",
+    });
+    async function withHttp(
+      body: (http: NestFastifyApplication) => Promise<void>,
+      requestDeadlineMs = 10000,
+      enabled = true,
+    ) {
+      const address = server?.address();
+      if (!address || typeof address === "string") throw new Error();
+      const baseUrl = `http://127.0.0.1:${address.port}`;
+      const module = await Test.createTestingModule({
+        imports: [
+          DatabaseModule.register({ databaseUrl: assertDefined(fixture).url }),
+          BillingHttpModule.register(
+            wireAuth,
+            enabled
+              ? {
+                  agent: {
+                    baseUrl,
+                    machineBearerToken: "reader-fixture",
+                    deadlineMs: 2000,
+                  },
+                  iam: {
+                    baseUrl,
+                    machineBearerToken: "iam-fixture",
+                    deadlineMs: 2000,
+                  },
+                  requestDeadlineMs,
+                }
+              : undefined,
+          ),
+        ],
+      }).compile();
+      const http = module.createNestApplication<NestFastifyApplication>(
+        new FastifyAdapter({ logger: false }),
+        { logger: false },
+      );
+      try {
+        await http.init();
+        await http.getHttpAdapter().getInstance().ready();
+        await body(http);
+      } finally {
+        await http.close();
+      }
+    }
+    const wireCommand = (c: ModelAdmissionCommand) => ({
+      run_id: c.runId,
+      attempt_id: c.attemptId,
+      request_ref: c.requestRef,
+      attempt_binding_digest: c.attemptBindingDigest,
+      planned_digest: c.plannedDigest,
+      final_request_digest: c.finalRequestDigest,
     });
     const create = (input: ModelAdmissionCommand) =>
       service.create(context(), input, "user-consumption-canary");
@@ -703,6 +781,296 @@ describe.skipIf(admin === undefined)(
           where: { command_name: "model.admit" },
         }),
       ).toBe(1);
+    });
+    test("formal HTTP creates one budget, replays original held, and GET reads current state without peers or writes", async () => {
+      const input = command();
+      await withHttp(async (http) => {
+        const first = await http.inject({
+          method: "POST",
+          url: "/v1/internal/billing/admissions",
+          headers: wireHeaders(),
+          payload: wireCommand(input),
+        });
+        expect(first.statusCode).toBe(201);
+        const created = JSON.parse(first.body) as {
+          data: {
+            admission_id: string;
+            status: string;
+            updated_at: string;
+            created_at: string;
+          };
+        };
+        expect(created.data.status).toBe("held");
+        expect(created.data.updated_at).toBe(created.data.created_at);
+        expect(first.headers.location).toBe(
+          `/v1/internal/billing/admissions/${created.data.admission_id}`,
+        );
+        const id = created.data.admission_id;
+        await assertDefined(fixture).client.billing_admission.update({
+          where: { id },
+          data: {
+            status: "pending_reconciliation",
+            updated_at: new Date(Date.now() + 1),
+          },
+        });
+        peerEnabled = false;
+        const counts = [agentCalls, iamCalls];
+        const keys =
+          await assertDefined(
+            fixture,
+          ).client.billing_command_key_binding.count();
+        const before = await funds();
+        const readHeaders = wireHeaders();
+        delete (readHeaders as Record<string, unknown>)["idempotency-key"];
+        delete (readHeaders as Record<string, unknown>)[
+          "x-billing-consumption-token"
+        ];
+        const read = await http.inject({
+          method: "GET",
+          url: `/v1/internal/billing/admissions/${id}`,
+          headers: readHeaders,
+        });
+        expect(read.statusCode).toBe(200);
+        expect(JSON.parse(read.body)).toMatchObject({
+          data: { admission_id: id, status: "pending_reconciliation" },
+        });
+        expect(read.headers["cache-control"]).toBe("no-store");
+        expect(
+          await assertDefined(
+            fixture,
+          ).client.billing_command_key_binding.count(),
+        ).toBe(keys);
+        const replay = await http.inject({
+          method: "POST",
+          url: "/v1/internal/billing/admissions",
+          headers: {
+            ...wireHeaders(),
+            "idempotency-key": "http-recovery-key",
+            "x-billing-consumption-token": "expired-header",
+          },
+          payload: wireCommand(input),
+        });
+        expect(replay.statusCode).toBe(201);
+        expect(JSON.parse(replay.body)).toEqual(created);
+        expect([agentCalls, iamCalls]).toEqual(counts);
+        expect(await funds()).toEqual(before);
+        const denied = await http.inject({
+          method: "GET",
+          url: `/v1/internal/billing/admissions/${id}`,
+          headers: wireHeaders("another-user"),
+        });
+        expect(denied.statusCode).toBe(404);
+        await assertDefined(fixture).client.billing_admission.update({
+          where: { id },
+          data: { run_id: "invalid\u0001run" },
+        });
+        const invalidStored = await http.inject({
+          method: "GET",
+          url: `/v1/internal/billing/admissions/${id}`,
+          headers: wireHeaders(),
+        });
+        expect(invalidStored.statusCode).toBe(500);
+        await assertDefined(fixture).client.billing_admission.update({
+          where: { id },
+          data: { run_id: input.runId },
+        });
+        await assertDefined(fixture).client.billing_command_receipt.updateMany({
+          where: { command_name: "model.admit" },
+          data: { payload_digest: "f".repeat(64) },
+        });
+        const corrupt = await http.inject({
+          method: "GET",
+          url: `/v1/internal/billing/admissions/${id}`,
+          headers: wireHeaders(),
+        });
+        expect(corrupt.statusCode).toBe(500);
+      });
+    });
+    test("formal HTTP rejects caller authority, ambiguous flat JSON, partial machine auth, aliases and unknown inputs before peer I/O", async () => {
+      const input = command(),
+        payload = wireCommand(input),
+        path = "/v1/internal/billing/admissions";
+      await withHttp(async (http) => {
+        for (const bad of [
+          JSON.stringify({ ...payload, tenant_id: "forged" }),
+          JSON.stringify(payload).replace("{", '{"run_id":"duplicate",'),
+          JSON.stringify({ ...payload, run_id: 123 }),
+          JSON.stringify({ ...payload, attempt_id: input.attemptId + "\n" }),
+        ]) {
+          const reply = await http.inject({
+            method: "POST",
+            url: path,
+            headers: wireHeaders(),
+            payload: bad,
+          });
+          expect(reply.statusCode).toBe(400);
+        }
+        const headers = wireHeaders();
+        delete (headers as Record<string, unknown>)["x-kokoro-subject"];
+        expect(
+          (await http.inject({ method: "POST", url: path, headers, payload }))
+            .statusCode,
+        ).toBe(403);
+        expect(
+          (
+            await http.inject({
+              method: "POST",
+              url: path + "?alias=1",
+              headers: wireHeaders(),
+              payload,
+            })
+          ).statusCode,
+        ).toBe(400);
+        expect(
+          (
+            await http.inject({
+              method: "POST",
+              url: path,
+              headers: { ...wireHeaders(), "x-kokoro-service": "agent" },
+              payload,
+            })
+          ).statusCode,
+        ).toBe(403);
+        expect([agentCalls, iamCalls]).toEqual([0, 0]);
+      });
+    });
+    test("formal HTTP total deadline cancels the outstanding peer read before reservation", async () => {
+      const input = command();
+      waitForDisconnect = true;
+      const before = await funds();
+      await withHttp(async (http) => {
+        const reply = await http.inject({
+          method: "POST",
+          url: "/v1/internal/billing/admissions",
+          headers: wireHeaders(),
+          payload: wireCommand(input),
+        });
+        expect(reply.statusCode).toBe(503);
+        expect(JSON.parse(reply.body)).toMatchObject({
+          error: { code: "billing.dependency_unavailable", retryable: true },
+        });
+        expect([agentCalls, iamCalls]).toEqual([1, 0]);
+        expect(await funds()).toEqual(before);
+      }, 25);
+    });
+    test("formal HTTP fails closed on missing prices, insufficient credits, payer mismatch and unavailable peers", async () => {
+      const input = command();
+      const before = await funds();
+      await withHttp(async (http) => {
+        const request = () =>
+          http.inject({
+            method: "POST",
+            url: "/v1/internal/billing/admissions",
+            headers: wireHeaders(),
+            payload: wireCommand(input),
+          });
+        grantUser = "other-payer";
+        const denied = await request();
+        expect(denied.statusCode).toBe(403);
+        grantUser = actorId;
+        peerEnabled = false;
+        expect((await request()).statusCode).toBe(503);
+        peerEnabled = true;
+        await assertDefined(fixture).client.billing_credit_account.updateMany({
+          where: { tenant_id: tenantId, subject_id: actorId },
+          data: { available_micros: 0n },
+        });
+        const insufficient = await request();
+        expect(insufficient.statusCode).toBe(422);
+        expect(JSON.parse(insufficient.body)).toMatchObject({
+          error: { code: "billing.insufficient_credit", retryable: false },
+        });
+        await assertDefined(fixture).client.billing_credit_account.updateMany({
+          where: { tenant_id: tenantId, subject_id: actorId },
+          data: { available_micros: 100000000n },
+        });
+        await assertDefined(
+          fixture,
+        ).client.billing_metering_rate_revision.updateMany({
+          where: { tenant_id: tenantId },
+          data: { effective_from: new Date("2099-01-01T00:00:00.000Z") },
+        });
+        const price = await request();
+        expect(price.statusCode).toBe(422);
+        expect(JSON.parse(price.body)).toMatchObject({
+          error: { code: "billing.price_unavailable", retryable: false },
+        });
+        expect(await funds()).toEqual(before);
+      });
+    });
+    test("formal HTTP rejects GET framing bytes rather than silently ignoring the body", async () => {
+      command();
+      await withHttp(async (http) => {
+        const reply = await http.inject({
+          method: "GET",
+          url: `/v1/internal/billing/admissions/${randomUUID()}`,
+          headers: { ...wireHeaders(), "content-length": "1" },
+          payload: "x",
+        });
+        expect(reply.statusCode).toBe(400);
+        expect([agentCalls, iamCalls]).toEqual([0, 0]);
+      });
+    });
+    test("formal HTTP is absent from the default graph until explicitly enabled", async () => {
+      const input = command();
+      await withHttp(
+        async (http) => {
+          expect(
+            (
+              await http.inject({
+                method: "POST",
+                url: "/v1/internal/billing/admissions",
+                headers: wireHeaders(),
+                payload: wireCommand(input),
+              })
+            ).statusCode,
+          ).toBe(404);
+          expect([agentCalls, iamCalls]).toEqual([0, 0]);
+        },
+        10000,
+        false,
+      );
+    });
+    test("second-round concurrent receipt recovery respects cancellation without revalidating or changing the committed budget", async () => {
+      const input = command();
+      await create(input);
+      const before = await funds();
+      const controller = new AbortController();
+      const receipts = assertDefined(app).get(CommandReceiptRepository);
+      const keyCount =
+        await assertDefined(fixture).client.billing_command_key_binding.count();
+      // Model a first miss followed by a competing committed command at the second identity lock.
+      const raced = {
+        recover: () => Promise.resolve(null),
+        execute: async (
+          ...args: Parameters<CommandReceiptRepository["execute"]>
+        ) => {
+          const result = await receipts.execute(...args);
+          expect(result.replayed).toBe(true);
+          controller.abort();
+          return result;
+        },
+      } as unknown as CommandReceiptRepository;
+      const competing = new ModelAdmissionService(
+        tx,
+        raced,
+        assertDefined(app).get(AuditAppender),
+        assertDefined(app).get(CreditEffects),
+        assertDefined(app).get(MeteringPricingSelectionService),
+        reader,
+        iam,
+      );
+      await expect(
+        competing.create(
+          { ...context(), signal: controller.signal },
+          { ...input, idempotencyKey: "raced-recovery-key" },
+          "consumption-fixture",
+        ),
+      ).rejects.toMatchObject({ code: "ABORTED" });
+      expect(await funds()).toEqual(before);
+      expect(
+        await assertDefined(fixture).client.billing_command_key_binding.count(),
+      ).toBe(keyCount);
     });
   },
 );

@@ -1,9 +1,15 @@
+import { ModelAdmissionController } from "../modules/metering/model-admission.controller.js";
+import {
+  resolveModelAdmissionOptions,
+  MODEL_ADMISSION_DEADLINE,
+  type ModelAdmissionOptions,
+} from "../modules/metering/model-admission.options.js";
 import { MeteringModule } from "../modules/metering/metering.module.js";
 import { MeteringPricingController } from "../modules/metering/metering-pricing.controller.js";
 import { parseMeteringPricingJson } from "../modules/metering/metering-pricing-json.js";
 import { CreditGrantController } from "../modules/credit/credit-grant.controller.js";
 import { BillingOperatorGuard } from "./billing-operator.guard.js";
-import { parseAdminCreditGrantJson } from "../modules/credit/credit-grant.input.js";
+import { parseFlatStringCommandJson } from "./flat-string-command-json.js";
 import { CreditAccountController } from "../modules/credit/credit-account.controller.js";
 import { CreditAccountGuard } from "./credit-account.guard.js";
 import {
@@ -66,11 +72,14 @@ export class BillingHttpModule implements NestModule {
       (request, body, done) => {
         if (
           request.method === "POST" &&
-          request.routeOptions.url === "/v1/admin/billing/credit-grants"
+          [
+            "/v1/admin/billing/credit-grants",
+            "/v1/internal/billing/admissions",
+          ].includes(request.routeOptions.url ?? "")
         ) {
           try {
             if (!Buffer.isBuffer(body)) throw new BadRequestException();
-            done(null, parseAdminCreditGrantJson(body));
+            done(null, parseFlatStringCommandJson(body));
           } catch {
             done(new BadRequestException());
           }
@@ -124,12 +133,26 @@ export class BillingHttpModule implements NestModule {
       done();
     });
   }
-  static register(options: BillingAuthOptions): DynamicModule {
+  static register(
+    options: BillingAuthOptions,
+    admission?: ModelAdmissionOptions,
+  ): DynamicModule {
+    const model =
+      admission === undefined
+        ? undefined
+        : resolveModelAdmissionOptions(admission);
     const config = validateBillingPersonalHttpOptions(options);
     return {
       module: BillingHttpModule,
-      imports: [CreditModule, CommerceModule, MeteringModule],
+      imports: [
+        CreditModule,
+        CommerceModule,
+        model === undefined
+          ? MeteringModule
+          : MeteringModule.registerModelAdmission(model),
+      ],
       controllers: [
+        ...(model === undefined ? [] : [ModelAdmissionController]),
         CreditReadController,
         CreditAccountController,
         CreditGrantController,
@@ -138,6 +161,14 @@ export class BillingHttpModule implements NestModule {
         ServiceProbesController,
       ],
       providers: [
+        ...(model === undefined
+          ? []
+          : [
+              {
+                provide: MODEL_ADMISSION_DEADLINE,
+                useValue: model.requestDeadlineMs,
+              },
+            ]),
         {
           provide: BILLING_CATALOG_AUTH,
           inject: [BILLING_PERSONAL_HTTP_OPTIONS],

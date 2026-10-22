@@ -14,6 +14,7 @@ import type { IamBillingAuthorizationClient } from "./iam-billing-authorization.
 import { currentMeteringProfileRef } from "./metering-policy-artifact.js";
 import {
   modelAdmissionIntent,
+  validateModelAdmissionRead,
   modelAdmissionResultCodec,
   encodeModelAdmissionPricing,
 } from "./model-admission-codec.js";
@@ -21,6 +22,7 @@ import type {
   ModelAdmissionContext,
   ModelAdmissionCommand,
   ModelAdmissionResult,
+  ModelAdmissionView,
 } from "./model-admission.types.js";
 import { ModelAdmissionError } from "./model-admission.error.js";
 
@@ -59,10 +61,13 @@ export class ModelAdmissionService {
           receipt,
           modelAdmissionResultCodec,
         );
+        checkCancelled();
         if (found === null) return null;
         await this.#assertCommitted(found.value, intent);
+        checkCancelled();
         return found.value;
       });
+      checkCancelled();
       if (previous !== null) return previous;
       // Existing results above survive peer/token expiry. New reservations require fresh owner checks.
       const prepared = await this.agent.readPrepared({
@@ -224,6 +229,7 @@ export class ModelAdmissionService {
           },
         );
         await this.#assertCommitted(execution.value, intent);
+        checkCancelled();
         // All reservation/audit/receipt awaits have settled. Old receipt recovery is not a new lease.
         if (!execution.replayed) await checkLiveBounds();
         return execution.value;
@@ -246,14 +252,110 @@ export class ModelAdmissionService {
       throw new ModelAdmissionError("UNAVAILABLE");
     }
   }
+  async read(
+    context: ModelAdmissionContext,
+    id: string,
+  ): Promise<ModelAdmissionView | null> {
+    validateModelAdmissionRead(context, id);
+    if (context.signal.aborted) throw new ModelAdmissionError("ABORTED");
+    try {
+      return await this.transactions.runRoot(
+        {
+          tenantId: context.tenantId,
+          actorId: context.actorId,
+          operation: "model.admission.read",
+          mode: "readOnlySnapshot",
+        },
+        async () => {
+          const client = this.transactions.requireActiveTransaction(
+            context.tenantId,
+            "readOnlySnapshot",
+          );
+          const row = await client.billing_admission.findFirst({
+            where: {
+              id,
+              tenant_id: context.tenantId,
+              actor_ref: context.actorId,
+              payer_ref: context.actorId,
+            },
+          });
+          if (context.signal.aborted) throw new ModelAdmissionError("ABORTED");
+          if (row === null) return null;
+          let intent: ReturnType<typeof modelAdmissionIntent>;
+          try {
+            intent = modelAdmissionIntent(context, {
+              runId: row.run_id,
+              attemptId: row.attempt_id,
+              requestRef: row.request_ref,
+              attemptBindingDigest: row.attempt_binding_digest,
+              plannedDigest: row.planned_digest,
+              finalRequestDigest: row.final_request_digest,
+              idempotencyKey: "readonly-validation",
+            });
+          } catch {
+            throw new ModelAdmissionError("CORRUPT");
+          }
+          const receipt = await client.billing_command_receipt.findFirst({
+            where: {
+              tenant_id: context.tenantId,
+              command_namespace: "admission",
+              api_surface: "internal",
+              command_name: "model.admit",
+              command_identity: row.attempt_id,
+            },
+          });
+          if (
+            receipt === null ||
+            receipt.status !== "succeeded" ||
+            receipt.request_schema_version !== 1 ||
+            receipt.result_schema_version !== 1 ||
+            receipt.payload_digest !== intent.receipt.payloadDigest
+          )
+            throw new ModelAdmissionError("CORRUPT");
+          let result: ModelAdmissionResult;
+          try {
+            result = modelAdmissionResultCodec.decode(receipt.result_json);
+          } catch {
+            throw new ModelAdmissionError("CORRUPT");
+          }
+          if (result.admissionId !== id)
+            throw new ModelAdmissionError("CORRUPT");
+          await this.#assertCommitted(result, intent, "readOnlySnapshot");
+          const status = row.status;
+          if (
+            status !== "held" &&
+            status !== "captured" &&
+            status !== "released" &&
+            status !== "pending_reconciliation"
+          )
+            throw new ModelAdmissionError("CORRUPT");
+          if (row.updated_at.getTime() < row.created_at.getTime())
+            throw new ModelAdmissionError("CORRUPT");
+          if (context.signal.aborted) throw new ModelAdmissionError("ABORTED");
+          return Object.freeze({
+            ...result,
+            attemptBindingDigest: row.attempt_binding_digest,
+            plannedDigest: row.planned_digest,
+            finalRequestDigest: row.final_request_digest,
+            status,
+            updatedAt: row.updated_at.toISOString(),
+          });
+        },
+      );
+    } catch (error) {
+      if (error instanceof ModelAdmissionError) throw error;
+      throw new ModelAdmissionError("UNAVAILABLE");
+    }
+  }
   async #assertCommitted(
     result: ModelAdmissionResult,
     intent: ReturnType<typeof modelAdmissionIntent>,
+    mode: "write" | "readOnlySnapshot" = "write",
   ): Promise<void> {
     const { expected, context } = intent;
     const client = this.transactions.requireActiveTransaction(
       context.tenantId,
-      "write",
+      mode,
     );
     const row = await client.billing_admission.findFirst({
       where: { id: result.admissionId, tenant_id: context.tenantId },

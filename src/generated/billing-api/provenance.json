@@ -2,9 +2,9 @@
   "owner": "@kokoro/billing",
   "source": {
     "path": "contract/openapi/v1/openapi.yaml",
-    "version": "4.0.0-experimental.6",
-    "bytes": 142821,
-    "sha256": "7044102dd6e221338348152bb268eaca6516039cc5ca5122d3c42a096f6dc962"
+    "version": "4.0.0-experimental.7",
+    "bytes": 142963,
+    "sha256": "cdb09146a767a8a1a6d976e2e7d819961a01518370968f671557ff2df4edccc3"
   },
   "generator": {
     "package": "@hey-api/openapi-ts",
@@ -87,12 +87,12 @@
       "sha256": "3ce98dbdb8e376fe7a29a69c30a3edac10f087b04665ac37177c39b8b1e5f5a1"
     },
     "types.gen.ts": {
-      "bytes": 37193,
-      "sha256": "3614b1b40c07885026bc36a458793737becbe58c20b6b2bebde986b91e4c20e3"
+      "bytes": 36157,
+      "sha256": "95ed06657a3f84cbc51deb041e7704bcf27b802f850f8a6a6b3336718d7d25a3"
     },
     "schemas.gen.ts": {
-      "bytes": 39663,
-      "sha256": "6e2c8098969bd9354593bb589cb8d238469564a33367b524889eab5e3e2a42f6"
+      "bytes": 37031,
+      "sha256": "7dc0fa4f073e07683e92ccd6222b44dde39a2e02cbd79f4235552975840298ec"
     }
   }
 }

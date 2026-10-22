@@ -886,87 +886,40 @@ export const AdmissionCreateRequestSchema = {
   additionalProperties: false,
   required: [
     "run_id",
-    "request_ref",
-    "call_id",
     "attempt_id",
-    "attempt_ordinal",
-    "feature_key",
-    "billing_subject",
-    "planned_binding_ref",
-    "planned_binding_digest",
-    "usage_profile_version",
-    "usage_profile_digest",
-    "execution_bound_ref",
-    "execution_bound_digest",
+    "request_ref",
+    "attempt_binding_digest",
+    "planned_digest",
+    "final_request_digest",
   ],
   properties: {
     run_id: {
       type: "string",
       minLength: 1,
-      maxLength: 255,
-    },
-    request_ref: {
-      type: "string",
-      minLength: 1,
-      maxLength: 255,
-    },
-    call_id: {
-      type: "string",
-      format: "uuid",
+      maxLength: 512,
     },
     attempt_id: {
       type: "string",
       format: "uuid",
+      pattern:
+        "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])",
     },
-    attempt_ordinal: {
-      $ref: "#/components/schemas/PositiveDecimal",
-    },
-    feature_key: {
+    request_ref: {
       type: "string",
       minLength: 1,
-      maxLength: 128,
+      maxLength: 512,
     },
-    billing_subject: {
-      type: "object",
-      additionalProperties: false,
-      required: ["kind", "ref"],
-      properties: {
-        kind: {
-          type: "string",
-          enum: ["user", "project", "organization", "service"],
-        },
-        ref: {
-          type: "string",
-          minLength: 1,
-          maxLength: 255,
-        },
-      },
-    },
-    planned_binding_ref: {
+    attempt_binding_digest: {
       type: "string",
-      minLength: 1,
-      maxLength: 255,
+      pattern: "^[0-9a-f]{64}$(?![\\s\\S])",
     },
-    planned_binding_digest: {
+    planned_digest: {
       type: "string",
-      pattern: "^[0-9a-f]{64}$",
+      pattern: "^[0-9a-f]{64}$(?![\\s\\S])",
     },
-    usage_profile_version: {
+    final_request_digest: {
       type: "string",
-      const: "2.0.0",
-    },
-    usage_profile_digest: {
-      type: "string",
-      const: "552f0d22251837aaf4d83766c7bd91311984f707f9a42950ed53ac7127bb5504",
-    },
-    execution_bound_ref: {
-      type: "string",
-      minLength: 1,
-      maxLength: 255,
-    },
-    execution_bound_digest: {
-      type: "string",
-      pattern: "^[0-9a-f]{64}$",
+      pattern: "^[0-9a-f]{64}$(?![\\s\\S])",
     },
   },
 } as const;
@@ -1085,185 +1038,86 @@ export const AdmissionReleaseRequestSchema = {
 export const AdmissionSchema = {
   type: "object",
   additionalProperties: false,
-  if: {
-    required: ["dispatch_status"],
-    properties: {
-      dispatch_status: {
-        const: "started",
-      },
-    },
-  },
-  then: {
-    required: ["authorization_status"],
-    properties: {
-      authorization_status: {
-        const: "authorized",
-      },
-    },
-  },
   required: [
     "admission_id",
-    "producer",
     "run_id",
-    "request_ref",
-    "call_id",
     "attempt_id",
-    "attempt_ordinal",
-    "feature_key",
-    "authorization_status",
-    "dispatch_status",
-    "evidence_status",
-    "charge_status",
-    "authorized_micros",
-    "snapshot_id",
-    "snapshot_digest",
-    "rate_revision_id",
-    "policy_revision_id",
-    "normalization_version",
-    "normalization_digest",
-    "rounding_version",
-    "currency_code",
-    "valid_until",
-    "planned_binding_ref",
-    "planned_binding_digest",
-    "usage_profile_version",
-    "usage_profile_digest",
-    "execution_bound_ref",
-    "execution_bound_digest",
+    "request_ref",
+    "attempt_binding_digest",
+    "planned_digest",
+    "final_request_digest",
     "hold_id",
+    "budget_credits",
+    "pricing_snapshot_digest",
+    "status",
     "created_at",
     "updated_at",
   ],
   properties: {
     admission_id: {
-      $ref: "#/components/schemas/Uuid",
-    },
-    producer: {
       type: "string",
-      minLength: 1,
-      maxLength: 128,
+      format: "uuid",
+      pattern:
+        "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])",
     },
     run_id: {
       type: "string",
       minLength: 1,
-      maxLength: 255,
-    },
-    request_ref: {
-      type: "string",
-      minLength: 1,
-      maxLength: 255,
-    },
-    call_id: {
-      type: "string",
-      format: "uuid",
+      maxLength: 512,
     },
     attempt_id: {
       type: "string",
       format: "uuid",
+      pattern:
+        "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])",
     },
-    attempt_ordinal: {
-      $ref: "#/components/schemas/PositiveDecimal",
-    },
-    feature_key: {
+    request_ref: {
       type: "string",
       minLength: 1,
-      maxLength: 128,
+      maxLength: 512,
     },
-    authorization_status: {
+    attempt_binding_digest: {
       type: "string",
-      enum: ["authorized", "denied", "expired", "unknown"],
+      pattern: "^[0-9a-f]{64}$(?![\\s\\S])",
     },
-    dispatch_status: {
+    planned_digest: {
       type: "string",
-      enum: ["awaiting", "not_dispatched", "started", "unknown"],
+      pattern: "^[0-9a-f]{64}$(?![\\s\\S])",
     },
-    evidence_status: {
+    final_request_digest: {
       type: "string",
-      enum: ["awaiting", "sealed_known", "sealed_unknown", "invalid"],
-    },
-    charge_status: {
-      type: "string",
-      enum: [
-        "pending_evidence",
-        "pending_review",
-        "partially_captured",
-        "captured",
-        "released",
-        "unknown",
-        "rejected",
-      ],
-    },
-    authorized_micros: {
-      $ref: "#/components/schemas/NonNegativeCreditMicros",
-    },
-    snapshot_id: {
-      $ref: "#/components/schemas/Uuid",
-    },
-    snapshot_digest: {
-      type: "string",
-      pattern: "^[0-9a-f]{64}$",
-    },
-    rate_revision_id: {
-      $ref: "#/components/schemas/Uuid",
-    },
-    policy_revision_id: {
-      $ref: "#/components/schemas/Uuid",
-    },
-    normalization_version: {
-      type: "string",
-      minLength: 1,
-      maxLength: 32,
-    },
-    normalization_digest: {
-      type: "string",
-      pattern: "^[0-9a-f]{64}$",
-    },
-    rounding_version: {
-      type: "string",
-      minLength: 1,
-      maxLength: 32,
-    },
-    currency_code: {
-      $ref: "#/components/schemas/CurrencyCode",
-    },
-    valid_until: {
-      $ref: "#/components/schemas/UtcInstant",
-    },
-    planned_binding_ref: {
-      type: "string",
-      minLength: 1,
-      maxLength: 255,
-    },
-    planned_binding_digest: {
-      type: "string",
-      pattern: "^[0-9a-f]{64}$",
-    },
-    usage_profile_version: {
-      type: "string",
-      const: "2.0.0",
-    },
-    usage_profile_digest: {
-      type: "string",
-      const: "552f0d22251837aaf4d83766c7bd91311984f707f9a42950ed53ac7127bb5504",
-    },
-    execution_bound_ref: {
-      type: "string",
-      minLength: 1,
-      maxLength: 255,
-    },
-    execution_bound_digest: {
-      type: "string",
-      pattern: "^[0-9a-f]{64}$",
+      pattern: "^[0-9a-f]{64}$(?![\\s\\S])",
     },
     hold_id: {
-      type: ["string", "null"],
+      type: "string",
       format: "uuid",
+      pattern:
+        "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])",
+    },
+    budget_credits: {
+      type: "string",
+      pattern:
+        "^(?:[1-9][0-9]{0,11}|[1-8][0-9]{12}|9[0-1][0-9]{11}|92[0-1][0-9]{10}|922[0-2][0-9]{9}|9223[0-2][0-9]{8}|92233[0-6][0-9]{7}|922337[0-1][0-9]{6}|92233720[0-2][0-9]{4}|922337203[0-5][0-9]{3}|9223372036[0-7][0-9]{2}|92233720368[0-4][0-9]|922337203685[0-3]|9223372036854)$(?![\\s\\S])",
+    },
+    pricing_snapshot_digest: {
+      type: "string",
+      pattern: "^[0-9a-f]{64}$(?![\\s\\S])",
+    },
+    status: {
+      type: "string",
+      enum: ["held", "captured", "released", "pending_reconciliation"],
     },
     created_at: {
-      $ref: "#/components/schemas/UtcInstant",
+      type: "string",
+      format: "date-time",
+      pattern:
+        "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$(?![\\s\\S])",
     },
     updated_at: {
-      $ref: "#/components/schemas/UtcInstant",
+      type: "string",
+      format: "date-time",
+      pattern:
+        "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$(?![\\s\\S])",
     },
   },
 } as const;

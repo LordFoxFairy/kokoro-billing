@@ -1,3 +1,11 @@
+## AGENT-1：正式预算 Admission HTTP（2026-10-22，已实施）
+
+唯一canonical experimental.7原位替换AdmissionCreateRequest与Admission，不保旧execution_bound／caller billing_subject／固定价或三组伪执行状态。POST闭集仅run_id、attempt_id、request_ref、attempt_binding_digest、planned_digest、final_request_digest；Idempotency-Key8..128、x-billing-consumption-token1..16384单独必需。tenant／actor来自完整BFF服务上下文，不从body自报；正式u1 header及三机器能力显式写contract。原create/get operationId／路径保持，其他pathItem保持原字节；共享Admission表示也为后继capture/release返回当前真实状态，不伪装其已挂载。
+
+Admission闭集为admission_id、run_id、attempt_id、request_ref、attempt_binding_digest、planned_digest、final_request_digest、hold_id、budget_credits（1..9223372036854正整数字符串）、pricing_snapshot_digest、status、created_at、updated_at。创建／原命令恢复201＋Location返回原held创建表示；GET200返回当前四态及updated_at，无token／原绑定JSON／价格明细。404隐藏其他tenant／actor，400严格语法／header／query，403身份或消费资格，409永久命令／request_ref冲突，422明确price_unavailable／insufficient_credit／invalid_state，500持久损坏，503依赖／取消／未知。retryable不授权新key/body或新派发，未知只原命令恢复。
+
+正规生成仍56schema／29operation，build/test-only精确逆恢复exp6原始全文SHA7044102dd6e221338348152bb268eaca6516039cc5ca5122d3c42a096f6dc962，之后承接原管理／资金／账户及target保护；旧删除片段只用于逆证明，不进入runtime或SDK兼容路径。当前新schema另覆盖正控及遗漏／旧字段／伪主体／预算自报负控，不以旧target断言决定当前设计。App公开Docs随后随BFF固定新发行物同步，本片内部HTTP不冒Manus私有计费API。
+
 ## AGENT-1：预算 Admission 业务边界（2026-10-22，实施门）
 
 本片先实现包内ModelAdmissionService.create，非新增或已挂载HTTP。受信context为tenantId／actorId／requestId／AbortSignal；命令只含runId／attemptId／requestRef／attemptBindingDigest／plannedDigest／finalRequestDigest／idempotencyKey，消费token是单独短命调用参数，不入命令digest／snapshot／日志。原planned bytes中的精确修订与身份是事实源，不收调用方价格／payer／商业tuple／预算或profile版本。

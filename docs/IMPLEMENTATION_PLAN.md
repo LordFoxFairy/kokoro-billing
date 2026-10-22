@@ -1,3 +1,12 @@
+## AGENT-1／CREDIT-1：正式预算 HTTP（2026-10-22，本地已验）
+
+主方唯一writer，基线9cc7af1，沿前三面已裁决预算业务；完整verify1779PASS／560默认资源SKIP、真实PG／HTTP222、source/dist10、fresh Prisma／正规生成检查全0，374输入无漂移、独审三P2均实证闭合；actual Agent→compiled canonical Billing HTTP／PG18检查通过、库库存94→94。正常配置／资金不动，详细失败及证据限制见CURRENT首节。
+
+- [x] 当前wire正负控RED→exp7原位替换／正规生成及exp6原始全文精确逆证明。
+- [x] 显式配置与Nest装配；BFF本人准入、strict flat JSON／消费header／deadline及现错误映射。
+- [x] 原创建回执HTTP恢复与RR本人当前状态读取，真实Nest／PG／peer授权隔离和故障恢复验收。
+- [x] 主方停写完整门／source-dist／生成与无漂移、独审，记录后固定owner给后继消费者；不以此勾实际扣分完成。
+
 ## AGENT-1／CREDIT-1：首次预算预占业务（2026-10-22，本地已验）
 
 主方唯一writer，基线7412c30。沿用户已确认预算方案与三面首节，无新审批／服务或成本上界前置。 主方最终363输入无漂移，verify1762PASS／551默认资源SKIP、相关真实PG／HTTP215、source/dist8、fresh Prisma／生成检查通过；仓外actual Agent→compiled Billing真实预占／离线回执恢复14检查通过，独审两P2已RED→GREEN并复核。正常未激活，价格／IAM peer明确QA；详细失败及证据限制见CURRENT。

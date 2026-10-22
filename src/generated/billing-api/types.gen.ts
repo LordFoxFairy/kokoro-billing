@@ -252,21 +252,11 @@ export type SubscriptionsResponse = {
 
 export type AdmissionCreateRequest = {
   run_id: string;
-  request_ref: string;
-  call_id: string;
   attempt_id: string;
-  attempt_ordinal: PositiveDecimal;
-  feature_key: string;
-  billing_subject: {
-    kind: "user" | "project" | "organization" | "service";
-    ref: string;
-  };
-  planned_binding_ref: string;
-  planned_binding_digest: string;
-  usage_profile_version: "2.0.0";
-  usage_profile_digest: "552f0d22251837aaf4d83766c7bd91311984f707f9a42950ed53ac7127bb5504";
-  execution_bound_ref: string;
-  execution_bound_digest: string;
+  request_ref: string;
+  attempt_binding_digest: string;
+  planned_digest: string;
+  final_request_digest: string;
 };
 
 export type AdmissionCaptureRequest = {
@@ -294,44 +284,19 @@ export type AdmissionReleaseRequest = {
 };
 
 export type Admission = {
-  admission_id: Uuid;
-  producer: string;
+  admission_id: string;
   run_id: string;
-  request_ref: string;
-  call_id: string;
   attempt_id: string;
-  attempt_ordinal: PositiveDecimal;
-  feature_key: string;
-  authorization_status: "authorized" | "denied" | "expired" | "unknown";
-  dispatch_status: "awaiting" | "not_dispatched" | "started" | "unknown";
-  evidence_status: "awaiting" | "sealed_known" | "sealed_unknown" | "invalid";
-  charge_status:
-    | "pending_evidence"
-    | "pending_review"
-    | "partially_captured"
-    | "captured"
-    | "released"
-    | "unknown"
-    | "rejected";
-  authorized_micros: NonNegativeCreditMicros;
-  snapshot_id: Uuid;
-  snapshot_digest: string;
-  rate_revision_id: Uuid;
-  policy_revision_id: Uuid;
-  normalization_version: string;
-  normalization_digest: string;
-  rounding_version: string;
-  currency_code: CurrencyCode;
-  valid_until: UtcInstant;
-  planned_binding_ref: string;
-  planned_binding_digest: string;
-  usage_profile_version: "2.0.0";
-  usage_profile_digest: "552f0d22251837aaf4d83766c7bd91311984f707f9a42950ed53ac7127bb5504";
-  execution_bound_ref: string;
-  execution_bound_digest: string;
-  hold_id: string | null;
-  created_at: UtcInstant;
-  updated_at: UtcInstant;
+  request_ref: string;
+  attempt_binding_digest: string;
+  planned_digest: string;
+  final_request_digest: string;
+  hold_id: string;
+  budget_credits: string;
+  pricing_snapshot_digest: string;
+  status: "held" | "captured" | "released" | "pending_reconciliation";
+  created_at: string;
+  updated_at: string;
 };
 
 export type AdmissionResponse = {
@@ -846,6 +811,8 @@ export type CreateAdmissionData = {
   body: AdmissionCreateRequest;
   headers: {
     "x-kokoro-tenant-id": string;
+    "x-kokoro-subject": string;
+    "x-kokoro-service": "web-bff";
     "idempotency-key": string;
     "x-billing-consumption-token": string;
   };
@@ -906,9 +873,11 @@ export type GetAdmissionData = {
   body?: never;
   headers: {
     "x-kokoro-tenant-id": string;
+    "x-kokoro-subject": string;
+    "x-kokoro-service": "web-bff";
   };
   path: {
-    admission_id: Uuid;
+    admission_id: string;
   };
   query?: never;
   url: "/v1/internal/billing/admissions/{admission_id}";

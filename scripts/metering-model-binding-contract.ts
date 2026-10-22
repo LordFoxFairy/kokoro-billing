@@ -1,10 +1,14 @@
+import { modelAdmissionBaselineSource } from "./model-admission-contract.js";
 import { createHash } from "node:crypto";
 const baselineSha =
   "8005cff204976ca681653565fb8b6b098bc195cc70049743f70ae85989df35ab";
 const modelRevisionProperty =
   "        model_revision:\n          type: object\n          additionalProperties: false\n          required:\n            - id\n            - content_digest\n          properties:\n            id:\n              type: string\n              format: uuid\n              pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])\n            content_digest:\n              type: string\n              pattern: ^[0-9a-f]{64}$(?![\\s\\S])\n";
 /** Build-only inverse proof; runtime has no reader for an unbound rate. */
-export function meteringModelBindingBaselineSource(source: string): string {
+export function meteringModelBindingBaselineSource(
+  currentSource: string,
+): string {
+  const source = modelAdmissionBaselineSource(currentSource);
   if (!source.includes("version: 4.0.0-experimental.6"))
     throw new Error("Invalid metering model-binding publication");
   const start = source.indexOf("    MeteringRate:\n"),

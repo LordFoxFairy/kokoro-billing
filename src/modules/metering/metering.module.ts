@@ -12,12 +12,12 @@ import { MeteringPricingPublicationService } from "./metering-pricing-publicatio
 import { MeteringPricingRevisionRepository } from "./metering-pricing-revision.repository.js";
 import { MeteringPricingSelectionService } from "./metering-pricing-selection.service.js";
 import { IamBillingAuthorizationClient } from "./iam-billing-authorization.client.js";
+import { ModelAdmissionService } from "./model-admission.service.js";
+import { AgentUsageEvidenceReader } from "./agent-usage-evidence-reader.js";
 import {
-  IAM_BILLING_AUTHORIZATION_OPTIONS,
-  resolveIamBillingAuthorizationOptions,
-  type IamBillingAuthorizationOptions,
-  type ResolvedIamBillingAuthorizationOptions,
-} from "./iam-billing-authorization.options.js";
+  resolveModelAdmissionOptions,
+  type ModelAdmissionOptions,
+} from "./model-admission.options.js";
 
 @Module({
   imports: [CreditModule],
@@ -86,23 +86,51 @@ import {
   ],
 })
 export class MeteringModule {
-  static register(options: IamBillingAuthorizationOptions): DynamicModule {
-    const resolved = resolveIamBillingAuthorizationOptions(options);
+  static registerModelAdmission(options: ModelAdmissionOptions): DynamicModule {
+    const resolved = resolveModelAdmissionOptions(options);
     return {
       module: MeteringModule,
       providers: [
         {
-          provide: IAM_BILLING_AUTHORIZATION_OPTIONS,
-          useValue: resolved,
+          provide: AgentUsageEvidenceReader,
+          useFactory: () => new AgentUsageEvidenceReader(resolved.agent),
         },
         {
           provide: IamBillingAuthorizationClient,
-          inject: [IAM_BILLING_AUTHORIZATION_OPTIONS],
-          useFactory: (value: ResolvedIamBillingAuthorizationOptions) =>
-            new IamBillingAuthorizationClient(value),
+          useFactory: () => new IamBillingAuthorizationClient(resolved.iam),
+        },
+        {
+          provide: ModelAdmissionService,
+          inject: [
+            TransactionService,
+            CommandReceiptRepository,
+            AuditAppender,
+            CreditEffects,
+            MeteringPricingSelectionService,
+            AgentUsageEvidenceReader,
+            IamBillingAuthorizationClient,
+          ],
+          useFactory: (
+            tx: TransactionService,
+            receipts: CommandReceiptRepository,
+            audit: AuditAppender,
+            credit: CreditEffects,
+            pricing: MeteringPricingSelectionService,
+            agent: AgentUsageEvidenceReader,
+            iam: IamBillingAuthorizationClient,
+          ) =>
+            new ModelAdmissionService(
+              tx,
+              receipts,
+              audit,
+              credit,
+              pricing,
+              agent,
+              iam,
+            ),
         },
       ],
-      exports: [IamBillingAuthorizationClient],
+      exports: [ModelAdmissionService],
     };
   }
 }

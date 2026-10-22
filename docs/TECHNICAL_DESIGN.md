@@ -1,3 +1,15 @@
+## AGENT-1：正式预算 Admission HTTP（2026-10-22，已实施）
+
+沿9cc7af1已验业务，在唯一Nest HTTP挂载既有POST /v1/internal/billing/admissions和GET /v1/internal/billing/admissions/{admission_id}，不增服务／表／第二套认证。当前个人钱包路径由web-bff编排：复用CreditAccountGuard的BFF专用bearer＋internal secret＋u1 tenant/subject完整准入，拒普通用户Bearer／部分机器身份fallback；非管理员发放权。POST再将单独消费header交现IAM在线verify，仅首次准入需要活grant；GET只读本人及同tenant。
+
+原MeteringModule.register升级为具名registerModelAdmission({agent,iam,requestDeadlineMs})，移除未使用的仅IAM动态入口，不保alias；静态Metering模块保持可用。唯一启动配置显式BILLING_MODEL_ADMISSION_ENABLED=true才装配两reader与业务／controller；默认false无模型路由和外部读取，true缺完整origin／bearer／期限即启动拒绝。外部reader仍用现专用角色，HTTP drain与provider销毁沿原顺序，不新增常驻进程或后台重试。
+
+POST原命令回放201仍返回原创建表示（status=held、updated_at=created_at），不通过GET新状态重写回执；GET在一份READ ONLY RR读取当前status／updated_at及原不可变授权字段，核同tenant／actor、原receipt与持久snapshot／hold完整性，不绑定活Agent或消费grant。外人／不存在统一404。读取不写key／receipt，不执行模型。当前status held/captured/released/pending_reconciliation，不宣称可由此HTTP直接capture或恢复pending。
+
+请求总deadline与客户端中断合成AbortSignal；只用IncomingMessage aborted／未完成reply的close，不把正常body读完的close当取消。监听finally清理；提交后ACK不明仍只原命令恢复。POST raw16KiB、严格UTF8／decoded duplicate key／闭集平面字符串；从旧grant parser原样提取具名HTTP共用机制，原grant语义不变。GET无query／body，canonical URI与唯一关键header。日志增加消费header脱敏，不回显原始错误／body／Key。
+
+写区为canonical HTTP／正规派生与build-only逆证明、现Module／App/bootstrap/config、具名controller/input/mapper／read projection、ErrorFilter直接错误映射和原flat parser提取、直接unit／真实Nest+PG及source/dist旅程、现三面与任务表。无SQL／Prisma变化；不激活正常配置／Schema／资金，不改同事连接器。先wire和HTTP行为RED，再实现、正式生成／完整门／真实资金恢复及只读审查；随后固定发行物给BFF/App及Agent消费，同一主线继续真实usage结算。
+
 ## AGENT-1：首次预算 Admission 与永久回执恢复（2026-10-22，本地业务已验）
 
 沿已确认预算方案，owner为现Metering＋Credit。沿原billing_admission原位替换未装配的feature固定价目标；不建新服务／表／成本保证或第二钱包。此片先交付可由Nest装配的业务Service及真实PG资金效果，HTTP正式挂载和异步App grant消费者随后在同一主链接线，不冒正常开放。

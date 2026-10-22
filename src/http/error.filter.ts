@@ -1,3 +1,6 @@
+import { ModelAdmissionError } from "../modules/metering/model-admission.error.js";
+import { AgentUsageReaderError } from "../modules/metering/agent-usage-evidence-reader.error.js";
+import { IamBillingAuthorizationError } from "../modules/metering/iam-billing-authorization.error.js";
 import { MeteringError } from "../modules/metering/metering.error.js";
 import { CommandReceiptError } from "../database/command-receipt.error.js";
 import { Catch, HttpException, Inject, Injectable } from "@nestjs/common";
@@ -38,6 +41,11 @@ const errors = {
   409: {
     code: "billing.idempotency_conflict",
     message: "Command identity conflicts",
+    retryable: false,
+  },
+  422: {
+    code: "billing.invalid_state",
+    message: "Operation is not eligible in the current state",
     retryable: false,
   },
   500: {
@@ -91,18 +99,50 @@ function dependency(error: unknown, depth = 0): boolean {
 }
 function statusOf(error: unknown): Status {
   if (dependency(error)) return 503;
+  if (error instanceof ModelAdmissionError) {
+    if (error.code === "INVALID") return 400;
+    if (error.code === "FORBIDDEN") return 403;
+    if (error.code === "CONFLICT") return 409;
+    if (error.code === "EXPIRED" || error.code === "RUN_BLOCKED") return 422;
+    return error.code === "CORRUPT" ? 500 : 503;
+  }
+  if (error instanceof AgentUsageReaderError) {
+    if (error.code === "REQUEST_INVALID") return 400;
+    if (error.code === "DENIED") return 403;
+    if (error.code === "NOT_FOUND") return 404;
+    if (error.code === "PREPARATION_UNAVAILABLE") return 422;
+    return 503;
+  }
+  if (error instanceof IamBillingAuthorizationError)
+    return [
+      "AUTHORIZATION_INVALID",
+      "DENIED",
+      "BINDING_MISMATCH",
+      "EXPIRED",
+    ].includes(error.code)
+      ? 403
+      : 503;
   if (
     error instanceof CommandReceiptError &&
     error.code === "COMMAND_IDEMPOTENCY_CONFLICT"
   )
     return 409;
   if (error instanceof MeteringError) {
+    if (
+      [
+        "PRICE_UNAVAILABLE",
+        "METERING_RATE_UNAVAILABLE",
+        "METERING_POLICY_UNAVAILABLE",
+      ].includes(error.code)
+    )
+      return 422;
     if (error.code === "METERING_PUBLICATION_FORBIDDEN") return 403;
     if (error.code === "METERING_PUBLICATION_CONFLICT") return 409;
     if (error.code === "METERING_PUBLICATION_UNAVAILABLE") return 503;
     return 500;
   }
   if (error instanceof CreditError) {
+    if (error.code === "CREDIT_INSUFFICIENT") return 422;
     if (["CREDIT_INVALID_QUERY", "CREDIT_INVALID_CURSOR"].includes(error.code))
       return 400;
     if (error.code === "CREDIT_ACCOUNT_DISABLED") return 403;
@@ -147,23 +187,37 @@ export class ErrorFilter implements ExceptionFilter {
     const status = statusOf(error);
     const response: ErrorResponse = {
       error:
-        status === 404 &&
+        status === 422 &&
         error instanceof CreditError &&
-        error.code === "CREDIT_ACCOUNT_NOT_FOUND"
+        error.code === "CREDIT_INSUFFICIENT"
           ? {
-              code: "billing.credit_account_not_found",
-              message: "Credit account not found",
+              code: "billing.insufficient_credit",
+              message: "Insufficient credits",
               retryable: false,
             }
-          : status === 403 &&
-              error instanceof CreditError &&
-              error.code === "CREDIT_ACCOUNT_DISABLED"
+          : status === 422 && error instanceof MeteringError
             ? {
-                code: "billing.credit_account_disabled",
-                message: "Credit account is disabled",
+                code: "billing.price_unavailable",
+                message: "Explicit model pricing is not available",
                 retryable: false,
               }
-            : errors[status],
+            : status === 404 &&
+                error instanceof CreditError &&
+                error.code === "CREDIT_ACCOUNT_NOT_FOUND"
+              ? {
+                  code: "billing.credit_account_not_found",
+                  message: "Credit account not found",
+                  retryable: false,
+                }
+              : status === 403 &&
+                  error instanceof CreditError &&
+                  error.code === "CREDIT_ACCOUNT_DISABLED"
+                ? {
+                    code: "billing.credit_account_disabled",
+                    message: "Credit account is disabled",
+                    retryable: false,
+                  }
+                : errors[status],
     };
     this.schemas.assert("ErrorResponse", response);
     void host

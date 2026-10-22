@@ -29,6 +29,7 @@ export async function createBillingRuntime(
         paths: [
           "req.headers.authorization",
           "req.headers.cookie",
+          'req.headers["x-billing-consumption-token"]',
           'req.headers["x-kokoro-internal-secret"]',
           'req.headers["x-kokoro-subject"]',
           'req.headers["x-kokoro-tenant-id"]',
