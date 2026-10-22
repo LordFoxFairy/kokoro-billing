@@ -1,3 +1,7 @@
+## CREDIT-1：内部计价语义（2026-10-22）
+
+HTTP canonical /v1 的25 operations、认证、金额单位和 generated API 不改变；本片不新增route。Metering纯结果及policy draft的内部 `roundingVersion` 固定为 `attempt-credit-ceil-v2`：对同attempt汇总的精确积分成本ceil一次整积分，再乘1,000,000记账。旧 `attempt-ceil-v1` 不能进入当前policy codec；不按旧名称改变历史snapshot含义。不得从纯结果推导已取得消费许可或资金写入成功，正式Admission/Capture仍按其owner证据和持久幂等边界接线。
+
 ## 2026-10-20 PR #2 main pairing
 
 Only the approved SET55 account initialization command moves to the current canonical PUT /v1/billing/me/credit-account; operationId, strict empty object, five-factor machine-only auth, response, disabled error and inherent idempotency remain. Artifact 4.0.0-experimental.3 / 25 operations / 43 schemas; no v2 alias. Exact removal of only the PUT/schema/version restores the complete main experimental.2 source. Consumer auto-initialization is a separate BFF/App slice; no user opening control is required.

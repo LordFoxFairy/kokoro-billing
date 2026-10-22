@@ -2416,7 +2416,7 @@ function syntheticPolicy(
     currencyCode: "USD",
     multiplier: { numerator: "7", denominator: "5" },
     creditMicrosPerMinor: { numerator: "100", denominator: "1" },
-    roundingVersion: "attempt-ceil-v1",
+    roundingVersion: "attempt-credit-ceil-v2",
     failurePolicyRef: {
       version: "1.0.0",
       artifactDigest:
@@ -2766,7 +2766,7 @@ integration("R243 immutable policy publication and joint pricing", () => {
         revision: "2",
         multiplier: { numerator: "8", denominator: "5" },
         creditMicrosPerMinor: { numerator: "100", denominator: "1" },
-        roundingVersion: "attempt-ceil-v1",
+        roundingVersion: "attempt-credit-ceil-v2",
         failurePolicyRef: syntheticPolicy(tenantId).failurePolicyRef,
       },
     });

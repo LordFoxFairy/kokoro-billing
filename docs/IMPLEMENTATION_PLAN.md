@@ -1,3 +1,7 @@
+## CREDIT-1：主链整积分内核（2026-10-22）
+
+主方唯一writer，基线158579f，隔离checkout `codex/integer-credit-metering`。承接Root最新主链与用户整数扣分裁决：先在现pricing suite新增整数边界回归并确认真实RED；再改唯一pricing/type与policy codec/type标识；更新现codec/真实publication fixture，保原负控并补旧版本拒绝；focused→相关format/lint/types/build/contract/default门。只改Metering计价、直接相关测试与这三设计/当前事实，不动旧Admission/Commerce/HTTP/Schema或正常资源。真实模型/资金整链仍由随后逐owner接线，非本纯内核完成条件的替代。
+
 ## 2026-10-20 PR #2 authorized merge closure
 
 User authorizes integrating the existing colleague PR into current main. Main agent sole writer; readonly reviewer examines original account implementation and final diff. Write area: current canonical v1 PUT/request component, original contract wrapper and generated output, new controller/tests route literals, conflicts in owner docs/validation scripts. Preserve all unrelated main changes and old test assertions. Run full local verify plus affected real PG/source-dist and fresh-schema/drift; record existing broader integration failures separately. Push once to the original PR branch after a final fetch, ready/review/merge via PR without waiting CI, no force or protection bypass. No BFF/App initialization, normal DB/config/service or money changes in this slice.

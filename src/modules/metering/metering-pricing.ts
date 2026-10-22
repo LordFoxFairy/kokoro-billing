@@ -7,6 +7,7 @@ import type {
 const INT64_MAX = 9_223_372_036_854_775_807n;
 const NUMERIC_MAX = 10n ** 78n - 1n;
 const MAX_BUCKETS = 64;
+const MICROS_PER_CREDIT = 1_000_000n;
 
 function shape(value: unknown, keys: readonly string[]): void {
   if (
@@ -213,8 +214,13 @@ export function priceMeteredAttempt(
     input.conversion.creditMicrosPerMinor,
   );
   const { numerator, denominator } = unroundedCreditMicros;
+  // Aggregate exact cost first. The only rounding boundary is whole Credits,
+  // not individual buckets, streamed chunks, or fractional ledger micros.
+  const creditDenominator = denominator * MICROS_PER_CREDIT;
   const creditMicros =
-    numerator / denominator + (numerator % denominator === 0n ? 0n : 1n);
+    (numerator / creditDenominator +
+      (numerator % creditDenominator === 0n ? 0n : 1n)) *
+    MICROS_PER_CREDIT;
   nonnegative(creditMicros, INT64_MAX);
   return {
     profileVersion: input.profile.version,
@@ -224,6 +230,6 @@ export function priceMeteredAttempt(
     salesCostMinor,
     unroundedCreditMicros,
     creditMicros,
-    roundingVersion: "attempt-ceil-v1",
+    roundingVersion: "attempt-credit-ceil-v2",
   };
 }

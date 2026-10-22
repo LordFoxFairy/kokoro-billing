@@ -62,5 +62,5 @@ export type MeteringPricingResult = Readonly<{
   salesCostMinor: MeteringRational;
   unroundedCreditMicros: MeteringRational;
   creditMicros: bigint;
-  roundingVersion: "attempt-ceil-v1";
+  roundingVersion: "attempt-credit-ceil-v2";
 }>;

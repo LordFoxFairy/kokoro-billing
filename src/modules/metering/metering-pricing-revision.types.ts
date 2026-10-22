@@ -56,7 +56,7 @@ export type MeteringPolicyRevisionDraft = Readonly<{
   currencyCode: string;
   multiplier: MeteringRevisionRational;
   creditMicrosPerMinor: MeteringRevisionRational;
-  roundingVersion: "attempt-ceil-v1";
+  roundingVersion: "attempt-credit-ceil-v2";
   /** Explicitly pending/nonexecutable when null; never an implicit free/charge policy.
    * A non-null reference also requires owner validation before execution.
    */

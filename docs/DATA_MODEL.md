@@ -1,3 +1,7 @@
+## CREDIT-1：整积分取整的数据边界（2026-10-22）
+
+无DDL、Prisma/schema、迁移或正常数据写入。现policy普通列 `rounding_version` 存新策略的 `attempt-credit-ceil-v2`，新内容自然有不同canonical digest；不更新既有revision或snapshot。余额/流水仍以int64 Credit micros保存；新计价结果为1,000,000的整倍数，0有效，超出int64可表示整积分上限拒绝。换算中间有理数不提前取整。旧micro-ceil策略不接受为新policy，不建立旧数据兼容执行路径。
+
 ## 2026-10-20 PR #2 main pairing
 
 The existing zero-account creation shares the grant subject advisory lock and commits the first account plus audit atomically; repeat requests return the actual account without resetting balances. SQL and generated Prisma schema remain byte-identical to both parents. No grants, journals, payment or normal data changes. Wire now uses canonical /v1; historical SET55 /v2 notes below are not the runtime.

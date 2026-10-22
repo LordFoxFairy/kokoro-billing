@@ -343,7 +343,7 @@ function policyDraft(value: unknown): MeteringPolicyRevisionDraft {
     currencyCode: currency(fields.currencyCode),
     multiplier: rational(fields.multiplier, true),
     creditMicrosPerMinor: rational(fields.creditMicrosPerMinor, true),
-    roundingVersion: literal(fields.roundingVersion, "attempt-ceil-v1"),
+    roundingVersion: literal(fields.roundingVersion, "attempt-credit-ceil-v2"),
     failurePolicyRef:
       fields.failurePolicyRef === null
         ? null

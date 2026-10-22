@@ -20,12 +20,16 @@ import type {
 // All values are synthetic; the all-zero artifact hash proves no publication.
 const RATE_JSON =
   '{"value":["kokoro.billing.metering.rate.content","1","tenant-a","2026-10-02T00:00:00.000Z","synthetic-source","2026-10-01T00:00:00.000Z",["synthetic-profile-v1","0000000000000000000000000000000000000000000000000000000000000000"],[["provider","test","account","model","v1","input","token",["all"],"XTS",["1","3"]],["provider","test","account","model","v1","output","token",["all"],"XTS",["2","5"]]]]}';
-const POLICY_JSON =
+const RETIRED_POLICY_JSON =
   '{"value":["kokoro.billing.metering.policy.content","1","tenant-a","2026-10-02T00:00:00.000Z","synthetic-source","2026-10-01T00:00:00.000Z",["synthetic-profile-v1","0000000000000000000000000000000000000000000000000000000000000000"],"XTS",["7","5"],["100","1"],"attempt-ceil-v1",null]}';
+const POLICY_JSON = RETIRED_POLICY_JSON.replace(
+  "attempt-ceil-v1",
+  "attempt-credit-ceil-v2",
+);
 const RATE_HASH =
   "40a3dcd31e9a3e13e5ff3c32077d6736bbd44982d1def56a2a64b1c8b5854a87";
 const POLICY_HASH =
-  "5e13df67652f561e9c51986a06f723677aa0ce0b77c964c2f327b93cdee6f956";
+  "47f7b1e7d4501b2fca27c889c57ee29b579da138e17469f5a6685d0587467511";
 const hash = (value: string): string =>
   createHash("sha256").update(value, "utf8").digest("hex");
 function row(bucket = "input"): MeteringRevisionRate {
@@ -71,7 +75,7 @@ function policy(): MeteringPolicyRevisionDraft {
     currencyCode: "XTS",
     multiplier: { numerator: "7", denominator: "5" },
     creditMicrosPerMinor: { numerator: "100", denominator: "1" },
-    roundingVersion: "attempt-ceil-v1",
+    roundingVersion: "attempt-credit-ceil-v2",
     failurePolicyRef: null,
   };
 }
@@ -128,6 +132,17 @@ function changed(
 
 // A complete synthetic encoder control is collected even against the minimal RED seam.
 describe("R81 revision golden bytes and pure scope", () => {
+  it("rejects the retired micro-ceil policy instead of reinterpreting its immutable bytes", () => {
+    expect(() =>
+      decodeMeteringPolicyRevisionDraft(RETIRED_POLICY_JSON),
+    ).toThrow(TypeError);
+    expect(() =>
+      encodeMeteringPolicyRevisionDraft({
+        ...policy(),
+        roundingVersion: "attempt-ceil-v1",
+      }),
+    ).toThrow(TypeError);
+  });
   it("callable legal control returns hashed JSON without resource dependencies", () => {
     const encoded = encodeMeteringRateRevisionDraft(rate());
     expect(typeof encoded.canonicalJson).toBe("string");
@@ -800,7 +815,7 @@ describe("strict canonical decoders", () => {
     ` ${POLICY_JSON}`,
     POLICY_JSON.replace('"value":', '"value":[],"value":'),
     POLICY_JSON.replace(".policy.content", ".rate.content"),
-    POLICY_JSON.replace('"attempt-ceil-v1"', '"floor"'),
+    POLICY_JSON.replace('"attempt-credit-ceil-v2"', '"floor"'),
     POLICY_JSON.replace('["7","5"]', '["14","10"]'),
     POLICY_JSON.replace(",null]}", ",[]]}"),
     POLICY_JSON.replace(",null]}", "]}"),
@@ -842,7 +857,7 @@ describe("pure publication digest and independent receipt metadata, not durable 
       `{"value":["kokoro.billing.metering.policy.command","1","tenant-a","policy-publication-1","actor-a","synthetic fixture","${POLICY_HASH}"]}`,
     );
     expect(policyEncoded.payloadDigest).toBe(
-      "1f59894eea7967feab0e30126e39dedb6a208915a51b0d685cc2cc4f011d22d2",
+      "4789f941cedf3cf83ecc75c1b41096234948103577c3d17e27df94d28397a73d",
     );
     expect(policyEncoded.contentDigest).toBe(POLICY_HASH);
   });

@@ -1,3 +1,11 @@
+## CREDIT-1：整积分取整（2026-10-22，已确认需求内实施）
+
+Billing 现 Metering 是唯一计价 owner。一个 attempt 的已验证实际类别先归一化合计，保留精确有理数费用，应用冻结倍率及 currency→Credit-micros 换算后，以 `ceil(unrounded_micros / 1_000_000) * 1_000_000` 得到账本应扣值。只在此边界取整一次；0仍0，正分数不足1积分扣1积分，取整后溢出int64即拒绝，不截断、不夹到上限。不按stream chunk或重复回执分别计价；去重与single settlement仍归后继Admission事务，不由纯函数冒充。
+
+固定新语义标识 `attempt-credit-ceil-v2`，替代旧未装配的micro-ceil内核；当前policy codec只接受新标识，旧标识明确拒绝，不把同一个v1名称重新解释或新增fallback。保留原费用精度、included bucket去重、未知用量拒绝及7/5显式倍率。沿现函数、result和policy codec/type、现测试修改，不新建模块/服务/HTTP路由；Ledger继续使用micros，不改变schema。已有持久policy/资金/历史证据不改写或自动迁移，正常资金链尚未装配；后继正式接线必须发布新policy，不能用旧snapshot新语义重算。失败恢复保持原精确幂等身份。
+
+验收：既有计价用例按新已确认输出承接；新整数边界、单次汇总、7/5、显式零与未知、BigInt精度及取整溢出、独立有理数oracle；旧policy标识负控及codec canonical/digest；focused和相关完整门。此片不代表真实充值、Admission或模型结算已成功，不修改正常数据/服务。
+
 ## 2026-10-20 PR #2 main integration
 
 Retain main Nest bootstrap, current /v1 canonical and usage2 reader; merge the existing SET55 machine-only zero-account command without another module, schema, account implementation or compatibility route. Exact current-main contract inverse preserves every unrelated operation. Existing source/dist and HTTP/PG account tests move to /v1; retired /v2 must remain unavailable. BFF will orchestrate hidden initialization after trusted product admission; this owner PR does not claim that consumer path. No normal service restart or financial execution in this merge slice.

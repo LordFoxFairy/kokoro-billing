@@ -1,3 +1,11 @@
+## 2026-10-22 CREDIT-1：整积分计价内核已验，真实结算接线继续
+
+基线158579f，按用户明确整数扣积分裁决，现Metering唯一内核改为同attempt归一化合计→冻结倍率/精确换算→一次ceil整Credit→×1,000,000账本micros；0仍0，正分数不足1积分收1积分，取整越int64拒绝而不clip。新policy/result标识attempt-credit-ceil-v2；旧v1 immutable bytes保为负控且当前codec拒绝，不重解释历史/增加fallback。无SQL/Prisma/HTTP/依赖或正常数据改动，纯函数不冒资金许可或重复结算防护。
+
+真实RED为计价7 FAIL及旧policy1 FAIL，随后focused311 PASS。独审发现取整会掩盖原大数/混合单位断言的P2，已在原suite补精确中间值、跨整积分的大数、混合单位与64桶精确成本，复核无剩余确定P0–P2。最终334非文档输入停写冻结无漂移；Node24.20.0 pnpm verify全0（格式/lint/types/build/SQL/contract及默认1580 PASS／501资源SKIP），另真实PostgreSQL现publication/selection一文件38 PASS／0SKIP，临时数据库库存94→94精确相等。初次隔离checkout缺Prisma派生造成lint失败，原官方prisma:generate后解决，日志保留，未改门禁。前次审查修复前1579PASS不当作最终输入证据。
+
+这是CREDIT-1的计价规则修复，不是正常充值、Admission预占/许可、Agent唯一dispatch或实际用量结算通过；这些沿同一主线继续。没有启动模型、工具、扣分、正常服务或真钱支付。PR/merge待完整需求及消费者接线验收后集中进行。
+
 ## 2026-10-20 PR #2 main integration verified (normal environment unchanged)
 
 Existing colleague zero-account initialization is paired to current canonical PUT /v1/billing/me/credit-account, artifact 4.0.0-experimental.3 / 25 operations / 43 schemas; no /v2 alias. The complete inverse restores main experimental.2 SHA256 9ff84d5f473e2f161f5d0c496db4cee175e2b032e836e97c7e23b9576a0af3e6 and its unchanged validator. SQL, generated Prisma schema, lock, main bootstrap and usage2 reader remain unchanged. No second account implementation, grants, journals, payments or normal rollout.
