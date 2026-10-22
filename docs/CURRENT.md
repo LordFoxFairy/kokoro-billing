@@ -1,3 +1,11 @@
+## 2026-10-22 AGENT-1／CREDIT-1：已确认预算方案与明确结算决策
+
+用户已确认退役额外“供应商成本上界保证”前置，采用后台价格及单次整数预算→预占→真实用量统一整数结算。现Metering包内model-attempt-settlement.ts实现三态：confirmed_not_dispatched唯一释放；completed/failed/cancelled的已验证actual<=预算只capture实际并release余量；unknown或超预算pending_reconciliation、保留全预占，不补0／夹金额／额外扣款。预算是业务支出限额，不假称token或成本上界；该函数不认证事实、不产生资金效果或dispatch permit，后继事务仍须消费它并停止同Run后续派发。
+
+先缺模块导入失败（不冒业务RED），再具名stub获得10行为FAIL／9PASS，实际实现后21新风险例通过。停写340非文档输入，完整Node24.20.0 pnpm verify全0（格式/lint/types/build/SQL/contract及1660 PASS／509默认资源SKIP），正规生成检查0；仓外仅携编译单文件的8个边界检查通过，340输入无漂移。独立只读审查无确定P0–P2。此pure切片无资源I/O，未重复运行PG，先前usage2 guard的真实38另属原证据，不混算。
+
+HTTP/Schema/Prisma/normal配置及资金未改，Agent缺正式Billing consumer仍零新派发；不能将pure决策称为真实扣分。正常计价revision均0的事实保持，下一步沿原Metering发布/选择接正式管理与消费授权，随后装配预占/dispatch/usage/结算和完整页面验收。真钱支付不做，集中PR尚未完成。
+
 ## 2026-10-22 AGENT-1／CREDIT-1：当前 usage2 可执行 policy 已配对
 
 源码实证发现 Agent producer及Billing reader已固定usage2，而Metering policy guard仍接受usage1 aggregate并拒绝当前profile。新风险测试真实RED为2 FAIL／9 PASS；现仅原位改两个版本／aggregate值，usage2固定owner Git原件核等，不混schema hash，不引入旧版fallback或新服务。failure-policy1.0.0／原generic规则保持，历史manifest只保留原发行关联，不作为当前profile支持集；旧行／receipt／digest不升级、不重解释。原publication和joint selection都调用同一guard，当前新策略可正式发布／选取，旧版明确拒绝。

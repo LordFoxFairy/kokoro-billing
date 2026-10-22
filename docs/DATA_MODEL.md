@@ -1,3 +1,7 @@
+## AGENT-1／CREDIT-1：预算决策不另建资金状态（2026-10-22）
+
+本片无Schema/Prisma/正常数据变化，仅包内纯决策；输出是事务编排的输入，不作为第二份账本或持久授权。预算及actual使用BigInt Credit-micros且必须为整积分；未知/超预算不改变现hold/capture/release事实，后继正式恢复沿同一attempt与原receipt。现正常余额1000未被此实现修改，不迁移历史、兼容旧前置或新增预算服务。
+
 ## AGENT-1／CREDIT-1：当前 profile 配对不迁移历史（2026-10-22）
 
 无DDL、Prisma派生或正常数据变更。沿原policy/rate revision不可变存储及profile_version/profile_artifact_digest字段，后继新发布必须绑定已消费usage2正式aggregate；不改历史行、历史receipt、原始canonical bytes/digest或已有余额。当前选择拒旧/错配可执行policy，不把旧记录在读取时补成新profile。真实验证只用自有fresh fixture，正常已发1000非现金积分不受此纯guard修复改写。

@@ -1,3 +1,7 @@
+## 2026-10-22 AGENT-1 预算结算决策
+
+`src/modules/metering/model-attempt-settlement.ts`仅拥有用户已确认的预算内capture／confirmed-not-dispatched release／unknown或超预算pending三态纯决策，真实价格与取整仍归原metering-pricing；不新增模块/服务/Schema/HTTP或重复钱包。现对应unit覆盖整Credit/int64、0/未知/超限、失败取消、结果冻结；工程及仓外compiled证据见docs/CURRENT.md。正式资金/派发消费尚待。
+
 ## 2026-10-22 AGENT-1／CREDIT-1 usage2 配对
 
 现 `src/modules/metering/metering-policy-artifact.ts` 原位绑定已固定Agent usage2的version及manifest aggregate，拒旧／错配profile，独立failure-policy1.0.0不变。新unit保护当前正控与历史／schema摘要混淆等负控，原真实PG publication/selection承接并发／幂等／审计／回滚；无新服务、HTTP、Schema或正常收费装配。验证及剩余主链见docs/CURRENT.md。

@@ -1,3 +1,7 @@
+## AGENT-1／CREDIT-1：预算结算裁决（2026-10-22）
+
+用户已确认预算预占→真实用量一次整数结算，替代额外供应商成本上界保证前置。本片仅Metering包内三态决策，不新增HTTP/客户端/DTO：confirmed_not_dispatched释放；已验证priced actual且不超预算capture实际并释放余量；unknown或超预算pending_reconciliation、保留原hold并停止后续派发。输入需来自现正式证据/冻结预算和价格，不接受浏览器自报金额。不是资金许可或已挂载收费API。
+
 ## AGENT-1／CREDIT-1：可执行 policy 的 usage2 引用（2026-10-22）
 
 本片没有HTTP、请求DTO、响应、鉴权或生成物变更。Metering包内profileRef保持原version＋artifactDigest结构；当前可执行值配对既有固定Agent usage2 version2.0.0与manifest aggregate 7c5fd0b24d0a691cfcf769a981d8b4a8a689534d9b4ae1b5968342bde591094c。不是schema文件摘要，不接受usage1、版本/digest错配或自动回退；独立Billing failure policy仍为1.0.0。当前publisher/selector仍包内API，未因此暴露为已挂载正式资金接口。

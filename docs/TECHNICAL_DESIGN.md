@@ -1,3 +1,11 @@
+## AGENT-1／CREDIT-1：预算预占与真实结算（2026-10-22，用户已确认）
+
+本节替代旧R252“必须先由供应商发布数学成本上界保证”的资金前置，不删除真实最终请求绑定、token限额、权限、tenant隔离、唯一派发、用量证据或幂等保护。单次预算是后台配置的整数积分支出限额，不是token数或外部成本上界；Billing沿原Credit hold预占，按冻结policy对单attempt真实用量汇总计价并一次ceil整积分。未知用量不补0；已确认未派发才释放预占；completed/failed/cancelled按同一已验证实际费用结算。
+
+已验证实际金额不超过预算时只capture实际值并release余量；actual超过预算、执行结果或用量未知时进入pending_reconciliation，保留预占和原证据，停止后续派发，不夹到预算、自动补差扣款、重发模型、猜价或自动释放。后续原attempt在取得明确新证据/解决结算后才恢复，不因重复回执新建扣分。正常本片只实现Metering包内明确决策函数model-attempt-settlement.ts；它消费上游已验证知识，不证明事实真实性、不授予dispatch、不写余额，也不新增服务/表/HTTP/配置入口。后继在现Admission/settlement事务中使用它，接口/持久状态按同一owner设计继续，不用独立pure通过冒实际收费完成。
+
+验证：TDD覆盖正整数预算和金额边界、0、精确预算/余量、超预算保留、未知保留、not_dispatched唯一释放、failed/cancelled与completed等价、非法/溢出/分数Credit拒绝及重复相同输入决策稳定。原priceMeteredAttempt仍是唯一换算和取整内核，不在该函数重复计算/取整。
+
 ## AGENT-1／CREDIT-1：当前 usage2 计价策略绑定修复（2026-10-22）
 
 当前 Agent producer／Billing evidence reader 已唯一使用正式 usage2，但 Metering 可执行 policy guard 仍硬绑 usage1 aggregate，导致真实当前 profile 无法发布／选取，而旧 profile 被当作可执行。沿已批准 MC01 usage2 单轨决定，在现 metering-policy-artifact.ts 原位改为固定已消费 owner usage2 的 version 2.0.0／manifest aggregate 7c5fd0b24d0a691cfcf769a981d8b4a8a689534d9b4ae1b5968342bde591094c，不把 schema hash 当 aggregate，不增加reader／服务／配置或fallback。failure policy独立1.0.0、7/5倍率、一次整积分ceil及已验证风险语义保持。
