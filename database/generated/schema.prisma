@@ -367,6 +367,8 @@ model billing_metering_rate {
   tenant_id                  String  @db.VarChar(191)
   revision                   BigInt
   ordinal                    Int     @db.SmallInt
+  model_revision_id          String  @db.Uuid
+  model_revision_digest      String  @db.Char(64)
   provider_ref               String  @db.VarChar(255)
   environment                String  @db.VarChar(255)
   pricing_account_ref        String  @db.VarChar(255)

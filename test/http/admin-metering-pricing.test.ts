@@ -36,6 +36,10 @@ const rate = {
   ...common,
   rates: [
     {
+      model_revision: {
+        id: "11111111-1111-4111-8111-111111111111",
+        content_digest: "a".repeat(64),
+      },
       provider_ref: "provider",
       environment: "test",
       pricing_account_ref: "account",
@@ -136,7 +140,7 @@ describe("formal administrative metering management HTTP (owner I/O explicitly s
     readLatest.mockResolvedValue({ rate: null, policy: null });
   });
   it.each([
-    ["rate", rate, "1"],
+    ["rate", rate, "2"],
     ["policy", policy, "2"],
   ] as const)(
     "publishes %s using only authenticated identity and owner-fixed protocol",

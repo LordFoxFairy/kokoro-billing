@@ -36,6 +36,10 @@ export function mapMeteringLatestPricing(
                 source_ref: rate.draft.sourceRef,
                 verified_at: rate.draft.verifiedAt,
                 rates: rate.draft.rates.map((row) => ({
+                  model_revision: {
+                    id: row.modelRevision.id,
+                    content_digest: row.modelRevision.contentDigest,
+                  },
                   provider_ref: row.providerRef,
                   environment: row.environment,
                   pricing_account_ref: row.pricingAccountRef,

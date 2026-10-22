@@ -23,7 +23,14 @@ export type MeteringRateApplicability =
       upperExclusive: string | null;
     }>;
 
+/** Exact immutable System content, not a model alias or a commercial identity. */
+export type MeteringModelRevisionReference = Readonly<{
+  id: string;
+  contentDigest: string;
+}>;
+
 export type MeteringRevisionRate = Readonly<{
+  modelRevision: MeteringModelRevisionReference;
   providerRef: string;
   environment: string;
   pricingAccountRef: string;
@@ -37,7 +44,7 @@ export type MeteringRevisionRate = Readonly<{
 }>;
 
 export type MeteringRateRevisionDraft = Readonly<{
-  schemaVersion: "1";
+  schemaVersion: "2";
   tenantId: string;
   effectiveFrom: string;
   sourceRef: string;

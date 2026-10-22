@@ -1,3 +1,7 @@
+## 当前精确模型选价绑定（2026-10-22）
+
+现行主链见[CURRENT](CURRENT.md)与[IMPLEMENTATION_PLAN](IMPLEMENTATION_PLAN.md)首卡。rate2将精确System修订UUID/摘要与显式商业五维同一不可变费率行绑定，无新表/服务；schema普通列与正规派生、exp6机器发行同步。本地完整owner门、真实PG61及source/dist8已通过，353输入停写无漂移；不称正常激活或实际扣分，后继须固定消费者及Admission。
+
 ## 当前主链：预算与正式计价管理（2026-10-22）
 
 现行主链见[CURRENT](CURRENT.md)首节与[IMPLEMENTATION_PLAN](IMPLEMENTATION_PLAN.md)首卡。policy2必填整数预算；正式计价管理三HTTP操作与owner门已本地验收，exp5／29操作／56schema。BFF/Admin/App消费、正常DDL／计价和实际资金消费仍待，不把下方历史候选记录当当前事实。

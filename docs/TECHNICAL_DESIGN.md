@@ -1,3 +1,17 @@
+## AGENT-1／MODEL-1：精确模型修订选价绑定（2026-10-22，本地已验）
+
+状态：本地实现和最终停写验收通过；完整verify1736 PASS／524默认资源SKIP，真实PG61、source/dist8及仓外compiled6通过，fresh Prisma／HTTP生成检查0，353非文档输入零漂移、自有库94→94。独审Approved。正常未激活，后继固定BFF／App／Admin新exp6及Agent实际资金链。详细失败修复和证据限制见CURRENT首节。
+
+承接R201已裁决的Billing本地显式版本化商业映射及用户已确认预算流程。本片主方唯一writer，Billing基线35651fc。System精确不可变revision UUID＋content digest已唯一封装provider/model/connection/request_model；Agent prepare和usage2原样冻结该身份，无commercial environment/account/version。不得从显示名、request_model、Key句柄或部署目录猜五维商业引用，不扩System或usage2闭集。
+
+最小实现沿现不可变rate行追加必填modelRevision{id,contentDigest}，对应SQL两普通列model_revision_id UUID及model_revision_digest CHAR(64)。映射版本就是同一rate revision／content digest，发布、审计、幂等、损坏回放和生效窗口完全沿原rate事务；不新建表、独立映射服务／API／生命周期或商业账号库。同一技术pair在一份完整费率修订只映射一个显式商业五维tuple和币种，input/output等桶可多行；不同精确修订可复用同一商业tuple。发布只记录管理员核实的映射，不声称已验证System存在性；实际Admission仍必须读Agent正式prepared快照并核完整计划身份，价目读取不是执行授权。
+
+rate draft/content/request schema显式升2，canonical rate tuple、business key digest及持久重建包含技术pair；无绑定旧rate1明确拒绝，无默认／alias／双读／历史回填。policy2、publication result1、usage2/failure-policy及原27项不相关wire保持。正式rate wire仅在原MeteringRate增加required model_revision{id,content_digest}；GET原快照完整带回，发布限制仍64行／1MiB／12层。当前experimental发行升6，正规生成；BFF/App/Admin后继原子固定该发行，不能把未配对候选正常激活。
+
+实际选择入口不再收调用方商业tuple，只收可信tenant/profile、精确modelRevision与bucket/适用范围；在原单次db-now／同一active rate读取内解析唯一商业映射，再选桶和policy，结果冻结技术pair及所选商业tuple供后继Admission snapshot。未绑定、错digest／旧修订无回退，歧义拒绝；冻结输入在任何异步读取前完成，发布并发不混用两个rate版本。
+
+写区：现Metering revision types/codec/repository/input/mapper/selection及相关Nest/contract注册与正规生成、canonical SQL与正规Prisma派生、直接unit/HTTP/PG测试和三面/现任务表。先新增技术pair正控与歧义/旧版负控RED，再GREEN；真实PG涵盖exact mismatch、同商业多修订、完整回放/原key漂移、未来生效、损坏和回滚；完整owner门、fresh schema/Prisma/生成drift和compiled检验。正常rate表先前为0，但本片不做正常DDL／重载／模型／工具／资金；正常演进另需锁下再确认空表、保护1000余额与流水。此片不是实际Admission或扣分完成。
+
 ## AGENT-1／CREDIT-1：现计价管理正式HTTP接线（2026-10-22）
 
 Owner仍Billing Metering，沿现不可变rate/policy发布、receipt、审计和选择；不建System价格副本或新服务。新增POST /v1/admin/billing/metering/rate-revisions、POST /v1/admin/billing/metering/policy-revisions及GET /v1/admin/billing/metering/pricing。GET是当前租户“最新已发布配置”单体快照（两者可独立null，含未来生效配置），不是有效价格选择／报价／历史列表；用原readOnlySnapshot一次RR读取，原完整digest损坏校验承接，无写和自动修复。运行选价仍由原selectActivePricing按生效时间、精确绑定和bucket负责。

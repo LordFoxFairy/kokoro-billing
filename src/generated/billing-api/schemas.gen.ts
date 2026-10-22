@@ -22,6 +22,7 @@ export const MeteringRateSchema = {
   type: "object",
   additionalProperties: false,
   required: [
+    "model_revision",
     "provider_ref",
     "environment",
     "pricing_account_ref",
@@ -34,6 +35,23 @@ export const MeteringRateSchema = {
     "minor_per_unit",
   ],
   properties: {
+    model_revision: {
+      type: "object",
+      additionalProperties: false,
+      required: ["id", "content_digest"],
+      properties: {
+        id: {
+          type: "string",
+          format: "uuid",
+          pattern:
+            "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])",
+        },
+        content_digest: {
+          type: "string",
+          pattern: "^[0-9a-f]{64}$(?![\\s\\S])",
+        },
+      },
+    },
     provider_ref: {
       type: "string",
       minLength: 1,

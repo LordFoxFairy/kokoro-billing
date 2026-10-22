@@ -1,5 +1,6 @@
 import type {
   MeteringPolicyRevisionDraft,
+  MeteringModelRevisionReference,
   MeteringRevisionRate,
   MeteringRevisionReference,
 } from "./metering-pricing-revision.types.js";
@@ -28,7 +29,7 @@ export type MeteringPricingSelectionRequest = Readonly<{
 export type MeteringPricingSelectionInput = Readonly<{
   tenantId: string;
   profileRef: MeteringRevisionReference;
-  binding: MeteringPricingSelectionBinding;
+  modelRevision: MeteringModelRevisionReference;
   requests: readonly MeteringPricingSelectionRequest[];
 }>;
 
@@ -38,6 +39,8 @@ export type MeteringSelectedRate = Readonly<{
 }>;
 
 export type MeteringPricingSelectionResult = Readonly<{
+  modelRevision: MeteringModelRevisionReference;
+  binding: MeteringPricingSelectionBinding;
   tenantId: string;
   dbNow: string;
   revisionId: string;

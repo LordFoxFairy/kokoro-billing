@@ -1,3 +1,13 @@
+## 2026-10-22 AGENT-1／MODEL-1：精确模型修订选价绑定已本地验收
+
+沿现不可变rate行绑定System修订UUID＋content digest和管理员显式商业五维／币种；无新表、服务或映射生命周期。Rate content/command/key升2，SQL追加两普通列，旧无绑定rate1明确拒绝，不回填／默认／兼容读。选择只收可信技术pair，不收调用方商业tuple，在原单次DB时点和active rate快照内冻结绑定与policy；同pair歧义、缺失、错digest、旧修订均拒绝。发布不是System存在性验证或消费许可，正式Admission仍须核Agent可信prepared快照。
+
+正式发行exp6／29操作／56schema，raw SHA256 7044102dd6e221338348152bb268eaca6516039cc5ca5122d3c42a096f6dc962；官方生成和fresh canonical Prisma派生，build-only精确inverse还原exp5全文及其既有保护。最终353非文档输入停写无漂移，Node24.20.0 pnpm verify各门exit0，1736 PASS／524默认资源SKIP；另三文件真实PG61 PASS／0SKIP、源码／dist进程8 PASS／0SKIP、fresh prisma:check和contract:generated:check均0，仓外compiled-only六检查通过，自有库库存精确94→94。独立只读审查Approved，无确定P0–P2。
+
+先取得技术pair缺失／歧义业务RED；精确inverse另新增必填缺失负控，确实RED后修复inverse而非放宽断言。既有codec负控的tuple索引随新版调整，保约分／适用范围原风险。源码／dist会话计数两次被其他fixture池关闭时序干扰（7→8、8→7）；仅测试改用子进程唯一application_name，启动前0、ready后>0、退出后限时精确0，原drain／退出期限／35表零写／秘密防泄断言均保留，无生产关闭语义变更。上述失败日志留ignored；首次新PG夹具失败的原始文件曾被聚焦重跑覆盖，只保会话输出，不伪称原始日志完整保留。
+
+正常Schema／服务／配置／1000余额及流水未动，零模型／工具／真实结算。BFF／App／Admin仍固定旧exp5，下一步按本发行精确升级、表单选择正式模型修订，随后接prepared reader、合法逐attempt授权／预算预占／唯一派发／真实usage一次整数结算；本片不代表正常激活、实际扣分或AGENT-1整项完成。真钱支付不做，集中PR尚未发起。
+
 ## 2026-10-22 AGENT-1／CREDIT-1：正式计价管理owner HTTP已验，消费者继续
 
 基线d19f0bc，现有Metering接2 POST不可变rate/policy发布和1 GET当前tenant最新已发布配置；不是有效价格报价，rate/policy独立null，未来生效也如实读取。canonical experimental.5／29操作／56schema，SHA256 8005cff204976ca681653565fb8b6b098bc195cc70049743f70ae85989df35ab；正规生成，精确inverse还原exp4原26操作／45schema全文，再承接旧funding保护，无runtime兼容。协议profile2／failure1／取整由owner固定，body只收价格／来源／生效时间／换算／预算，tenant和actor来自原管理上下文。

@@ -3,6 +3,7 @@ import type {
   MeteringPolicyRevisionDraft,
   MeteringPublicationEncoding,
   MeteringRateApplicability,
+  MeteringModelRevisionReference,
   MeteringRateRevisionDraft,
   MeteringRevisionEncoding,
   MeteringRevisionRate,
@@ -126,6 +127,21 @@ function reference(value: unknown): MeteringRevisionReference {
   };
 }
 
+/** Shared strict pair parser; it carries no proof of external publication. */
+export function parseMeteringModelRevision(
+  value: unknown,
+): MeteringModelRevisionReference {
+  const fields = object(value, ["id", "contentDigest"]);
+  return Object.freeze({
+    id: matching(
+      fields.id,
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u,
+      36,
+    ),
+    contentDigest: matching(fields.contentDigest, /^[0-9a-f]{64}$/u, 64),
+  });
+}
+
 function instant(value: unknown): string {
   const parsed = matching(
     value,
@@ -202,6 +218,7 @@ function applicability(value: unknown): MeteringRateApplicability {
 
 function rate(value: unknown): MeteringRevisionRate {
   const fields = object(value, [
+    "modelRevision",
     "providerRef",
     "environment",
     "pricingAccountRef",
@@ -214,6 +231,7 @@ function rate(value: unknown): MeteringRevisionRate {
     "minorPerUnit",
   ]);
   return {
+    modelRevision: parseMeteringModelRevision(fields.modelRevision),
     providerRef: text(fields.providerRef),
     environment: text(fields.environment),
     pricingAccountRef: text(fields.pricingAccountRef),
@@ -244,13 +262,19 @@ function referenceTuple(value: MeteringRevisionReference) {
 function rationalTuple(value: MeteringRevisionRational) {
   return [value.numerator, value.denominator] as const;
 }
-function bindingTuple(value: MeteringRevisionRate) {
+function commercialTuple(value: MeteringRevisionRate) {
   return [
     value.providerRef,
     value.environment,
     value.pricingAccountRef,
     value.modelRef,
     value.modelVersion,
+  ] as const;
+}
+function bindingTuple(value: MeteringRevisionRate) {
+  return [
+    [value.modelRevision.id, value.modelRevision.contentDigest],
+    ...commercialTuple(value),
   ] as const;
 }
 function rateKeyTuple(value: MeteringRevisionRate) {
@@ -293,8 +317,18 @@ function rateSet(value: unknown): readonly MeteringRevisionRate[] {
   const rows = array(value, 1, 64).map(rate);
   const keys = new Set<string>();
   const currencies = new Map<string, string>();
+  const mappings = new Map<string, string>();
   const intervals = new Map<string, MeteringRateApplicability[]>();
   const entries = rows.map((row) => {
+    const technical = JSON.stringify([
+      row.modelRevision.id,
+      row.modelRevision.contentDigest,
+    ]);
+    const commercial = JSON.stringify(commercialTuple(row));
+    const previousMapping = mappings.get(technical);
+    if (previousMapping !== undefined && previousMapping !== commercial)
+      invalid();
+    mappings.set(technical, commercial);
     const key = JSON.stringify(rateKeyTuple(row));
     if (keys.has(key)) invalid();
     keys.add(key);
@@ -330,7 +364,7 @@ function common<V extends "1" | "2">(
 }
 function rateDraft(value: unknown): MeteringRateRevisionDraft {
   const fields = object(value, [...COMMON_FIELDS, "rates"]);
-  return { ...common(fields, "1"), rates: rateSet(fields.rates) };
+  return { ...common(fields, "2"), rates: rateSet(fields.rates) };
 }
 function policyDraft(value: unknown): MeteringPolicyRevisionDraft {
   const fields = object(value, [
@@ -457,18 +491,20 @@ function unpackApplicability(value: unknown) {
   };
 }
 function unpackRate(value: unknown) {
-  const tuple = array(value, 10);
+  const tuple = array(value, 11);
+  const model = array(tuple[0], 2);
   return {
-    providerRef: tuple[0],
-    environment: tuple[1],
-    pricingAccountRef: tuple[2],
-    modelRef: tuple[3],
-    modelVersion: tuple[4],
-    bucket: tuple[5],
-    unit: tuple[6],
-    applicability: unpackApplicability(tuple[7]),
-    currencyCode: tuple[8],
-    minorPerUnit: unpackRational(tuple[9]),
+    modelRevision: { id: model[0], contentDigest: model[1] },
+    providerRef: tuple[1],
+    environment: tuple[2],
+    pricingAccountRef: tuple[3],
+    modelRef: tuple[4],
+    modelVersion: tuple[5],
+    bucket: tuple[6],
+    unit: tuple[7],
+    applicability: unpackApplicability(tuple[8]),
+    currencyCode: tuple[9],
+    minorPerUnit: unpackRational(tuple[10]),
   };
 }
 function unpackCommon(tuple: readonly unknown[]) {
@@ -541,7 +577,7 @@ function publication(
   const content = "rates" in draft ? encodeRate(draft) : encodePolicy(draft);
   const command = encodeTuple([
     `kokoro.billing.metering.${kind}.command`,
-    kind === "policy" ? "2" : "1",
+    "2",
     tenantId,
     commandIdentity,
     actorId,
@@ -555,7 +591,7 @@ function publication(
     commandName: `metering.publish_${kind}_revision`,
     commandIdentity,
     idempotencyKey,
-    requestSchemaVersion: kind === "policy" ? 2 : 1,
+    requestSchemaVersion: 2,
     canonicalJson: command.canonicalJson,
     contentDigest: content.contentDigest,
     payloadDigest: command.contentDigest,

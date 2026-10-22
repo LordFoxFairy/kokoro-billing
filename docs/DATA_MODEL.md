@@ -1,3 +1,7 @@
+## 精确模型修订选价绑定（2026-10-22，实施门）
+
+Billing现billing_metering_rate增加model_revision_id UUID NOT NULL和model_revision_digest CHAR(64) NOT NULL＋小写hex CHECK；现billing_metering_rate_revision.schema_version唯一允许2。映射身份进入同一rate canonical content/digest、业务键摘要v2、command schema2/审计和持久重建，映射版本即rate revision，不新建表/JSON稳定身份/第二事实源。商业五维仍ordinary columns，单一技术pair在同一完整配置不得跨商业tuple/币种；应用codec统一验证，既有unique digest仅缩窄索引而非替代full key校验。Prisma仅由canonical SQL临时库正规refresh派生。fresh-only，无旧无绑定rate回填/兼容；本片不执行正常DDL。正常演进须锁内确认rate两表仍为空并保护既有账户/余额/流水，非零或归属不明即停止该DDL。
+
 ## AGENT-1／CREDIT-1：管理HTTP复用现revision（2026-10-22）
 
 本片无SQL/Prisma变化。价格和预算仍只存现Metering不可变revision，POST沿原tenant generation锁、永久command receipt、audit同事务；当前协议绑定服务端固定。GET以原RR readOnlySnapshot复用完整digest重建，只取tenant各自最大revision，并不更改effective_from或运行选价规则；rate/policy可独立为空，损坏明确失败，不合成0／默认预算。不存在新的管理缓存真源或迁移compat入口，正常Schema演进仍待上一片既定核空保护。

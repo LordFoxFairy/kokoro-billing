@@ -213,13 +213,22 @@ describe.skipIf(admin === undefined)(
               },
             });
           const before = await facts();
+          // The fixture has its own pools; their PG teardown can lag module.close().
+          // Track this child, not a fluctuating count of every fixture connection.
+          const applicationName = `runtime-drain-${randomUUID()}`;
+          const childDatabaseUrl = new URL(fixture.url);
+          childDatabaseUrl.searchParams.set(
+            "application_name",
+            applicationName,
+          );
           const sessionCount = async () =>
             (
               await fixture.pool.query<{ count: string }>(
-                "SELECT count(*)::text AS count FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid()",
+                "SELECT count(*)::text AS count FROM pg_stat_activity WHERE datname=current_database() AND application_name=$1",
+                [applicationName],
               )
             ).rows[0]?.count;
-          const baselineSessions = await sessionCount();
+          expect(await sessionCount()).toBe("0");
           const port = await availablePort();
           const internal = randomUUID(),
             bearer = randomUUID(),
@@ -235,7 +244,7 @@ describe.skipIf(admin === undefined)(
               stdio: ["ignore", "pipe", "pipe"],
               env: {
                 ...process.env,
-                DATABASE_URL: fixture.url,
+                DATABASE_URL: childDatabaseUrl.toString(),
                 BILLING_AUTH_MODE: "jwks",
                 BILLING_AUTH_JWKS_URL: "https://iam.example.test/iam/jwks",
                 BILLING_AUTH_JWT_ISSUER: "https://iam.example.test/iam",
@@ -281,6 +290,7 @@ describe.skipIf(admin === undefined)(
               throw new Error("Billing fixture readiness deadline");
             await sleep(30);
           }
+          expect(Number(await sessionCount())).toBeGreaterThan(0);
           const encode = (value: string) =>
             "u1." + Buffer.from(value, "utf8").toString("base64url");
           const headers = {
@@ -427,7 +437,12 @@ describe.skipIf(admin === undefined)(
             await once(child.stderr, "end");
           for (const secret of [internal, bearer, operator, fixture.url])
             expect(logs.includes(secret)).toBe(false);
-          expect(await sessionCount()).toBe(baselineSessions);
+          // Process exit closes sockets before PG necessarily removes backend rows.
+          // The runtime drain/exit deadlines above are unchanged; no child backend
+          // may remain once this short observation window closes.
+          await expect
+            .poll(sessionCount, { timeout: 1000, interval: 10 })
+            .toBe("0");
         } finally {
           try {
             if (child) await stop(child);

@@ -80,13 +80,17 @@ export function readMeteringRateCommand(
     idempotencyKey: key,
     reason: body.reason,
     draft: {
-      schemaVersion: "1",
+      schemaVersion: "2",
       tenantId: context.tenantId,
       effectiveFrom: config.effective_from,
       verifiedAt: config.verified_at,
       sourceRef: config.source_ref,
       profileRef: currentMeteringProfileRef,
       rates: config.rates.map((rate) => ({
+        modelRevision: {
+          id: rate.model_revision.id,
+          contentDigest: rate.model_revision.content_digest,
+        },
         providerRef: rate.provider_ref,
         environment: rate.environment,
         pricingAccountRef: rate.pricing_account_ref,

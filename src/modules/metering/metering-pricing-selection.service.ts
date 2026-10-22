@@ -1,6 +1,6 @@
+import { parseMeteringModelRevision } from "./metering-pricing-revision-codec.js";
 import type { MeteringPricingRevisionRepository } from "./metering-pricing-revision.repository.js";
 import type {
-  MeteringPricingSelectionBinding,
   MeteringPricingSelectionInput,
   MeteringPricingSelectionRequest,
   MeteringPricingSelectionResult,
@@ -58,23 +58,6 @@ function businessKey(value: unknown): string {
   return result;
 }
 
-function binding(value: unknown): MeteringPricingSelectionBinding {
-  const fields = object(value, [
-    "providerRef",
-    "environment",
-    "pricingAccountRef",
-    "modelRef",
-    "modelVersion",
-  ]);
-  return Object.freeze({
-    providerRef: text(fields.providerRef, 255),
-    environment: text(fields.environment, 255),
-    pricingAccountRef: text(fields.pricingAccountRef, 255),
-    modelRef: text(fields.modelRef, 255),
-    modelVersion: text(fields.modelVersion, 255),
-  });
-}
-
 function request(value: unknown): MeteringPricingSelectionRequest {
   const fields = object(value, ["bucket", "unit", "applicability"]);
   if (fields.applicability === null || typeof fields.applicability !== "object")
@@ -119,7 +102,7 @@ function parse(input: unknown): MeteringPricingSelectionInput {
   const fields = object(input, [
     "tenantId",
     "profileRef",
-    "binding",
+    "modelRevision",
     "requests",
   ]);
   const profile = object(fields.profileRef, ["version", "artifactDigest"]);
@@ -153,7 +136,13 @@ function parse(input: unknown): MeteringPricingSelectionInput {
       version: text(profile.version, 255),
       artifactDigest,
     }),
-    binding: binding(fields.binding),
+    modelRevision: (() => {
+      try {
+        return parseMeteringModelRevision(fields.modelRevision);
+      } catch {
+        return invalid();
+      }
+    })(),
     requests: Object.freeze(requests),
   });
 }

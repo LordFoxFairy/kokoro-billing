@@ -49,6 +49,10 @@ const rate = {
   ...common,
   rates: [
     {
+      model_revision: {
+        id: "11111111-1111-4111-8111-111111111111",
+        content_digest: "a".repeat(64),
+      },
       provider_ref: "provider",
       environment: "test",
       pricing_account_ref: "account",

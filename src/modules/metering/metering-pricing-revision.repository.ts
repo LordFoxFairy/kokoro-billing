@@ -23,7 +23,8 @@ import { MeteringError } from "./metering.error.js";
 
 const MAX_REVISION = 9_223_372_036_854_775_807n;
 const keyTuple = (rate: MeteringRevisionRate) => [
-  "kokoro.billing.metering.rate.key.v1",
+  "kokoro.billing.metering.rate.key.v2",
+  [rate.modelRevision.id, rate.modelRevision.contentDigest],
   rate.providerRef,
   rate.environment,
   rate.pricingAccountRef,
@@ -139,7 +140,7 @@ export class MeteringPricingRevisionRepository {
         id: revisionId,
         tenant_id: draft.tenantId,
         revision,
-        schema_version: 1,
+        schema_version: 2,
         effective_from: new Date(draft.effectiveFrom),
         source_ref: draft.sourceRef,
         verified_at: new Date(draft.verifiedAt),
@@ -156,6 +157,8 @@ export class MeteringPricingRevisionRepository {
         tenant_id: draft.tenantId,
         revision,
         ordinal,
+        model_revision_id: rate.modelRevision.id,
+        model_revision_digest: rate.modelRevision.contentDigest,
         provider_ref: rate.providerRef,
         environment: rate.environment,
         pricing_account_ref: rate.pricingAccountRef,
@@ -266,12 +269,15 @@ export class MeteringPricingRevisionRepository {
       );
     const bindingRates = stored.draft.rates.filter(
       (rate) =>
-        rate.providerRef === input.binding.providerRef &&
-        rate.environment === input.binding.environment &&
-        rate.pricingAccountRef === input.binding.pricingAccountRef &&
-        rate.modelRef === input.binding.modelRef &&
-        rate.modelVersion === input.binding.modelVersion,
+        rate.modelRevision.id === input.modelRevision.id &&
+        rate.modelRevision.contentDigest === input.modelRevision.contentDigest,
     );
+    const mapped = bindingRates[0];
+    if (!mapped)
+      throw new MeteringError(
+        "METERING_RATE_UNAVAILABLE",
+        "Metering rate is unavailable",
+      );
     const currencies = new Set(bindingRates.map((rate) => rate.currencyCode));
     if (currencies.size > 1) this.#selectionCorrupt();
     const rates = input.requests.map((request) => {
@@ -341,6 +347,14 @@ export class MeteringPricingRevisionRepository {
     if (failurePolicyRef === null) this.#policyCorrupt();
     return Object.freeze({
       tenantId: input.tenantId,
+      modelRevision: Object.freeze({ ...input.modelRevision }),
+      binding: Object.freeze({
+        providerRef: mapped.providerRef,
+        environment: mapped.environment,
+        pricingAccountRef: mapped.pricingAccountRef,
+        modelRef: mapped.modelRef,
+        modelVersion: mapped.modelVersion,
+      }),
       dbNow: dbNow.toISOString(),
       revisionId: stored.revisionId,
       revision: active.revision.toString(),
@@ -556,7 +570,7 @@ export class MeteringPricingRevisionRepository {
     });
     if (
       !header ||
-      header.schema_version !== 1 ||
+      header.schema_version !== 2 ||
       header.rate_count < 1 ||
       header.rate_count > 64 ||
       rows.length !== header.rate_count
@@ -589,6 +603,10 @@ export class MeteringPricingRevisionRepository {
         });
       } else corrupt();
       const rate: MeteringRevisionRate = Object.freeze({
+        modelRevision: Object.freeze({
+          id: row.model_revision_id,
+          contentDigest: row.model_revision_digest,
+        }),
         providerRef: row.provider_ref,
         environment: row.environment,
         pricingAccountRef: row.pricing_account_ref,
@@ -607,7 +625,7 @@ export class MeteringPricingRevisionRepository {
       return rate;
     });
     const draft: MeteringRateRevisionDraft = Object.freeze({
-      schemaVersion: "1",
+      schemaVersion: "2",
       tenantId,
       effectiveFrom: header.effective_from.toISOString(),
       sourceRef: header.source_ref,

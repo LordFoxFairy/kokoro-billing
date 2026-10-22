@@ -1,3 +1,4 @@
+import { meteringModelBindingBaselineSource } from "./metering-model-binding-contract.js";
 import { createHash } from "node:crypto";
 import { parse } from "yaml";
 
@@ -36,7 +37,10 @@ function stable(value: unknown): unknown {
   return value;
 }
 /** Build/test-only exact inverse. There is no runtime old contract reader. */
-export function meteringManagementBaselineSource(source: string): string {
+export function meteringManagementBaselineSource(
+  currentSource: string,
+): string {
+  const source = meteringModelBindingBaselineSource(currentSource);
   const doc = parse(source) as {
     info?: { version?: string };
     paths?: Record<string, unknown>;

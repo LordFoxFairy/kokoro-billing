@@ -9,6 +9,8 @@ Reconcile 与 Billing command receipt；不拥有 Tenant、Identity、Agent Run�
 当前规范化分支的[任务板](docs/IMPLEMENTATION_PLAN.md)与[ADR-0003](docs/ADR/0003-nestjs-prisma-sql-first-alignment.md)
 记录Nest/Prisma目标与分阶段验收；唯一入口使用canonical Nest module graph。已交付目录、本人余额/流水、无感零账户初始化及三项probe；本地候选新增正式非现金管理员发放，相关owner验收已过但正常后台消费者尚待。完整Agent资金授权、实际用量结算与收费仍待接线，不以源码候选冒称正常生效。
 
+本地计价候选已完成正式管理三HTTP操作、policy2单次整数预算和rate2精确System修订绑定（exp6）；完整验证与真实PG证据见CURRENT首节。消费者及Agent逐attempt资金接线仍需完成，正常环境未因本片变化。
+
 ## 边界
 
 - PostgreSQL 是支付、余额、账本、幂等 receipt、inbox/outbox 与对账事实源。

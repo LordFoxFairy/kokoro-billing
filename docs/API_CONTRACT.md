@@ -1,3 +1,7 @@
+## 精确模型修订选价绑定（2026-10-22，实施门）
+
+仅将原MeteringRate增加必填model_revision闭集{id: canonical UUID, content_digest: lowercase SHA256}；商业五维仍为管理员核实的显式配置，不从技术名称推导。rate draft/content/request schema2，experimental6；路径、29操作及其他schema语义保持，policy2/回执1不变。旧无绑定rate拒绝，无兼容；GET最新完整回传，同技术pair的五维/币种必须一致。内部选择只消费可信prepared精确修订，返回冻结映射与rate/policy，不接受Agent自报商业价目身份；此内核不自行验证外部owner或给予dispatch许可。原1MiB／12层／64行、三凭据、原命令重放/未知语义保持。发行物及消费者后继逐一固定，正常未激活。
+
 ## AGENT-1／CREDIT-1：计价管理三个操作（2026-10-22）
 
 当前canonical目标4.0.0-experimental.5：POST /v1/admin/billing/metering/{rate-revisions,policy-revisions}及GET /v1/admin/billing/metering/pricing，全部internal-owner且管理代理专用；保原26操作逐字不变。外部JSON snake_case，闭集请求publication_id/reason/configuration，无tenant/actor；configuration的协议绑定由owner固定。POST 201 data包含kind/revision/content_digest/published_at/effective_from；GET 200 data含rate_revision/policy_revision，null表示此tenant尚未发布，最新已发布不等同当前生效。GET不收query/body；未来生效时间不得被误记为已生效。

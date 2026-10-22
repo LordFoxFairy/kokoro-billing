@@ -1,3 +1,9 @@
+## 当前精确模型选价绑定候选（2026-10-22）
+
+canonical 4.0.0-experimental.6，29操作／56schema；SHA256 `7044102dd6e221338348152bb268eaca6516039cc5ca5122d3c42a096f6dc962`。仅原MeteringRate新增必填model_revision{id,content_digest}，与显式商业五维一起进入rate2，policy2/回执1/其他操作保持。选择消费可信prepared精确技术pair，同一次active rate读取得出并冻结商业映射，不接受Agent自报价目身份；无新表／服务／API／默认商业值。正常尚未激活，消费者待固定本发行。
+
+构建/测试的具名inverse逐字恢复整个exp5（SHA8005cff204976ca681653565fb8b6b098bc195cc70049743f70ae85989df35ab），再承接原26操作/45schema inverse。它不是runtime兼容；旧无技术绑定rate1拒绝。下方记录仅历史，不能覆盖本节当前版本。
+
 ## 当前计价管理候选（2026-10-22）
 
 canonical 4.0.0-experimental.5，29操作／56schema；SHA256 `8005cff204976ca681653565fb8b6b098bc195cc70049743f70ae85989df35ab`。现Metering发布两POST与最新配置RR单体GET；当前协议绑定owner固定，非生效报价，无资金效果。正式生成与精确逆恢复保护旧26操作/45schema；无runtime旧wire回退。源码候选不等于正常部署。
