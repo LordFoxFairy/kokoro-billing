@@ -17,7 +17,8 @@ function policy(
   overrides: Partial<MeteringPolicyRevisionDraft> = {},
 ): MeteringPolicyRevisionDraft {
   return {
-    schemaVersion: "1",
+    schemaVersion: "2",
+    maxAttemptCredits: "10",
     tenantId: "qa-current-usage-profile",
     effectiveFrom: "2026-01-01T00:00:00.000Z",
     sourceRef: "QA current profile; not a real procurement tariff",

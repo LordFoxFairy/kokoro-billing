@@ -54,6 +54,7 @@ export type MeteringPricingSelectionResult = Readonly<{
     effectiveFrom: string;
     multiplier: MeteringPolicyRevisionDraft["multiplier"];
     creditMicrosPerMinor: MeteringPolicyRevisionDraft["creditMicrosPerMinor"];
+    maxAttemptCredits: MeteringPolicyRevisionDraft["maxAttemptCredits"];
     roundingVersion: MeteringPolicyRevisionDraft["roundingVersion"];
     failurePolicyRef: MeteringRevisionReference;
   }>;

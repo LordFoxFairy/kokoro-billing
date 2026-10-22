@@ -313,6 +313,7 @@ export class MeteringPricingRevisionRepository {
         creditMicrosPerMinor: Object.freeze({
           ...policy.draft.creditMicrosPerMinor,
         }),
+        maxAttemptCredits: policy.draft.maxAttemptCredits,
         roundingVersion: policy.draft.roundingVersion,
         failurePolicyRef: Object.freeze({ ...failurePolicyRef }),
       }),
@@ -361,7 +362,7 @@ export class MeteringPricingRevisionRepository {
         id: revisionId,
         tenant_id: draft.tenantId,
         revision,
-        schema_version: 1,
+        schema_version: 2,
         effective_from: new Date(draft.effectiveFrom),
         source_ref: draft.sourceRef,
         verified_at: new Date(draft.verifiedAt),
@@ -373,6 +374,7 @@ export class MeteringPricingRevisionRepository {
         credit_micros_per_minor_numerator: draft.creditMicrosPerMinor.numerator,
         credit_micros_per_minor_denominator:
           draft.creditMicrosPerMinor.denominator,
+        max_attempt_credits: BigInt(draft.maxAttemptCredits),
         rounding_version: draft.roundingVersion,
         failure_policy_version: failurePolicyRef.version,
         failure_policy_artifact_digest: failurePolicyRef.artifactDigest,
@@ -437,11 +439,11 @@ export class MeteringPricingRevisionRepository {
     const row = await client.billing_metering_policy_revision.findUnique({
       where: { tenant_id_revision: { tenant_id: tenantId, revision } },
     });
-    if (!row || row.schema_version !== 1) this.#policyCorrupt();
+    if (!row || row.schema_version !== 2) this.#policyCorrupt();
     // Database failures are outside this catch: preserve transaction firstCause.
     try {
       const encoded = encodeMeteringPolicyRevisionDraft({
-        schemaVersion: "1",
+        schemaVersion: "2",
         tenantId,
         effectiveFrom: row.effective_from.toISOString(),
         sourceRef: row.source_ref,
@@ -459,6 +461,7 @@ export class MeteringPricingRevisionRepository {
           numerator: row.credit_micros_per_minor_numerator.toFixed(0),
           denominator: row.credit_micros_per_minor_denominator.toFixed(0),
         },
+        maxAttemptCredits: row.max_attempt_credits.toString(),
         roundingVersion: row.rounding_version,
         failurePolicyRef: {
           version: row.failure_policy_version,

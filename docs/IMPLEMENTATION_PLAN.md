@@ -1,3 +1,9 @@
+## AGENT-1／CREDIT-1：已确认预算策略持久化（2026-10-22）
+
+主方沿codex/integer-credit-metering、基线4810a4d唯一writer；写区为现Metering policy types/codec/repository/publication/selection、canonical policy列及正规Prisma派生、直接unit/PG测试和三设计／当前事实。用户已裁决预算方案，不另建服务或重新审批。policy2必填预算固定完整digest并拒无预算旧版，rate与结果wire不变。
+
+状态：本地实施及停写验收通过。新unit16 PASS；完整verify1681 PASS／512默认资源SKIP，真实publication/selection PG41 PASS／0SKIP，fresh Prisma／HTTP生成检查0，341输入无漂移，自有库94→94精确恢复，独审无确定P0–P2。两次失败日志保留，详见CURRENT。本片无正常DDL／资金变化、模型或工具请求；正式管理、消费授权及真实结算仍待同一主链继续，不勾整个CREDIT-1或AGENT-1完成。
+
 ## CREDIT-1：正式非现金资金入口（2026-10-22）
 
 当前状态：owner实施与本地验收通过。原grant跨effective_at重复计入的P1已先真实PG RED后修复；同一次DB时点决定状态和余额。最终341非文档输入无漂移，完整verify1628 PASS／509默认资源SKIP；相关真实PG133 PASS／0SKIP、source/dist8 PASS／0SKIP，fresh canonical/Prisma drift与官方HTTP artifact drift通过，临时库库存精确恢复。治理map旧别名已由正式26操作全覆盖集合承接，不用continue漏检。源码/契约/Schema与正常激活分开，后继BFF/Admin及Agent主链仍未完成。

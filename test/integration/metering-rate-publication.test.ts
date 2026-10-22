@@ -2009,6 +2009,7 @@ describe.skipIf(adminUrl === undefined)("R241 policy catalog RED", () => {
         0,
         null,
       ],
+      ["max_attempt_credits", "bigint", "NO", null, 64, 0, null],
       ["rounding_version", "character varying", "NO", 64, null, null, null],
       [
         "failure_policy_version",
@@ -2111,7 +2112,8 @@ describe.skipIf(adminUrl === undefined)("R241 policy catalog RED", () => {
       .sort();
     const requiredCheckTerms = [
       "revision>0",
-      "schema_version=1",
+      "schema_version=2",
+      "max_attempt_credits>=1ANDmax_attempt_credits<='9223372036854'",
       "char_length(tenant_id)>=1",
       "char_length(source_ref)>=1",
       "char_length(profile_version)>=1",
@@ -2403,7 +2405,8 @@ function syntheticPolicy(
   overrides: Partial<MeteringPolicyRevisionDraft> = {},
 ): MeteringPolicyRevisionDraft {
   return {
-    schemaVersion: "1",
+    schemaVersion: "2",
+    maxAttemptCredits: "10",
     tenantId,
     effectiveFrom: "2026-01-01T00:00:00.000Z",
     sourceRef: "QA synthetic policy; not a production price or conversion",
@@ -2543,6 +2546,89 @@ integration("R243 immutable policy publication and joint pricing", () => {
     }
   });
 
+  test("freezes explicit attempt budgets in persisted policy, original replay and joint selection", async () => {
+    await publishRate();
+    const maximum = "9223372036854";
+    const firstCommand = command("budget-original", {
+      maxAttemptCredits: maximum,
+    });
+    const first = await publisher.publishPolicy(context(), firstCommand);
+    expect(await publisher.publishPolicy(context(), firstCommand)).toEqual(
+      first,
+    );
+    expect(
+      await publisher.publishPolicy(
+        context(),
+        command(
+          "budget-original",
+          { maxAttemptCredits: maximum },
+          "budget-recovery-key",
+        ),
+      ),
+    ).toEqual(first);
+    expect((await select()).policy.maxAttemptCredits).toBe(maximum);
+    await expect(
+      publisher.publishPolicy(
+        context(),
+        command(
+          "budget-original",
+          { maxAttemptCredits: "11" },
+          "budget-drift-key",
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "METERING_PUBLICATION_CONFLICT" });
+    const second = await publisher.publishPolicy(
+      context(),
+      command("budget-replacement", { maxAttemptCredits: "20" }),
+    );
+    expect(second.revision).toBe("2");
+    const selection = await select();
+    expect(selection.policy.maxAttemptCredits).toBe("20");
+    expect(Object.isFrozen(selection.policy)).toBe(true);
+    const persisted = await pool().query(
+      "SELECT schema_version,max_attempt_credits::text AS budget FROM billing_metering_policy_revision WHERE tenant_id=$1 ORDER BY revision",
+      [tenantId],
+    );
+    expect(persisted.rows).toEqual([
+      { schema_version: 2, budget: maximum },
+      { schema_version: 2, budget: "20" },
+    ]);
+    expect(await counts()).toEqual([
+      { policies: "2", receipts: "2", keys: "3", audits: "2" },
+    ]);
+  });
+
+  test("canonical database budget and current schema constraints reject invalid states without changing policy", async () => {
+    await publisher.publishPolicy(context(), command("budget-constraints"));
+    for (const invalid of [0n, -1n, 9_223_372_036_855n])
+      await expect(
+        pool().query(
+          "UPDATE billing_metering_policy_revision SET max_attempt_credits=$1 WHERE tenant_id=$2",
+          [invalid.toString(), tenantId],
+        ),
+      ).rejects.toMatchObject({
+        code: "23514",
+        constraint: "ck_billing_metering_policy_revision_budget",
+      });
+    await expect(
+      pool().query(
+        "UPDATE billing_metering_policy_revision SET schema_version=1 WHERE tenant_id=$1",
+        [tenantId],
+      ),
+    ).rejects.toMatchObject({
+      code: "23514",
+      constraint: "ck_billing_metering_policy_revision_schema",
+    });
+    const persisted = await pool().query(
+      "SELECT schema_version,max_attempt_credits::text AS budget FROM billing_metering_policy_revision WHERE tenant_id=$1",
+      [tenantId],
+    );
+    expect(persisted.rows).toEqual([{ schema_version: 2, budget: "10" }]);
+    expect(await counts()).toEqual([
+      { policies: "1", receipts: "1", keys: "1", audits: "1" },
+    ]);
+  });
+
   test("publishes exact seven-field policy bytes, replays both keys, audits the actual row, and separates rate identities", async () => {
     await publishRate("policy-1");
     const first = await publisher.publishPolicy(context(), command());
@@ -2656,6 +2742,7 @@ integration("R243 immutable policy publication and joint pricing", () => {
     "multiplier_numerator",
     "failure_policy_artifact_digest",
     "profile_artifact_digest",
+    "max_attempt_credits",
   ] as const)(
     "rejects %s drift on same/new-key replay and joint selection",
     async (field) => {
@@ -2670,6 +2757,8 @@ integration("R243 immutable policy publication and joint pricing", () => {
           "UPDATE billing_metering_policy_revision SET failure_policy_artifact_digest=repeat('b',64)",
         profile_artifact_digest:
           "UPDATE billing_metering_policy_revision SET profile_artifact_digest=repeat('b',64)",
+        max_attempt_credits:
+          "UPDATE billing_metering_policy_revision SET max_attempt_credits=11",
       };
       await pool().query(statements[field]);
       const before = await counts();

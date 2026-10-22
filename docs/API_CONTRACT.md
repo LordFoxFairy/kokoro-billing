@@ -1,3 +1,7 @@
+## AGENT-1／CREDIT-1：包内policy content2必填预算（2026-10-22）
+
+本片不改HTTP/OpenAPI、生成HTTP DTO或鉴权。包内MeteringPolicyRevisionDraft改schemaVersion="2"，追加maxAttemptCredits正整数字符串（1..9223372036854）；canonical policy tuple由12扩13，末项为预算，policy command/request schema为2，永久identity/key绑定新完整digest。Rate schema/command1和七字段publication result1保持，不能混作policy content版本；当前拒无预算/旧schema1，未知不回退，旧raw只作负控。不因本片宣称新后台/Admission接口已挂载。
+
 ## AGENT-1／CREDIT-1：预算结算裁决（2026-10-22）
 
 用户已确认预算预占→真实用量一次整数结算，替代额外供应商成本上界保证前置。本片仅Metering包内三态决策，不新增HTTP/客户端/DTO：confirmed_not_dispatched释放；已验证priced actual且不超预算capture实际并释放余量；unknown或超预算pending_reconciliation、保留原hold并停止后续派发。输入需来自现正式证据/冻结预算和价格，不接受浏览器自报金额。不是资金许可或已挂载收费API。

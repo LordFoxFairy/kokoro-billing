@@ -47,12 +47,14 @@ export type MeteringRateRevisionDraft = Readonly<{
 }>;
 
 export type MeteringPolicyRevisionDraft = Readonly<{
-  schemaVersion: "1";
+  schemaVersion: "2";
   tenantId: string;
   effectiveFrom: string;
   sourceRef: string;
   verifiedAt: string;
   profileRef: MeteringRevisionReference;
+  /** Positive whole Credits; budget, not a provider cost guarantee. */
+  maxAttemptCredits: string;
   currencyCode: string;
   multiplier: MeteringRevisionRational;
   creditMicrosPerMinor: MeteringRevisionRational;
@@ -86,7 +88,7 @@ export type MeteringPublicationEncoding = Readonly<{
     "metering.publish_rate_revision" | "metering.publish_policy_revision";
   commandIdentity: string;
   idempotencyKey: string;
-  requestSchemaVersion: 1;
+  requestSchemaVersion: 1 | 2;
   canonicalJson: string;
   contentDigest: string;
   payloadDigest: string;

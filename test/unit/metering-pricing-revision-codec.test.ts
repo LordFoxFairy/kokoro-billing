@@ -22,14 +22,16 @@ const RATE_JSON =
   '{"value":["kokoro.billing.metering.rate.content","1","tenant-a","2026-10-02T00:00:00.000Z","synthetic-source","2026-10-01T00:00:00.000Z",["synthetic-profile-v1","0000000000000000000000000000000000000000000000000000000000000000"],[["provider","test","account","model","v1","input","token",["all"],"XTS",["1","3"]],["provider","test","account","model","v1","output","token",["all"],"XTS",["2","5"]]]]}';
 const RETIRED_POLICY_JSON =
   '{"value":["kokoro.billing.metering.policy.content","1","tenant-a","2026-10-02T00:00:00.000Z","synthetic-source","2026-10-01T00:00:00.000Z",["synthetic-profile-v1","0000000000000000000000000000000000000000000000000000000000000000"],"XTS",["7","5"],["100","1"],"attempt-ceil-v1",null]}';
-const POLICY_JSON = RETIRED_POLICY_JSON.replace(
+const PRE_BUDGET_POLICY_JSON = RETIRED_POLICY_JSON.replace(
   "attempt-ceil-v1",
   "attempt-credit-ceil-v2",
 );
+const POLICY_JSON =
+  '{"value":["kokoro.billing.metering.policy.content","2","tenant-a","2026-10-02T00:00:00.000Z","synthetic-source","2026-10-01T00:00:00.000Z",["synthetic-profile-v1","0000000000000000000000000000000000000000000000000000000000000000"],"XTS",["7","5"],["100","1"],"attempt-credit-ceil-v2",null,"10"]}';
 const RATE_HASH =
   "40a3dcd31e9a3e13e5ff3c32077d6736bbd44982d1def56a2a64b1c8b5854a87";
 const POLICY_HASH =
-  "47f7b1e7d4501b2fca27c889c57ee29b579da138e17469f5a6685d0587467511";
+  "fb28fc1fae3b73495a0ca450fc53eb53d0c9496adc1ec7d87c4d68ce099f62b2";
 const hash = (value: string): string =>
   createHash("sha256").update(value, "utf8").digest("hex");
 function row(bucket = "input"): MeteringRevisionRate {
@@ -66,7 +68,8 @@ function rate(): MeteringRateRevisionDraft {
 function policy(): MeteringPolicyRevisionDraft {
   const draft = rate();
   return {
-    schemaVersion: draft.schemaVersion,
+    schemaVersion: "2",
+    maxAttemptCredits: "10",
     tenantId: draft.tenantId,
     effectiveFrom: draft.effectiveFrom,
     sourceRef: draft.sourceRef,
@@ -142,6 +145,14 @@ describe("R81 revision golden bytes and pure scope", () => {
         roundingVersion: "attempt-ceil-v1",
       }),
     ).toThrow(TypeError);
+  });
+  it("preserves the retired budgetless golden as a rejection vector", () => {
+    expect(hash(PRE_BUDGET_POLICY_JSON)).toBe(
+      "47f7b1e7d4501b2fca27c889c57ee29b579da138e17469f5a6685d0587467511",
+    );
+    expect(() =>
+      decodeMeteringPolicyRevisionDraft(PRE_BUDGET_POLICY_JSON),
+    ).toThrow();
   });
   it("callable legal control returns hashed JSON without resource dependencies", () => {
     const encoded = encodeMeteringRateRevisionDraft(rate());
@@ -468,14 +479,22 @@ describe("closed shapes and non-coercing scalar validation", () => {
       ),
     ).toThrow();
   });
-  it.each(["2", 1, "1\n"])("rejects schema version %j", (schemaVersion) => {
-    expect(() =>
-      encodeMeteringRateRevisionDraft({ ...rate(), schemaVersion }),
-    ).toThrow();
-    expect(() =>
-      encodeMeteringPolicyRevisionDraft({ ...policy(), schemaVersion }),
-    ).toThrow();
-  });
+  it.each(["2", 1, "1\n"])(
+    "rejects rate schema version %j",
+    (schemaVersion) => {
+      expect(() =>
+        encodeMeteringRateRevisionDraft({ ...rate(), schemaVersion }),
+      ).toThrow();
+    },
+  );
+  it.each(["1", 2, "2\n"])(
+    "rejects policy schema version %j",
+    (schemaVersion) => {
+      expect(() =>
+        encodeMeteringPolicyRevisionDraft({ ...policy(), schemaVersion }),
+      ).toThrow();
+    },
+  );
   it("rejects unknown rounding and extra fields in pending/named policy", () => {
     expect(() =>
       encodeMeteringPolicyRevisionDraft({
@@ -817,9 +836,9 @@ describe("strict canonical decoders", () => {
     POLICY_JSON.replace(".policy.content", ".rate.content"),
     POLICY_JSON.replace('"attempt-credit-ceil-v2"', '"floor"'),
     POLICY_JSON.replace('["7","5"]', '["14","10"]'),
-    POLICY_JSON.replace(",null]}", ",[]]}"),
-    POLICY_JSON.replace(",null]}", "]}"),
-    POLICY_JSON.replace(",null]}", ",null,null]}"),
+    POLICY_JSON.replace(',null,"10"]}', ',[],"10"]}'),
+    POLICY_JSON.replace(',null,"10"]}', ',"10"]}'),
+    POLICY_JSON.replace(',null,"10"]}', ',null,null,"10"]}'),
   ])("rejects noncanonical/invalid policy bytes %s", (raw) => {
     expect(() => decodeMeteringPolicyRevisionDraft(raw)).toThrow();
   });
@@ -854,10 +873,10 @@ describe("pure publication digest and independent receipt metadata, not durable 
     );
     expect(policyEncoded.commandName).toBe("metering.publish_policy_revision");
     expect(policyEncoded.canonicalJson).toBe(
-      `{"value":["kokoro.billing.metering.policy.command","1","tenant-a","policy-publication-1","actor-a","synthetic fixture","${POLICY_HASH}"]}`,
+      `{"value":["kokoro.billing.metering.policy.command","2","tenant-a","policy-publication-1","actor-a","synthetic fixture","${POLICY_HASH}"]}`,
     );
     expect(policyEncoded.payloadDigest).toBe(
-      "4789f941cedf3cf83ecc75c1b41096234948103577c3d17e27df94d28397a73d",
+      "90abbb6bd033bf9a135b0f962acd31c3e92f33e3937e47c22aa5c31203a02389",
     );
     expect(policyEncoded.contentDigest).toBe(POLICY_HASH);
   });

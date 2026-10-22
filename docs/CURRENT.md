@@ -1,3 +1,11 @@
+## 2026-10-22 AGENT-1／CREDIT-1：单次预算进入不可变策略，正式管理／资金消费继续
+
+基线4810a4d，按已确认预算预占方案，在现Metering policy content/schema2必填maxAttemptCredits正整数字符串（1..9223372036854）；同一预算进入canonical bytes/digest、policy command/request schema2、数据库、审计、原命令回放完整性及joint selection冻结值。Rate content/command1和七字段publication result1保持；拒旧policy1／缺预算，不注入默认、读取回填或兼容双轨。唯一canonical policy表新增BIGINT列及范围CHECK，Prisma由fresh canonical正式refresh生成。
+
+新unit16例先取得真实5 FAIL／11 PASS再GREEN；current golden与旧raw负控独立重算，预算漂移回放／损坏／最大值／SQL约束进入真实PG。最终341非文档输入停写无漂移，Node24.20.0 pnpm verify全0（格式/lint/types/build/SQL/contract及1681 PASS／512默认资源SKIP）；另现publication/selection真实PG41 PASS／0 SKIP，fresh prisma:check、正式HTTP生成检查均0。自有库库存精确94→94。初次新测试JSON unknown的lint3错及PG大BIGINT literal带引号的精确CHECK oracle失败均保留；只配对类型guard和实际PG表示，不删除／放宽全约束集合断言。独立只读审查未发现确定P0–P2。
+
+本片不是正常DDL、已挂载后台计价或实际扣分证据。未改正常服务／配置／1000非现金余额，零模型／工具／actual settlement。正常计价表空的历史只读证据不授权自动迁移，后继具名演进须锁内再确认、保护现资金与历史；非空不猜默认或重写旧策略。下一步仍在同一主链接正式计价管理、合法逐attempt消费授权与预占／唯一派发／真实usage一次整数结算，真钱支付不做，集中PR尚未完成。
+
 ## 2026-10-22 AGENT-1／CREDIT-1：已确认预算方案与明确结算决策
 
 用户已确认退役额外“供应商成本上界保证”前置，采用后台价格及单次整数预算→预占→真实用量统一整数结算。现Metering包内model-attempt-settlement.ts实现三态：confirmed_not_dispatched唯一释放；completed/failed/cancelled的已验证actual<=预算只capture实际并release余量；unknown或超预算pending_reconciliation、保留全预占，不补0／夹金额／额外扣款。预算是业务支出限额，不假称token或成本上界；该函数不认证事实、不产生资金效果或dispatch permit，后继事务仍须消费它并停止同Run后续派发。

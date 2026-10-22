@@ -315,9 +315,12 @@ function rateSet(value: unknown): readonly MeteringRevisionRate[] {
   return entries.map((entry) => entry.row);
 }
 
-function common(fields: Readonly<Record<string, unknown>>) {
+function common<V extends "1" | "2">(
+  fields: Readonly<Record<string, unknown>>,
+  version: V,
+) {
   return {
-    schemaVersion: literal(fields.schemaVersion, "1"),
+    schemaVersion: literal(fields.schemaVersion, version),
     tenantId: text(fields.tenantId, 191),
     effectiveFrom: instant(fields.effectiveFrom),
     sourceRef: text(fields.sourceRef),
@@ -327,7 +330,7 @@ function common(fields: Readonly<Record<string, unknown>>) {
 }
 function rateDraft(value: unknown): MeteringRateRevisionDraft {
   const fields = object(value, [...COMMON_FIELDS, "rates"]);
-  return { ...common(fields), rates: rateSet(fields.rates) };
+  return { ...common(fields, "1"), rates: rateSet(fields.rates) };
 }
 function policyDraft(value: unknown): MeteringPolicyRevisionDraft {
   const fields = object(value, [
@@ -337,9 +340,14 @@ function policyDraft(value: unknown): MeteringPolicyRevisionDraft {
     "creditMicrosPerMinor",
     "roundingVersion",
     "failurePolicyRef",
+    "maxAttemptCredits",
   ]);
+  const budget = bound(fields.maxAttemptCredits);
+  if (BigInt(budget) === 0n || BigInt(budget) > INT64_MAX / 1_000_000n)
+    invalid();
   return {
-    ...common(fields),
+    ...common(fields, "2"),
+    maxAttemptCredits: budget,
     currencyCode: currency(fields.currencyCode),
     multiplier: rational(fields.multiplier, true),
     creditMicrosPerMinor: rational(fields.creditMicrosPerMinor, true),
@@ -391,6 +399,7 @@ function encodePolicy(
     draft.failurePolicyRef === null
       ? null
       : referenceTuple(draft.failurePolicyRef),
+    draft.maxAttemptCredits,
   ]);
 }
 
@@ -494,7 +503,7 @@ export function decodeMeteringPolicyRevisionDraft(
   const tuple = canonicalTuple(
     value,
     "kokoro.billing.metering.policy.content",
-    12,
+    13,
   );
   const draft = policyDraft({
     ...unpackCommon(tuple),
@@ -503,6 +512,7 @@ export function decodeMeteringPolicyRevisionDraft(
     creditMicrosPerMinor: unpackRational(tuple[9]),
     roundingVersion: tuple[10],
     failurePolicyRef: tuple[11] === null ? null : unpackReference(tuple[11]),
+    maxAttemptCredits: tuple[12],
   });
   if (encodePolicy(draft).canonicalJson !== value) invalid();
   return draft;
@@ -531,7 +541,7 @@ function publication(
   const content = "rates" in draft ? encodeRate(draft) : encodePolicy(draft);
   const command = encodeTuple([
     `kokoro.billing.metering.${kind}.command`,
-    "1",
+    kind === "policy" ? "2" : "1",
     tenantId,
     commandIdentity,
     actorId,
@@ -545,7 +555,7 @@ function publication(
     commandName: `metering.publish_${kind}_revision`,
     commandIdentity,
     idempotencyKey,
-    requestSchemaVersion: 1,
+    requestSchemaVersion: kind === "policy" ? 2 : 1,
     canonicalJson: command.canonicalJson,
     contentDigest: content.contentDigest,
     payloadDigest: command.contentDigest,

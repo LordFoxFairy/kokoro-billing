@@ -1,3 +1,11 @@
+## AGENT-1／CREDIT-1：单次预算进入现不可变policy（2026-10-22）
+
+采用用户已确认预算方案：在现Metering policy revision增加必填maxAttemptCredits（正整数字符串，最多9223372036854），是每attempt支出预算，不是供应商数学成本界。预算与当前usage2 profile、倍率、换算和取整一起纳入原canonical content digest、幂等payload、审计与immutable policy选择；policy content/schemaVersion显式升2并附预算，当前codec拒旧无预算版本，不默认10、不按读取回填、不双轨执行。Rate content/version1及原七字段publication result1保持原字节；policy command/request schema升2，沿原identity/key永久绑定完整命令。
+
+位置仍现metering-pricing-revision.types/codec/repository/publication、selection types，SQL唯一canonical在现billing_metering_policy_revision追加max_attempt_credits BIGINT NOT NULL，CHECK整credits范围，policy schema_version CHECK改2；Prisma仅正规refresh生成。旧policy无兼容读取/默认，正常owner只读已证policy表0，后继正常演进须再次锁下确认空表并保其余资金/账户事实，本片只自有fresh资源，禁止直接修改正常表或余额。Agent和BFF只消费后继正式预算快照，不自行算金额；不建预算表/服务/规则引擎。
+
+验收先current budget codec正控/缺失和旧版本负控RED，后完整边界与current golden bytes；真实PG发布/回执重放/预算漂移/并发/策略选择/列和CHECK/回滚保护及fresh Prisma drift。数据及生成变化完整相关门通过后才交正式管理/Admission消费，不能用数据底座完成冒实际预占/派发/扣分。
+
 ## AGENT-1／CREDIT-1：预算预占与真实结算（2026-10-22，用户已确认）
 
 本节替代旧R252“必须先由供应商发布数学成本上界保证”的资金前置，不删除真实最终请求绑定、token限额、权限、tenant隔离、唯一派发、用量证据或幂等保护。单次预算是后台配置的整数积分支出限额，不是token数或外部成本上界；Billing沿原Credit hold预占，按冻结policy对单attempt真实用量汇总计价并一次ceil整积分。未知用量不补0；已确认未派发才释放预占；completed/failed/cancelled按同一已验证实际费用结算。

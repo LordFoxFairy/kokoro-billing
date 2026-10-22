@@ -350,6 +350,7 @@ model billing_metering_policy_revision {
   multiplier_denominator              Decimal  @db.Decimal(78, 0)
   credit_micros_per_minor_numerator   Decimal  @db.Decimal(78, 0)
   credit_micros_per_minor_denominator Decimal  @db.Decimal(78, 0)
+  max_attempt_credits                 BigInt
   rounding_version                    String   @db.VarChar(64)
   failure_policy_version              String   @db.VarChar(255)
   failure_policy_artifact_digest      String   @db.Char(64)

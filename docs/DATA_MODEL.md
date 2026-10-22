@@ -1,3 +1,9 @@
+## AGENT-1／CREDIT-1：现policy revision冻结单次预算（2026-10-22）
+
+唯一canonical SQL现billing_metering_policy_revision新增max_attempt_credits BIGINT NOT NULL（credits，不是micros），CHECK 1..9223372036854；schema_version CHECK=2，其余rate/credit/账本/receipt结构保持。Prisma由同canonical fresh安装正式refresh，不手改生成物或另写SQL事实源。预算参与policy canonical bytes/digest、audit、replay损坏验证和joint selection冻结值；不在前端/Agent或新表保存第二份可编辑预算。
+
+正常policy表0是此前只读证据，不授权边读边迁移：本片只创建/回收自有测试库，无正常DDL。后继owner具名演进入口必须在锁内再确认policy表为空，保护现1000非现金余额及所有其他owner/账户历史；非空即停，不填默认或重写旧policy。发布新policy后不得部署旧reader/producer重新解释新记录；无双读/迁移兼容分支。
+
 ## AGENT-1／CREDIT-1：预算决策不另建资金状态（2026-10-22）
 
 本片无Schema/Prisma/正常数据变化，仅包内纯决策；输出是事务编排的输入，不作为第二份账本或持久授权。预算及actual使用BigInt Credit-micros且必须为整积分；未知/超预算不改变现hold/capture/release事实，后继正式恢复沿同一attempt与原receipt。现正常余额1000未被此实现修改，不迁移历史、兼容旧前置或新增预算服务。

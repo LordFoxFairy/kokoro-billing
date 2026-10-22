@@ -1,3 +1,7 @@
+## 当前主链：预算预占与真实结算（2026-10-22）
+
+现行预算方案及本地验收见[CURRENT](CURRENT.md)首节与[IMPLEMENTATION_PLAN](IMPLEMENTATION_PLAN.md)首卡。policy content/schema2必填整数预算；canonical与正规Prisma派生已验，正常DDL／后台计价／真实资金消费尚未因此启用。下方旧SET候选记录不覆盖此状态。
+
 ## SET55当前设计入口
 
 本人零余额账户的三设计SET55前缀和IMPLEMENTATION_PLAN阶段卡为当前裁决。phaseC正规exp6契约与43schema已通过纯门；phaseR候选已注册PUT，真实PG/source-dist尚待Root验证，未部署或声称页面开户可用。下方旧Fastify/v1/24operation叙述是历史。
