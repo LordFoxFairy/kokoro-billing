@@ -527,7 +527,10 @@ describe.skipIf(admin === undefined)(
             "x-kokoro-subject": identity("runtime-admission-user"),
             "content-type": "application/json",
             "idempotency-key": "runtime-admission-command",
-            "x-billing-execution-proof": "runtime-proof-canary",
+            "x-billing-execution-proof": "runtime-proof-canary".padEnd(
+              16_384,
+              "x",
+            ),
           };
           const response = await fetch(
             base + "/v1/internal/billing/admissions",
@@ -568,7 +571,7 @@ describe.skipIf(admin === undefined)(
             ...run.secrets,
             "runtime-agent-reader-canary",
             "runtime-iam-machine-canary",
-            "runtime-consumption-canary",
+            "runtime-proof-canary",
             databaseUrl.href,
           ])
             expect(run.logs()).not.toContain(value);

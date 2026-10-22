@@ -19,6 +19,7 @@ export async function createBillingRuntime(
 ): Promise<BillingRuntime> {
   const adapter = new FastifyAdapter({
     bodyLimit: 32_768,
+    http: { maxHeaderSize: 32_768 },
     logger: {
       level:
         process.env.NODE_ENV === "test"
