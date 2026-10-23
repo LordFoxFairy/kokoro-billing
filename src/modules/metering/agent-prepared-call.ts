@@ -191,3 +191,26 @@ export function decodeAgentPreparedResponse(
     return invalid();
   }
 }
+
+/** Same fixed schema/canonical checks, without a live prepared-envelope/lease requirement. */
+export function decodeStoredPreparedBinding(
+  input: Readonly<{
+    attemptBindingJson: string;
+    attemptBindingDigest: string;
+    plannedJson: string;
+    plannedDigest: string;
+  }>,
+): Frozen<{ identity: PreparedCallIdentity; planned: PlannedBinding }> {
+  return freezeAgentUsageFacts({
+    identity: decodeCanonical(
+      Buffer.from(input.attemptBindingJson).toString("base64url"),
+      input.attemptBindingDigest,
+      validateIdentity,
+    ).value,
+    planned: decodeCanonical(
+      Buffer.from(input.plannedJson).toString("base64url"),
+      input.plannedDigest,
+      validatePlanned,
+    ).value,
+  });
+}

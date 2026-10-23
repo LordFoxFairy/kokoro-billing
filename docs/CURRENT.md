@@ -1,3 +1,9 @@
+## CREDIT-1：同一admission结算应用（2026-10-22，本地应用已验）
+
+沿原Metering装配应用：事务外严格读取Agent sealed evidence，原冻结价格聚合后一次整数ceil；同一receipt→Run锁内应用capture／release／pending、原始证据head、审计及永久回执。旧pending ACK在已知相邻后继结清后仍恢复原决定；terminal ACK逐项核持久hold/source、usage数量／维度及settlement。对当前head缺原receipt拒绝损坏，不自动重建；原创建回执仍保held表示。原Metering结算实现仅提取同事务入口，不复制资金逻辑；canonical SQL仅增加一个nullable head TEXT列，Prisma已fresh正规派生。
+
+当前33项真实隔离PG回归、134项计价／决策／Nest装配定向通过。合法超大用量抛错回held的P2、terminal回执缺来源校验及pending head缺receipt重建均已实际RED后修复；最终金额超过int64明确budget_exceeded待核对，中间算术未知不猜最终价。只读审查Approved。首轮388冻结输入完整门的默认测试1812 PASS／2 FAIL／607资源SKIP，两处失败均是新helper直接导入Prisma生成行类型越过既有边界；已按现CreditRepository模式从TransactionClient派生唯一行类型，原架构断言不改，15项架构回归通过。失败日志保留，随后重冻完整门，尚未据此宣称完成。进一步适价审查发现通用actual=verified不足以证明属于冻结费率：现按Agent文档ec80da5明确的本轮局部System目录ID映射核原planned pair，再沿原revision/digest→商业tuple取冻价；不收窄通用usage2，也不以字符串相近猜命名空间。4单元／4真实PG业务RED后错provider、错model、商业refs及raw模型名均pending，完整保hold且零usage/capture/release。真正认证映射producer仍待装配，不能复制planned自证。归属补强前完整五阶段已全0（388输入无漂移、1814默认PASS／607资源SKIP、268真实PG、source/dist10、fresh Prisma／正规生成、库94→94），该结果不外推新增行为；最终再次停写388非文档输入无漂移，五阶段全部exit0：pnpm verify的format／lint／types／build／SQL／contract全过，默认1818 PASS／611资源SKIP（不计通过），相关9文件真实隔离PG272 PASS／0SKIP、source/dist10 PASS／0SKIP，fresh Prisma及正规contract生成检查通过；数据库库存94→94。独立只读增量审查Approved。原始RED、首完整失败及归属补强前门均保留，本提交只交付应用层，不冒正式HTTP／真实模型验收。具名Agent/IAM端口与合成QA价／usage仅验证Billing事务，不是正常供应商实际调用／扣分；数据库库存94→94，无正常资金／配置／进程变化。正式HTTP/BFF/Agent传输、worker唯一派发及真实usage恢复仍由同一主线后继接线。
+
 ## CREDIT-1：实际结算前置——跨有效期预算结清修复（2026-10-22，本地已验）
 
 推进同admission实际结算时发现Credit原语会将过期grant的hold余量回灌available。
@@ -739,3 +745,5 @@ Prisma/client/adapter-pg固定7.10.0；SQL仍唯一可编辑Schema，schema/prov
 修正了key UNIQUE被identity约束掩盖、泛P2010冒充超时以及JavaScript barrier早期失败悬挂等测试缺口。
 交付27938824a064893a1d8f201fd3e3c9d8042ce579；Root干净HEAD全套55文件233项、独立integration32文件137项通过，0失败0跳过；catalog与Prisma生成均0差异。
 生产仍Fastify/pg，本轮不声称业务writer/Nest已切换；下一切片B7，精确命令及未运行项见任务板。
+
+本片脱敏验收摘要如上；原始ignored证据位于Root本地 `var/dev/model-settlement-application-20261022`，不进入交付源码。

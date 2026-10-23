@@ -618,6 +618,7 @@ CREATE TABLE IF NOT EXISTS billing_admission (
   lease_expires_at TIMESTAMPTZ(3) NOT NULL,
   pricing_snapshot_json TEXT NOT NULL,
   pricing_snapshot_digest CHAR(64) NOT NULL,
+  settlement_evidence_json TEXT NULL,
   budget_credits BIGINT NOT NULL,
   hold_id UUID NOT NULL,
   status VARCHAR(32) NOT NULL DEFAULT 'held',

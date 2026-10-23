@@ -1,3 +1,9 @@
+## CREDIT-1：模型结算证据head（2026-10-22，实施设计）
+
+actual归属的本轮局部profile不增列：System目录ID及认证映射观察沿原sealed evidence bytes保存，商业五元组沿原pricing snapshot保存；两者明确不同命名空间，由原System revision/digest连接，不将商业refs反填实际归属，也不改写旧证据。其他／未知归属保head及原hold待核对。
+
+现billing_admission增加nullable TEXT settlement_evidence_json，保存已验证原usage2 sealed bytes；held尚未应用证据时null，pending／captured／released由同一事务写入。原余额／hold／usage event／settlement表继续复用，不另建钱包或事件表；canonical SQL为唯一源，Prisma经fresh正规派生。当前head供相邻successor检查，每个event原JSON及原决定另由现不可变command receipt保留；pending不创建终态usage settlement。原创建receipt仍恢复原held表示，历史结算receipt不随current状态改写，更新失败／audit失败／取消整体回滚。无需旧数据回填／alias／双读。
+
 ## CREDIT-1：过期hold余量账务（2026-10-22）
 
 不改Schema。hold.released_micros仍表示解除冻结总额，不等于可用余额增量；过期grant分配的余量不回available，同时从grant.remaining移除。既有grant_expiry按grant注销当时未冻结额度；后续held余量用expiry entry、source_kind=hold_release_expiry、source_ref=allocation UUID单独追加，承接原source唯一性和journal_seq。capture／expiry与hold／allocation／account／audit同事务，重放不追加，历史流水不改写。

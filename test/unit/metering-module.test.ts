@@ -8,6 +8,7 @@ import { PrismaService } from "../../src/database/prisma.service.js";
 import { TransactionService } from "../../src/database/transaction.service.js";
 import { CreditEffects } from "../../src/modules/credit/credit.service.js";
 import { IamBillingAuthorizationClient } from "../../src/modules/metering/iam-billing-authorization.client.js";
+import { ModelAttemptSettlementService } from "../../src/modules/metering/model-attempt-settlement.service.js";
 import { MeteringModule } from "../../src/modules/metering/metering.module.js";
 import { MeteringRepository } from "../../src/modules/metering/metering.repository.js";
 import { MeteringService } from "../../src/modules/metering/metering.service.js";
@@ -50,6 +51,9 @@ describe("Metering module IAM authorization registration", () => {
         MeteringRepository,
       );
       expect(moduleRef.get(MeteringService)).toBeInstanceOf(MeteringService);
+      expect(moduleRef.get(ModelAttemptSettlementService)).toBeInstanceOf(
+        ModelAttemptSettlementService,
+      );
       expect(moduleRef.get(IamBillingAuthorizationClient)).toBeInstanceOf(
         IamBillingAuthorizationClient,
       );
@@ -81,6 +85,7 @@ describe("Metering module IAM authorization registration", () => {
     try {
       expect(moduleRef.get(MeteringService)).toBeInstanceOf(MeteringService);
       expect(() => moduleRef.get(IamBillingAuthorizationClient)).toThrow();
+      expect(() => moduleRef.get(ModelAttemptSettlementService)).toThrow();
     } finally {
       await moduleRef.close();
     }

@@ -1,3 +1,15 @@
+## CREDIT-1：同一模型预算实际结算（2026-10-22，实施设计）
+
+本轮局部actual归属profile与Agent文档ec80da5配对：verified.provider_ref／model_ref仅接受具名认证上游证据映射确认的System provider／model目录ID，逐项等于原frozen planned.provider／model，再由原revision ID/digest映射已冻结商业五元组及费率。认证映射必须绑定同attempt／最终请求／冻结revision，不能复制planned、目录存在或单独response.model自证。actual unknown、其他命名空间／raw model名／商业refs或超出该唯一允许模型者进入unknown/pending，不按planned价追认、不另选当前价。通用usage2 schema／decoder／vectors不收窄；真正producer仍待装配，未据此激活模型。
+
+补强：已知最终整积分金额超过int64上限时，计价内核抛专用终值溢出；该事实足以证明超过任意合法预算，进入pending／budget_exceeded，保留全部hold，不截断金额。若仅精确有界中间算术失败，不推断最终费用，按unknown保留待核对。原内核成功返回仍严格int64，不扩大账本数值范围。ACK恢复／新应用／提交后重核均沿receipt→原Run锁顺序，避免ReadCommitted下head与hold跨并发版本；不在Run锁内另取旧receipt锁。pending后继先直接核head对应原永久receipt的scope／schema／payload／原evidence及时间，缺失或不一致拒绝CORRUPT，不自动重建。terminal回执还核原head／时间、hold金额及terminal source、真实usage source／数量／dimensions及settlement，不凭ID存在即成功。
+
+沿已批准预算方案在现Metering新增同admission结算编排，不新增服务／模块／用户token或成本保证。价格只取预占时完整snapshot；复用revision codec的row／rational／interval规则，严格原字节／hash、tenant／精确模型／商业tuple／profile／policy／预算核对。有限token_usage_v1映射为input、output两个必需根及可选input_cache_read／input_cache_write／output_reasoning子桶，unit=token；range dimension只引用正式count字段，未知桶／维度／所需count不猜。total只核一致性／作range维度，不作额外收费桶。先所有桶精确汇总，再沿唯一priceMeteredAttempt一次整积分ceil。
+
+短事务先恢复永久receipt，miss才事务外现Agent sealed reader取证；原identity/planned外再核prepared_at与granted的request_ref／admission_ref。未派发释放无需actual verified，派发后actual attribution/profile/count不足则pending；已知actual<=预算按原Metering/Credit事务capture实际及解除余量，unknown／超预算保留hold。第一次或后继应用在原Run advisory lock下重读head，核现successor相邻／知识单调，再原子写head、status、资金、audit和receipt；不在锁内HTTP、不重查现在价格。结算不要求活用户token／IAM／Run lease，证据的合法生产仍由Agent负责。
+
+为承接真实sealed unknown→known窗口，原admission仅增nullable settlement_evidence_json作为当前已验证head；每条原永久receipt保原证据与结果，command identity为admission＋event，digest还绑定revision／evidence digest。旧pending ACK精确恢复、不要求等于当前head；新head须owner当前sealed且对已存head紧邻单调，capture/release终态拒新head。当前Agent Run terminal后只准exact replay，不承诺终态后自动补证。正常worker最后再开放；本片只实现owner结算，正式HTTP／BFF／Agent传输另依同一计划固定配对。
+
 ## CREDIT-1：跨积分有效期的预算结清（2026-10-22）
 
 实际模型结算复用CreditEffects前，修复无TTL hold跨grant到期时余量复活。沿现account→grants→hold→allocations锁序，首次终态以同一DB时点刷新有效期；只将仍有效分配的未用部分恢复available，过期分配未用部分从grant.remaining注销并写独立expiry流水。已预占的实际费用仍可capture，不因过期免单；account.disabled不阻断已有hold结清、不改变账户状态。原terminal source／金额精确重放零写，审计失败全事务回滚；不加服务／Schema／配置／成本保证或拒绝长期hold。

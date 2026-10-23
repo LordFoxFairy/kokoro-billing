@@ -1,3 +1,13 @@
+## CREDIT-1：结算应用装配边界（2026-10-22）
+
+本轮局部actual归属profile与Agent文档ec80da5配对：verified.provider_ref／model_ref仅接受具名认证上游证据映射确认的System provider／model目录ID，逐项等于原frozen planned.provider／model，再由原revision ID/digest映射已冻结商业五元组及费率。认证映射必须绑定同attempt／最终请求／冻结revision，不能复制planned、目录存在或单独response.model自证。actual unknown、其他命名空间／raw model名／商业refs或超出该唯一允许模型者进入unknown/pending，不按planned价追认、不另选当前价。通用usage2 schema／decoder／vectors不收窄；真正producer仍待装配，未据此激活模型。
+
+当前新增Metering内部同admission结算应用，仅在既有registerModelAdmission显式选项下装配，不增加独立服务或默认开放。命令绑定原admission、sealed event／revision／digest及永久key；tenant／actor沿受信上下文。内部返回含保留的原evidence JSON用于不可变回执校验，后继正式HTTP必须显式映射闭集，不把此字段暴露给浏览器。本片未修改exp8 canonical、生成SDK或挂载结算HTTP；不冒已可通过现预算HTTP扣分。历史pending ACK保原结果，owner当前head只允许真正相邻单调推进；未知／超预算保hold，不授权新派发。
+
+## CREDIT-1：现Metering内模型结算命令（2026-10-22，实施设计）
+
+本片不改HTTP原件、SDK或权限。包内结算只收可信context与admissionId／eventId／revision／digest／原idempotencyKey，不收usage、actual金额、payer或价格；证据仅从现owner reader取。永久摘要绑定tenant／actor／admission／event／revision／digest，key不在摘要内；scope和payer仍沿原admission校验。精确旧ACK可在owner离线或head推进后恢复；新事件需当前sealed及相邻合法successor。安全返回区分captured／released／pending_reconciliation，保留实际捕获／解除冻结金额、evidence和账本引用；HTTP后继只投影安全结果，不回传原完整evidence。真钱支付不做。
+
 ## CREDIT-1：预算结清的过期分配语义（2026-10-22）
 
 本片不新增HTTP或修改现契约。CreditEffects capture/release返回的releasedMicros是hold解除冻结金额；过期分配不会变成可用积分，余额与不可变expiry流水按实际回读。原source与金额重放语义、管理员发放及用户读取边界保持；实际model admission结算接口另按现主线接入，不以此修复冒真实模型扣费整链完成。

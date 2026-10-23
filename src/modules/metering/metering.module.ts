@@ -13,6 +13,7 @@ import { MeteringPricingRevisionRepository } from "./metering-pricing-revision.r
 import { MeteringPricingSelectionService } from "./metering-pricing-selection.service.js";
 import { IamBillingAuthorizationClient } from "./iam-billing-authorization.client.js";
 import { ModelAdmissionService } from "./model-admission.service.js";
+import { ModelAttemptSettlementService } from "./model-attempt-settlement.service.js";
 import { AgentUsageEvidenceReader } from "./agent-usage-evidence-reader.js";
 import {
   resolveModelAdmissionOptions,
@@ -129,8 +130,38 @@ export class MeteringModule {
               iam,
             ),
         },
+        {
+          provide: ModelAttemptSettlementService,
+          inject: [
+            TransactionService,
+            CommandReceiptRepository,
+            AuditAppender,
+            CreditEffects,
+            MeteringService,
+            ModelAdmissionService,
+            AgentUsageEvidenceReader,
+          ],
+          useFactory: (
+            tx: TransactionService,
+            receipts: CommandReceiptRepository,
+            audit: AuditAppender,
+            credit: CreditEffects,
+            metering: MeteringService,
+            admissions: ModelAdmissionService,
+            agent: AgentUsageEvidenceReader,
+          ) =>
+            new ModelAttemptSettlementService(
+              tx,
+              receipts,
+              audit,
+              credit,
+              metering,
+              admissions,
+              agent,
+            ),
+        },
       ],
-      exports: [ModelAdmissionService],
+      exports: [ModelAdmissionService, ModelAttemptSettlementService],
     };
   }
 }

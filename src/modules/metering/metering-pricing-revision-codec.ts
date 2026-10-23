@@ -167,7 +167,10 @@ function bound(value: unknown): string {
   return parsed;
 }
 
-function rational(value: unknown, positive: boolean): MeteringRevisionRational {
+export function parseMeteringRevisionRational(
+  value: unknown,
+  positive: boolean,
+): MeteringRevisionRational {
   const fields = object(value, ["numerator", "denominator"]);
   const numerator = decimal(fields.numerator);
   const denominator = decimal(fields.denominator);
@@ -216,7 +219,9 @@ function applicability(value: unknown): MeteringRateApplicability {
   };
 }
 
-function rate(value: unknown): MeteringRevisionRate {
+export function parseMeteringRevisionRate(
+  value: unknown,
+): MeteringRevisionRate {
   const fields = object(value, [
     "modelRevision",
     "providerRef",
@@ -241,7 +246,7 @@ function rate(value: unknown): MeteringRevisionRate {
     unit: businessKey(fields.unit),
     applicability: applicability(fields.applicability),
     currencyCode: currency(fields.currencyCode),
-    minorPerUnit: rational(fields.minorPerUnit, false),
+    minorPerUnit: parseMeteringRevisionRational(fields.minorPerUnit, false),
   };
 }
 
@@ -313,8 +318,10 @@ function validateIntervals(
     invalid();
 }
 
-function rateSet(value: unknown): readonly MeteringRevisionRate[] {
-  const rows = array(value, 1, 64).map(rate);
+export function parseMeteringRevisionRates(
+  value: unknown,
+): readonly MeteringRevisionRate[] {
+  const rows = array(value, 1, 64).map(parseMeteringRevisionRate);
   const keys = new Set<string>();
   const currencies = new Map<string, string>();
   const mappings = new Map<string, string>();
@@ -364,7 +371,10 @@ function common<V extends "1" | "2">(
 }
 function rateDraft(value: unknown): MeteringRateRevisionDraft {
   const fields = object(value, [...COMMON_FIELDS, "rates"]);
-  return { ...common(fields, "2"), rates: rateSet(fields.rates) };
+  return {
+    ...common(fields, "2"),
+    rates: parseMeteringRevisionRates(fields.rates),
+  };
 }
 function policyDraft(value: unknown): MeteringPolicyRevisionDraft {
   const fields = object(value, [
@@ -383,8 +393,11 @@ function policyDraft(value: unknown): MeteringPolicyRevisionDraft {
     ...common(fields, "2"),
     maxAttemptCredits: budget,
     currencyCode: currency(fields.currencyCode),
-    multiplier: rational(fields.multiplier, true),
-    creditMicrosPerMinor: rational(fields.creditMicrosPerMinor, true),
+    multiplier: parseMeteringRevisionRational(fields.multiplier, true),
+    creditMicrosPerMinor: parseMeteringRevisionRational(
+      fields.creditMicrosPerMinor,
+      true,
+    ),
     roundingVersion: literal(fields.roundingVersion, "attempt-credit-ceil-v2"),
     failurePolicyRef:
       fields.failurePolicyRef === null

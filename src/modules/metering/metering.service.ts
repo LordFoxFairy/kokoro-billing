@@ -35,63 +35,67 @@ export class MeteringService {
         operation: "metering.settle",
         mode: "write",
       },
-      async () => {
-        const client = this.transactions.requireActiveTransaction(
-          input.tenantId,
-          "write",
-        );
-        const usageEventId = await this.repository.recordUsage({
-          tenantId: input.tenantId,
-          subjectId: input.subjectId,
-          sourceEventId: input.sourceEventId,
-          featureKey: input.featureKey,
-          quantity: input.quantity,
-          ...(input.dimensions === undefined
-            ? {}
-            : { dimensions: input.dimensions }),
-          holdId: input.holdId,
-        });
-        const terminal = await this.credit.capture({
-          tenantId: input.tenantId,
-          holdId: input.holdId,
-          actualMicros: input.actualMicros,
-          sourceRef: usageEventId,
-        });
-        const durable = await client.billing_usage_settlement.findFirst({
-          where: { tenant_id: input.tenantId, credit_hold_id: input.holdId },
-        });
-        if (
-          durable &&
-          (durable.usage_event_id !== usageEventId ||
-            durable.actual_micros !== input.actualMicros)
-        )
-          throw new MeteringError(
-            "USAGE_EVENT_MISMATCH",
-            "Settlement belongs to another usage payload",
-          );
-        const settlementId = durable?.id ?? randomUUID();
-        if (!durable) {
-          await client.billing_usage_settlement.create({
-            data: {
-              id: settlementId,
-              tenant_id: input.tenantId,
-              credit_hold_id: input.holdId,
-              usage_event_id: usageEventId,
-              actual_micros: input.actualMicros,
-            },
-          });
-          await client.billing_usage_event.update({
-            where: { id: usageEventId },
-            data: { status: "settled" },
-          });
-        }
-        return {
-          usageEventId,
-          settlementId,
-          capturedMicros: terminal.capturedMicros,
-          releasedMicros: terminal.releasedMicros,
-        };
-      },
+      () => this.settleInTransaction(input),
     );
+  }
+  /** Module-internal composition: use the caller's one funding transaction. */
+  async settleInTransaction(
+    input: SettleUsageInput,
+  ): Promise<UsageSettlementResult> {
+    const client = this.transactions.requireActiveTransaction(
+      input.tenantId,
+      "write",
+    );
+    const usageEventId = await this.repository.recordUsage({
+      tenantId: input.tenantId,
+      subjectId: input.subjectId,
+      sourceEventId: input.sourceEventId,
+      featureKey: input.featureKey,
+      quantity: input.quantity,
+      ...(input.dimensions === undefined
+        ? {}
+        : { dimensions: input.dimensions }),
+      holdId: input.holdId,
+    });
+    const terminal = await this.credit.capture({
+      tenantId: input.tenantId,
+      holdId: input.holdId,
+      actualMicros: input.actualMicros,
+      sourceRef: usageEventId,
+    });
+    const durable = await client.billing_usage_settlement.findFirst({
+      where: { tenant_id: input.tenantId, credit_hold_id: input.holdId },
+    });
+    if (
+      durable &&
+      (durable.usage_event_id !== usageEventId ||
+        durable.actual_micros !== input.actualMicros)
+    )
+      throw new MeteringError(
+        "USAGE_EVENT_MISMATCH",
+        "Settlement belongs to another usage payload",
+      );
+    const settlementId = durable?.id ?? randomUUID();
+    if (!durable) {
+      await client.billing_usage_settlement.create({
+        data: {
+          id: settlementId,
+          tenant_id: input.tenantId,
+          credit_hold_id: input.holdId,
+          usage_event_id: usageEventId,
+          actual_micros: input.actualMicros,
+        },
+      });
+      await client.billing_usage_event.update({
+        where: { id: usageEventId },
+        data: { status: "settled" },
+      });
+    }
+    return {
+      usageEventId,
+      settlementId,
+      capturedMicros: terminal.capturedMicros,
+      releasedMicros: terminal.releasedMicros,
+    };
   }
 }

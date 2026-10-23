@@ -13,32 +13,33 @@ datasource db {
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model billing_admission {
-  id                      String   @id @db.Uuid
-  tenant_id               String   @db.VarChar(191)
-  run_id                  String   @db.VarChar(512)
-  attempt_id              String   @db.Uuid
-  request_ref             String   @db.VarChar(512)
-  actor_ref               String   @db.VarChar(255)
-  payer_ref               String   @db.VarChar(255)
-  call_id                 String   @db.Uuid
-  attempt_ordinal         BigInt
-  feature_key             String   @db.VarChar(128)
-  attempt_binding_json    String
-  attempt_binding_digest  String   @db.Char(64)
-  planned_json            String
-  planned_digest          String   @db.Char(64)
-  authorization_json      String
-  final_request_digest    String   @db.Char(64)
-  prepared_at             DateTime @db.Timestamptz(3)
-  observed_at             DateTime @db.Timestamptz(3)
-  lease_expires_at        DateTime @db.Timestamptz(3)
-  pricing_snapshot_json   String
-  pricing_snapshot_digest String   @db.Char(64)
-  budget_credits          BigInt
-  hold_id                 String   @db.Uuid
-  status                  String   @default("held") @db.VarChar(32)
-  created_at              DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
-  updated_at              DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+  id                       String   @id @db.Uuid
+  tenant_id                String   @db.VarChar(191)
+  run_id                   String   @db.VarChar(512)
+  attempt_id               String   @db.Uuid
+  request_ref              String   @db.VarChar(512)
+  actor_ref                String   @db.VarChar(255)
+  payer_ref                String   @db.VarChar(255)
+  call_id                  String   @db.Uuid
+  attempt_ordinal          BigInt
+  feature_key              String   @db.VarChar(128)
+  attempt_binding_json     String
+  attempt_binding_digest   String   @db.Char(64)
+  planned_json             String
+  planned_digest           String   @db.Char(64)
+  authorization_json       String
+  final_request_digest     String   @db.Char(64)
+  prepared_at              DateTime @db.Timestamptz(3)
+  observed_at              DateTime @db.Timestamptz(3)
+  lease_expires_at         DateTime @db.Timestamptz(3)
+  pricing_snapshot_json    String
+  pricing_snapshot_digest  String   @db.Char(64)
+  settlement_evidence_json String?
+  budget_credits           BigInt
+  hold_id                  String   @db.Uuid
+  status                   String   @default("held") @db.VarChar(32)
+  created_at               DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+  updated_at               DateTime @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
 
   @@unique([tenant_id, attempt_id], map: "uq_billing_admission_attempt")
   @@unique([tenant_id, hold_id], map: "uq_billing_admission_hold")

@@ -9,6 +9,14 @@ const NUMERIC_MAX = 10n ** 78n - 1n;
 const MAX_BUCKETS = 64;
 const MICROS_PER_CREDIT = 1_000_000n;
 
+/** Exact final rounded cost is known, but cannot be persisted as int64 micros. */
+export class MeteringCreditOverflowError extends RangeError {
+  constructor() {
+    super("Final metered credits exceed int64 storage");
+    this.name = "MeteringCreditOverflowError";
+  }
+}
+
 function shape(value: unknown, keys: readonly string[]): void {
   if (
     value === null ||
@@ -221,6 +229,7 @@ export function priceMeteredAttempt(
     (numerator / creditDenominator +
       (numerator % creditDenominator === 0n ? 0n : 1n)) *
     MICROS_PER_CREDIT;
+  if (creditMicros > INT64_MAX) throw new MeteringCreditOverflowError();
   nonnegative(creditMicros, INT64_MAX);
   return {
     profileVersion: input.profile.version,

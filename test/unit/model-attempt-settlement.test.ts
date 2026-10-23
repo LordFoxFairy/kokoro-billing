@@ -66,6 +66,17 @@ describe("one-attempt budget settlement after trusted usage verification", () =>
       retainedMicros: 10n * CREDIT,
     });
   });
+  test("known final cost beyond int64 retains any valid whole-credit budget", () => {
+    expect(
+      decideModelAttemptSettlement(MAX_CREDITS * CREDIT, {
+        state: "actual_exceeds_int64",
+      }),
+    ).toEqual({
+      action: "pending_reconciliation",
+      reason: "budget_exceeded",
+      retainedMicros: MAX_CREDITS * CREDIT,
+    });
+  });
   test("maximum whole-credit int64 boundary stays exact", () => {
     const budget = MAX_CREDITS * CREDIT;
     expect(decideModelAttemptSettlement(budget, known(budget))).toEqual({

@@ -2,6 +2,7 @@
 export type ModelAttemptSettlementKnowledge =
   | Readonly<{ state: "confirmed_not_dispatched" }>
   | Readonly<{ state: "unknown" }>
+  | Readonly<{ state: "actual_exceeds_int64" }>
   | Readonly<{
       state: "actual_priced";
       outcome: "completed" | "failed" | "cancelled";
@@ -45,6 +46,12 @@ export function decideModelAttemptSettlement(
       return Object.freeze({
         action: "pending_reconciliation",
         reason: "unknown_usage_or_outcome",
+        retainedMicros: budgetMicros,
+      });
+    case "actual_exceeds_int64":
+      return Object.freeze({
+        action: "pending_reconciliation",
+        reason: "budget_exceeded",
         retainedMicros: budgetMicros,
       });
     case "actual_priced": {

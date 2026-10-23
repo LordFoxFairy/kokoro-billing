@@ -1,3 +1,13 @@
+## CREDIT-1：同admission结算应用（2026-10-22）
+
+沿现已批准预算与sealed证据方案，不增加服务／模块／用户授权旅程。
+- [x] 固定snapshot严格解码、有限token桶映射、聚合一次整数ceil与超大金额pending。
+- [x] 明确本轮actual System目录ID映射profile，错归属／商业refs／raw名pending，通用usage2合法性不改；真正认证映射producer仍待。
+- [x] 同一资金事务、永久原回执、相邻head、terminal资金／usage来源及异常回滚；33项真实隔离PG回归通过。
+- [x] 原MeteringModule显式预算配置下装配；未配置的正常图不增加依赖／开放接口。
+- [x] 停写388输入、完整owner门、fresh Schema／生成与source-dist核验及本切片提交；1818默认PASS／611资源SKIP、272真实PG／10source-dist PASS，库94→94。
+- [ ] 后继固定正式HTTP／BFF／Agent消费者，worker唯一派发／真实usage封口／崩溃恢复及正常端到端；本地事务fixture不算实际模型扣分。
+
 ## CREDIT-1：Run-proof消费者配对（2026-10-22，本地已验）
 
 复用同一Root16项主链；主方唯一writer／Billing f61a5d2基线，相关三面首节已按用户最新裁决收敛。未实施App额外消费grant与BFF回程token broker退出，历史段落中该前置不再执行。
