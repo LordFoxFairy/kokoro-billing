@@ -1,7 +1,11 @@
+import { modelSettlementBaselineSource } from "./model-settlement-contract.js";
 import { createHash } from "node:crypto";
 import previous from "./model-admission-previous.json" with { type: "json" };
 /** Exact exp8→exp7 inverse, build/test only. No legacy credential acceptance at runtime. */
-export function modelAdmissionProofBaselineSource(source: string): string {
+export function modelAdmissionProofBaselineSource(
+  currentSource: string,
+): string {
+  const source = modelSettlementBaselineSource(currentSource);
   if (
     createHash("sha256").update(source).digest("hex") !==
     "2c65b64c896a85cb89e6b8f23ee9802b6e5cf2440d9a8debaa23973f5c199b6e"

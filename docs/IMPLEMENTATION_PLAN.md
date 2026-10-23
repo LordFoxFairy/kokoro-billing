@@ -1,3 +1,10 @@
+## CREDIT-1：正式结算HTTP（2026-10-22）
+
+- [x] exp9原位发布28操作／57schema，旧capture/release声明退役、整字节逆证明及正规生成。
+- [x] Run及原ACK绑定、strict input/mapper/controller和raw parser的定向RED→GREEN。
+- [x] 真实Nest/PG资金／幂等／历史ACK／跨身份及失败恢复，默认关闭和source/dist验收。
+- [x] 停写完整owner门与只读审查后提交，供BFF／Agent固定消费；不激活正常模型或资金。
+
 ## CREDIT-1：同admission结算应用（2026-10-22）
 
 沿现已批准预算与sealed证据方案，不增加服务／模块／用户授权旅程。

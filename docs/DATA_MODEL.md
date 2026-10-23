@@ -1,3 +1,9 @@
+## CREDIT-1：正式结算HTTP（2026-10-22，本地已验）
+
+本片不改SQL／Prisma。新model.settle命令首次对外发布前在既有永久摘要中增加run_id，
+恢复前与原admission Run核等，原回执结果明确保run/attempt；正常不存在此候选结算数据，
+不提供旧结果fallback或历史回填。head／资金／usage／audit／receipt仍同一事务，原创建回执不变。
+
 ## CREDIT-1：模型结算证据head（2026-10-22，实施设计）
 
 actual归属的本轮局部profile不增列：System目录ID及认证映射观察沿原sealed evidence bytes保存，商业五元组沿原pricing snapshot保存；两者明确不同命名空间，由原System revision/digest连接，不将商业refs反填实际归属，也不改写旧证据。其他／未知归属保head及原hold待核对。

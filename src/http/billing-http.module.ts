@@ -75,6 +75,7 @@ export class BillingHttpModule implements NestModule {
           [
             "/v1/admin/billing/credit-grants",
             "/v1/internal/billing/admissions",
+            "/v1/internal/billing/admissions/:admission_id/settle",
           ].includes(request.routeOptions.url ?? "")
         ) {
           try {
@@ -205,7 +206,7 @@ export class BillingHttpModule implements NestModule {
               Object.entries(generatedSchemas),
             );
             if (
-              bindings.length !== 56 ||
+              bindings.length !== 57 ||
               exports.size !== bindings.length ||
               new Set(bindings.map(([, exported]) => exported)).size !==
                 exports.size

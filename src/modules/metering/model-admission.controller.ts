@@ -1,7 +1,11 @@
+import { ModelAttemptSettlementService } from "./model-attempt-settlement.service.js";
+import { readModelSettlementInput } from "./model-settlement.input.js";
+import { mapModelSettlement } from "./model-settlement.mapper.js";
 import {
   Controller,
   Get,
   Post,
+  HttpCode,
   Inject,
   Req,
   Res,
@@ -29,6 +33,8 @@ export class ModelAdmissionController {
   constructor(
     @Inject(ModelAdmissionService)
     private readonly service: ModelAdmissionService,
+    @Inject(ModelAttemptSettlementService)
+    private readonly settlements: ModelAttemptSettlementService,
     @Inject(BILLING_SCHEMA_VALIDATOR)
     private readonly schemas: BillingSchemaValidator,
     @Inject(MODEL_ADMISSION_DEADLINE) private readonly deadline: number,
@@ -79,6 +85,23 @@ export class ModelAdmissionController {
       });
       this.schemas.assert("AdmissionResponse", response);
       reply.header("location", `${modelAdmissionPath}/${result.admissionId}`);
+      return response;
+    });
+  }
+  @Post(":admission_id/settle")
+  @HttpCode(200)
+  async settle(
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    const command = readModelSettlementInput(request, this.schemas);
+    return this.scoped(request, reply, async (signal) => {
+      const result = await this.settlements.settle(
+        modelAdmissionContext(request, signal),
+        command,
+      );
+      const response = mapModelSettlement(result);
+      this.schemas.assert("AdmissionSettlementResponse", response);
       return response;
     });
   }

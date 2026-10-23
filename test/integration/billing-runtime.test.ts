@@ -553,6 +553,37 @@ describe.skipIf(admin === undefined)(
             error: { code: "billing.dependency_unavailable", retryable: true },
           });
           expect(calls).toBe(1);
+          const settlementHeaders: Record<string, string> = { ...headers };
+          delete settlementHeaders["x-billing-execution-proof"];
+          const settlementUrl =
+            base + `/v1/internal/billing/admissions/${randomUUID()}/settle`;
+          const settlementBody = {
+            run_id: "runtime-admission-run",
+            evidence_event_id: randomUUID(),
+            evidence_revision: "1",
+            evidence_digest: "a".repeat(64),
+          };
+          const noAdmission = await fetch(settlementUrl, {
+            method: "POST",
+            headers: settlementHeaders,
+            body: JSON.stringify(settlementBody),
+            signal: AbortSignal.timeout(2000),
+          });
+          expect(noAdmission.status).toBe(403);
+          expect(await noAdmission.json()).toMatchObject({
+            error: { code: "billing.forbidden", retryable: false },
+          });
+          const amount = await fetch(settlementUrl, {
+            method: "POST",
+            headers: settlementHeaders,
+            body: JSON.stringify({
+              ...settlementBody,
+              actual_micros: "1000000",
+            }),
+            signal: AbortSignal.timeout(2000),
+          });
+          expect(amount.status).toBe(400);
+          expect(calls).toBe(1); // settlement neither reacquires consumption permission nor reads an unknown attempt.
           for (const table of [
             "billing_admission",
             "billing_credit_account",

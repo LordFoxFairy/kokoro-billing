@@ -68,7 +68,8 @@ export class ModelAttemptSettlementService {
         intent.command.admissionId,
       );
       guard();
-      if (view === null) throw new ModelAdmissionError("FORBIDDEN");
+      if (view === null || view.runId !== intent.command.runId)
+        throw new ModelAdmissionError("FORBIDDEN");
       const recovered = await this.tx.runRoot(transaction, async () => {
         const result = await this.receipts.recover(
           receipt,
@@ -178,6 +179,7 @@ export class ModelAttemptSettlementService {
       ).evidence;
       const prior = modelSettlementIntent(intent.context, {
         admissionId: row.id,
+        runId: row.run_id,
         eventId: previous.identity.event_id,
         revision: previous.revision,
         digest: previous.digest,
@@ -343,6 +345,8 @@ export class ModelAttemptSettlementService {
     return modelSettlementResultCodec.decode({
       schemaVersion: 1,
       admissionId: view.admissionId,
+      runId: view.runId,
+      attemptId: view.attemptId,
       eventId: e.evidence.identity.event_id,
       revision: e.evidence.revision,
       digest: e.evidence.digest,
@@ -366,6 +370,9 @@ export class ModelAttemptSettlementService {
     const command = intent.command;
     if (
       result.admissionId !== command.admissionId ||
+      result.runId !== command.runId ||
+      result.runId !== view.runId ||
+      result.attemptId !== view.attemptId ||
       result.eventId !== command.eventId ||
       result.revision !== command.revision ||
       result.digest !== command.digest

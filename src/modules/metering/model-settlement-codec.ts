@@ -29,9 +29,20 @@ const number = z
       return false;
     }
   });
+const runId = z
+  .string()
+  .min(1)
+  .max(512)
+  .refine((s) =>
+    [...s].every((c) => {
+      const n = c.codePointAt(0) ?? 0;
+      return n >= 32 && n !== 127 && (n < 0xd800 || n > 0xdfff);
+    }),
+  );
 const commandSchema = z
   .object({
     admissionId: uuid,
+    runId,
     eventId: uuid,
     revision: number.refine((s) => s !== "0"),
     digest,
@@ -47,6 +58,8 @@ const resultSchema = z
   .object({
     schemaVersion: z.literal(1),
     admissionId: uuid,
+    runId,
+    attemptId: uuid,
     eventId: uuid,
     revision: number,
     digest,
@@ -102,6 +115,7 @@ export function modelSettlementIntent(
               "kokoro.billing.model-settle:1",
               scope.tenantId,
               scope.actorId,
+              copied.runId,
               copied.admissionId,
               copied.eventId,
               copied.revision,

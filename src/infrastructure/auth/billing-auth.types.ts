@@ -64,6 +64,7 @@ export type BillingSchemaValidator = Readonly<{
   acceptsRequest(
     name:
       | "AdmissionCreateRequest"
+      | "AdmissionSettlementRequest"
       | "AdminCreditGrantRequest"
       | "AdminMeteringRatePublishRequest"
       | "AdminMeteringPolicyPublishRequest",
@@ -72,6 +73,7 @@ export type BillingSchemaValidator = Readonly<{
   assert(
     name:
       | "AdmissionResponse"
+      | "AdmissionSettlementResponse"
       | "CatalogResponse"
       | "CreditAccountResponse"
       | "CreditLedgerResponse"

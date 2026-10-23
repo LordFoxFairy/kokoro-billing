@@ -259,28 +259,53 @@ export type AdmissionCreateRequest = {
   final_request_digest: string;
 };
 
-export type AdmissionCaptureRequest = {
+export type AdmissionSettlementRequest = {
   run_id: string;
-  call_id: string;
-  attempt_id: string;
-  evidence_schema_version: "2.0.0";
-  evidence_ref: string;
   evidence_event_id: string;
-  evidence_revision: PositiveDecimal;
+  evidence_revision: string;
   evidence_digest: string;
 };
 
-export type AdmissionReleaseRequest = {
-  run_id: string;
-  call_id: string;
+export type AdmissionSettlement = (
+  | {
+      status: "captured";
+      reason?: null;
+      usage_event_id?: string;
+      settlement_id?: string;
+    }
+  | {
+      status: "released";
+      reason?: null;
+      captured_credits?: "0";
+      usage_event_id?: null;
+      settlement_id?: null;
+    }
+  | {
+      status: "pending_reconciliation";
+      reason?: "unknown_usage_or_outcome" | "budget_exceeded";
+      captured_credits?: "0";
+      released_credits?: "0";
+      usage_event_id?: null;
+      settlement_id?: null;
+    }
+) & {
+  admission_id: string;
   attempt_id: string;
-  release_basis: "not_dispatched" | "settled_remainder";
-  evidence_schema_version: "2.0.0";
-  evidence_ref: string;
   evidence_event_id: string;
-  evidence_revision: PositiveDecimal;
+  run_id: string;
+  evidence_revision: string;
   evidence_digest: string;
-  reason: string;
+  status: "captured" | "released" | "pending_reconciliation";
+  reason: null | "unknown_usage_or_outcome" | "budget_exceeded";
+  captured_credits: string;
+  released_credits: string;
+  usage_event_id: string | null;
+  settlement_id: string | null;
+  updated_at: string;
+};
+
+export type AdmissionSettlementResponse = {
+  data: AdmissionSettlement;
 };
 
 export type Admission = {
@@ -920,20 +945,22 @@ export type GetAdmissionResponses = {
 export type GetAdmissionResponse =
   GetAdmissionResponses[keyof GetAdmissionResponses];
 
-export type CaptureAdmissionData = {
-  body: AdmissionCaptureRequest;
+export type SettleModelAdmissionData = {
+  body: AdmissionSettlementRequest;
   headers: {
-    "x-kokoro-tenant-id": string;
     "idempotency-key": string;
+    "x-kokoro-tenant-id": string;
+    "x-kokoro-subject": string;
+    "x-kokoro-service": "web-bff";
   };
   path: {
-    admission_id: Uuid;
+    admission_id: string;
   };
   query?: never;
-  url: "/v1/internal/billing/admissions/{admission_id}/capture";
+  url: "/v1/internal/billing/admissions/{admission_id}/settle";
 };
 
-export type CaptureAdmissionErrors = {
+export type SettleModelAdmissionErrors = {
   /**
    * Request failed
    */
@@ -968,79 +995,18 @@ export type CaptureAdmissionErrors = {
   503: ErrorResponse;
 };
 
-export type CaptureAdmissionError =
-  CaptureAdmissionErrors[keyof CaptureAdmissionErrors];
+export type SettleModelAdmissionError =
+  SettleModelAdmissionErrors[keyof SettleModelAdmissionErrors];
 
-export type CaptureAdmissionResponses = {
+export type SettleModelAdmissionResponses = {
   /**
    * Success
    */
-  200: AdmissionResponse;
+  200: AdmissionSettlementResponse;
 };
 
-export type CaptureAdmissionResponse =
-  CaptureAdmissionResponses[keyof CaptureAdmissionResponses];
-
-export type ReleaseAdmissionData = {
-  body: AdmissionReleaseRequest;
-  headers: {
-    "x-kokoro-tenant-id": string;
-    "idempotency-key": string;
-  };
-  path: {
-    admission_id: Uuid;
-  };
-  query?: never;
-  url: "/v1/internal/billing/admissions/{admission_id}/release";
-};
-
-export type ReleaseAdmissionErrors = {
-  /**
-   * Request failed
-   */
-  400: ErrorResponse;
-  /**
-   * Authentication required
-   */
-  401: ErrorResponse;
-  /**
-   * Forbidden
-   */
-  403: ErrorResponse;
-  /**
-   * Not found
-   */
-  404: ErrorResponse;
-  /**
-   * Conflict
-   */
-  409: ErrorResponse;
-  /**
-   * Invalid state
-   */
-  422: ErrorResponse;
-  /**
-   * Internal failure
-   */
-  500: ErrorResponse;
-  /**
-   * Dependency unavailable
-   */
-  503: ErrorResponse;
-};
-
-export type ReleaseAdmissionError =
-  ReleaseAdmissionErrors[keyof ReleaseAdmissionErrors];
-
-export type ReleaseAdmissionResponses = {
-  /**
-   * Success
-   */
-  200: AdmissionResponse;
-};
-
-export type ReleaseAdmissionResponse =
-  ReleaseAdmissionResponses[keyof ReleaseAdmissionResponses];
+export type SettleModelAdmissionResponse =
+  SettleModelAdmissionResponses[keyof SettleModelAdmissionResponses];
 
 export type AcceptExecutionEventData = {
   body: ExecutionEventRequest;

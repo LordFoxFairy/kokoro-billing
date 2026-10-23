@@ -1,3 +1,13 @@
+## CREDIT-1：正式结算HTTP（2026-10-22，本地已验）
+
+沿现ModelAdmissionController／CreditAccountGuard发布exp9，一个POST `/v1/internal/billing/admissions/{admission_id}/settle` 替换两个未挂载capture/release声明。只收原Run与sealed事件／修订／digest及永久key；tenant／actor来自现BFF机器上下文，无用户token／proof／新IAM许可。恢复前核原Admission的Run，原ACK带run／attempt；旧pending回执在后继结清后仍原样恢复。未知／超预算保hold，真正确认未派发才释放；不接调用方金额或usage。安全闭集只投影整Credit字符串及资金／证据引用，不暴露原evidence JSON。
+
+canonical exp9／28操作／57schema，raw SHA256 `7b5335fde2be601b2d6256cb9b68b0964d5518cfa053b50f2029358a059a0924`。正规生成；build/test-only精确逆回原exp8全图，旧target oracle及历史保护保持。曾因canonical条件交集产生generated unknown lint失败，现将等价三态约束改为互斥oneOf并正规重生成；未手改产物或放宽lint。mapper额外核状态／金额／引用一致性和整Credit精度，5项业务RED后修复；wire、Run恢复前核对与HTTP缺路由均留实际RED，setup失败另列不冒行为证明。
+
+42项实际Nest／PG结算回归覆盖capture、release、pending相邻推进、离线原ACK、错Run／跨身份、取消回滚、严格flat JSON及禁header、默认关闭／旧路径404。physical重复headers负控先用相同TCP framing成功200作正控，再核拒绝且资金零变化；非全部请求格式错误的伪通过。source／dist原进程10项亦覆盖正式settle而不触达新peer。
+
+主方停写394非文档输入无漂移，最终五阶段exit0：完整pnpm verify的格式／lint／typecheck／build／SQL／contract通过，1839 PASS／620默认资源SKIP；相关9文件真实PG281 PASS／0SKIP、source/dist10 PASS／0SKIP、fresh Prisma及正规contract生成检查通过。独立只读审查Approved，数据库库存94→94。SQL／Prisma／依赖和正常配置／资金未变；Agent／IAM具名fixture及QA价／用量只验证真实HTTP与资金事务，零实际模型／工具调用，不冒正常供应商扣分。后继固定BFF→Agent结算消费者、原唯一派发／同流真实usage与持久恢复，再验正常产品链；本地提交不等于PR合并或正常激活。
+
 ## CREDIT-1：同一admission结算应用（2026-10-22，本地应用已验）
 
 沿原Metering装配应用：事务外严格读取Agent sealed evidence，原冻结价格聚合后一次整数ceil；同一receipt→Run锁内应用capture／release／pending、原始证据head、审计及永久回执。旧pending ACK在已知相邻后继结清后仍恢复原决定；terminal ACK逐项核持久hold/source、usage数量／维度及settlement。对当前head缺原receipt拒绝损坏，不自动重建；原创建回执仍保held表示。原Metering结算实现仅提取同事务入口，不复制资金逻辑；canonical SQL仅增加一个nullable head TEXT列，Prisma已fresh正规派生。

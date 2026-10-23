@@ -1,3 +1,11 @@
+## CREDIT-1：正式sealed结算（2026-10-22，候选）
+
+唯一canonical为4.0.0-experimental.9，28 operations／57 schemas；SHA256 `7b5335fde2be601b2d6256cb9b68b0964d5518cfa053b50f2029358a059a0924`。
+新增BFF本人机器上下文的POST admissions/{admission_id}/settle，由owner决定capture／release／pending，
+删除未挂载的两个旧capture/release命令和两旧request schema，不保handler／wire alias。
+Run与原Admission先核等；strict原证据引用，原永久ACK以整Credit字符串公开，不外露evidence JSON。
+exp9→8 build/test-only逆证明完整还原原SHA，再沿既有whole-source链核不相关操作；正常尚未激活。
+
 ## 当前精确模型选价绑定候选（2026-10-22）
 
 canonical 4.0.0-experimental.8，29操作／56schema；SHA256 `2c65b64c896a85cb89e6b8f23ee9802b6e5cf2440d9a8debaa23973f5c199b6e`。Admission POST/GET 改为真实整次预算资源：BFF 完整 u1 身份、独立消费授权、六项 preparation 绑定；POST 回放原始 held，GET 当前金融状态。移除旧未实现的成本上界与复合伪状态；无运行时兼容。原 MeteringRate 的精确 model_revision、rate2/policy2 保持。选择消费可信prepared精确技术pair，同一次active rate读取得出并冻结商业映射，不接受Agent自报价目身份；无新表／服务／API／默认商业值。正常尚未激活，消费者待固定本发行。
@@ -42,13 +50,13 @@ SHA256 `9ff84d5f473e2f161f5d0c496db4cee175e2b032e836e97c7e23b9576a0af3e6`。消�
 
 ## Current machine artifact
 
-[`openapi/v1/openapi.yaml`](openapi/v1/openapi.yaml) is the only editable Billing HTTP machine source. It defines exactly 26 operations: three unversioned probes and 23 `/v1/**` internal-owner operations. The artifact version is `4.0.0-experimental.4`; package version and HTTP path version are independent. There is no `/v2` alias, fallback, or second editable contract.
+[`openapi/v1/openapi.yaml`](openapi/v1/openapi.yaml) is the only editable Billing HTTP machine source: `4.0.0-experimental.9`, exactly 28 operations / 57 schemas (three probes and 25 `/v1/**` operations). No `/v2` alias or second editable source.
 
 ```text
-openapi/v1/openapi.yaml  a09e00a3d6f602fdaff13a50a5a839c8a989b1a26ab28c43eac314738fcfdef2
+openapi/v1/openapi.yaml  7b5335fde2be601b2d6256cb9b68b0964d5518cfa053b50f2029358a059a0924
 ```
 
-The probes, canonical Catalog, two personal Credit reads, the machine-only account initialization PUT and the delegated-administrator non-cash credit-grant POST are mounted by this source candidate. The other 18 contract operations remain unimplemented and unregistered; their presence in the target artifact is not runtime-completion evidence. Historical candidate narratives and old digests remain in Git history and dated owner documentation.
+The existing probes, Catalog, personal Credit lifecycle, non-cash administrator grants and pricing configuration remain mounted. Explicit model-admission configuration adds create/get and owner-decided settle; it is not default activation. The other declared payment/execution targets remain unimplemented and unregistered. Candidate HTTP availability is not normal provider execution or actual usage acceptance evidence.
 
 ## Owner, visibility, and authority
 

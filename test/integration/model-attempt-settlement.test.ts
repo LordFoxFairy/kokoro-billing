@@ -1,3 +1,10 @@
+import { request as httpRequest } from "node:http";
+import {
+  FastifyAdapter,
+  type NestFastifyApplication,
+} from "@nestjs/platform-fastify";
+import { BillingHttpModule } from "../../src/http/billing-http.module.js";
+import type { AdmissionSettlementResponse } from "../../src/generated/billing-api/types.gen.js";
 import { createHash, randomUUID } from "node:crypto";
 import { Test, type TestingModule } from "@nestjs/testing";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -50,6 +57,7 @@ describe.skipIf(!admin)("actual model attempt settlement transaction", () => {
   });
   const command = (key = "qa-model-settlement") => ({
     admissionId: admitted.admissionId,
+    runId: e.identity.run_id,
     eventId: e.identity.event_id,
     revision: e.revision,
     digest: e.digest,
@@ -86,6 +94,78 @@ describe.skipIf(!admin)("actual model attempt settlement transaction", () => {
         ).rows.map((r) => r.fact),
       ),
     );
+  const auth = {
+    mode: "jwks" as const,
+    internalServiceSecret: "settlement-test-internal-secret-000001",
+    bffServiceToken: "settlement-test-bff-bearer-token-00001",
+    operatorProxySecret: "settlement-test-operator-secret-000001",
+    jwksUrl: "http://127.0.0.1:1/unused-jwks",
+    issuer: "https://qa.example.test/iam",
+    audience: "https://kokoro.dev/resources/billing",
+  };
+  const headers = () => ({
+    authorization: `Bearer ${auth.bffServiceToken}`,
+    "x-kokoro-service": "web-bff",
+    "x-kokoro-internal-secret": auth.internalServiceSecret,
+    "x-kokoro-tenant-id":
+      "u1." + Buffer.from("qa-tenant").toString("base64url"),
+    "x-kokoro-subject": "u1." + Buffer.from("qa-user").toString("base64url"),
+    "content-type": "application/json",
+    "idempotency-key": "http-settlement-key",
+  });
+  const path = () =>
+    `/v1/internal/billing/admissions/${admitted.admissionId}/settle`;
+  const body = () => ({
+    run_id: e.identity.run_id,
+    evidence_event_id: e.identity.event_id,
+    evidence_revision: e.revision,
+    evidence_digest: e.digest,
+  });
+  async function withHttp(
+    work: (http: NestFastifyApplication) => Promise<void>,
+    enabled = true,
+    deadline = 10000,
+  ) {
+    const module = await Test.createTestingModule({
+      imports: [
+        DatabaseModule.register({ databaseUrl: db.url }),
+        BillingHttpModule.register(
+          auth,
+          enabled
+            ? {
+                agent: {
+                  baseUrl: "http://127.0.0.1:1",
+                  machineBearerToken: "qa-reader",
+                  deadlineMs: 1000,
+                },
+                iam: {
+                  baseUrl: "http://127.0.0.1:1",
+                  machineBearerToken: "qa-iam",
+                  deadlineMs: 1000,
+                },
+                requestDeadlineMs: deadline,
+              }
+            : undefined,
+        ),
+      ],
+    })
+      .overrideProvider(ModelAdmissionService)
+      .useValue(admissions)
+      .overrideProvider(ModelAttemptSettlementService)
+      .useValue(service)
+      .compile();
+    const http = module.createNestApplication<NestFastifyApplication>(
+      new FastifyAdapter({ logger: false }),
+      { logger: false },
+    );
+    try {
+      await http.init();
+      await http.getHttpAdapter().getInstance().ready();
+      await work(http);
+    } finally {
+      await http.close();
+    }
+  }
   beforeEach(async () => {
     db = await createPrismaDatabaseFixture(assertDefined(admin));
     app = await Test.createTestingModule({
@@ -266,6 +346,8 @@ describe.skipIf(!admin)("actual model attempt settlement transaction", () => {
     const result = await service.settle(context(), command());
     expect(result).toMatchObject({
       status: "captured",
+      runId: e.identity.run_id,
+      attemptId: e.identity.attempt_id,
       capturedMicros: "1000000",
       releasedMicros: "9000000",
     });
@@ -280,6 +362,19 @@ describe.skipIf(!admin)("actual model attempt settlement transaction", () => {
     online = false;
     const before = await facts();
     expect(await service.settle(context(), command())).toEqual(result);
+    expect(await facts()).toEqual(before);
+    expect(reads).toBe(1);
+  });
+  test("wrong Run is rejected before receipt recovery, peer access or writes", async () => {
+    await service.settle(context(), command());
+    online = false;
+    const before = await facts();
+    await expect(
+      service.settle(context(), {
+        ...command("foreign-run-key"),
+        runId: "different-run",
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(await facts()).toEqual(before);
     expect(reads).toBe(1);
   });
@@ -705,6 +800,350 @@ describe.skipIf(!admin)("actual model attempt settlement transaction", () => {
       expect(await facts()).toEqual(before);
     },
   );
+  test("formal HTTP captures integer credits and recovers the same public ACK offline", async () => {
+    await withHttp(async (http) => {
+      const first = await http.inject({
+        method: "POST",
+        url: path(),
+        headers: headers(),
+        payload: body(),
+      });
+      expect(first.statusCode, first.body).toBe(200);
+      const ack = first.json<AdmissionSettlementResponse>();
+      expect(ack.data).toMatchObject({
+        admission_id: admitted.admissionId,
+        run_id: e.identity.run_id,
+        attempt_id: e.identity.attempt_id,
+        status: "captured",
+        captured_credits: "1",
+        released_credits: "9",
+        reason: null,
+      });
+      expect(Object.keys(ack.data).sort()).toEqual(
+        [
+          "admission_id",
+          "run_id",
+          "attempt_id",
+          "evidence_event_id",
+          "evidence_revision",
+          "evidence_digest",
+          "status",
+          "reason",
+          "captured_credits",
+          "released_credits",
+          "usage_event_id",
+          "settlement_id",
+          "updated_at",
+        ].sort(),
+      );
+      expect(first.headers["cache-control"]).toBe("no-store");
+      expect(await balances()).toEqual({ available: 99_000_000n, held: 0n });
+      online = false;
+      const before = await facts();
+      const replay = await http.inject({
+        method: "POST",
+        url: path(),
+        headers: headers(),
+        payload: body(),
+      });
+      expect(replay.statusCode, replay.body).toBe(200);
+      expect(replay.json()).toEqual(ack);
+      expect(await facts()).toEqual(before);
+      expect(reads).toBe(1);
+    });
+  });
+  test("formal pending ACK stays original after a known adjacent capture", async () => {
+    e.execution.outcome = "unknown";
+    update();
+    const request = body(),
+      previous = structuredClone(e);
+    await withHttp(async (http) => {
+      const pending = await http.inject({
+        method: "POST",
+        url: path(),
+        headers: headers(),
+        payload: request,
+      });
+      expect(pending.statusCode, pending.body).toBe(200);
+      expect(pending.json<AdmissionSettlementResponse>().data).toMatchObject({
+        status: "pending_reconciliation",
+        captured_credits: "0",
+        released_credits: "0",
+        reason: "unknown_usage_or_outcome",
+      });
+      e.execution.outcome = "completed";
+      e.identity.event_id = randomUUID();
+      e.revision = "2";
+      e.predecessor = {
+        event_id: previous.identity.event_id,
+        digest: previous.digest,
+      };
+      e.observed_at = "2026-10-22T00:00:00.000Z";
+      update();
+      const next = await http.inject({
+        method: "POST",
+        url: path(),
+        headers: { ...headers(), "idempotency-key": "known-http-settlement" },
+        payload: body(),
+      });
+      expect(next.statusCode, next.body).toBe(200);
+      expect(next.json<AdmissionSettlementResponse>().data.status).toBe(
+        "captured",
+      );
+      online = false;
+      const before = await facts(),
+        replay = await http.inject({
+          method: "POST",
+          url: path(),
+          headers: headers(),
+          payload: request,
+        });
+      expect(replay.statusCode, replay.body).toBe(200);
+      expect(replay.json()).toEqual(pending.json());
+      expect(await facts()).toEqual(before);
+    });
+  });
+  test("formal HTTP releases only confirmed unused admission", async () => {
+    e.execution.outcome = "not_dispatched";
+    e.execution.dispatch_started_at = null;
+    e.actual = { state: "unknown", reason: "not_observed" };
+    e.usage = {
+      state: "unresolved",
+      reason: "missing_usage",
+      raw_usage_digest: null,
+    };
+    update();
+    await withHttp(async (http) => {
+      const reply = await http.inject({
+        method: "POST",
+        url: path(),
+        headers: headers(),
+        payload: body(),
+      });
+      expect(reply.statusCode, reply.body).toBe(200);
+      expect(reply.json<AdmissionSettlementResponse>().data).toMatchObject({
+        status: "released",
+        reason: null,
+        captured_credits: "0",
+        released_credits: "10",
+        usage_event_id: null,
+        settlement_id: null,
+      });
+      expect(await balances()).toEqual({ available: 100_000_000n, held: 0n });
+      expect(await db.client.billing_usage_event.count()).toBe(0);
+    });
+  });
+  test("formal HTTP rejects malformed, ambiguous, oversized and caller-authoritative commands", async () => {
+    await withHttp(async (http) => {
+      const json = JSON.stringify(body());
+      const invalid = [
+        { ...body(), actual_micros: "1" },
+        { ...body(), tenant_id: "qa-tenant" },
+        { ...body(), status: "released" },
+        { ...body(), evidence_json: head },
+        { ...body(), evidence_revision: "9223372036854775808" },
+        { ...body(), evidence_revision: 1 },
+        null,
+        [],
+        json.replace('"run_id":', '"run_id":"bad","run_id":'),
+        json.replace('"run_id":', String.raw`"\u0072un_id":"bad","run_id":`),
+        json + "x",
+        json + " ".repeat(17000),
+        Buffer.from([0xc3, 0x28]),
+      ];
+      const before = await facts();
+      for (const payload of invalid) {
+        const reply = await http.inject({
+          method: "POST",
+          url: path(),
+          headers: headers(),
+          payload: payload === null ? "null" : payload,
+        });
+        expect(reply.statusCode, reply.body).toBe(400);
+      }
+      for (const patch of [
+        { "x-billing-execution-proof": "qa-proof" },
+        { "x-billing-consumption-token": "qa-old" },
+        {
+          "x-billing-execution-proof": "qa-proof",
+          "x-billing-consumption-token": "qa-old",
+        },
+      ]) {
+        const reply = await http.inject({
+          method: "POST",
+          url: path(),
+          headers: { ...headers(), ...patch },
+          payload: body(),
+        });
+        expect(reply.statusCode, reply.body).toBe(400);
+      }
+      expect(await facts()).toEqual(before);
+      expect(reads).toBe(0);
+    });
+  });
+  test("formal HTTP rejects foreign Run/actor and incomplete machine auth before peer work", async () => {
+    await withHttp(async (http) => {
+      const before = await facts();
+      for (const key of [
+        "authorization",
+        "x-kokoro-internal-secret",
+        "x-kokoro-service",
+        "x-kokoro-tenant-id",
+        "x-kokoro-subject",
+      ] as const) {
+        const h: Record<string, string> = { ...headers() };
+        delete h[key];
+        const reply = await http.inject({
+          method: "POST",
+          url: path(),
+          headers: h,
+          payload: body(),
+        });
+        expect(reply.statusCode, reply.body).toBe(403);
+      }
+      for (const [h, payload] of [
+        [
+          {
+            ...headers(),
+            "x-kokoro-subject":
+              "u1." + Buffer.from("other-user").toString("base64url"),
+          },
+          body(),
+        ],
+        [headers(), { ...body(), run_id: "other-run" }],
+      ] as const) {
+        const reply = await http.inject({
+          method: "POST",
+          url: path(),
+          headers: h,
+          payload,
+        });
+        expect(reply.statusCode, reply.body).toBe(403);
+      }
+      expect(await facts()).toEqual(before);
+      expect(reads).toBe(0);
+    });
+  });
+  test("real TCP duplicate critical headers and encoded route aliases are rejected without effects", async () => {
+    e.execution.outcome = "unknown";
+    update();
+    let before = await facts();
+    await withHttp(async (http) => {
+      await http.listen(0, "127.0.0.1");
+      const base = await http.getUrl();
+      const payload = JSON.stringify(body());
+      const rawHeaders = () => [
+        "host",
+        new URL(base).host,
+        "content-length",
+        String(Buffer.byteLength(payload)),
+        ...Object.entries(headers()).flat(),
+      ];
+      const send = (raw: string[]) =>
+        new Promise<number | undefined>((resolve, reject) => {
+          const request = httpRequest(
+            base + path(),
+            { method: "POST", headers: raw },
+            (response) => {
+              response.resume();
+              response.once("end", () => resolve(response.statusCode));
+              response.once("error", reject);
+            },
+          );
+          request.setTimeout(2000, () =>
+            request.destroy(new Error("Owned TCP request deadline")),
+          );
+          request.once("error", reject);
+          request.end(payload);
+        });
+      // A successful identical raw frame proves the negatives are not merely malformed HTTP.
+      expect(await send(rawHeaders())).toBe(200);
+      expect(await balances()).toEqual({
+        available: 90_000_000n,
+        held: 10_000_000n,
+      });
+      before = await facts();
+      for (const name of [
+        "authorization",
+        "x-kokoro-internal-secret",
+        "x-kokoro-service",
+        "x-kokoro-tenant-id",
+        "x-kokoro-subject",
+        "idempotency-key",
+        "content-type",
+      ] as const) {
+        const raw = rawHeaders();
+        raw.push(name, headers()[name]);
+        expect([400, 403]).toContain(await send(raw));
+      }
+      const id = admitted.admissionId;
+      for (const alias of [
+        path().replace(id, `%${id.charCodeAt(0).toString(16)}${id.slice(1)}`),
+        path().replace(id, id.toUpperCase()),
+      ]) {
+        const reply = await http.inject({
+          method: "POST",
+          url: alias,
+          headers: headers(),
+          payload: body(),
+        });
+        expect([400, 404]).toContain(reply.statusCode);
+      }
+    });
+    expect(await facts()).toEqual(before);
+    expect(reads).toBe(1);
+  });
+  test("formal HTTP deadline rolls back without clearing an unknown attempt", async () => {
+    const before = await facts();
+    await withHttp(
+      async (http) => {
+        const reply = await http.inject({
+          method: "POST",
+          url: path(),
+          headers: headers(),
+          payload: body(),
+        });
+        expect(reply.statusCode, reply.body).toBe(503);
+      },
+      true,
+      1,
+    );
+    expect(await facts()).toEqual(before);
+  });
+  test("disabled or retired command routes never settle money", async () => {
+    const before = await facts();
+    await withHttp(async (http) => {
+      const reply = await http.inject({
+        method: "POST",
+        url: path(),
+        headers: headers(),
+        payload: body(),
+      });
+      expect(reply.statusCode, reply.body).toBe(404);
+    }, false);
+    await withHttp(async (http) => {
+      for (const suffix of ["capture", "release"]) {
+        const reply = await http.inject({
+          method: "POST",
+          url: path().replace(/settle$/u, suffix),
+          headers: headers(),
+          payload: body(),
+        });
+        expect(reply.statusCode, reply.body).toBe(404);
+      }
+      for (const suffix of ["?ignored=1", "/"]) {
+        const reply = await http.inject({
+          method: "POST",
+          url: path() + suffix,
+          headers: headers(),
+          payload: body(),
+        });
+        expect([400, 404]).toContain(reply.statusCode);
+      }
+    });
+    expect(await facts()).toEqual(before);
+    expect(reads).toBe(0);
+  });
   test("audit cancellation rolls evidence, money and receipt back", async () => {
     const abort = new AbortController(),
       original = audit.append.bind(audit);

@@ -1,3 +1,25 @@
+## CREDIT-1：正式结算HTTP（2026-10-22，本地已验）
+
+基线796bfce，复用现ModelAdmissionController／CreditAccountGuard与Metering结算应用；
+唯一writer为主方。canonical exp8→9用一个POST admissions/{admission_id}/settle替换未挂载的
+capture/release两个声明，不保旧handler／schema兼容。BFF本人机器身份、internal secret及u1
+租户／主体沿既有认证；不新增用户token、proof／IAM消费许可或服务。请求只有run_id、
+evidence_event_id／evidence_revision／evidence_digest及原Idempotency-Key，禁proof和旧consumption header。
+Core command增加受信Run核对并纳原永久摘要；恢复前原Admission的Run必须相符，结果补原
+run/attempt，资金／同Run锁／先回执后事务外reader不变。已提交回执无需live Agent／IAM。
+
+Response严格data闭集：admission／run／attempt、证据event／revision／digest、status／reason、
+captured_credits／released_credits、usage_event_id／settlement_id、updated_at；整Credit字符串
+含0，不外露evidenceJSON、原价格或凭据。未知／超预算是成功保存的pending回执，不冒扣分；
+旧pending ACK不随GET当前状态变动。raw16KiB flat JSON／重复decoded key／UTF8／canonical URL、
+必需及禁用headers、deadline／中断沿现路径处理；默认未显式启用无新路由。
+
+写区：唯一OpenAPI／正规派生、build/test-only exp9→原exp8整字节逆证明及精确inventory，
+现controller／HTTP parser列表、具名settlement.input／mapper、command/result及Run绑定、
+直接contract/unit／真实Nest+PG／source-dist测试和现文档。无SQL／Prisma／依赖／正常资源修改。
+先wire与HTTP行为RED，再最小实现、正式生成、完整owner门及独立只读审查，随后固定给BFF／Agent；
+HTTP peer可用性不代替真实模型、工具或供应商扣分。沿同一16项TODO继续，无另一个任务中心。
+
 ## CREDIT-1：结算应用装配边界（2026-10-22）
 
 本轮局部actual归属profile与Agent文档ec80da5配对：verified.provider_ref／model_ref仅接受具名认证上游证据映射确认的System provider／model目录ID，逐项等于原frozen planned.provider／model，再由原revision ID/digest映射已冻结商业五元组及费率。认证映射必须绑定同attempt／最终请求／冻结revision，不能复制planned、目录存在或单独response.model自证。actual unknown、其他命名空间／raw model名／商业refs或超出该唯一允许模型者进入unknown/pending，不按planned价追认、不另选当前价。通用usage2 schema／decoder／vectors不收窄；真正producer仍待装配，未据此激活模型。

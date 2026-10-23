@@ -26,4 +26,4 @@ assertCreditAccountContract(
   creditFundingBaselineSource(meteringManagementBaselineSource(source)),
 );
 await generateAgentUsageArtifacts(root, true);
-process.stdout.write("Billing OpenAPI v1 contract is valid: 29 operations\n");
+process.stdout.write("Billing OpenAPI v1 contract is valid: 28 operations\n");
