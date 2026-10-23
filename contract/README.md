@@ -54,10 +54,10 @@ SHA256 `9ff84d5f473e2f161f5d0c496db4cee175e2b032e836e97c7e23b9576a0af3e6`。消�
 
 ## Current machine artifact
 
-[`openapi/v1/openapi.yaml`](openapi/v1/openapi.yaml) is the only editable Billing HTTP machine source: `4.0.0-experimental.9`, exactly 28 operations / 57 schemas (three probes and 25 `/v1/**` operations). No `/v2` alias or second editable source.
+[`openapi/v1/openapi.yaml`](openapi/v1/openapi.yaml) is the only editable Billing HTTP machine source: `4.0.0-experimental.10`, exactly 29 operations / 57 schemas (three probes and 26 `/v1/**` operations). No `/v2` alias or second editable source.
 
 ```text
-openapi/v1/openapi.yaml  7b5335fde2be601b2d6256cb9b68b0964d5518cfa053b50f2029358a059a0924
+openapi/v1/openapi.yaml  f3d510bbf084d0dddad91d8cfafd13caf19e23c2a97074b363e0687291e14654
 ```
 
 The existing probes, Catalog, personal Credit lifecycle, non-cash administrator grants and pricing configuration remain mounted. Explicit model-admission configuration adds create/get and owner-decided settle; it is not default activation. The other declared payment/execution targets remain unimplemented and unregistered. Candidate HTTP availability is not normal provider execution or actual usage acceptance evidence.
@@ -85,7 +85,7 @@ public contract.
 
 ## MC01-B2b exact Agent HTTP consumer
 
-The usage2 consumer receipt now fixes the read-only HTTP7.1 OpenAPI and provenance under `vendor/agent/http/v7/`, from immutable Agent `7e1e068` Git blobs. The old v6 vendor path is removed, not a runtime fallback. The existing generator emits exact sealed/prepared types and separate bounded envelope schemas. Both operations share the existing authenticated reader lifecycle; only pending/current prepared facts can be considered for a new admission. Canonical bytes, ordinary part digests, complete expected binding and arrival-time lease expiry are verified. This read is not a financial permit or hold; existing receipt recovery must not require a live prepared read. Frozen usage2 sources and the original sealed numeric/budget/knowledge semantics remain unchanged.
+The usage2 consumer receipt now fixes the read-only HTTP7.2 OpenAPI and provenance under `vendor/agent/http/v7/`, from immutable Agent `189c8ac74baa8715589cd4e7ab1a5ee79fb51f9e` Git blobs. Exact sealed-event reads include historical revisions and retain independent current-head validation; this does not grant execution permission. The old v6 vendor path is removed, not a runtime fallback. The existing generator emits exact sealed/prepared types and separate bounded envelope schemas. Both operations share the existing authenticated reader lifecycle; only pending/current prepared facts can be considered for a new admission. Canonical bytes, ordinary part digests, complete expected binding and arrival-time lease expiry are verified. This read is not a financial permit or hold; existing receipt recovery must not require a live prepared read. Frozen usage2 sources and the original sealed numeric/budget/knowledge semantics remain unchanged.
 
 ## Target per-attempt usage contract
 
@@ -101,7 +101,7 @@ Agent usage schema SHA-256: 552f0d22251837aaf4d83766c7bd91311984f707f9a42950ed53
 
 The read-only release pointer is `agent/usage/v2/consumer-pin.json`, verified by
 `pnpm contract:check` against its accepted immutable digest. It binds Agent
-commit `2d5ce12c0eecdecfcdb44a21b69da707d51eb7c7`, HTTP6, and the usage2
+commit `189c8ac74baa8715589cd4e7ab1a5ee79fb51f9e`, HTTP7.2, and the unchanged usage2
 schema/manifest/vectors. It is not a runtime reader or billing permission.
 Sealed usage1 remains Agent-owned historical evidence; it does not authorize a
 new admission or retroactive billing without an original financial snapshot.

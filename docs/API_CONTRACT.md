@@ -1,3 +1,7 @@
+## AGENT-1／CREDIT-1：固定 Agent HTTP7.2（2026-10-23）
+
+现 usage2 consumer 固定 Agent `189c8ac74baa8715589cd4e7ab1a5ee79fb51f9e` Git blobs，HTTP SHA256 `4e75244c676e02736867d2f461d18b4d67d93151ff03ffaf6e632685b77ca9db`。相同 Billing 专用 credential／GET 按原 event 读取历史 sealed 修订，Agent 独立核实际 head；Billing 仍严格核原期望身份／revision／digest、原字节和相邻修订。当前 prepared 语义不变，历史财务读取不授原 worker 补派发权。usage2 三件与既有 source 逐字相同，两份 generated envelope 仅来源标注/hash变化；Billing exp10 canonical／Schema／资金接口不变，不增兼容路由或回退。
+
 ## CREDIT-1：原预占回执恢复HTTP（2026-10-22，本地已验）
 
 新增POST /v1/internal/billing/admissions/recover；复用现机器／u1 context、AdmissionCreateRequest六事实及永久key，不要求亦不接受proof／旧consumption header。200复用AdmissionResponse且始终原held创建表示／原时间，不变成GET当前状态；404只表示此查询时未找到已提交的匹配回执，可能存在并发在途事务，不能证明未预占或许可新执行。冲突409、损坏500／依赖503沿原安全映射。无新wire schema，exp10共29操作／57schema，原exp9整图精确逆保护，正规生成。原create、settle及GET不改语义；无自动重试、用户token或兼容入口。

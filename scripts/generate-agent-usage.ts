@@ -140,7 +140,7 @@ export async function generateAgentUsageArtifacts(
         ).replaceAll('"#/components/schemas/', '"#/$defs/'),
       ) as unknown,
     };
-    const httpSchema = `// Generated from immutable Agent HTTP7.1 schema. Do not edit.\nexport const SOURCE_SHA256 = ${JSON.stringify(http.sha256)};\nexport const agentEvidenceEnvelopeSchema = ${JSON.stringify(envelopeSchema)} as const;\n`;
+    const httpSchema = `// Generated from immutable Agent HTTP7.2 schema. Do not edit.\nexport const SOURCE_SHA256 = ${JSON.stringify(http.sha256)};\nexport const agentEvidenceEnvelopeSchema = ${JSON.stringify(envelopeSchema)} as const;\n`;
     const preparedSchema = {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $ref: "#/$defs/PreparedModelCallSnapshotEnvelope",
@@ -158,7 +158,7 @@ export async function generateAgentUsageArtifacts(
         ).replaceAll('"#/components/schemas/', '"#/$defs/'),
       ) as unknown,
     };
-    const preparedHttpSchema = `// Generated from immutable Agent HTTP7.1 schema. Do not edit.\nexport const SOURCE_SHA256 = ${JSON.stringify(http.sha256)};\nexport const agentPreparedEnvelopeSchema = ${JSON.stringify(preparedSchema)} as const;\n`;
+    const preparedHttpSchema = `// Generated from immutable Agent HTTP7.2 schema. Do not edit.\nexport const SOURCE_SHA256 = ${JSON.stringify(http.sha256)};\nexport const agentPreparedEnvelopeSchema = ${JSON.stringify(preparedSchema)} as const;\n`;
     const rawSchema = `// Generated from immutable Agent usage2 schema. Do not edit.\nexport const SOURCE_SHA256 = ${JSON.stringify(AGENT_USAGE_SCHEMA_SHA256)};\nexport const agentUsageSchema = ${schema.trim()} as const;\n`;
     const files = {
       "index.ts": await readFile(join(output, "index.ts"), "utf8"),

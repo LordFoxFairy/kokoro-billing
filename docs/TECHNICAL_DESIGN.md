@@ -1,3 +1,7 @@
+## AGENT-1／CREDIT-1：固定历史 sealed reader（2026-10-23，本地已验）
+
+沿现 usage2 receipt、HTTP v7 原件和唯一生成器更新至已验 Agent HTTP7.2；从提交后的 Git blobs 固定 OpenAPI／provenance，并逐字核 usage2 三件未变。只扩展精确历史 sealed 事件读取的受控 owner 语义，独立当前 head 完整性由 Agent 保证；Billing 原六事实绑定、相邻修订、资金 receipt／预算和一次取整不变。prepared 仍仅当前 live admission，不把历史读取当新执行权。无新增 API／DTO／Schema／依赖或兼容 reader。正规生成仅更新原件来源 hash／注释，原 wire 形状必须逐值相等。验收先固定版本 RED，再 drift／篡改负控、现 evidence reader／settlement 回归及相关 owner 门；真实供应商扣分和 Agent 持久 ACK 尚待后继装配，不以此 pin 冒整链完成。
+
 ## CREDIT-1：原预算仅恢复接缝（2026-10-22，本地已验）
 
 基线deab94e，主方唯一writer。为Billing已预占但Agent未存grant／原Run失租的窗口，在现ModelAdmissionService增加recover，复用原modelAdmissionIntent、receipt.recover及#assertCommitted短事务。miss返回null，不读Agent／IAM／现在价格、不创建hold／admission／audit或receipt；hit恢复原创建表示，原key零写，沿现语义换key只追加原命令key binding，不新增资金。未知在途事务尚未提交时允许miss，不把404作为永久未预占证明、不自动新派发；原key／事实后继恢复。冲突／损坏／取消沿现错误和整体回滚；不授旧fence补grant或provider派发权。

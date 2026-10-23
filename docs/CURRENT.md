@@ -1,3 +1,27 @@
+## 2026-10-23 AGENT-1／CREDIT-1：历史 sealed reader 固定消费（本地已验）
+
+固定已提交Agent `189c8ac74baa8715589cd4e7ab1a5ee79fb51f9e` 的Git blobs：HTTP7.2 raw SHA256
+`4e75244c676e02736867d2f461d18b4d67d93151ff03ffaf6e632685b77ca9db`，provenance与usage2三件
+逐字核来源。唯一receipt SHA256 `608ec8dfd26dd49c953e46a23ac20d0b91d0ced78322816ee77b50b05bed550c`。
+原生成器正式生成，两份envelope仅注释及SOURCE_SHA256变化，wire／DTO形状不变；原reader／
+binder／金融事务／整数取整／Billing exp10 canonical／SQL／Prisma／依赖无diff。精确历史读取
+独立核当前head、不授执行权；prepared仍原当前live语义，无兼容reader或新服务。
+
+先新版本消费RED（实际7.1≠7.2），后89项consumer／drift／负控通过。新整图逆证明首轮fixture
+用JS重序列化，因int64精度与整数response key顺序改变失败；现只逆转两个已批准raw编辑，
+仍核同一个完整7.1原SHA，没有放宽hash或舍弃其余字段。早期一次多余tsx eval顶层await及
+仓外wrapper相对路径调用错误均非业务RED，后者未进入门禁；正式CLI／绝对路径后通过。
+
+398非文档输入停写且无漂移，完整pnpm verify全0（格式／lint／typecheck／build／SQL／contract；
+默认1842 PASS／628原资源SKIP），相关真实隔离PG结算42 PASS／0SKIP，正规生成drift检查0。
+此片无Schema或runtime更改，未重跑fresh Prisma／source-dist及不相关真实资源套件；不把默认
+SKIP称真实通过。自有库库存94→94，未改正常资源、资金或发送真实模型／工具调用。
+独立只读审查Approved，原件／wire／原strict pin及取整均核同；当前README旧pin已同步。
+
+后继Agent消费BFF internal1.3、独立金融关联／逐事件持久ACK与崩溃恢复、原唯一派发和同流
+真实usage仍待装配，再正常页面／后台端到端验收及集中PR merge。本片尚未正常激活／PR合并，
+不是实际供应商费用、扣分或整目标完成证明；真钱支付仍后置。
+
 ## CREDIT-1：原预算仅恢复HTTP已本地验收（2026-10-22）
 
 沿原ModelAdmissionService将首次短事务receipt恢复提取供create／recover共享；原首次预占仍需live proof与Agent／IAM，recover只核已提交原receipt及#assertCommitted，零peer／价格请求。miss零hold／admission／audit／receipt／alias；命中原key零写、换key仅沿既有receipt绑定alias，损坏／取消全事务回滚。不授旧fence补grant或派发权，不伪造proof；为后继Agent保存历史金融关联提供入口，而非宣称完整崩溃恢复已装配。
