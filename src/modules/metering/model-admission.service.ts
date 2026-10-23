@@ -56,17 +56,7 @@ export class ModelAdmissionService {
     };
     try {
       checkCancelled();
-      const previous = await this.transactions.runRoot(scope, async () => {
-        const found = await this.receipts.recover(
-          receipt,
-          modelAdmissionResultCodec,
-        );
-        checkCancelled();
-        if (found === null) return null;
-        await this.#assertCommitted(found.value, intent);
-        checkCancelled();
-        return found.value;
-      });
+      const previous = await this.#recoverCommitted(intent);
       checkCancelled();
       if (previous !== null) return previous;
       // Existing results above survive peer/proof expiry. New reservations require fresh owner checks.
@@ -268,6 +258,54 @@ export class ModelAdmissionService {
         error instanceof MeteringError
       )
         throw error;
+      throw new ModelAdmissionError("UNAVAILABLE");
+    }
+  }
+  /** Only a committed original reservation; a miss never invokes peers or creates financial facts. */
+  async recover(
+    context: ModelAdmissionContext,
+    command: ModelAdmissionCommand,
+  ): Promise<ModelAdmissionResult | null> {
+    return this.#recoverCommitted(modelAdmissionIntent(context, command));
+  }
+  async #recoverCommitted(
+    intent: ReturnType<typeof modelAdmissionIntent>,
+  ): Promise<ModelAdmissionResult | null> {
+    const { receipt, context } = intent;
+    const check = () => {
+      if (context.signal.aborted) throw new ModelAdmissionError("ABORTED");
+    };
+    try {
+      check();
+      const result = await this.transactions.runRoot(
+        {
+          tenantId: context.tenantId,
+          actorId: context.actorId,
+          operation: "model.admit",
+          mode: "write",
+        },
+        async () => {
+          const found = await this.receipts.recover(
+            receipt,
+            modelAdmissionResultCodec,
+          );
+          check();
+          if (found === null) return null;
+          await this.#assertCommitted(found.value, intent);
+          check();
+          return found.value;
+        },
+      );
+      check();
+      return result;
+    } catch (error) {
+      if (error instanceof CommandReceiptError)
+        throw new ModelAdmissionError(
+          error.code === "COMMAND_IDEMPOTENCY_CONFLICT"
+            ? "CONFLICT"
+            : "CORRUPT",
+        );
+      if (error instanceof ModelAdmissionError) throw error;
       throw new ModelAdmissionError("UNAVAILABLE");
     }
   }

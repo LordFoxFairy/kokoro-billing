@@ -363,6 +363,33 @@ describe.skipIf(!admin)("actual model attempt settlement transaction", () => {
     const before = await facts();
     expect(await service.settle(context(), command())).toEqual(result);
     expect(await facts()).toEqual(before);
+    const row = await db.client.billing_admission.findFirstOrThrow();
+    await withHttp(async (http) => {
+      const result = await http.inject({
+        method: "POST",
+        url: "/v1/internal/billing/admissions/recover",
+        headers: { ...headers(), "idempotency-key": "qa-admission-key" },
+        payload: {
+          run_id: row.run_id,
+          attempt_id: row.attempt_id,
+          request_ref: row.request_ref,
+          attempt_binding_digest: row.attempt_binding_digest,
+          planned_digest: row.planned_digest,
+          final_request_digest: row.final_request_digest,
+        },
+      });
+      expect(result.statusCode).toBe(200);
+      expect(result.json()).toMatchObject({
+        data: {
+          admission_id: admitted.admissionId,
+          status: "held",
+          budget_credits: "10",
+          created_at: admitted.createdAt,
+          updated_at: admitted.createdAt,
+        },
+      });
+    });
+    expect(await facts()).toEqual(before);
     expect(reads).toBe(1);
   });
   test("wrong Run is rejected before receipt recovery, peer access or writes", async () => {

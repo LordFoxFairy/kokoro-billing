@@ -1,3 +1,7 @@
+## 2026-10-22 原预算仅恢复发行
+
+当前canonical exp10／29操作／57schema，raw SHA256 `f3d510bbf084d0dddad91d8cfafd13caf19e23c2a97074b363e0687291e14654`。唯一新增POST admissions/recover复用AdmissionCreateRequest／AdmissionResponse，不建新wire schema；显式只恢复已提交原命令，不收proof、旧consumption header或自报payer／金额，miss不新预占／回执／alias。200原held创建ACK，404仅当前查询未找到，绝不证明在途create已取消或允许新派发。正式生成及exp10→完整exp9整字节逆证明保持历史全图；BFF／Agent须后继固定正式commit原件，不能与仍固定exp9的正常候选混用。本片不改SQL／Prisma／依赖／正常配置资金。实际门和恢复窗口边界见CURRENT首节。
+
 ## CREDIT-1：正式sealed结算（2026-10-22，候选）
 
 唯一canonical为4.0.0-experimental.9，28 operations／57 schemas；SHA256 `7b5335fde2be601b2d6256cb9b68b0964d5518cfa053b50f2029358a059a0924`。

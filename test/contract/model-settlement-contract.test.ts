@@ -95,7 +95,7 @@ describe("owner-decided model settlement wire", () => {
   });
 
   test("publishes one BFF-only settlement, retiring both caller-decided commands", () => {
-    expect(doc.info.version).toBe("4.0.0-experimental.9");
+    expect(doc.info.version).toBe("4.0.0-experimental.10");
     const op =
       doc.paths["/v1/internal/billing/admissions/{admission_id}/settle"]?.post;
     expect(op?.operationId).toBe("settleModelAdmission");

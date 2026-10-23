@@ -1,3 +1,4 @@
+import { readModelAdmissionRecoveryInput } from "./model-admission-recovery.input.js";
 import { ModelAttemptSettlementService } from "./model-attempt-settlement.service.js";
 import { readModelSettlementInput } from "./model-settlement.input.js";
 import { mapModelSettlement } from "./model-settlement.mapper.js";
@@ -26,7 +27,10 @@ import {
   modelAdmissionContext,
   modelAdmissionPath,
 } from "./model-admission.input.js";
-import { mapModelAdmission } from "./model-admission.mapper.js";
+import {
+  mapModelAdmission,
+  mapModelAdmissionCreation,
+} from "./model-admission.mapper.js";
 @Controller("v1/internal/billing/admissions")
 @UseGuards(CreditAccountGuard)
 export class ModelAdmissionController {
@@ -75,16 +79,27 @@ export class ModelAdmissionController {
         input.command,
         input.executionProof,
       );
-      const response = mapModelAdmission({
-        ...result,
-        attemptBindingDigest: input.command.attemptBindingDigest,
-        plannedDigest: input.command.plannedDigest,
-        finalRequestDigest: input.command.finalRequestDigest,
-        status: "held",
-        updatedAt: result.createdAt,
-      });
+      const response = mapModelAdmissionCreation(result, input.command);
       this.schemas.assert("AdmissionResponse", response);
       reply.header("location", `${modelAdmissionPath}/${result.admissionId}`);
+      return response;
+    });
+  }
+  @Post("recover")
+  @HttpCode(200)
+  async recover(
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    const command = readModelAdmissionRecoveryInput(request, this.schemas);
+    return this.scoped(request, reply, async (signal) => {
+      const result = await this.service.recover(
+        modelAdmissionContext(request, signal),
+        command,
+      );
+      if (result === null) throw new NotFoundException();
+      const response = mapModelAdmissionCreation(result, command);
+      this.schemas.assert("AdmissionResponse", response);
       return response;
     });
   }

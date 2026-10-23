@@ -1,5 +1,9 @@
 import type { AdmissionResponse } from "../../generated/billing-api/types.gen.js";
-import type { ModelAdmissionView } from "./model-admission.types.js";
+import type {
+  ModelAdmissionResult,
+  ModelAdmissionCommand,
+  ModelAdmissionView,
+} from "./model-admission.types.js";
 export function mapModelAdmission(
   value: ModelAdmissionView,
 ): AdmissionResponse {
@@ -20,4 +24,19 @@ export function mapModelAdmission(
       updated_at: value.updatedAt,
     },
   };
+}
+
+/** Original creation receipt, never the current read state. */
+export function mapModelAdmissionCreation(
+  value: ModelAdmissionResult,
+  command: ModelAdmissionCommand,
+): AdmissionResponse {
+  return mapModelAdmission({
+    ...value,
+    attemptBindingDigest: command.attemptBindingDigest,
+    plannedDigest: command.plannedDigest,
+    finalRequestDigest: command.finalRequestDigest,
+    status: "held",
+    updatedAt: value.createdAt,
+  });
 }

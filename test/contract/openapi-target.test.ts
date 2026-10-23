@@ -1935,7 +1935,7 @@ describe("R67 generated schema semantics and provenance", () => {
       );
     }
     const provenance = validProvenance();
-    expect(provenance.source.version).toBe("4.0.0-experimental.9");
+    expect(provenance.source.version).toBe("4.0.0-experimental.10");
     expect(provenance.source.sha256).toBe(
       createHash("sha256").update(sourceText).digest("hex"),
     );

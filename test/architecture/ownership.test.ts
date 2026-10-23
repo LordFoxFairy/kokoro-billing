@@ -109,6 +109,10 @@ const operationGovernance: Readonly<
     idempotency: "required",
     permission: "web-bff-model-admission",
   },
+  "post /v1/internal/billing/admissions/recover": {
+    idempotency: "required",
+    permission: "web-bff-model-admission",
+  },
   "get /v1/internal/billing/admissions/{admission_id}": {
     idempotency: "read-only",
     permission: "web-bff-model-admission",
@@ -238,7 +242,7 @@ describe("billing ownership architecture", () => {
     expect([...actualOperations].sort()).toEqual(
       Object.keys(operationGovernance).sort(),
     );
-    expect(operationCount).toBe(28);
+    expect(operationCount).toBe(29);
   });
 
   it("binds contract governance documentation to the current OpenAPI digest", async () => {

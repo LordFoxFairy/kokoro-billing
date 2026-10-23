@@ -42,7 +42,7 @@ const admission = {
 };
 describe("current whole-budget model admission HTTP contract", () => {
   test("publishes the original two operation IDs with complete BFF-only u1 context", () => {
-    expect(document.info.version).toBe("4.0.0-experimental.9");
+    expect(document.info.version).toBe("4.0.0-experimental.10");
     for (const [path, method, id] of [
       ["/v1/internal/billing/admissions", "post", "createAdmission"],
       ["/v1/internal/billing/admissions/{admission_id}", "get", "getAdmission"],

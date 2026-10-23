@@ -1,3 +1,7 @@
+## CREDIT-1：原预占回执恢复HTTP（2026-10-22，本地已验）
+
+新增POST /v1/internal/billing/admissions/recover；复用现机器／u1 context、AdmissionCreateRequest六事实及永久key，不要求亦不接受proof／旧consumption header。200复用AdmissionResponse且始终原held创建表示／原时间，不变成GET当前状态；404只表示此查询时未找到已提交的匹配回执，可能存在并发在途事务，不能证明未预占或许可新执行。冲突409、损坏500／依赖503沿原安全映射。无新wire schema，exp10共29操作／57schema，原exp9整图精确逆保护，正规生成。原create、settle及GET不改语义；无自动重试、用户token或兼容入口。
+
 ## CREDIT-1：正式结算HTTP（2026-10-22，本地已验）
 
 基线796bfce，复用现ModelAdmissionController／CreditAccountGuard与Metering结算应用；

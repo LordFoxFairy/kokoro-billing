@@ -583,6 +583,37 @@ describe.skipIf(admin === undefined)(
             signal: AbortSignal.timeout(2000),
           });
           expect(amount.status).toBe(400);
+          const recovery = {
+            run_id: "runtime-admission-run",
+            attempt_id: randomUUID(),
+            request_ref: "runtime-admission-request",
+            attempt_binding_digest: "a".repeat(64),
+            planned_digest: "b".repeat(64),
+            final_request_digest: "c".repeat(64),
+          };
+          const missing = await fetch(
+            base + "/v1/internal/billing/admissions/recover",
+            {
+              method: "POST",
+              headers: settlementHeaders,
+              body: JSON.stringify(recovery),
+              signal: AbortSignal.timeout(2000),
+            },
+          );
+          expect(missing.status).toBe(404);
+          expect(await missing.json()).toMatchObject({
+            error: { code: "billing.not_found", retryable: false },
+          });
+          const forged = await fetch(
+            base + "/v1/internal/billing/admissions/recover",
+            {
+              method: "POST",
+              headers: settlementHeaders,
+              body: JSON.stringify({ ...recovery, budget_credits: "1" }),
+              signal: AbortSignal.timeout(2000),
+            },
+          );
+          expect(forged.status).toBe(400);
           expect(calls).toBe(1); // settlement neither reacquires consumption permission nor reads an unknown attempt.
           for (const table of [
             "billing_admission",

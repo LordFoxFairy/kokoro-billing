@@ -1,3 +1,15 @@
+## CREDIT-1：原预算仅恢复HTTP已本地验收（2026-10-22）
+
+沿原ModelAdmissionService将首次短事务receipt恢复提取供create／recover共享；原首次预占仍需live proof与Agent／IAM，recover只核已提交原receipt及#assertCommitted，零peer／价格请求。miss零hold／admission／audit／receipt／alias；命中原key零写、换key仅沿既有receipt绑定alias，损坏／取消全事务回滚。不授旧fence补grant或派发权，不伪造proof；为后继Agent保存历史金融关联提供入口，而非宣称完整崩溃恢复已装配。
+
+canonical exp10／29操作／57schema，raw SHA256 `f3d510bbf084d0dddad91d8cfafd13caf19e23c2a97074b363e0687291e14654`；仅新增POST admissions/recover，复用原六字段request与原AdmissionResponse，机器／u1Guard、strict flat16KiB、canonical URL／唯一key和content-type，禁proof与旧consumption header。200始终原held创建ACK／原时间，含capture后；404只表示此锁定观察点无已提交回执，不证明在途create已取消或可换attempt派发。唯一新增op完整逆回原exp9 SHA7b5335fd，原历史inverse和target保护保持，正规生成，无新editable DTO、SQL／Prisma／依赖或服务。
+
+实际RED：2缺recover方法／28原回归PASS；2缺HTTP路由／32其余PASS。首次service green一项跨actor测试误以原tenant-wide key会miss，实际既有actor-bound payload校验CONFLICT；现明确断言拒绝且零钱／peer，不改生产命名空间。36项actual PG／Nest原预算回归现含外部取证阶段recover miss→原create后提交→唯一hold恢复、原资金事务锁内并发恢复、alias触发器阻塞后取消回滚、坏快照不修复、默认关闭和同帧TCP正控后物理重复header拒绝。原settlement capture案例另实测recover仍原heldACK且11表事实零变化；source/dist两正式进程均验recover404／自报金额400且零额外peer。
+
+主方停写397非文档输入无漂移，最终五阶段exit0：完整verify的格式／lint／typecheck／build／SQL／contract通过，默认1841 PASS／628资源SKIP；相关9文件真实PG289 PASS／0SKIP、source/dist10 PASS／0SKIP、fresh Prisma及正规生成检查通过，库94→94，独立只读Approved。80项定向（含36预算／42结算／2契约）通过。首完整门在新HTTP测试fixture的unknown payload类型失败，原冻结／失败保留；只收窄为原wireCommand推导类型后新冻结完整重验，不改业务／断言／门禁。早期在追加exp10完整逆证明前生成被旧raw保护拒绝亦保留，不跳过原保护。
+
+Root＋12子仓非递归fetch全成功，main无新增；正常配置／服务／余额与资金不动，零实际模型／工具请求。BFF目前仍固定exp9，后继固定本次正式commit，再由Agent仅恢复原预占并独立保金融关联／逐事件ACK；不改历史requested_unknown为granted。相邻sealed revision恢复采用正式历史事实读取及顺序通知的既有owner接缝继续收敛，不借Chat outbox或新服务；运行装配、真实产品整链与集中PR／正常激活仍待，真钱支付不做。
+
 ## CREDIT-1：正式结算HTTP（2026-10-22，本地已验）
 
 沿现ModelAdmissionController／CreditAccountGuard发布exp9，一个POST `/v1/internal/billing/admissions/{admission_id}/settle` 替换两个未挂载capture/release声明。只收原Run与sealed事件／修订／digest及永久key；tenant／actor来自现BFF机器上下文，无用户token／proof／新IAM许可。恢复前核原Admission的Run，原ACK带run／attempt；旧pending回执在后继结清后仍原样恢复。未知／超预算保hold，真正确认未派发才释放；不接调用方金额或usage。安全闭集只投影整Credit字符串及资金／证据引用，不暴露原evidence JSON。

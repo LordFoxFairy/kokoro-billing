@@ -1,3 +1,7 @@
+## CREDIT-1：仅恢复命令无新资金事实（2026-10-22）
+
+无SQL／Prisma／迁移或新表。原命令identity／digest／receipt及key复用；miss不创建任何receipt、alias、hold、账本或audit，hit原key零写，命中换key只沿原receipt永久绑定别名。原#assertCommitted重核不可变admission／hold／payer／精确价快照，损坏拒绝且新alias回滚，不修复坏数据。恢复得到历史admission ID不修改Agent执行授权／旧lease或授新派发权，Agent须另持久记录金融关联。
+
 ## CREDIT-1：正式结算HTTP（2026-10-22，本地已验）
 
 本片不改SQL／Prisma。新model.settle命令首次对外发布前在既有永久摘要中增加run_id，

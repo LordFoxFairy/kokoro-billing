@@ -45,20 +45,23 @@ export function readModelAdmissionInput(
     !schemas.acceptsRequest("AdmissionCreateRequest", request.body)
   )
     throw new BadRequestException();
-  const b = request.body as AdmissionCreateRequest;
   return {
-    command: {
-      runId: b.run_id,
-      attemptId: b.attempt_id,
-      requestRef: b.request_ref,
-      attemptBindingDigest: b.attempt_binding_digest,
-      plannedDigest: b.planned_digest,
-      finalRequestDigest: b.final_request_digest,
-      idempotencyKey: key,
-    },
+    command: modelAdmissionCommand(request.body as AdmissionCreateRequest, key),
     executionProof: proof,
   };
 }
+export function modelAdmissionCommand(b: AdmissionCreateRequest, key: string) {
+  return {
+    runId: b.run_id,
+    attemptId: b.attempt_id,
+    requestRef: b.request_ref,
+    attemptBindingDigest: b.attempt_binding_digest,
+    plannedDigest: b.planned_digest,
+    finalRequestDigest: b.final_request_digest,
+    idempotencyKey: key,
+  };
+}
+
 export function readModelAdmissionId(request: FastifyRequest): string {
   const id = (request.params as { admission_id?: unknown }).admission_id;
   const length = request.headers["content-length"];

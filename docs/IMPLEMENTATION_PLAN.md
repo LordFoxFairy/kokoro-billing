@@ -1,3 +1,10 @@
+## CREDIT-1：失租后的原预算仅恢复（2026-10-22）
+
+- [x] 现service共享原receipt恢复、miss零写／hit原ACK及冲突／坏数据／取消RED→GREEN。
+- [x] exp10唯一recover HTTP、默认关闭、strict body/headers、整exp9逆保护及正规生成。
+- [x] 真实PG／HTTP／source-dist、停写完整owner门与独立只读审查后提交，供BFF／Agent固定。
+- [ ] 后继金融关联／逐事件ACK和相邻sealed恢复、唯一派发与正常真实产品链，真钱支付不做。
+
 ## CREDIT-1：正式结算HTTP（2026-10-22）
 
 - [x] exp9原位发布28操作／57schema，旧capture/release声明退役、整字节逆证明及正规生成。

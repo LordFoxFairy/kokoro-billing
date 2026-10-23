@@ -75,6 +75,7 @@ export class BillingHttpModule implements NestModule {
           [
             "/v1/admin/billing/credit-grants",
             "/v1/internal/billing/admissions",
+            "/v1/internal/billing/admissions/recover",
             "/v1/internal/billing/admissions/:admission_id/settle",
           ].includes(request.routeOptions.url ?? "")
         ) {

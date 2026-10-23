@@ -1,3 +1,11 @@
+## CREDIT-1：原预算仅恢复接缝（2026-10-22，本地已验）
+
+基线deab94e，主方唯一writer。为Billing已预占但Agent未存grant／原Run失租的窗口，在现ModelAdmissionService增加recover，复用原modelAdmissionIntent、receipt.recover及#assertCommitted短事务。miss返回null，不读Agent／IAM／现在价格、不创建hold／admission／audit或receipt；hit恢复原创建表示，原key零写，沿现语义换key只追加原命令key binding，不新增资金。未知在途事务尚未提交时允许miss，不把404作为永久未预占证明、不自动新派发；原key／事实后继恢复。冲突／损坏／取消沿现错误和整体回滚；不授旧fence补grant或provider派发权。
+
+正式exp10只新增POST /v1/internal/billing/admissions/recover，仍现Controller／CreditAccountGuard与deadline。原BFF机器身份及u1租户／用户，body复用六事实AdmissionCreateRequest、必需原永久key，明确禁止proof和旧consumption header。200原held ACK，404无已提交原receipt；现create首次proof要求不改。仅抽取原初始恢复代码供create／recover共享，不建第二命令／幂等表；GET已知ID仍原义。默认未显式启用不增加路由，strict flat16KiB／原URL及header cardinality不放宽。
+
+写区：当前service／input／controller／HTTP parser路径、唯一canonical和正规生成、build/test-only exp10→完整exp9逆证明、直接contract与真实PG／HTTP／source-dist及现文档。无SQL／Prisma／依赖／服务／正常配置资金变化；恢复不是真实模型验收。后继BFF／Agent固定正式原件后消费，与逐事件ACK／相邻evidence恢复一起闭合后才装配实际执行。沿Root原16项，不新增任务中心。
+
 ## CREDIT-1：正式结算HTTP（2026-10-22，本地已验）
 
 基线796bfce，复用现ModelAdmissionController／CreditAccountGuard与Metering结算应用；

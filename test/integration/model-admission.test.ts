@@ -4,7 +4,7 @@ import {
 } from "@nestjs/platform-fastify";
 import { BillingHttpModule } from "../../src/http/billing-http.module.js";
 import { createHash, randomUUID } from "node:crypto";
-import { createServer, type Server } from "node:http";
+import { createServer, request as rawRequest, type Server } from "node:http";
 import { once } from "node:events";
 import { Test, type TestingModule } from "@nestjs/testing";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
@@ -61,6 +61,7 @@ describe.skipIf(admin === undefined)(
       expiry: string;
     let authorizationExpiry: string;
     let waitForDisconnect = false;
+    let pausePrepared: ((reply: () => void) => void) | undefined;
     let makeReply: (requestId: string) => object;
     let decisionRunId: string, decisionDigest: string;
     let decisionDelta: Record<string, unknown>, iamRequests: unknown[];
@@ -180,6 +181,7 @@ describe.skipIf(admin === undefined)(
       expiry = new Date(Date.now() + 60000).toISOString();
       authorizationExpiry = expiry;
       waitForDisconnect = false;
+      pausePrepared = undefined;
       server = createServer((request, response) => {
         if (!peerEnabled) {
           response.writeHead(503);
@@ -189,13 +191,17 @@ describe.skipIf(admin === undefined)(
         if (request.method === "GET") {
           agentCalls++;
           if (waitForDisconnect) return;
-          const body = makeReply(String(request.headers["x-request-id"]));
-          response.writeHead(200, {
-            "content-type": "application/json",
-            "cache-control": "no-store",
-            "x-request-id": String(request.headers["x-request-id"]),
-          });
-          response.end(JSON.stringify(body));
+          const reply = () => {
+            const body = makeReply(String(request.headers["x-request-id"]));
+            response.writeHead(200, {
+              "content-type": "application/json",
+              "cache-control": "no-store",
+              "x-request-id": String(request.headers["x-request-id"]),
+            });
+            response.end(JSON.stringify(body));
+          };
+          if (pausePrepared) pausePrepared(reply);
+          else reply();
         } else {
           iamCalls++;
           let raw = "";
@@ -499,6 +505,348 @@ describe.skipIf(admin === undefined)(
           "expired-proof",
         ),
       ).rejects.toMatchObject({ code: "CONFLICT" });
+    });
+    test("recover-only miss with both peers offline creates no financial or command facts", async () => {
+      peerEnabled = false;
+      const input = command();
+      const before = await funds();
+      const f = assertDefined(fixture);
+      const keys = await f.client.billing_command_key_binding.count();
+      const receipts = await f.client.billing_command_receipt.count();
+      expect(await service.recover(context(), input)).toBeNull();
+      expect(await funds()).toEqual(before);
+      expect(await f.client.billing_command_key_binding.count()).toBe(keys);
+      expect(await f.client.billing_command_receipt.count()).toBe(receipts);
+      expect(agentCalls).toBe(0);
+      expect(iamCalls).toBe(0);
+    });
+    test("recover-only survives peer expiry without a proof and cannot create a second reservation or repair corruption", async () => {
+      const input = command();
+      const original = await create(input);
+      peerEnabled = false;
+      const before = await funds();
+      const f = assertDefined(fixture);
+      const keys = await f.client.billing_command_key_binding.count();
+      expect(await service.recover(context(), input)).toEqual(original);
+      expect(await f.client.billing_command_key_binding.count()).toBe(keys);
+      expect(
+        await service.recover(context(), {
+          ...input,
+          idempotencyKey: "only-recovery-new-key",
+        }),
+      ).toEqual(original);
+      expect(await f.client.billing_command_key_binding.count()).toBe(keys + 1);
+      expect(await funds()).toEqual(before);
+      // The existing tenant-wide command key conflicts when actor-bound payload differs; no other user's receipt is returned.
+      await expect(
+        service.recover({ ...context(), actorId: "other-user" }, input),
+      ).rejects.toMatchObject({ code: "CONFLICT" });
+      expect(
+        await service.recover({ ...context(), tenantId: "foreign" }, input),
+      ).toBeNull();
+      await expect(
+        service.recover(context(), {
+          ...input,
+          finalRequestDigest: "f".repeat(64),
+        }),
+      ).rejects.toMatchObject({ code: "CONFLICT" });
+      expect(agentCalls).toBe(1);
+      expect(iamCalls).toBe(1);
+      await f.client.billing_admission.update({
+        where: { id: original.admissionId },
+        data: { pricing_snapshot_digest: "0".repeat(64) },
+      });
+      const afterCorrupt = await funds();
+      await expect(
+        service.recover(context(), {
+          ...input,
+          idempotencyKey: "corrupt-recovery-key",
+        }),
+      ).rejects.toMatchObject({ code: "CORRUPT" });
+      expect(await f.client.billing_command_key_binding.count()).toBe(keys + 1);
+      expect(await funds()).toEqual(afterCorrupt);
+    });
+    test("a recover miss before the original create enters its transaction is not a durable cancellation", async () => {
+      const input = command();
+      let resume: (() => void) | undefined;
+      let entered: (() => void) | undefined;
+      const arrived = new Promise<void>((r) => {
+        entered = r;
+      });
+      pausePrepared = (reply) => {
+        resume = reply;
+        entered?.();
+      };
+      const before = await funds();
+      const pending = create(input).then(
+        (value) => ({ value, error: undefined }),
+        (error: unknown) => ({ value: undefined, error }),
+      );
+      try {
+        await Promise.race([
+          arrived,
+          new Promise((_, reject) =>
+            setTimeout(
+              () => reject(new Error("prepared peer not entered")),
+              1000,
+            ),
+          ),
+        ]);
+        expect(await service.recover(context(), input)).toBeNull();
+        expect(await funds()).toEqual(before);
+      } finally {
+        resume?.();
+      }
+      const created = await pending;
+      expect(created.error).toBeUndefined();
+      expect(created.value).toBeDefined();
+      peerEnabled = false;
+      expect(await service.recover(context(), input)).toEqual(created.value);
+      expect((await funds()).holds).toHaveLength(1);
+    });
+    test("cancelling an alias recovery while its insert is blocked rolls back the alias and preserves the original funds", async () => {
+      const input = command();
+      await create(input);
+      peerEnabled = false;
+      const f = assertDefined(fixture),
+        before = await funds();
+      const keys = await f.client.billing_command_key_binding.count(),
+        controller = new AbortController();
+      await f.pool.query(
+        `CREATE FUNCTION recovery_alias_wait() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.idempotency_key='cancelled-recovery-key' THEN PERFORM pg_advisory_xact_lock(987145); END IF; RETURN NEW; END $$`,
+      );
+      await f.pool.query(
+        "CREATE TRIGGER recovery_alias_wait BEFORE INSERT ON billing_command_key_binding FOR EACH ROW EXECUTE FUNCTION recovery_alias_wait()",
+      );
+      const blocker = await f.pool.connect();
+      await blocker.query("SELECT pg_advisory_lock(987145)");
+      const pending = service
+        .recover(
+          { ...context(), signal: controller.signal },
+          { ...input, idempotencyKey: "cancelled-recovery-key" },
+        )
+        .then(
+          (value) => ({ value, error: undefined }),
+          (error: unknown) => ({ value: undefined, error }),
+        );
+      let blocked = false;
+      try {
+        const end = Date.now() + 1000;
+        while (Date.now() < end) {
+          const r = await f.pool.query<{ n: number }>(
+            "SELECT count(*)::int AS n FROM pg_locks WHERE locktype='advisory' AND objid=987145 AND NOT granted AND database=(SELECT oid FROM pg_database WHERE datname=current_database())",
+          );
+          if (Number(r.rows[0]?.n) > 0) {
+            blocked = true;
+            break;
+          }
+          await new Promise((r) => setTimeout(r, 5));
+        }
+        controller.abort();
+      } finally {
+        await blocker.query("SELECT pg_advisory_unlock(987145)");
+        blocker.release();
+      }
+      const result = await pending;
+      expect(blocked).toBe(true);
+      expect(result.error).toMatchObject({ code: "ABORTED" });
+      expect(await funds()).toEqual(before);
+      expect(await f.client.billing_command_key_binding.count()).toBe(keys);
+    });
+    test("formal recover HTTP is proof-free, never creates a missing reservation and returns the original receipt offline", async () => {
+      const input = command();
+      const headers = wireHeaders();
+      delete (headers as Record<string, unknown>)["x-billing-execution-proof"];
+      await withHttp(async (http) => {
+        const path = "/v1/internal/billing/admissions/recover",
+          inject = (payload = wireCommand(input)) =>
+            http.inject({ method: "POST", url: path, headers, payload });
+        peerEnabled = false;
+        const before = await funds();
+        const missing = await inject();
+        expect(missing.statusCode).toBe(404);
+        expect(await funds()).toEqual(before);
+        expect(agentCalls).toBe(0);
+        expect(iamCalls).toBe(0);
+        peerEnabled = true;
+        const original = await create(input);
+        peerEnabled = false;
+        const fundsBefore = await funds();
+        const recovered = await inject();
+        expect(recovered.statusCode).toBe(200);
+        expect(recovered.json()).toMatchObject({
+          data: {
+            admission_id: original.admissionId,
+            run_id: input.runId,
+            attempt_id: input.attemptId,
+            status: "held",
+            created_at: original.createdAt,
+            updated_at: original.createdAt,
+          },
+        });
+        expect(await funds()).toEqual(fundsBefore);
+        expect(agentCalls).toBe(1);
+        expect(iamCalls).toBe(1);
+        const again = await inject();
+        expect(again.json()).toEqual(recovered.json());
+        expect(again.headers["cache-control"]).toBe("no-store");
+        expect(await funds()).toEqual(fundsBefore);
+      });
+    });
+    test("recover HTTP rejects proof and caller-controlled identity or financial input before any peer or money", async () => {
+      const input = command();
+      const headers = wireHeaders();
+      delete (headers as Record<string, unknown>)["x-billing-execution-proof"];
+      await withHttp(async (http) => {
+        const before = await funds(),
+          path = "/v1/internal/billing/admissions/recover";
+        for (const payload of [
+          { ...wireCommand(input), user_id: "victim" },
+          { ...wireCommand(input), budget_credits: "1" },
+          '{"run_id":"one","run_id":"two"}',
+          "\ufeff" + JSON.stringify(wireCommand(input)),
+        ])
+          expect(
+            (await http.inject({ method: "POST", url: path, headers, payload }))
+              .statusCode,
+          ).toBe(400);
+        for (const key of [
+          "x-billing-execution-proof",
+          "x-billing-consumption-token",
+        ])
+          expect(
+            (
+              await http.inject({
+                method: "POST",
+                url: path,
+                headers: { ...headers, [key]: "forbidden" },
+                payload: wireCommand(input),
+              })
+            ).statusCode,
+          ).toBe(400);
+        for (const url of [
+          path + "?alias=1",
+          path + "/",
+          path.replace("recover", "%72ecover"),
+        ])
+          expect([400, 404]).toContain(
+            (
+              await http.inject({
+                method: "POST",
+                url,
+                headers,
+                payload: wireCommand(input),
+              })
+            ).statusCode,
+          );
+        expect(await funds()).toEqual(before);
+        expect(agentCalls).toBe(0);
+        expect(iamCalls).toBe(0);
+      });
+    });
+    test("recovery waits behind the original locked admission transaction and returns its only committed hold", async () => {
+      const input = command(),
+        f = assertDefined(fixture),
+        lock = await f.pool.connect();
+      await lock.query("BEGIN");
+      await lock.query("SELECT id FROM billing_credit_account FOR UPDATE");
+      const pending = create(input).then(
+        (value) => ({ value, error: undefined }),
+        (error: unknown) => ({ value: undefined, error }),
+      );
+      let recover: ReturnType<ModelAdmissionService["recover"]> | undefined,
+        blocked = false;
+      try {
+        const end = Date.now() + 1000;
+        while (Date.now() < end) {
+          const r = await f.pool.query<{ n: number }>(
+            "SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%SELECT id, status, available_micros%'",
+          );
+          if (Number(r.rows[0]?.n) > 0) {
+            blocked = true;
+            break;
+          }
+          await new Promise((r) => setTimeout(r, 5));
+        }
+        recover = service.recover(context(), input);
+        await new Promise((r) => setTimeout(r, 15));
+      } finally {
+        await lock.query("ROLLBACK");
+        lock.release();
+      }
+      const result = await pending;
+      expect(blocked).toBe(true);
+      expect(result.error).toBeUndefined();
+      expect(await recover).toEqual(result.value);
+      expect((await funds()).holds).toHaveLength(1);
+    });
+    test("physical duplicate recovery headers reject after identical TCP framing successfully recovers once", async () => {
+      const input = command();
+      await create(input);
+      peerEnabled = false;
+      await withHttp(async (http) => {
+        await http.listen(0, "127.0.0.1");
+        const address = http.getHttpServer().address() as { port: number };
+        const body = JSON.stringify(wireCommand(input));
+        const headers = wireHeaders();
+        delete (headers as Record<string, unknown>)[
+          "x-billing-execution-proof"
+        ];
+        const request = (extras: string[] = []) =>
+          new Promise<number>((resolve, reject) => {
+            const req = rawRequest(
+              {
+                host: "127.0.0.1",
+                port: address.port,
+                path: "/v1/internal/billing/admissions/recover",
+                method: "POST",
+                headers: [
+                  "Host",
+                  `127.0.0.1:${address.port}`,
+                  "Content-Length",
+                  String(Buffer.byteLength(body)),
+                  ...Object.entries(headers).flat(),
+                  ...extras,
+                ],
+              },
+              (res) => {
+                res.resume();
+                res.once("end", () => resolve(res.statusCode ?? 0));
+              },
+            );
+            req.setTimeout(2000, () =>
+              req.destroy(new Error("recovery raw request deadline")),
+            );
+            req.once("error", reject);
+            req.end(body);
+          });
+        expect(await request()).toBe(200);
+        const before = await funds(),
+          keys =
+            await assertDefined(
+              fixture,
+            ).client.billing_command_key_binding.count();
+        for (const extras of [
+          ["Authorization", headers.authorization],
+          ["Content-Type", "application/json"],
+          ["IDEMPOTENCY-KEY", "other-recovery-key"],
+          [
+            "X-Billing-Execution-Proof",
+            "one",
+            "x-billing-execution-proof",
+            "two",
+          ],
+        ])
+          expect([400, 403]).toContain(await request(extras));
+        expect(await funds()).toEqual(before);
+        expect(
+          await assertDefined(
+            fixture,
+          ).client.billing_command_key_binding.count(),
+        ).toBe(keys);
+        expect(agentCalls).toBe(1);
+        expect(iamCalls).toBe(1);
+      });
     });
     test("concurrent different keys create only one hold and one admission", async () => {
       const input = command();
@@ -1089,6 +1437,16 @@ describe.skipIf(admin === undefined)(
               await http.inject({
                 method: "POST",
                 url: "/v1/internal/billing/admissions",
+                headers: wireHeaders(),
+                payload: wireCommand(input),
+              })
+            ).statusCode,
+          ).toBe(404);
+          expect(
+            (
+              await http.inject({
+                method: "POST",
+                url: "/v1/internal/billing/admissions/recover",
                 headers: wireHeaders(),
                 payload: wireCommand(input),
               })

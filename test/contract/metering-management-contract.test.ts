@@ -16,7 +16,7 @@ const document = parse(source) as {
 };
 describe("formal metering management wire contract", () => {
   test("publishes the current three operations without replacing earlier contracts", () => {
-    expect(document.info.version).toBe("4.0.0-experimental.9");
+    expect(document.info.version).toBe("4.0.0-experimental.10");
     for (const [method, path, id] of [
       ["get", "/v1/admin/billing/metering/pricing", "getAdminMeteringPricing"],
       [
@@ -61,7 +61,7 @@ describe("formal metering management wire contract", () => {
     ["web-bff-billing-admin-proxy", "authenticated-user"],
     ["MeteringRational:", "MeteringRationalWeakened:"],
     ["max_attempt_credits:", "default_budget:"],
-    ["version: 4.0.0-experimental.9", "version: 4.0.0-experimental.4"],
+    ["version: 4.0.0-experimental.10", "version: 4.0.0-experimental.4"],
   ])(
     "rejects changed management semantics and preceding contract bytes %#",
     (from, to) => {

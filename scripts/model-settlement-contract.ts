@@ -1,7 +1,9 @@
+import { modelAdmissionRecoveryBaselineSource } from "./model-admission-recovery-contract.js";
 import { createHash } from "node:crypto";
 import previous from "./model-settlement-previous.json" with { type: "json" };
 /** Build/test-only exact exp9→8 inverse. No retired runtime handlers or compatibility parser. */
-export function modelSettlementBaselineSource(source: string): string {
+export function modelSettlementBaselineSource(currentSource: string): string {
+  const source = modelAdmissionRecoveryBaselineSource(currentSource);
   if (
     createHash("sha256").update(source).digest("hex") !==
     "7b5335fde2be601b2d6256cb9b68b0964d5518cfa053b50f2029358a059a0924"
