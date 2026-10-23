@@ -1,5 +1,7 @@
 ## AUTH-1／CREDIT-1：内部认证纠偏（2026-10-23，待实现）
 
+当前实现固定 IAM `2f881d0` clean SDK0.17.0；认证profile为 `billing-direct-service-v1`，业务wire与Schema不变。原证据JSON解析器的纯解析部分提取到本Metering模块 `strict-metering-json.ts`，原Agent证据规则／错误映射保持，新凭据读取复用拒绝重复成员、严格UTF-8和深度限制；不新增通用SDK／服务。总期限包含文件IO，取消／shutdown先结束调用，迟到句柄按finally释放，禁止迟到HTTP派发。当前仍待完整门禁／组合，非正常激活声明。
+
 沿既有SQL canonical，无新表／列／迁移。IAM服务凭据仅为sender私有受限文件，动态读取，不进入余额、流水、预算receipt、Run、日志或公开接口。原IAM授权回执的tenant/user/run/session/fence/hash验证和receipt幂等身份保持；服务调用来源认证不替代资金业务授权。原已验数据配对及余额不变，后继认证切换不以清库作为前置。
 
 ## CREDIT-1：仅恢复命令无新资金事实（2026-10-22）

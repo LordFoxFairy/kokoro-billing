@@ -1,5 +1,6 @@
 import { IamClient, IamClientError } from "@kokoro/iam-client";
 import type { OnModuleDestroy } from "@nestjs/common";
+import { readIamServiceCredential } from "./iam-service-credential.js";
 import { IamBillingAuthorizationError } from "./iam-billing-authorization.error.js";
 import type {
   AuthorizeIamBillingInput,
@@ -30,6 +31,7 @@ const exactUtcInstant = (value: string): number | null => {
 export class IamBillingAuthorizationClient implements OnModuleDestroy {
   readonly #client: IamClient;
   readonly #deadlineMs: number;
+  readonly #serviceCredentialFile: string;
   readonly #shutdown = new AbortController();
   readonly #inflight = new Set<Promise<unknown>>();
   #closing = false;
@@ -37,11 +39,11 @@ export class IamBillingAuthorizationClient implements OnModuleDestroy {
   public constructor(options: ResolvedIamBillingAuthorizationOptions) {
     this.#client = new IamClient({
       baseUrl: options.baseUrl,
-      bearerToken: options.machineBearerToken,
       deadlineMs: options.deadlineMs,
       retryReads: 0,
     });
     this.#deadlineMs = options.deadlineMs;
+    this.#serviceCredentialFile = options.serviceCredentialFile;
   }
 
   public authorize(
@@ -72,8 +74,24 @@ export class IamBillingAuthorizationClient implements OnModuleDestroy {
   async #authorize(
     input: AuthorizeIamBillingInput,
   ): Promise<IamBillingAuthorization> {
-    const signal = AbortSignal.any([input.signal, this.#shutdown.signal]);
+    const deadline = AbortSignal.timeout(this.#deadlineMs);
+    const started = performance.now();
+    const signal = AbortSignal.any([
+      input.signal,
+      this.#shutdown.signal,
+      deadline,
+    ]);
     try {
+      const bearerToken = await readIamServiceCredential(
+        this.#serviceCredentialFile,
+        input.tenantId,
+        signal,
+      );
+      signal.throwIfAborted();
+      const remaining = Math.max(
+        1,
+        Math.floor(this.#deadlineMs - (performance.now() - started)),
+      );
       const response = await this.#client.verifyBillingAuthorization(
         {
           executionProof: input.executionProof,
@@ -81,10 +99,12 @@ export class IamBillingAuthorizationClient implements OnModuleDestroy {
         },
         {
           requestId: input.requestId,
-          deadlineMs: this.#deadlineMs,
+          bearerToken,
+          deadlineMs: remaining,
           signal,
         },
       );
+      signal.throwIfAborted();
       const decision = response.body.data;
       if (
         decision.allowed !== true ||
@@ -106,11 +126,13 @@ export class IamBillingAuthorizationClient implements OnModuleDestroy {
         expiresAt: decision.expires_at,
       });
     } catch (error) {
-      if (error instanceof IamBillingAuthorizationError) throw error;
       if (this.#shutdown.signal.aborted)
         throw new IamBillingAuthorizationError("SHUTTING_DOWN");
       if (input.signal.aborted)
         throw new IamBillingAuthorizationError("ABORTED");
+      if (deadline.aborted)
+        throw new IamBillingAuthorizationError("UNAVAILABLE");
+      if (error instanceof IamBillingAuthorizationError) throw error;
       throw this.#mapSdkError(error);
     }
   }

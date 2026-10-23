@@ -1,4 +1,6 @@
-## AUTH-1／CREDIT-1：IAM直接服务调用（2026-10-23，待owner发行）
+## AUTH-1／CREDIT-1：IAM直接服务调用（2026-10-23，消费者验收中）
+
+当前实现固定 IAM `2f881d0` clean SDK0.17.0；认证profile为 `billing-direct-service-v1`，业务wire与Schema不变。原证据JSON解析器的纯解析部分提取到本Metering模块 `strict-metering-json.ts`，原Agent证据规则／错误映射保持，新凭据读取复用拒绝重复成员、严格UTF-8和深度限制；不新增通用SDK／服务。总期限包含文件IO，取消／shutdown先结束调用，迟到句柄按finally释放，禁止迟到HTTP派发。当前仍待完整门禁／组合，非正常激活声明。
 
 撤回未提交的机器token自动续期方案，遵循Root ADR-035。沿现metering/IamBillingAuthorizationClient与原生成SDK，固定接收IAM的直接认证profile后，按已验证的input.tenantId从Billing自有受限credential文件鲜读唯一服务凭据，传入本次调用；不签发／交换／缓存OAuth token，不新增服务、broker或兼容fallback。
 

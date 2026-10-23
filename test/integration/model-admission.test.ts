@@ -1,4 +1,8 @@
 import {
+  iamCredentialEntry,
+  iamServiceCredentialFixture,
+} from "../support/iam-service-credential.fixture.js";
+import {
   FastifyAdapter,
   type NestFastifyApplication,
 } from "@nestjs/platform-fastify";
@@ -60,6 +64,8 @@ describe.skipIf(admin === undefined)(
       payerUser: string,
       expiry: string;
     let authorizationExpiry: string;
+    let credential:
+      Awaited<ReturnType<typeof iamServiceCredentialFixture>> | undefined;
     let waitForDisconnect = false;
     let pausePrepared: ((reply: () => void) => void) | undefined;
     let makeReply: (requestId: string) => object;
@@ -244,10 +250,13 @@ describe.skipIf(admin === undefined)(
         machineBearerToken: "reader-fixture",
         deadlineMs: 2000,
       });
+      credential = await iamServiceCredentialFixture([
+        iamCredentialEntry(tenantId),
+      ]);
       iam = new IamBillingAuthorizationClient(
         resolveIamBillingAuthorizationOptions({
           baseUrl,
-          machineBearerToken: "iam-fixture",
+          serviceCredentialFile: assertDefined(credential).path,
           deadlineMs: 2000,
         }),
       );
@@ -344,6 +353,8 @@ describe.skipIf(admin === undefined)(
       });
     });
     afterEach(async () => {
+      await credential?.close();
+      credential = undefined;
       await reader?.onModuleDestroy();
       await iam?.onModuleDestroy();
       await app?.close();
@@ -398,7 +409,7 @@ describe.skipIf(admin === undefined)(
                   },
                   iam: {
                     baseUrl,
-                    machineBearerToken: "iam-fixture",
+                    serviceCredentialFile: assertDefined(credential).path,
                     deadlineMs: 2000,
                   },
                   requestDeadlineMs,

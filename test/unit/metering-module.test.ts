@@ -28,7 +28,7 @@ describe("Metering module IAM authorization registration", () => {
           },
           iam: {
             baseUrl: "http://127.0.0.1:1",
-            machineBearerToken: "machine-secret-canary",
+            serviceCredentialFile: "/private/iam-service-credentials.json",
             deadlineMs: 25,
           },
           requestDeadlineMs: 1000,

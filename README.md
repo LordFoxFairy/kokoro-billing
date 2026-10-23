@@ -58,7 +58,9 @@ pnpm dev
 
 默认不注册此片两条路由。设置 `BILLING_MODEL_ADMISSION_ENABLED=true` 时，必须同时配置
 `BILLING_AGENT_BASE_URL`／`BILLING_AGENT_READER_TOKEN` 和
-`BILLING_IAM_BASE_URL`／`BILLING_IAM_AUTHORIZATION_TOKEN`；两个地址仅接受 origin。
+`BILLING_IAM_BASE_URL`／`BILLING_IAM_SERVICE_CREDENTIAL_FILE`；两个地址仅接受 origin。
+IAM 专用服务凭据从受限文件按可信租户逐次读取；不再签发、交换或内省机器 OAuth token，也没有五分钟自动到期。
+旧 `BILLING_IAM_AUTHORIZATION_TOKEN` 在启用准入时明确拒绝，不作 fallback。文件格式与轮换见 [Runbook](docs/RUNBOOK.md#iam-direct-service)。
 peer 单次读取各 2 秒、零重试；`BILLING_MODEL_ADMISSION_DEADLINE_MS` 默认 10000，必须为正整数且不超 2147483647。
 设置错误时启动失败；凭据不写日志或回传。原默认图不因这些变量的存在而隐式启用。
 

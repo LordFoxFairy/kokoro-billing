@@ -1,8 +1,18 @@
 import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import { once } from "node:events";
-import { afterEach, describe, expect, it } from "vitest";
+import {
+  iamCredentialEntry,
+  iamServiceCredentialFixture,
+} from "../support/iam-service-credential.fixture.js";
+import * as files from "node:fs/promises";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { IamBillingAuthorizationClient } from "../../src/modules/metering/iam-billing-authorization.client.js";
 import { resolveIamBillingAuthorizationOptions } from "../../src/modules/metering/iam-billing-authorization.options.js";
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const original = await importOriginal<typeof files>();
+  return { ...original, open: vi.fn(original.open) };
+});
 
 type Reply = Readonly<{
   status?: number;
@@ -10,7 +20,7 @@ type Reply = Readonly<{
   delayMs?: number;
 }>;
 
-const machineToken = "machine-secret-canary";
+const machineToken = "fixture-service-secret-" + "a".repeat(32);
 const executionProof = "run-proof-secret-canary";
 const future = "2099-01-01T00:00:00.000Z";
 const allowed = (overrides: Record<string, unknown> = {}) => ({
@@ -88,7 +98,12 @@ const input = (signal = new AbortController().signal) => ({
 describe("IAM Billing authorization through the published SDK HTTP transport", () => {
   const servers: Server[] = [];
   const clients: IamBillingAuthorizationClient[] = [];
+  const credentials: Array<
+    Awaited<ReturnType<typeof iamServiceCredentialFixture>>
+  > = [];
   afterEach(async () => {
+    vi.restoreAllMocks();
+    await Promise.all(credentials.splice(0).map((entry) => entry.close()));
     await Promise.all(
       clients.splice(0).map((client) => client.onModuleDestroy()),
     );
@@ -106,15 +121,17 @@ describe("IAM Billing authorization through the published SDK HTTP transport", (
   const setup = async (reply: Reply, deadlineMs = 250) => {
     const fixture = await peer(reply);
     servers.push(fixture.server);
+    const credential = await iamServiceCredentialFixture();
+    credentials.push(credential);
     const client = new IamBillingAuthorizationClient(
       resolveIamBillingAuthorizationOptions({
         baseUrl: fixture.baseUrl,
-        machineBearerToken: machineToken,
+        serviceCredentialFile: credential.path,
         deadlineMs,
       }),
     );
     clients.push(client);
-    return { ...fixture, client };
+    return { ...fixture, client, credential };
   };
 
   it("binds one exact direct-user Run request through the published SDK, without user tokens", async () => {
@@ -139,6 +156,92 @@ describe("IAM Billing authorization through the published SDK HTTP transport", (
       "access_token",
     );
   });
+  it("rereads tenant-specific credentials on each request and never falls back to cached credentials", async () => {
+    const fixture = await setup({ body: allowed() });
+    await fixture.client.authorize(input());
+    const rotated = "rotated-service-secret-" + "b".repeat(32);
+    await fixture.credential.replace({
+      version: 1,
+      entries: [
+        iamCredentialEntry("tenant-b"),
+        iamCredentialEntry("tenant-a", rotated),
+      ],
+    });
+    await fixture.client.authorize(input());
+    expect(
+      fixture.requests.map((request) => request.headers.authorization),
+    ).toEqual([`Bearer ${machineToken}`, `Bearer ${rotated}`]);
+    await fixture.credential.replace({
+      version: 1,
+      entries: [iamCredentialEntry("tenant-b")],
+    });
+    await expect(fixture.client.authorize(input())).rejects.toMatchObject({
+      code: "UNAVAILABLE",
+    });
+    await fixture.credential.replace({});
+    await expect(fixture.client.authorize(input())).rejects.toMatchObject({
+      code: "UNAVAILABLE",
+    });
+    expect(fixture.requests).toHaveLength(2);
+  });
+
+  it.each(["deadline", "caller", "shutdown"])(
+    "bounds delayed file IO on %s, closes late handles and never sends late requests",
+    async (cause) => {
+      const fixture = await setup(
+        { body: allowed() },
+        cause === "deadline" ? 20 : 1000,
+      );
+      const handle = await files.open(fixture.credential.path, "r");
+      const close = vi.spyOn(handle, "close");
+      let release!: () => void;
+      vi.spyOn(files, "open").mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            release = () => resolve(handle);
+          }),
+      );
+      const controller = new AbortController();
+      const request = fixture.client
+        .authorize(input(controller.signal))
+        .catch((error: unknown) => error);
+      if (cause === "caller") controller.abort();
+      const shutdown =
+        cause === "shutdown" ? fixture.client.onModuleDestroy() : undefined;
+      try {
+        const result = await Promise.race([
+          request,
+          new Promise((resolve) =>
+            setTimeout(() => resolve("deadline missed"), 150),
+          ),
+        ]);
+        expect(result).toMatchObject({
+          code:
+            cause === "deadline"
+              ? "UNAVAILABLE"
+              : cause === "caller"
+                ? "ABORTED"
+                : "SHUTTING_DOWN",
+        });
+        await expect(
+          Promise.race([
+            shutdown ?? fixture.client.onModuleDestroy(),
+            new Promise((resolve) =>
+              setTimeout(() => resolve("shutdown stalled"), 150),
+            ),
+          ]),
+        ).resolves.toBeUndefined();
+      } finally {
+        release();
+        await request;
+        await expect
+          .poll(() => close.mock.calls.length, { timeout: 1000 })
+          .toBe(1);
+      }
+      expect(fixture.requests).toHaveLength(0);
+    },
+  );
+
   it("preserves the exact maximum safe lease generation without rounding", async () => {
     const fixture = await setup({
       body: allowed({ lease_generation: Number.MAX_SAFE_INTEGER }),

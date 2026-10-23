@@ -1,3 +1,10 @@
+## 2026-10-23 IAM 直接服务认证
+
+- `metering/iam-service-credential.ts`：本owner鲜读受限文件、按可信tenant选直接服务凭据；总deadline/cancel有界、迟到IO释放；无token换发或缓存。
+- `metering/iam-billing-authorization.client.ts`：正式IAM SDK单次调用及原六事实/期限核验，不参与钱包写入。
+- `metering/strict-metering-json.ts`：原usage纯JSON解析器，供证据与凭据两处复用；schema/领域错误归各调用方。
+- `src/config/model-admission-config.ts`：新显式文件配置、旧machine-token入口退役。验收边界见CURRENT。
+
 ## 2026-10-22 AGENT-1 预算结算决策
 
 `src/modules/metering/model-attempt-settlement.ts`仅拥有用户已确认的预算内capture／confirmed-not-dispatched release／unknown或超预算pending三态纯决策，真实价格与取整仍归原metering-pricing；不新增模块/服务/Schema/HTTP或重复钱包。现对应unit覆盖整Credit/int64、0/未知/超限、失败取消、结果冻结；工程及仓外compiled证据见docs/CURRENT.md。正式资金/派发消费尚待。

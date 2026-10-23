@@ -16,8 +16,8 @@ importers:
   .:
     dependencies:
       '@kokoro/iam-client':
-        specifier: file:vendor/iam/kokoro-iam-client-0.16.0.tgz
-        version: file:vendor/iam/kokoro-iam-client-0.16.0.tgz
+        specifier: file:vendor/iam/kokoro-iam-client-0.17.0.tgz
+        version: file:vendor/iam/kokoro-iam-client-0.17.0.tgz
       '@nestjs/common':
         specifier: 12.0.1
         version: 12.0.1(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0)
@@ -424,9 +424,9 @@ packages:
   '@keyv/serialize@1.1.1':
     resolution: {integrity: sha512-dXn3FZhPv0US+7dtJsIi2R+c7qWYiReoEh5zUntWCf4oSpMNib8FDhSoed6m3QyZdx5hK7iLFkYk3rNxwt8vTA==}
 
-  '@kokoro/iam-client@file:vendor/iam/kokoro-iam-client-0.16.0.tgz':
-    resolution: {integrity: sha512-pEOmdZbe9wkV/nDeCza8LhB5wrIOrndAIXhdoGb1Xn0tCrIu401vj36Jd06rq7vUusqZ+o15/aXxOHl/9+fL4Q==, tarball: file:vendor/iam/kokoro-iam-client-0.16.0.tgz}
-    version: 0.16.0
+  '@kokoro/iam-client@file:vendor/iam/kokoro-iam-client-0.17.0.tgz':
+    resolution: {integrity: sha512-rr5nXvC4IPdHzr5iANYvqS2Nlya+s2ELimMJqK+xPf6AJJncVKyQh+iqwVDdfHT+0M4V/+xMFp4VRkdVeqDfHQ==, tarball: file:vendor/iam/kokoro-iam-client-0.17.0.tgz}
+    version: 0.17.0
     engines: {node: '>=24 <25'}
 
   '@lukeed/csprng@1.1.0':
@@ -2413,7 +2413,7 @@ snapshots:
 
   '@keyv/serialize@1.1.1': {}
 
-  '@kokoro/iam-client@file:vendor/iam/kokoro-iam-client-0.16.0.tgz':
+  '@kokoro/iam-client@file:vendor/iam/kokoro-iam-client-0.17.0.tgz':
     dependencies:
       zod: 4.5.4
 

@@ -1,133 +1,27 @@
 import { agentUsageSchema } from "../../generated/agent-usage-v2/schema.gen.js";
 import { AgentUsageEvidenceError } from "./agent-usage-evidence.error.js";
 
-export type UsageJson =
-  null | boolean | string | 1 | UsageJson[] | { [key: string]: UsageJson };
+import {
+  parseStrictMeteringJson,
+  type MeteringJson,
+} from "./strict-metering-json.js";
+export type UsageJson = MeteringJson;
 
-// Usage2 and sealed envelopes reject numbers. Only the prepared envelope adds literal numeric version 1.
 function parseAgentJson(
   raw: Uint8Array,
   maxBytes: number,
   preparedEnvelope = false,
-): Readonly<{ text: string; value: UsageJson }> {
-  if (raw.byteLength > maxBytes) throw new AgentUsageEvidenceError();
-  let text: string;
+) {
   try {
-    text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(
+    return parseStrictMeteringJson(
       raw,
+      maxBytes,
+      agentUsageSchema["x-max-json-depth"],
+      preparedEnvelope,
     );
   } catch {
     throw new AgentUsageEvidenceError();
   }
-  let offset = 0;
-  const fail = (): never => {
-    throw new AgentUsageEvidenceError();
-  };
-  const whitespace = (): void => {
-    while (/[ \n\r\t]/u.test(text[offset] ?? "!")) offset++;
-  };
-  const string = (): string => {
-    if (text[offset] !== '"') return fail();
-    const start = offset++;
-    while (offset < text.length) {
-      const char = text[offset++];
-      if (char === "\\") {
-        offset++;
-        continue;
-      }
-      if (char !== '"') continue;
-      let result: unknown;
-      try {
-        result = JSON.parse(text.slice(start, offset));
-      } catch {
-        return fail();
-      }
-      if (
-        typeof result !== "string" ||
-        [...result].some((character) => {
-          const point = character.codePointAt(0) ?? 0;
-          return (
-            point < 32 || point === 127 || (point >= 0xd800 && point <= 0xdfff)
-          );
-        })
-      )
-        return fail();
-      return result;
-    }
-    return fail();
-  };
-  const value = (depth: number): UsageJson => {
-    if (depth > agentUsageSchema["x-max-json-depth"]) return fail();
-    whitespace();
-    const char = text[offset];
-    if (char === '"') return string();
-    if (char === "{") {
-      offset++;
-      whitespace();
-      const result: { [key: string]: UsageJson } = Object.create(null) as {
-        [key: string]: UsageJson;
-      };
-      if (text[offset] === "}") {
-        offset++;
-        return result;
-      }
-      while (offset < text.length) {
-        whitespace();
-        const key = string();
-        if (Object.hasOwn(result, key)) return fail();
-        whitespace();
-        if (text[offset++] !== ":") return fail();
-        result[key] = value(depth + 1);
-        whitespace();
-        const separator = text[offset++];
-        if (separator === "}") return result;
-        if (separator !== ",") return fail();
-      }
-      return fail();
-    }
-    if (char === "[") {
-      offset++;
-      whitespace();
-      const result: UsageJson[] = [];
-      if (text[offset] === "]") {
-        offset++;
-        return result;
-      }
-      while (offset < text.length) {
-        result.push(value(depth + 1));
-        whitespace();
-        const separator = text[offset++];
-        if (separator === "]") return result;
-        if (separator !== ",") return fail();
-      }
-      return fail();
-    }
-    for (const [token, literal] of [
-      ["null", null],
-      ["true", true],
-      ["false", false],
-    ] as const) {
-      if (text.startsWith(token, offset)) {
-        offset += token.length;
-        return literal;
-      }
-    }
-    if (preparedEnvelope) {
-      const lexeme =
-        /^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/u.exec(
-          text.slice(offset),
-        )?.[0];
-      if (lexeme !== undefined && Number(lexeme) === 1) {
-        offset += lexeme.length;
-        return 1;
-      }
-    }
-    return fail();
-  };
-  const parsed = value(1);
-  whitespace();
-  if (offset !== text.length) return fail();
-  return { text, value: parsed };
 }
 
 /** Preserve the published usage2 budget; the HTTP wrapper never enlarges it. */

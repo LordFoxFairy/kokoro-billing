@@ -10,6 +10,8 @@ export function readModelAdmissionConfig(env: NodeJS.ProcessEnv) {
     return v;
   };
   try {
+    if (env.BILLING_IAM_AUTHORIZATION_TOKEN !== undefined)
+      throw new Error("Retired IAM machine credential configuration");
     return resolveModelAdmissionOptions({
       agent: {
         baseUrl: required("BILLING_AGENT_BASE_URL"),
@@ -18,7 +20,7 @@ export function readModelAdmissionConfig(env: NodeJS.ProcessEnv) {
       },
       iam: {
         baseUrl: required("BILLING_IAM_BASE_URL"),
-        machineBearerToken: required("BILLING_IAM_AUTHORIZATION_TOKEN"),
+        serviceCredentialFile: required("BILLING_IAM_SERVICE_CREDENTIAL_FILE"),
         deadlineMs: 2000,
       },
       requestDeadlineMs: Number(

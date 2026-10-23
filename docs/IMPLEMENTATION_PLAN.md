@@ -1,3 +1,11 @@
+## AUTH-1／CREDIT-1：IAM 直接服务调用（2026-10-23）
+
+- [x] IAM已发行0.17.0直接认证profile，固定clean commit、archive与provenance；删除旧0.16包。
+- [x] 原Client/配置改按可信tenant逐次取服务凭据，无机器OAuth/缓存/fallback；原proof和六事实绑定保持。
+- [x] RED→GREEN：轮换／缺失／跨tenant、重复JSON／迟到文件IO；两项独审发现均有回归。
+- [x] 完整owner门1862 PASS/628默认资源SKIP；真实PG/source-dist115 PASS、实际IAM/compiled Client八项配对；独审复核。
+- [ ] 双端正常配对、退役旧注册和真实Agent用量链；本地组件通过不勾整链。
+
 ## CREDIT-1：失租后的原预算仅恢复（2026-10-22）
 
 - [x] 现service共享原receipt恢复、miss零写／hit原ACK及冲突／坏数据／取消RED→GREEN。

@@ -5,7 +5,7 @@ const enabled = {
   BILLING_AGENT_BASE_URL: "http://127.0.0.1:1",
   BILLING_AGENT_READER_TOKEN: "agent-canary-secret",
   BILLING_IAM_BASE_URL: "http://127.0.0.1:2",
-  BILLING_IAM_AUTHORIZATION_TOKEN: "iam-canary-secret",
+  BILLING_IAM_SERVICE_CREDENTIAL_FILE: "/private/iam-service-credentials.json",
 };
 describe("explicit model admission runtime activation", () => {
   test("default and explicit disabled do not activate based on credential presence", () => {
@@ -25,9 +25,17 @@ describe("explicit model admission runtime activation", () => {
     expect(value?.agent.machineBearerToken).toBe(
       enabled.BILLING_AGENT_READER_TOKEN,
     );
-    expect(value?.iam.machineBearerToken).toBe(
-      enabled.BILLING_IAM_AUTHORIZATION_TOKEN,
+    expect(value?.iam.serviceCredentialFile).toBe(
+      enabled.BILLING_IAM_SERVICE_CREDENTIAL_FILE,
     );
+  });
+  test("rejects retired machine OAuth configuration rather than silently retaining it", () => {
+    expect(() =>
+      readModelAdmissionConfig({
+        ...enabled,
+        BILLING_IAM_AUTHORIZATION_TOKEN: "retired-secret",
+      }),
+    ).toThrow("Invalid explicit model admission configuration");
   });
   test.each(["TRUE", "1", ""])("rejects ambiguous enable flag %s", (flag) => {
     expect(() =>

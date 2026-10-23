@@ -1,3 +1,15 @@
+## AUTH-1／CREDIT-1：IAM直接服务认证消费者（2026-10-23，本地已验，正常未切换）
+
+IAM owner已提交`2f881d0ad7c97a4226ee217b78fbc1dc9b1cbeab`，clean SDK0.17.0 archive SHA256 `147625e285132fcf0a37edf97b0d27da11804828d5c33176310b550914858c9e`；本仓固定包、provenance、lock与双架构门，删除0.16包。接收端/消费者业务body与response、Billing公开wire及canonical SQL/Prisma不变。
+
+原Client只保IAM origin/期限/本地服务凭据文件路径。每次由已验证tenant选固定caller/surface唯一凭据，调用正式SDK；无machine OAuth mint、exchange、introspection、secret/allow缓存、JWT fallback或自动续期。旧启动token配置在启用时拒绝，原Run proof和响应六事实/严格expiry/取消/账务事务保持。缺失/损坏文件只拒绝，不恢复旧凭据。现Metering严格JSON解析器复用原usage纯算法，保原错误和数字规则，不建共享SDK/新服务。
+
+验证：完整`pnpm verify`自然退出0，70文件1862 PASS、53资源文件628默认SKIP；额外真实PG/Nest/source-dist/SDK四文件115 PASS／0SKIP，临时库清单94→94。compiled Billing Client→实际IAM Nest/PG/Redis八检查通过（Agent signer、BFF绑定明确fixture），观察OAuth请求0；覆盖双方轮换、错tenant、无当前Run绑定、坏receiver文件与恢复，模型/工具调用及正常积分写入0。独立只读复核无新增阻断。
+
+原失败保留：配置/HTTP RED、重复JSON与停滞文件IO六项RED；首次mock export写法仅测试装配失败，修正后才记录真实RED；原fixture字段未更新导致typecheck失败、两处lint失败、架构pin仍0.16失败均修正。一次PG套件dist未重建导致1FAIL/114PASS，未弱化断言，最终完整build后115PASS。审查发现重复成员last-wins与取消等待磁盘的问题，均补回归并修复；迟到文件句柄最终释放、零迟到HTTP。全部原日志/运行收据留Root ignored `var/dev/product-real-chain-20261023/auth-direct`。
+
+下一步仅配对正常IAM/Billing、正规退役旧专属机器注册，然后回到既有真实Agent/用量结算主链。当前未重启正常两端、未PR/merge，不以本地SDK组合冒充产品完整验收。剩余Agent→Platform机器OAuth不是本片已删除事实。
+
 # kokoro-billing 验收矩阵
 
 验收必须在待交付 commit 的干净工作树上重新执行。历史报告、旧 CI、Agent 自报、被 skip 的 integration 和本地 fixture

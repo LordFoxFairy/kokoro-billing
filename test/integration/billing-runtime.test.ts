@@ -488,7 +488,8 @@ describe.skipIf(admin === undefined)(
             BILLING_AGENT_BASE_URL: origin,
             BILLING_AGENT_READER_TOKEN: "runtime-agent-reader-canary",
             BILLING_IAM_BASE_URL: origin,
-            BILLING_IAM_AUTHORIZATION_TOKEN: "runtime-iam-machine-canary",
+            BILLING_IAM_SERVICE_CREDENTIAL_FILE:
+              "/private/not-read-without-valid-run.json",
             BILLING_MODEL_ADMISSION_DEADLINE_MS: "500",
           });
           child = run.child;
@@ -632,7 +633,6 @@ describe.skipIf(admin === undefined)(
           for (const value of [
             ...run.secrets,
             "runtime-agent-reader-canary",
-            "runtime-iam-machine-canary",
             "runtime-proof-canary",
             databaseUrl.href,
           ])

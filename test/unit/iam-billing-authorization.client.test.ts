@@ -7,7 +7,7 @@ import { resolveIamBillingAuthorizationOptions } from "../../src/modules/meterin
 const options = () =>
   resolveIamBillingAuthorizationOptions({
     baseUrl: "http://127.0.0.1:1",
-    machineBearerToken: "machine-secret-canary",
+    serviceCredentialFile: "/private/iam-service-credentials.json",
     deadlineMs: 25,
   });
 
@@ -15,19 +15,23 @@ describe("IAM Billing authorization client boundary", () => {
   it("validates closed options without enumerating the machine credential", () => {
     const resolved = options();
     expect(Object.keys(resolved)).toEqual(["baseUrl", "deadlineMs"]);
-    expect(JSON.stringify(resolved)).not.toContain("machine-secret-canary");
-    expect(resolved.machineBearerToken).toBe("machine-secret-canary");
+    expect(JSON.stringify(resolved)).not.toContain(
+      "/private/iam-service-credentials.json",
+    );
+    expect(resolved.serviceCredentialFile).toBe(
+      "/private/iam-service-credentials.json",
+    );
     expect(() =>
       resolveIamBillingAuthorizationOptions({
         baseUrl: "http://user:pass@localhost/path?query=1",
-        machineBearerToken: "secret",
+        serviceCredentialFile: "/private/iam-service-credentials.json",
         deadlineMs: 1,
       }),
     ).toThrow();
     expect(() =>
       resolveIamBillingAuthorizationOptions({
         baseUrl: "http://localhost",
-        machineBearerToken: "secret",
+        serviceCredentialFile: "/private/iam-service-credentials.json",
         deadlineMs: 1,
         extra: true,
       } as never),
@@ -38,14 +42,14 @@ describe("IAM Billing authorization client boundary", () => {
     expect(
       resolveIamBillingAuthorizationOptions({
         baseUrl: "http://localhost",
-        machineBearerToken: "secret",
+        serviceCredentialFile: "/private/iam-service-credentials.json",
         deadlineMs: 1,
       }).baseUrl,
     ).toBe("http://localhost");
     expect(
       resolveIamBillingAuthorizationOptions({
         baseUrl: "http://localhost/",
-        machineBearerToken: "secret",
+        serviceCredentialFile: "/private/iam-service-credentials.json",
         deadlineMs: 1,
       }).baseUrl,
     ).toBe("http://localhost");
@@ -54,7 +58,7 @@ describe("IAM Billing authorization client boundary", () => {
       try {
         resolveIamBillingAuthorizationOptions({
           baseUrl,
-          machineBearerToken: "machine-secret-canary",
+          serviceCredentialFile: "/private/iam-service-credentials.json",
           deadlineMs: 1,
         });
       } catch (error) {
@@ -65,7 +69,9 @@ describe("IAM Billing authorization client boundary", () => {
       expect(thrown.issues.map((issue) => issue.message)).toEqual([
         "IAM base URL is invalid",
       ]);
-      expect(JSON.stringify(thrown)).not.toContain("machine-secret-canary");
+      expect(JSON.stringify(thrown)).not.toContain(
+        "/private/iam-service-credentials.json",
+      );
     }
   });
 

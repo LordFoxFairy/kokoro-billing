@@ -140,7 +140,8 @@ describe.skipIf(!admin)("actual model attempt settlement transaction", () => {
                 },
                 iam: {
                   baseUrl: "http://127.0.0.1:1",
-                  machineBearerToken: "qa-iam",
+                  serviceCredentialFile:
+                    "/private/never-read-during-settlement.json",
                   deadlineMs: 1000,
                 },
                 requestDeadlineMs: deadline,

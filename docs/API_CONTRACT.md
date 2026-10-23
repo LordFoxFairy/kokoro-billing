@@ -1,4 +1,6 @@
-## AUTH-1／CREDIT-1：IAM消费认证切换（2026-10-23，待owner发行）
+## AUTH-1／CREDIT-1：IAM消费认证切换（2026-10-23，消费者验收中）
+
+当前实现固定 IAM `2f881d0` clean SDK0.17.0；认证profile为 `billing-direct-service-v1`，业务wire与Schema不变。原证据JSON解析器的纯解析部分提取到本Metering模块 `strict-metering-json.ts`，原Agent证据规则／错误映射保持，新凭据读取复用拒绝重复成员、严格UTF-8和深度限制；不新增通用SDK／服务。总期限包含文件IO，取消／shutdown先结束调用，迟到句柄按finally释放，禁止迟到HTTP派发。当前仍待完整门禁／组合，非正常激活声明。
 
 Billing对外业务wire、Schema及预算／结算状态机不变。IAM消费的认证profile将由其正规版本替换为专用直接服务凭据；body／response仍沿固定generated SDK，不新增另一HTTP入口。删除旧BILLING_IAM_AUTHORIZATION_TOKEN及未落地的client ID／secret续期入口，不接受别名或JWT fallback；新配置为受限服务凭据文件，由已验证tenant选择精确entry。
 
