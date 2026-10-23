@@ -1,3 +1,30 @@
+## CREDIT-1：实际结算前置——跨有效期预算结清修复（2026-10-22，本地已验）
+
+推进同admission实际结算时发现Credit原语会将过期grant的hold余量回灌available。
+主方真实PG复现8 FAIL／3 PASS：到期刷新前／后、释放／部分capture、混合分配与并发均可暴露。
+本片只修CreditRepository原终态路径：保原account→grants→hold→allocations锁序和完整性校验，
+新终态用同一DB时点刷新窗口；有效余量恢复available，过期余量从remaining注销，并按allocation
+UUID追加hold_release_expiry流水。hold.released总额原义不变；已有实际费用仍capture，
+disabled账户仍可结清且不复活账户；终态原source／金额精确重放在refresh前返回，零新写。
+
+迭代中另实证单hold坏remaining被提前refresh修复的1 FAIL，已将原完整性校验前置保留；
+独审再指出同grant多hold总额不足的P2，真实PG两个负控均FAIL后补总reserved合法性门，
+已expired仅核remaining==reserved、不自动修复。最终专项17 PASS／0SKIP，涵盖两窗口路径、
+混合及多hold分次结清、disabled、并发／原回执零变化和audit失败全事务回滚；不靠TTL拒绝
+长期hold、改断言／skip或新增兼容路径规避。初次Vitest标题%j序列化BigInt的设置错误保留，
+修测试名后才取得业务RED，不把0测试当业务证据。
+
+主方冻结379非文档输入无漂移，Node24.20.0完整pnpm verify全0：1786 PASS／578默认资源SKIP，
+另8文件真实PG239 PASS／0SKIP、source/dist10 PASS／0SKIP、fresh prisma:check与正规生成检查0。
+全部自有数据库库存94→94精确恢复，独审Approved，无遗留确定P0–P2。Schema／Prisma生成物、
+HTTP契约／依赖及正常配置／资金原样；没有模型／工具／正常使用量结算或服务重载。
+
+本片是实际结算必经Credit原语修复，不称model admission结算已实现。已确认现缺严格冻结价格
+snapshot decoder、有限usage2桶／range映射和sealed evidence→计价→同admission事务编排；
+后继复用原价、一次整数ceil、原capture/release／receipt，unknown和超预算保留hold、阻止Run
+后续派发。不能用当前selectActivePricing重选现价、将cache unknown补0或把旧声明接口当运行入口。
+之后再接正式传输、Agent同SDK流usage封口及持久恢复、唯一派发与正常有限真实整链；目标仍进行中。
+
 ## CREDIT-1：完整proof头容量修复（2026-10-22，本地已验）
 
 运行修复commit d34502595e2cb1ac12e5b57fb372497ef04c90fd，canonical exp8／contract SHA2c65b64c保持。真实Node TCP发现合法16KiB proof叠加服务身份头会触发默认16KiB parser的431，原source/dist样本两FAIL（期待依赖503）。唯一Fastify composition显式http.maxHeaderSize=32KiB，仍保32KiB body和proof16384边界；原source/dist请求改满长proof且核实际canary脱敏，修后4PASS／6名称过滤（非未执行通过），无资金写。

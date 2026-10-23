@@ -1,3 +1,7 @@
+## CREDIT-1：预算结清的过期分配语义（2026-10-22）
+
+本片不新增HTTP或修改现契约。CreditEffects capture/release返回的releasedMicros是hold解除冻结金额；过期分配不会变成可用积分，余额与不可变expiry流水按实际回读。原source与金额重放语义、管理员发放及用户读取边界保持；实际model admission结算接口另按现主线接入，不以此修复冒真实模型扣费整链完成。
+
 ## CREDIT-1：Run-proof预算授权HTTP（2026-10-22，已实施）
 
 canonical v1 experimental.8，原29项operation／56schema、POST六字段body及201原held回执／GET本人当前四态不变。唯一POST凭据槽为x-billing-execution-proof（必填、单个header、visible ASCII1..16384），旧x-billing-consumption-token单用／混用一律400，无旧路径alias或默认。proof不属于永久请求摘要；换短时proof不改变同一command恢复，GET仍不需要proof且不触达Agent／IAM。

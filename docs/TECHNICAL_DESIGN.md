@@ -1,3 +1,7 @@
+## CREDIT-1：跨积分有效期的预算结清（2026-10-22）
+
+实际模型结算复用CreditEffects前，修复无TTL hold跨grant到期时余量复活。沿现account→grants→hold→allocations锁序，首次终态以同一DB时点刷新有效期；只将仍有效分配的未用部分恢复available，过期分配未用部分从grant.remaining注销并写独立expiry流水。已预占的实际费用仍可capture，不因过期免单；account.disabled不阻断已有hold结清、不改变账户状态。原terminal source／金额精确重放零写，审计失败全事务回滚；不加服务／Schema／配置／成本保证或拒绝长期hold。
+
 ## CREDIT-1：固定Run-proof授权消费者（2026-10-22，已实施）
 
 承接Root最新主链及用户“Run不持用户token”裁决，主方唯一writer、基线f61a5d2。沿现Metering／ModelAdmission／同一IamBillingAuthorizationClient，固定IAM16ee2eb（运行实现67a3c0e，SDK说明修正）的clean SDK0.16及原provenance／archive hash，删除唯一旧0.7包；不新增服务／broker／认证协议或App grant生命周期。SDK来源与原生登录／其他IAM接口不是本片重新设计对象。

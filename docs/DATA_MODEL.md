@@ -1,3 +1,7 @@
+## CREDIT-1：过期hold余量账务（2026-10-22）
+
+不改Schema。hold.released_micros仍表示解除冻结总额，不等于可用余额增量；过期grant分配的余量不回available，同时从grant.remaining移除。既有grant_expiry按grant注销当时未冻结额度；后续held余量用expiry entry、source_kind=hold_release_expiry、source_ref=allocation UUID单独追加，承接原source唯一性和journal_seq。capture／expiry与hold／allocation／account／audit同事务，重放不追加，历史流水不改写。
+
 ## CREDIT-1：Run消费证明不落资金事实（2026-10-22，已实施）
 
 无SQL／Prisma／表／列／默认／迁移变化。永久model-admit:1 digest、request_schema_version=1、receipt/key身份、原snapshot与hold完整性保持；proof/jti/expiry不进入永久command digest，旧消费token退役且不新增凭据存储。现已校验prepared返回attempt/planned摘要供唯一tuple复算，仅内存投影，不新增wire或事实owner。当前Actor/tenant/Run/session/fence/hash逐项核验，身份和资金事务仍分开，不作跨owner原子承诺；未知提交沿原receipt恢复，不以proof到期释放hold。
