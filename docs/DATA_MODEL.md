@@ -1,3 +1,7 @@
+## AUTH-1／CREDIT-1：内部认证纠偏（2026-10-23，待实现）
+
+沿既有SQL canonical，无新表／列／迁移。IAM服务凭据仅为sender私有受限文件，动态读取，不进入余额、流水、预算receipt、Run、日志或公开接口。原IAM授权回执的tenant/user/run/session/fence/hash验证和receipt幂等身份保持；服务调用来源认证不替代资金业务授权。原已验数据配对及余额不变，后继认证切换不以清库作为前置。
+
 ## CREDIT-1：仅恢复命令无新资金事实（2026-10-22）
 
 无SQL／Prisma／迁移或新表。原命令identity／digest／receipt及key复用；miss不创建任何receipt、alias、hold、账本或audit，hit原key零写，命中换key只沿原receipt永久绑定别名。原#assertCommitted重核不可变admission／hold／payer／精确价快照，损坏拒绝且新alias回滚，不修复坏数据。恢复得到历史admission ID不修改Agent执行授权／旧lease或授新派发权，Agent须另持久记录金融关联。

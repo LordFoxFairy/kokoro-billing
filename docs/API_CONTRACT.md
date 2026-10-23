@@ -1,3 +1,9 @@
+## AUTH-1／CREDIT-1：IAM消费认证切换（2026-10-23，待owner发行）
+
+Billing对外业务wire、Schema及预算／结算状态机不变。IAM消费的认证profile将由其正规版本替换为专用直接服务凭据；body／response仍沿固定generated SDK，不新增另一HTTP入口。删除旧BILLING_IAM_AUTHORIZATION_TOKEN及未落地的client ID／secret续期入口，不接受别名或JWT fallback；新配置为受限服务凭据文件，由已验证tenant选择精确entry。
+
+必须先收到IAM已提交artifact／SDK再更新固定来源；实际HTTP确认不访问oauth2/token或introspect、无自动业务重试，并保错tenant／错proof／回执串线／取消／期限和unknown资金保护。本段不表示消费者已切换。
+
 ## AGENT-1／CREDIT-1：固定 Agent HTTP7.2（2026-10-23）
 
 现 usage2 consumer 固定 Agent `189c8ac74baa8715589cd4e7ab1a5ee79fb51f9e` Git blobs，HTTP SHA256 `4e75244c676e02736867d2f461d18b4d67d93151ff03ffaf6e632685b77ca9db`。相同 Billing 专用 credential／GET 按原 event 读取历史 sealed 修订，Agent 独立核实际 head；Billing 仍严格核原期望身份／revision／digest、原字节和相邻修订。当前 prepared 语义不变，历史财务读取不授原 worker 补派发权。usage2 三件与既有 source 逐字相同，两份 generated envelope 仅来源标注/hash变化；Billing exp10 canonical／Schema／资金接口不变，不增兼容路由或回退。

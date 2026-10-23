@@ -1,3 +1,9 @@
+## AUTH-1／CREDIT-1：IAM直接服务调用（2026-10-23，待owner发行）
+
+撤回未提交的机器token自动续期方案，遵循Root ADR-035。沿现metering/IamBillingAuthorizationClient与原生成SDK，固定接收IAM的直接认证profile后，按已验证的input.tenantId从Billing自有受限credential文件鲜读唯一服务凭据，传入本次调用；不签发／交换／缓存OAuth token，不新增服务、broker或兼容fallback。
+
+接收IAM固定caller=kokoro-billing、surface=billing_authorization、tenant及独立secret；sender/receiver分属各自owner部署配置。沿现文件严检／取消／期限，不把browser header当可信tenant。每次授权仍核IAM回执的六事实、实时期限；原预占／唯一dispatch／实际结算／恢复与未知状态全保持。未发行前不将任意secret塞入旧machineBearerToken，不正常激活未配对协议。
+
 ## AGENT-1／CREDIT-1：固定历史 sealed reader（2026-10-23，本地已验）
 
 沿现 usage2 receipt、HTTP v7 原件和唯一生成器更新至已验 Agent HTTP7.2；从提交后的 Git blobs 固定 OpenAPI／provenance，并逐字核 usage2 三件未变。只扩展精确历史 sealed 事件读取的受控 owner 语义，独立当前 head 完整性由 Agent 保证；Billing 原六事实绑定、相邻修订、资金 receipt／预算和一次取整不变。prepared 仍仅当前 live admission，不把历史读取当新执行权。无新增 API／DTO／Schema／依赖或兼容 reader。正规生成仅更新原件来源 hash／注释，原 wire 形状必须逐值相等。验收先固定版本 RED，再 drift／篡改负控、现 evidence reader／settlement 回归及相关 owner 门；真实供应商扣分和 Agent 持久 ACK 尚待后继装配，不以此 pin 冒整链完成。
