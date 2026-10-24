@@ -1,3 +1,7 @@
+## CREDIT-1：用户更新零售倍率（2026-10-24，待新 policy 发布）
+
+Root ADR-033 已按用户答复将后续新报价倍率从初始7/5更新为精确3/2。沿现Metering版本化policy、同attempt成本聚合/冻结换算/一次整Credit向上取整实施，不新增价格owner、代码默认值、固定按次价或消费者重复加价。历史发布物/已冻结admission仍用原revision，原10积分预占和unknown不改；缺失缓存不补0。现纯内核已接受正有理倍率，无须为1.5添加硬编码分支。本次是决策记录，尚未发布/激活正常新policy，采购依据和真实capture仍待核实。
+
 ## AUTH-1／CREDIT-1：IAM直接服务调用（2026-10-23，消费者验收中）
 
 当前实现固定 IAM `2f881d0` clean SDK0.17.0；认证profile为 `billing-direct-service-v1`，业务wire与Schema不变。原证据JSON解析器的纯解析部分提取到本Metering模块 `strict-metering-json.ts`，原Agent证据规则／错误映射保持，新凭据读取复用拒绝重复成员、严格UTF-8和深度限制；不新增通用SDK／服务。总期限包含文件IO，取消／shutdown先结束调用，迟到句柄按finally释放，禁止迟到HTTP派发。当前仍待完整门禁／组合，非正常激活声明。

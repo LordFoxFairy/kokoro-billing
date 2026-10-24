@@ -1,3 +1,9 @@
+## 2026-10-24 CREDIT-1：零售倍率改定3/2，未追溯改旧报价
+
+用户已明确1.5倍换算积分，Root ADR-033同步；后续新报价采用现policy的精确3/2，替代初始7/5，不向用户反复索要同一倍率。现内核原生支持该有理数，不在消费者或余额再加倍率。计价仍按已核实同attempt成本×倍率×冻结currency/Credit换算→一次向上取整。此前本人QA1000 Credit/USD保持验收配置身份，不宣称正式销售汇率。
+
+本片仅文档裁决，未发布正常policy、改Schema/进程/原冻结快照、写资金或执行新模型；原缓存缺失仍pending，不猜0，不重算原10积分预占。后续按原正式发布入口创建新revision并回读；采购及完整实际usage/capture仍不是已完成事实。历史段落7/5仅代表当时基线。
+
 ## AUTH-1／CREDIT-1：IAM直接服务认证消费者（2026-10-23，本地已验，正常未切换）
 
 IAM owner已提交`2f881d0ad7c97a4226ee217b78fbc1dc9b1cbeab`，clean SDK0.17.0 archive SHA256 `147625e285132fcf0a37edf97b0d27da11804828d5c33176310b550914858c9e`；本仓固定包、provenance、lock与双架构门，删除0.16包。接收端/消费者业务body与response、Billing公开wire及canonical SQL/Prisma不变。
