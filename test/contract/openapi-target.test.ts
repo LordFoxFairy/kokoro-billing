@@ -2355,6 +2355,11 @@ describe("public Agent usage consumer pin gate", () => {
           join(directory, "src/generated/agent-usage-v2"),
           { recursive: true },
         );
+        await cp(
+          join(process.cwd(), "src/generated/agent-model-call-bound-v1"),
+          join(directory, "src/generated/agent-model-call-bound-v1"),
+          { recursive: true },
+        );
         const check = () =>
           spawnSync(
             process.execPath,

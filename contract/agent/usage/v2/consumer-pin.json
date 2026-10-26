@@ -1,12 +1,12 @@
 {
   "owner": "kokoro-agent",
-  "source_commit": "2d5ce12c0eecdecfcdb44a21b69da707d51eb7c7",
+  "source_commit": "8b5da987712ca41a26a856132266cfda77cb5563",
   "http_contract": {
-    "version": "6.0.0",
+    "version": "7.1.0",
     "path": "contract/openapi/v1/openapi.json",
-    "sha256": "e4d30178f2330744b374788abf7e6d23bbf8d7841dcd01537063c705dc18a8db",
+    "sha256": "df6427dd26f2ee5ed6550b04464e6aa4e0d791c480e6cb152df2ae381b94cff0",
     "provenance_path": "contract/provenance.json",
-    "provenance_sha256": "d6fa5c5cdb0038b471ba523661c0aa8b958e8bb94bbc4e5c54472d6c63fe1791"
+    "provenance_sha256": "7c085cbdca5e3d87042f1edcc46a31e9a659fee4faac7792515a465351c4e4b3"
   },
   "usage_artifact": {
     "version": "2.0.0",
@@ -16,5 +16,27 @@
     "manifest_sha256": "197aa6f1680e82dad47815903229e20ddaf2e9642f708fada55611e94ea99941",
     "vectors_path": "contract/usage/v2/vectors.json",
     "vectors_sha256": "4fbec9f41732032ad28fee132e703c93dc50d09fecd82cb8a7578d90bb826483"
+  },
+  "bound_artifact": {
+    "version": "1.0.0",
+    "schema_path": "contract/model-call-bound/v1/schema.json",
+    "schema_sha256": "9c27caf925c48037a7c185a0e62a08e00a2c202d3da05bc3d085f25d1bd08815",
+    "vectors_path": "contract/model-call-bound/v1/vectors.json",
+    "vectors_sha256": "9f9394106fed8dba8dce0de13079b68b0b6bf92b10dae45257016773d758b0dd",
+    "manifest_path": "contract/model-call-bound/v1/manifest.json",
+    "manifest_sha256": "32c19ada6d83bc14599d54da66b3a8cb935bbd1883e221b04a3cea62efd154e1"
+  },
+  "capacity_guarantee_artifact": {
+    "version": "1.0.0",
+    "schema_path": "contract/model-call-capacity-guarantee/v1/schema.json",
+    "schema_sha256": "c00852c059920e10f498e01e641f2270a896cc8392f79ff97261167da8c922c8",
+    "guarantee_path": "contract/model-call-capacity-guarantee/v1/guarantee.json",
+    "guarantee_sha256": "7c3da26f60d42addd029876c31ad4a1b7c3ce3090187975e03ded73327041ece",
+    "evidence_path": "contract/model-call-capacity-guarantee/v1/evidence.json",
+    "evidence_sha256": "07f5f501b81b78ded69e0127996bc975dcb6b6bdb1d17a97e105bd4ad2dd187a",
+    "vectors_path": "contract/model-call-capacity-guarantee/v1/vectors.json",
+    "vectors_sha256": "332b4cd0444299ad4a5ee125a9a06c42b03c6e06d25667cb89f26d16d248e689",
+    "manifest_path": "contract/model-call-capacity-guarantee/v1/manifest.json",
+    "manifest_sha256": "59daa7c2838c91ec92a3688befb3710f710abffa9f358802cbdfdd7f5f8e0c59"
   }
 }

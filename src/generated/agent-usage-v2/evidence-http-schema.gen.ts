@@ -1,6 +1,6 @@
-// Generated from immutable Agent HTTP6 schema. Do not edit.
+// Generated from immutable Agent HTTP7.1 schema. Do not edit.
 export const SOURCE_SHA256 =
-  "e4d30178f2330744b374788abf7e6d23bbf8d7841dcd01537063c705dc18a8db";
+  "df6427dd26f2ee5ed6550b04464e6aa4e0d791c480e6cb152df2ae381b94cff0";
 export const agentEvidenceEnvelopeSchema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $ref: "#/$defs/FinalModelCallUsageEvidenceEnvelope",

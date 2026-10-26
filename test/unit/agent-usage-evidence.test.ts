@@ -226,7 +226,7 @@ describe("immutable Agent usage2 consumer", () => {
         recursive: true,
       });
       await readAgentUsageArtifacts(scratch);
-      const http = join(scratch, "vendor/agent/http/v6/openapi.json");
+      const http = join(scratch, "vendor/agent/http/v7.1/openapi.json");
       const originalHttp = await readFile(http);
       await writeFile(http, "{}");
       await expect(readAgentUsageArtifacts(scratch)).rejects.toThrow(
@@ -715,4 +715,21 @@ describe("Agent HTTP6 exact usage2 evidence reader", () => {
       },
     );
   });
+});
+
+it("retains the usage request ID snapshot when caller input changes in flight", async () => {
+  await withEvidenceServer(
+    (_request, response) =>
+      response.writeHead(200, responseHeaders).end(JSON.stringify(envelope())),
+    async (reader) => {
+      const input = {
+        expected: expectedUsage(),
+        requestId: "reader-test",
+        signal: new AbortController().signal,
+      };
+      const result = reader.read(input);
+      input.requestId = "changed-after-read";
+      expect((await result).originalJson).toBe(original);
+    },
+  );
 });

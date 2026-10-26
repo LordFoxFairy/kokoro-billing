@@ -1,3 +1,17 @@
+## 只读 bound 消费者阶段收口（2026-10-27）
+
+本片设计、严格消费者、生成闭包、独立审查与具名真实资源门已完成：默认1664 PASS / 501资源SKIP，独立相关450 PASS，正式Agent HTTP/PG至source/dist接缝26 PASS，原Billing runtime真实PG8 PASS。正常装配、正常账户与余额、外部Provider均无变化；原runtime仅在自有fixture播种grant和账户审计，保持原断言和清理；全量历史资源门未据此改为通过。
+
+CURRENT新增准确验收前缀，原历史正文逐字保留；生产、测试与契约冻结输入保持。按既有授权提交和非强推当前功能分支，Git实际结果另记发布收据。后继商业mapping/rate/policy/IAM hold、grant/single dispatch与sealed actual/unknown恢复仍开放，不将只读消费者交付冒完整目标。
+
+## NEXT-BILLING-BOUND 实施交付（2026-10-27）
+
+本片范围与阶段门沿 Root 正式 NEXT-BILLING-BOUND 任务卡；唯一 Billing writer完成严格只读消费者，冻结待独立审查/Root真实接缝。未修改正常装配、API、SQL/Prisma、依赖或资金writer，未提交/推送。完整行为和失败记录见 CURRENT 当前同名段，不另建计划中心。
+
+已完成：固定正式 owner 8b5da987发布物及唯一pin；原 reader 双入口共用传输生命周期；strict bound/planned原字节、完整绑定/provenance/保证/时窗；六新generated及drift；旧88 oracle保护，新增requestId快照反例；loopback预算/错误/取消/关闭/零retryredirect/秘密反例。Root在首完整门实际6失败后仅扩允许原contract测试夹具复制新generated目录，六原正反断言保持。
+
+当前门：定向450 PASS，Agent generator --check、完整 verify（1664 PASS / 0 FAIL / 501资源SKIP）及 contract:generated:check exit0。原RED、首增强5失败、完整1652/6/501及格式失败保留；501SKIP不得冒真实资源。后继Root：独审→正式Agent host至源码/dist→正常Billing source/dist资源门→获授权的串行Git。商业mapping/rate/policy/IAM hold、grant/single dispatch及sealed actual/unknown恢复继续未完成。
+
 ## 2026-10-20 PR #2 authorized merge closure
 
 User authorizes integrating the existing colleague PR into current main. Main agent sole writer; readonly reviewer examines original account implementation and final diff. Write area: current canonical v1 PUT/request component, original contract wrapper and generated output, new controller/tests route literals, conflicts in owner docs/validation scripts. Preserve all unrelated main changes and old test assertions. Run full local verify plus affected real PG/source-dist and fresh-schema/drift; record existing broader integration failures separately. Push once to the original PR branch after a final fetch, ready/review/merge via PR without waiting CI, no force or protection bypass. No BFF/App initialization, normal DB/config/service or money changes in this slice.

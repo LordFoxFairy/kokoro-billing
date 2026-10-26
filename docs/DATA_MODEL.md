@@ -1,3 +1,11 @@
+## NEXT-BILLING-BOUND：无持久化 owner 变化（2026-10-26，实施设计）
+
+本片只读 Agent 正式上限证据，返回两份不可变原 JSON 字符串及递归冻结事实。没有新增表、列、索引、SQL、Prisma 派生、缓存、snapshot、receipt、预占、journal 或余额变化；canonical `database/schema.sql` 及所有金融实体保持原字节。无持久化 owner：reader 只校验读取事实，不拥有收费状态，因此不创建空 schema。
+
+可信 expected 沿现 AdmissionCreateRequest 的闭集字段及验证后的 tenant/service 上下文；它不等于已持久 Admission。认证 owner 返回的 lease/profile/final request/guarantee 不作为 body 已证实的重复事实；后继真实 Admission 必须在 Billing 既有事务内绑定不可变证据、商业 mapping/rate/policy、IAM 与 DB 时钟。后继未实施前，不以只读结果伪造 durable snapshot 或资金保证。
+
+planned/bound 字节各自 canonical 与 SHA256(raw)，usage2 的 domain-separated digest/原 decimal 字符串及 BigInt/int63 语义保持；不重复持久原 usage 数据，不将 unknown/未报告补零。Agent 同次 lease/terminal 快照只担保读取时有效，后继 hold/grant/dispatch 与实际 capture/release 必须自行复核其 fence、时窗和幂等身份。本设计不执行模型、扣费或正常数据变更。
+
 ## 2026-10-20 PR #2 main pairing
 
 The existing zero-account creation shares the grant subject advisory lock and commits the first account plus audit atomically; repeat requests return the actual account without resetting balances. SQL and generated Prisma schema remain byte-identical to both parents. No grants, journals, payment or normal data changes. Wire now uses canonical /v1; historical SET55 /v2 notes below are not the runtime.

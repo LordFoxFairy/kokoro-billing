@@ -1,3 +1,9 @@
+## NEXT-BILLING-BOUND Agent consumer（2026-10-27）
+
+唯一既有 consumer-pin 现固定已发布 Agent `8b5da987712ca41a26a856132266cfda77cb5563`、HTTP7.1 两资源、bound1 三资源、capacity1 五资源，usage2 三资源保持原字节。vendor 为不可编辑 Git blob 分发物；旧 HTTP6 分发已退役，下方旧 MC01 记录仅为历史。
+
+原 generate-agent-usage 正规生成 `agent-usage-v2` 的五项与 `agent-model-call-bound-v1` 的六项输出。bound index/types 是公共类型入口，schema 为严格 Ajv 源，bound-http 类型/schema 负责 owner 成功/错误 envelope，capacity-guarantee 为技术保证身份与有效时窗；全部输入摘要及输出 inventory/字节由 `--check` 和原 contract 门治理。Billing canonical API、API generated、正常 HTTP 装配和 SQL 未变；读取不授予 dispatch 或资金许可。
+
 ## 2026-10-20 PR #2 current integration
 
 Canonical `openapi/v1/openapi.yaml` advances to `4.0.0-experimental.3`: 25 operations / 43 schemas. `PUT /v1/billing/me/credit-account` reuses the approved machine-only naturally idempotent zero-account command. No `/v2` alias; no grants, journals, payments or schema changes. The exact inverse restores main experimental.2 bytes and runs its unchanged validator. This is an internal lifecycle operation, not a user-facing account-opening step. BFF/App consumption is separate.

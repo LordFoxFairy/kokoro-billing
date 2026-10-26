@@ -483,3 +483,44 @@ describe("format-independent source governance", () => {
     );
   });
 });
+
+it("keeps both Agent evidence operations in one bounded lifecycle without normal wiring", async () => {
+  const reader = await text(
+    "src/modules/metering/agent-usage-evidence-reader.ts",
+  );
+  expect(reader.match(/await fetch\(/gu)).toHaveLength(1);
+  expect(reader).toContain("public readBound(");
+  expect(reader).toContain("MAX_AGENT_EVIDENCE_RESPONSE_BYTES");
+  expect(reader).toContain("MAX_AGENT_BOUND_RESPONSE_BYTES");
+  for (const path of [
+    "src/app.module.ts",
+    "src/modules/metering/metering.module.ts",
+    "src/http/billing-http.module.ts",
+    "src/config/runtime-config.ts",
+  ]) {
+    expect(await text(path), path).not.toMatch(
+      /AgentUsageEvidenceReader|readBound/u,
+    );
+  }
+  const codec = await text("src/modules/metering/agent-model-call-bound.ts");
+  expect(codec).not.toMatch(
+    /\bfetch\(|node:fs|process\.env|\.\/agent-usage-evidence-reader/u,
+  );
+  await expect(
+    access(join(process.cwd(), "vendor/agent/http/v6")),
+  ).rejects.toThrow();
+  expect(
+    (
+      await readdir(
+        join(process.cwd(), "src/generated/agent-model-call-bound-v1"),
+      )
+    ).sort(),
+  ).toEqual([
+    "bound-http-schema.gen.ts",
+    "bound-http.gen.ts",
+    "capacity-guarantee.gen.ts",
+    "index.ts",
+    "schema.gen.ts",
+    "types.gen.ts",
+  ]);
+});

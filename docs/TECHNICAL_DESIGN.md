@@ -1,3 +1,17 @@
+## NEXT-BILLING-BOUND：派发前上限只读消费者（2026-10-26，实施设计）
+
+Agent 已发布正式 owner commit `8b5da987712ca41a26a856132266cfda77cb5563`；本片沿 Metering 原 `AgentUsageEvidenceReader` 新增 `readBound`，不新增模块、路由、配置、数据库或资金动作。依赖顺序为 Agent bound → 本严格消费者 → Billing 商业映射/价格/政策/IAM 与 Admission 预占 → Agent grant/单次派发 → sealed actual 结算与未知结果恢复。后四项未因只读成功而完成，正常模型执行保持关闭。
+
+沿现普通文件边界拆分 bound codec/error，抽取 usage 现有严格 Ajv 扩展到同域唯一 validation；原 reader 两入口共享同一 fetch、分块计数、总 deadline、取消及 shutdown 在途集合，不复制网络循环。原 usage `read` 的所有成功/错误语义、98304 外层及 65536 原证据预算保留。复用现 JSON parser，仅 bound 根字段 `final_request_binding_version` 允许原 token 整数 `1`，拒绝 `1.0`、`1e0`、布尔和任何其他 number；usage/envelope 不放宽。bound 外层硬上限 196608；这是保守预算，不宣称某个紧凑 envelope 估值是 owner schema 可达最大值。合法外层空白可以验证超过旧预算的新响应，原两份 JSON 仍各自 canonical 且有界。
+
+`ReadAgentModelCallBoundInput` 为 `{ expected, requestId, signal }`；受信 expected 只含 API_CONTRACT 中的十三字段，调用开始深复制，不能从返回包反建可信 expected。返回 `DecodedAgentModelCallBound` 四字段：两份 original JSON 字符串与递归冻结的 planned/bound 事实；不返回可变 byte view，不创建 durable snapshot。两份原字节分别核严格 UTF8、JCS、SHA256(raw)，不借用 usage domain digest；同一响应核全部 ref/digest、attempt UUIDv5、tenant/run/call/ordinal/feature/planned 技术绑定。未获得原始 final wire，不能声称重算 final-request digest。
+
+固定 owner HTTP7.1、bound v1、capacity guarantee v1 及 System4 完整八 key/二十 source provenance；技术 profile、lease/final-request、保证是认证 Agent 的新事实，不是 Admission body 已独立证实的价格或授权。保证仅支持已发布 direct `gpt-4o-2024-08-06`、纯文本、非 stream、n=1、store=false/default tier；核 token/int63/joint 约束及 guarantee canonical digest `326f7d12d6cdfecf46f78f66ff7400378dc76ee4386146687a8574cf03af6995`。seal 与 expiry 必须为有效 UTC 毫秒，seal < expiry <= `2027-01-14T00:00:00Z`，响应完成时 seal 非未来且尚未过期。读取的 live lease/terminal fence 由 Agent 同次快照担保，后继 hold/dispatch 仍需再次检查。
+
+沿唯一 consumer-pin 固定正式 Git objects；保留 usage2 三资源原字节，替换退休 HTTP6 vendor 并生成 HTTP7.1 派生，新增 bound/guarantee 正规生成与 drift。禁止手写生成物、第二 pin、生产 mock、retry/redirect、开放 Provider/资金。错误固定且不含 URL/token/raw/cause；旧 usage 的 HTTP 错误语义不变，新 bound 完整校验 headers/envelope/status/code 后区分 STALE/EXPIRED 等，不由任何失败推导资金释放。
+
+实施先记录旧 usage 88 项基线和有意义行为 RED，保留原 oracle；覆盖 owner vectors、数字词法、canonical/摘要/绑定/provenance/时间、expected 并发变更、body 预算/慢响应/取消/混合 shutdown/零 retry 与秘密 canary。Root 后继正式 Agent host→源码及 dist、正常 source/dist drain/启动失败与零金融差量验收；loopback peer、默认资源 SKIP 或本设计均不冒真实 owner 接缝通过。
+
 ## 2026-10-20 PR #2 main integration
 
 Retain main Nest bootstrap, current /v1 canonical and usage2 reader; merge the existing SET55 machine-only zero-account command without another module, schema, account implementation or compatibility route. Exact current-main contract inverse preserves every unrelated operation. Existing source/dist and HTTP/PG account tests move to /v1; retired /v2 must remain unavailable. BFF will orchestrate hidden initialization after trusted product admission; this owner PR does not claim that consumer path. No normal service restart or financial execution in this merge slice.

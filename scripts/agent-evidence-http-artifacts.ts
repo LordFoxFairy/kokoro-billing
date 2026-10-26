@@ -24,7 +24,9 @@ export async function readAgentEvidenceHttpArtifacts(
     ["openapi", receipt.http_contract.sha256],
     ["provenance", receipt.http_contract.provenance_sha256],
   ] as const) {
-    const raw = await readFile(join(root, `vendor/agent/http/v6/${name}.json`));
+    const raw = await readFile(
+      join(root, `vendor/agent/http/v7.1/${name}.json`),
+    );
     if (createHash("sha256").update(raw).digest("hex") !== digest)
       throw new Error(
         "Agent HTTP distributed artifact differs from accepted release",
@@ -37,17 +39,58 @@ export async function readAgentEvidenceHttpArtifacts(
       components: z.object({ schemas: z.record(z.unknown()) }),
     })
     .parse(JSON.parse(source));
-  const schemas = Object.fromEntries(
-    [
-      "FinalModelCallUsageEvidenceEnvelope",
-      "FinalModelCallUsageEvidence",
-      "Meta",
-    ].map((name) => {
-      const value = document.components.schemas[name];
-      if (!value || typeof value !== "object")
-        throw new Error("Agent HTTP evidence schema is absent");
-      return [name, value];
-    }),
+  const select = (names: string[]) =>
+    Object.fromEntries(
+      names.map((name) => {
+        const value = document.components.schemas[name];
+        if (!value || typeof value !== "object")
+          throw new Error("Agent HTTP evidence schema is absent");
+        return [name, value];
+      }),
+    );
+  const schemas = select([
+    "FinalModelCallUsageEvidenceEnvelope",
+    "FinalModelCallUsageEvidence",
+    "Meta",
+  ]);
+  const boundSchemas = select([
+    "ModelCallBoundEnvelope",
+    "ModelCallBoundData",
+    "ErrorEnvelope",
+    "Error",
+    "Meta",
+  ]);
+  const operation = z
+    .object({
+      paths: z
+        .object({
+          "/v1/model-call-bounds/{bound_ref}": z.object({
+            get: z
+              .object({
+                responses: z.record(
+                  z
+                    .object({ "x-kokoro-error-code": z.string().optional() })
+                    .passthrough(),
+                ),
+              })
+              .passthrough(),
+          }),
+        })
+        .passthrough(),
+    })
+    .passthrough()
+    .parse(JSON.parse(source));
+  const errors = Object.fromEntries(
+    Object.entries(
+      operation.paths["/v1/model-call-bounds/{bound_ref}"].get.responses,
+    )
+      .filter(([, value]) => value["x-kokoro-error-code"])
+      .map(([status, value]) => [status, value["x-kokoro-error-code"]]),
   );
-  return { schemas, sha256: receipt.http_contract.sha256 };
+  return {
+    schemas,
+    boundSchemas,
+    errors,
+    sha256: receipt.http_contract.sha256,
+  };
 }

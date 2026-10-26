@@ -1,3 +1,23 @@
+## 只读 bound 消费者验收通过（2026-10-27）
+
+本版固定 Agent 8b5da987 的正式 HTTP7.1、bound1 与 capacity1，已完成独立审查和源码、构建产物双路径联调。以下旧日期小节保留各阶段事实；其中“待独审/待真实接缝”是当时状态，不是本版仍缺的验收。
+
+默认 `pnpm verify` 通过，1664 PASS / 501 资源 SKIP；format、lint、typecheck、build、SQL、contract 及两类正规生成检查通过。另行执行相关 unit/ownership/contract 450 PASS。501 SKIP 仍不算全量资源集成通过，既有历史资源失败未改写。
+
+正式 Agent HTTP host 与 PostgreSQL prepare 至 Billing source/dist 的独立接缝共26项通过：16项成功读取、身份、绑定、取消与关闭检查，以及10项 terminal、fence、lease缩短、真实到期和损坏持久证据的错误检查。两份原 JSON 与递归冻结断言仅适用于成功读取；错误场景验证固定错误码、无 cause 和无秘密。每个自有fixture的23张表读取前后不变，结束资源清单恢复。原 `test/integration/billing-runtime.test.ts` 的8项真实PostgreSQL门也通过，覆盖source/dist正常图、drain与启动失败清理，数据库catalog前后相同。
+
+本片不增加正常装配、路由、配置、依赖、SQL/Prisma或资金执行。原runtime测试会在自有隔离fixture中播种grant并开立account/audit，按原断言核范围和清理；没有正常账户或余额变更，没有实际Provider请求。商业mapping/rate/policy/IAM hold、grant/single dispatch、实际结算与unknown恢复仍待后继；已验证只读事实不是收费或派发许可。此为当前功能分支切片验收，不代表main已合入、正常服务已切换或完整执行计费上线。
+
+## NEXT-BILLING-BOUND 候选已验证并冻结（2026-10-27，待独审与真实接缝）
+
+基线 `158579f8fdeb62ba5064365260942b62a195a4bb`；只读消费者固定 Agent `8b5da987712ca41a26a856132266cfda77cb5563` 的 HTTP7.1、bound1、capacity1。Metering 原 reader 新增 readBound，两个入口共用唯一 fetch/分块预算/总 deadline/取消/shutdown；bound 只返回两份原 canonical JSON 字符串与递归冻结事实。完整 tuple、SHA256(raw)、System 八 key/二十 source provenance、固定技术保证、UTC 毫秒和响应完成有效时窗均严格检查。旧 usage 三生成物与原 88 项 oracle 正文保持，旧 98304/65536 预算和早期状态错误语义继续生效。
+
+Node24.20.0/pnpm11.25.0：相关 unit/ownership/contract 定向 450 PASS；正规 Agent generator --check、完整 pnpm verify、Billing contract:generated:check 均 exit0。最终默认门 1664 PASS / 0 FAIL / 501 resource SKIP（99 文件：52 PASS / 47 SKIP），测试阶段72.93秒；format/lint/typecheck/build/sql/contract 通过。资源 SKIP 不是数据库集成通过；原 header-cardinality 诊断及故意不可用 Redis 负控日志保持。没有真实 PG/Redis/Provider、正常服务或资金操作。
+
+原真实缺失 readBound 的 RED、原88基线、首增强定向5失败、request ID 快照回归 RED 与两次完整门失败均保留。Ajv 对 null-prototype 对象的 const 比较通过安全 structuredClone 承接，不放松完整 provenance；旧 request ID 改为调用起始快照。首完整门1652 PASS / 6 FAIL / 501 SKIP均因原公共pin测试夹具未复制新增 generated 目录；Root批准只加五行 cp，原六组正反 oracle/10秒预算/断言逐字保持。第二完整门仅新测试格式检查失败，格式收敛后最终完整门通过，未削弱门禁。
+
+451个正式 Agent Git object 与验收 release逐项 exact，13个分发资源匹配该 commit；六个新 generated 由原正规生成器产生并有类型/校验/保证身份与 drift用途。唯一 pin 扩展，旧 HTTP6 vendor 原件先移 Trash再退役。依赖、canonical Billing API及其 generated、SQL/Prisma、options、Module/main/正常装配保持。此为 worker 冻结候选，尚未独审、真实 Agent host→源码/dist、正常 Billing source/dist资源验收；Root负责后继审查、验收与 Git，不把此片称完整 Admission/执行/结算或产品闭环。
+
 ## 2026-10-20 PR #2 main integration verified (normal environment unchanged)
 
 Existing colleague zero-account initialization is paired to current canonical PUT /v1/billing/me/credit-account, artifact 4.0.0-experimental.3 / 25 operations / 43 schemas; no /v2 alias. The complete inverse restores main experimental.2 SHA256 9ff84d5f473e2f161f5d0c496db4cee175e2b032e836e97c7e23b9576a0af3e6 and its unchanged validator. SQL, generated Prisma schema, lock, main bootstrap and usage2 reader remain unchanged. No second account implementation, grants, journals, payments or normal rollout.

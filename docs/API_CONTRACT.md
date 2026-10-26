@@ -1,3 +1,15 @@
+## NEXT-BILLING-BOUND：只消费正式 Agent 上限（2026-10-26，实施设计）
+
+本片不改变 Billing canonical `/v1`、25 operations、43 schemas 或正常 HTTP 装配；只消费 Agent commit `8b5da987712ca41a26a856132266cfda77cb5563` 的 HTTP7.1 `GET /v1/model-call-bounds/{bound_ref}`。专用 reader bearer 与可信 origin 沿现 options；新 requestId 限安全 ASCII `[A-Za-z0-9._:-]{1,128}`。tenant/service 不由普通 body 自报。无 body/query/redirect/retry，deadline 覆盖 headers 与完整分块 body。
+
+内部 `ReadAgentModelCallBoundInput` 的 `expected` 闭集为 `tenantRef`、`producer`、`runId`、`callId`、`attemptId`、`attemptOrdinal`、`featureKey`、`plannedBindingRef`、`plannedBindingDigest`、`usageProfileVersion`、`usageProfileDigest`、`executionBoundRef`、`executionBoundDigest`。tenantRef/producer 来自受信服务上下文，producer 固定 `kokoro-agent`；其余映射现已闭集校验 AdmissionCreateRequest，不新增 wire 字段。lease/final request/profile/guarantee 为 owner 新证据，不伪作独立 expected。返回 `DecodedAgentModelCallBound` 的 `originalPlannedJson`、`originalBoundJson`、`planned`、`bound`，后二者递归冻结；planned 使用原 usage2 PlannedBinding 类型，bound 使用正规生成 AgentModelCallBound 类型。
+
+成功严格核 envelope 八字段、meta request ID、200/no-store/JSON headers、无 padding canonical base64url、两份 canonical 原字节各自 SHA256、ref/digest/revision/sealed 与完整 tuple。bound 原 JSON 只允许根 final_request_binding_version 原 token `1` 的唯一 number 例外；其他 JSON/usage number 仍拒绝。新外层累计 196608、每份原 JSON 65536；原 usage 外层 98304 不变。身份、精确 System4 provenance、保证摘要/联合约束/有效时窗均需验证，不能仅比版本号或 URL。
+
+bound HTTP 401/403→DENIED、404→NOT_FOUND、409→STALE、410→EXPIRED、503→UNAVAILABLE；正式错误 envelope/code 必须与状态匹配，坏包/headers/未知 code 为 CONTRACT_INVALID，传输异常为 UNAVAILABLE，TIMEOUT/ABORTED/SHUTTING_DOWN 保持。所有错误固定且不携带上游消息/URL/凭据；旧 usage 的早期状态分支语义保留。读取不能创建 Admission、quote/grant、扣费或 release。
+
+唯一 consumer-pin 固定 owner HTTP 两资源、bound 三资源、capacity 五资源；usage2 三资源版本/原字节保持。源码及 dist 包内生成物均受原 generate-agent-usage/--check/verify-openapi 保护，不运行时导入 sibling 源码，不手写第二份 DTO/schema。当前为设计门，消费者尚未实施，不能宣称真实 Agent→Billing 成功。
+
 ## 2026-10-20 PR #2 main pairing
 
 Only the approved SET55 account initialization command moves to the current canonical PUT /v1/billing/me/credit-account; operationId, strict empty object, five-factor machine-only auth, response, disabled error and inherent idempotency remain. Artifact 4.0.0-experimental.3 / 25 operations / 43 schemas; no v2 alias. Exact removal of only the PUT/schema/version restores the complete main experimental.2 source. Consumer auto-initialization is a separate BFF/App slice; no user opening control is required.

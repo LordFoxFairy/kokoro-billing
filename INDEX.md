@@ -1,3 +1,9 @@
+## NEXT-BILLING-BOUND 当前实现入口（2026-10-27）
+
+Metering 的 `agent-usage-evidence-reader.ts` 通过 `read` / `readBound` 共用唯一 HTTP、累计字节预算、deadline、取消和 shutdown。`agent-usage-evidence-response.ts` 只校 owner envelope 与错误状态；新增 `agent-model-call-bound.ts` / `.error.ts` 只解码并冻结两份原事实，`agent-model-call-validation.ts` 承接唯一 Ajv 扩展。没有正常 Module/路由/配置或资金装配。
+
+唯一 `contract/agent/usage/v2/consumer-pin.json` 固定 Agent `8b5da987` 的 HTTP7.1、bound1、capacity1 和原 usage2。`scripts/generate-agent-usage.ts` 生成原五文件及六个 `src/generated/agent-model-call-bound-v1` 文件，原 usage 三输出字节不变；旧 HTTP6 vendor 已退役。新 bound 单测、原 usage 88 项及 ownership 架构门共同验证；真实 Agent 和正常 source/dist 资源验收由 Root 后继执行。
+
 ## 2026-10-20 PR #2 integration (current)
 
 Current account initialization uses PUT /v1/billing/me/credit-account and canonical 4.0.0-experimental.3. Reuses SET55 owner implementation; no user-facing opening step, /v2 fallback, schema or financial mutations. Earlier dated SET55 v2 receipts remain historical. Final local verify and affected real PG/source-dist verification passed; final readonly review Approved. See CURRENT for exact evidence and limits.
