@@ -197,7 +197,7 @@ export function priceMeteredAttempt(
     unit: string;
     quantity: bigint;
   }[] = [];
-  let procurementCostMinor: MeteringRational = {
+  let baseTariffMinor: MeteringRational = {
     numerator: 0n,
     denominator: 1n,
   };
@@ -211,19 +211,19 @@ export function priceMeteredAttempt(
     const quantity = total - (includedTotals.get(key) ?? 0n);
     nonnegative(quantity, INT64_MAX);
     normalizedUsage.push({ bucket: key, unit: bucket.unit, quantity });
-    procurementCostMinor = add(
-      procurementCostMinor,
+    baseTariffMinor = add(
+      baseTariffMinor,
       multiply({ numerator: quantity, denominator: 1n }, rate),
     );
   }
-  const salesCostMinor = multiply(procurementCostMinor, input.multiplier);
+  const salesCostMinor = multiply(baseTariffMinor, input.multiplier);
   const unroundedCreditMicros = multiply(
     salesCostMinor,
     input.conversion.creditMicrosPerMinor,
   );
   const { numerator, denominator } = unroundedCreditMicros;
-  // Aggregate exact cost first. The only rounding boundary is whole Credits,
-  // not individual buckets, streamed chunks, or fractional ledger micros.
+  // Aggregate this attempt's exact tariff first, then ceil once to whole Credits,
+  // not per bucket, streamed chunk or whole Run. Each attempt settles separately.
   const creditDenominator = denominator * MICROS_PER_CREDIT;
   const creditMicros =
     (numerator / creditDenominator +
@@ -235,7 +235,7 @@ export function priceMeteredAttempt(
     profileVersion: input.profile.version,
     currencyCode: input.conversion.currencyCode,
     normalizedUsage,
-    procurementCostMinor,
+    baseTariffMinor,
     salesCostMinor,
     unroundedCreditMicros,
     creditMicros,

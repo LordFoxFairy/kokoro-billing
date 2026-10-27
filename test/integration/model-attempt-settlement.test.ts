@@ -564,8 +564,140 @@ describe.skipIf(!admin)("actual model attempt settlement transaction", () => {
       await db.client.billing_usage_event.findFirstOrThrow(),
     ).toMatchObject({ quantity: 0n, status: "settled" });
   });
-  test("publication after admission does not reprice the frozen attempt", async () => {
+  test.each(["two-root", "legacy-cache"] as const)(
+    "%s tariff with missing cache preserves its own charging semantics and replay",
+    async (tariff) => {
+      const originalAdmission =
+        await db.client.billing_admission.findFirstOrThrow();
+      const original = frozenPricingFixture();
+      const publisher = app.get(MeteringPricingPublicationService);
+      const metadata = {
+        schemaVersion: "2" as const,
+        tenantId: "qa-tenant",
+        effectiveFrom: "2026-01-02T00:00:00.000Z",
+        sourceRef: "synthetic tariff regression",
+        verifiedAt: "2026-01-02T00:00:00.000Z",
+        profileRef: original.profileRef,
+      };
+      const publication = {
+        tenantId: "qa-tenant",
+        actorId: "qa-admin",
+        publicationIdentity: "tariff-rate",
+        idempotencyKey: "tariff-rate-key",
+        reason: "isolated two-root and historical cache tariff regression",
+      };
+      const adminContext = {
+        tenantId: "qa-tenant",
+        operatorId: "qa-admin",
+        role: "billing.admin",
+      };
+      await publisher.publishRate(adminContext, {
+        ...publication,
+        draft: {
+          ...metadata,
+          rates:
+            tariff === "two-root"
+              ? original.rates
+              : [
+                  ...original.rates,
+                  {
+                    ...assertDefined(original.rates[0]),
+                    bucket: "input_cache_read",
+                  },
+                ],
+        },
+      });
+      await publisher.publishPolicy(adminContext, {
+        ...publication,
+        publicationIdentity: "tariff-policy",
+        idempotencyKey: "tariff-policy-key",
+        draft: {
+          ...metadata,
+          currencyCode: original.currencyCode,
+          multiplier:
+            tariff === "two-root"
+              ? { numerator: "3", denominator: "2" }
+              : original.policy.multiplier,
+          creditMicrosPerMinor: original.policy.creditMicrosPerMinor,
+          maxAttemptCredits: "10",
+          roundingVersion: "attempt-credit-ceil-v2",
+          failurePolicyRef: original.policy.failurePolicyRef,
+        },
+      });
+      e.identity.attempt_id = randomUUID();
+      e.identity.event_id = randomUUID();
+      const { event_id: _event, ...identity } = e.identity;
+      void _event;
+      admitted = await admissions.create(
+        context(),
+        {
+          runId: e.identity.run_id,
+          attemptId: e.identity.attempt_id,
+          requestRef: "next-request",
+          attemptBindingDigest: createHash("sha256")
+            .update(canonicalFixture(identity))
+            .digest("hex"),
+          plannedDigest: createHash("sha256")
+            .update(canonicalFixture(e.planned))
+            .digest("hex"),
+          finalRequestDigest: "a".repeat(64),
+          idempotencyKey: "tariff-admission-key",
+        },
+        "qa-proof",
+      );
+      e.authorization_observation = {
+        state: "granted",
+        request_ref: "next-request",
+        admission_ref: admitted.admissionId,
+      };
+      if (e.usage.state !== "normalized") throw new Error();
+      Object.assign(e.usage.value, {
+        input_total: { state: "reported", count: "5" },
+        output_total: { state: "reported", count: "2" },
+        total: { state: "reported", count: "7" },
+        input_cache_read: { state: "unreported" },
+        input_cache_write: { state: "unreported" },
+        output_reasoning: { state: "unreported" },
+      });
+      update();
+      const captured = tariff === "two-root";
+      const result = await service.settle(context(), command());
+      expect(result).toMatchObject({
+        status: captured ? "captured" : "pending_reconciliation",
+        reason: captured ? null : "unknown_usage_or_outcome",
+        capturedMicros: captured ? "2000000" : "0",
+        releasedMicros: captured ? "8000000" : "0",
+      });
+      expect(await balances()).toEqual({
+        available: captured ? 88_000_000n : 80_000_000n,
+        held: captured ? 10_000_000n : 20_000_000n,
+      });
+      expect(await db.client.billing_usage_settlement.count()).toBe(
+        captured ? 1 : 0,
+      );
+      expect(
+        await db.client.billing_admission.findUniqueOrThrow({
+          where: { id: originalAdmission.id },
+        }),
+      ).toEqual(originalAdmission);
+      online = false;
+      const settledFacts = await facts();
+      expect(await service.settle(context(), command())).toEqual(result);
+      expect(await facts()).toEqual(settledFacts);
+      expect(reads).toBe(1);
+    },
+  );
+  test("new 3/2 publication preserves an old snapshot multiplier, rounding and exact replay", async () => {
     const original = frozenPricingFixture();
+    const admissionBefore =
+      await db.client.billing_admission.findFirstOrThrow();
+    if (e.usage.state !== "normalized") throw new Error();
+    Object.assign(e.usage.value, {
+      input_total: { state: "reported", count: "5" },
+      output_total: { state: "reported", count: "2" },
+      total: { state: "reported", count: "7" },
+    });
+    update();
     await app.get(MeteringPricingPublicationService).publishRate(
       { tenantId: "qa-tenant", operatorId: "qa-admin", role: "billing.admin" },
       {
@@ -588,10 +720,57 @@ describe.skipIf(!admin)("actual model attempt settlement transaction", () => {
         },
       },
     );
-    expect(await service.settle(context(), command())).toMatchObject({
+    await app.get(MeteringPricingPublicationService).publishPolicy(
+      { tenantId: "qa-tenant", operatorId: "qa-admin", role: "billing.admin" },
+      {
+        tenantId: "qa-tenant",
+        actorId: "qa-admin",
+        publicationIdentity: "new-policy",
+        idempotencyKey: "new-policy-key",
+        reason: "synthetic 3/2 policy update",
+        draft: {
+          schemaVersion: "2",
+          tenantId: "qa-tenant",
+          effectiveFrom: "2026-10-22T00:00:00.000Z",
+          sourceRef: "new QA policy",
+          verifiedAt: "2026-10-22T00:00:00.000Z",
+          profileRef: original.profileRef,
+          currencyCode: original.currencyCode,
+          multiplier: { numerator: "3", denominator: "2" },
+          creditMicrosPerMinor: original.policy.creditMicrosPerMinor,
+          maxAttemptCredits: "10",
+          roundingVersion: "attempt-credit-ceil-v2",
+          failurePolicyRef: original.policy.failurePolicyRef,
+        },
+      },
+    );
+    // Old 7/5: 0.7 × 7/5 = 0.98, ceil once to 1; 3/2 would charge 2.
+    const result = await service.settle(context(), command());
+    expect(result).toMatchObject({
       status: "captured",
       capturedMicros: "1000000",
+      releasedMicros: "9000000",
     });
+    const admissionAfter = await db.client.billing_admission.findFirstOrThrow();
+    expect(admissionAfter.pricing_snapshot_json).toBe(
+      admissionBefore.pricing_snapshot_json,
+    );
+    expect(admissionAfter.pricing_snapshot_digest).toBe(
+      admissionBefore.pricing_snapshot_digest,
+    );
+    expect(JSON.parse(admissionAfter.pricing_snapshot_json)).toMatchObject({
+      policy: {
+        multiplier: { numerator: "7", denominator: "5" },
+        roundingVersion: "attempt-credit-ceil-v2",
+        maxAttemptCredits: "10",
+      },
+    });
+    online = false;
+    const settledFacts = await facts();
+    expect(await service.settle(context(), command())).toEqual(result);
+    expect(await facts()).toEqual(settledFacts);
+    expect(await db.client.billing_usage_settlement.count()).toBe(1);
+    expect(reads).toBe(1);
   });
   test("pending ACK racing an adjacent settlement recovers its original result", async () => {
     const known = structuredClone(e);

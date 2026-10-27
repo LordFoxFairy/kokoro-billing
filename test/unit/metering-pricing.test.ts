@@ -150,7 +150,7 @@ describe("Billing pure metering pricing (synthetic rates only)", () => {
       profileVersion: "synthetic-flat-v1",
       currencyCode: "XTS",
       normalizedUsage: [{ bucket: "input", unit: "token", quantity: 0n }],
-      procurementCostMinor: rational(0n),
+      baseTariffMinor: rational(0n),
       salesCostMinor: rational(0n),
       unroundedCreditMicros: rational(0n),
       creditMicros: 0n,
@@ -160,7 +160,7 @@ describe("Billing pure metering pricing (synthetic rates only)", () => {
 
   it("prices the legal one-unit control", () => {
     const result = priceMeteredAttempt(fixture());
-    expect(result.procurementCostMinor).toEqual(rational(1n));
+    expect(result.baseTariffMinor).toEqual(rational(1n));
     expect(result.creditMicros).toBe(1_000_000n);
   });
 
@@ -173,7 +173,7 @@ describe("Billing pure metering pricing (synthetic rates only)", () => {
       { bucket: "output", unit: "token", quantity: 35n },
       { bucket: "reasoning", unit: "token", quantity: 15n },
     ]);
-    expect(result.procurementCostMinor).toEqual(rational(215n));
+    expect(result.baseTariffMinor).toEqual(rational(215n));
     expect(result.salesCostMinor).toEqual(rational(301n));
     expect(result.unroundedCreditMicros).toEqual(rational(1505n, 2n));
     expect(result.creditMicros).toBe(1_000_000n);
@@ -198,7 +198,7 @@ describe("Billing pure metering pricing (synthetic rates only)", () => {
       result.normalizedUsage.find((bucket) => bucket.bucket === "cached")
         ?.quantity,
     ).toBe(10n);
-    expect(result.procurementCostMinor).toEqual(rational(220n));
+    expect(result.baseTariffMinor).toEqual(rational(220n));
   });
 
   it("sums fractional categories before the single final ceil", () => {
@@ -229,7 +229,7 @@ describe("Billing pure metering pricing (synthetic rates only)", () => {
         creditMicrosPerMinor: rational(5_000_000n, 2n),
       },
     });
-    expect(result.procurementCostMinor).toEqual(rational(2n, 3n));
+    expect(result.baseTariffMinor).toEqual(rational(2n, 3n));
     expect(result.salesCostMinor).toEqual(rational(14n, 15n));
     expect(result.unroundedCreditMicros).toEqual(rational(7_000_000n, 3n));
     expect(result.creditMicros).toBe(3_000_000n); // Per-bucket ceil would incorrectly charge 4 Credits.
@@ -275,7 +275,7 @@ describe("Billing pure metering pricing (synthetic rates only)", () => {
     expect(result.normalizedUsage).toEqual([
       { bucket: "input", unit: "token", quantity },
     ]);
-    expect(result.procurementCostMinor).toEqual(rational(quantity));
+    expect(result.baseTariffMinor).toEqual(rational(quantity));
     expect(result.unroundedCreditMicros).toEqual(rational(quantity));
     expect(result.creditMicros).toBe(
       ((quantity + 999_999n) / 1_000_000n) * 1_000_000n,
@@ -316,7 +316,7 @@ describe("Billing pure metering pricing (synthetic rates only)", () => {
     expect(priceMeteredAttempt(input)).toEqual(priceMeteredAttempt(reverse));
     const result = priceMeteredAttempt(input);
     expect(input).toEqual(before);
-    expect(result.procurementCostMinor).not.toBe(input.rates[0]?.minorPerUnit);
+    expect(result.baseTariffMinor).not.toBe(input.rates[0]?.minorPerUnit);
     Object.freeze(input);
     expect(priceMeteredAttempt(input).creditMicros).toBe(1_000_000n);
   });
@@ -346,7 +346,7 @@ describe("Billing pure metering pricing (synthetic rates only)", () => {
         },
       ],
     });
-    expect(result.procurementCostMinor).toEqual(rational(2n));
+    expect(result.baseTariffMinor).toEqual(rational(2n));
     expect(result.unroundedCreditMicros).toEqual(rational(2n));
     expect(result.creditMicros).toBe(1_000_000n);
   });
@@ -529,7 +529,7 @@ describe("Billing pure metering pricing (synthetic rates only)", () => {
         minorPerUnit: rational(1n, NUMERIC_MAX),
       })),
     });
-    expect(result.procurementCostMinor).toEqual(rational(1n, NUMERIC_MAX));
+    expect(result.baseTariffMinor).toEqual(rational(1n, NUMERIC_MAX));
     expect(result.creditMicros).toBe(1_000_000n);
   });
 
@@ -577,7 +577,7 @@ describe("Billing pure metering pricing (synthetic rates only)", () => {
       };
     };
     const result = priceMeteredAttempt(make(64));
-    expect(result.procurementCostMinor).toEqual(rational(64n));
+    expect(result.baseTariffMinor).toEqual(rational(64n));
     expect(result.creditMicros).toBe(1_000_000n);
     expect(() => priceMeteredAttempt(make(65))).toThrow(RangeError);
   });
@@ -634,10 +634,8 @@ describe("Billing pure metering pricing (synthetic rates only)", () => {
     };
     freeze(input);
     const result = priceMeteredAttempt(input);
-    Reflect.set(result.procurementCostMinor, "numerator", 0n);
-    expect(priceMeteredAttempt(input).procurementCostMinor).toEqual(
-      rational(215n),
-    );
+    Reflect.set(result.baseTariffMinor, "numerator", 0n);
+    expect(priceMeteredAttempt(input).baseTariffMinor).toEqual(rational(215n));
     expect(priceMeteredAttempt(input).creditMicros).toBe(1_000_000n);
   });
 

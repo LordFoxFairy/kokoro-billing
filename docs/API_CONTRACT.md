@@ -1,3 +1,15 @@
+## CREDIT-1：两桶基础 tariff 的现接口配置边界（2026-10-25方案；2026-10-27交付收口）
+
+当前态：正常 policy2/rate2 已于 2026-10-25T11:24:36.174Z 同时生效，真实同 Run 已按两桶基础 tariff ×3/2逐attempt结算。下文“待发布”仅为25日方案时点；本次7路径仅内部命名澄清与回归收口，不重新发布费率、不改旧10预占或历史账。Root独立临时PG44项通过且库存前后相同；供应商实际成本未知仍与客户tariff分开。
+
+沿现 `POST /v1/admin/billing/metering/rate-revisions` 与 `POST /v1/admin/billing/metering/policy-revisions`，不新增HTTP／DTO／Schema。rate configuration仍是全量 `rates`，每个本次两桶模型的精确 `model_revision` 与原商业五元组配置 `input`／`output`、`unit=token`、`applicability={kind:all}`、币种及精确 `minor_per_unit`；单价含义为客户公布基础价，不是已证供应商实际采购价。保留其余有效模型配置，不把两行发布当增量更新。同模型不再混配cache／reasoning子桶；总输入／总输出包含这些子集，各只按根桶计一次，不加总计total第三桶。
+
+policy现 `multiplier={numerator:"3",denominator:"2"}` 与明确 `credit_micros_per_minor` 可直接表达该算式；`max_attempt_credits` 仍按现wire必填，表示单attempt预占，不是默认每Run100积分或用户可选Run预算。现执行仍每attempt聚合后一次整Credit ceil，Run展示合计各attempt金额，不声称全Run仅一次ceil。用户可选预算、套餐新行为及产品价格展示不由本段新增。
+
+`source_ref` 仍仅为来源追踪，当前rate／policy没有机器可区分的客户tariff／采购成本双角色；不按其自由文案分支、不新增虚构price_basis字段。当前单套有效费率用作新客户报价无需扩wire；若以后需要双价并行选择，先经owner显式设计／版本发布。纯结果内部旧名 `procurementCostMinor` 在本地候选已改为 `baseTariffMinor`，从未外露为本API的供应商成本事实；采购成本unknown不得以新tariff填充。实际模型归属／usage unknown仍沿原pending，不因费率公开而省略证据。
+
+两个POST各保原publication_id／永久key、完整digest、认证、回执和未知恢复，不承诺跨POST原子发布。新整对rate／policy核对并在批准生效前控制新准入；现GET返回latest不保证当前active。新admission仅冻结合法生效的新修订，已存在的snapshot、7/5旧倍率、旧10hold和settle／recover原回执保持原义，不按当前价重算。本次命名/回归交付无正常发布／模型／资金操作，无新机器契约发行；已生效的2/2保持。
+
 ## AUTH-1／CREDIT-1：IAM消费认证切换（2026-10-23，消费者验收中）
 
 当前实现固定 IAM `2f881d0` clean SDK0.17.0；认证profile为 `billing-direct-service-v1`，业务wire与Schema不变。原证据JSON解析器的纯解析部分提取到本Metering模块 `strict-metering-json.ts`，原Agent证据规则／错误映射保持，新凭据读取复用拒绝重复成员、严格UTF-8和深度限制；不新增通用SDK／服务。总期限包含文件IO，取消／shutdown先结束调用，迟到句柄按finally释放，禁止迟到HTTP派发。当前仍待完整门禁／组合，非正常激活声明。

@@ -97,6 +97,56 @@ describe("frozen model price to integer settlement", () => {
       outcome: "completed",
     });
   });
+  test.each(["unreported", "reported"] as const)(
+    "two-root 3/2 tariff includes cache and reasoning once when subsets are %s",
+    (subsetState) => {
+      const snapshot = structuredClone(frozenPricingFixture());
+      Object.assign(snapshot.policy, {
+        multiplier: { numerator: "3", denominator: "2" },
+      });
+      const raw = canonicalFixture(snapshot);
+      const evidence = usageFixture();
+      if (evidence.usage.state !== "normalized") throw new Error();
+      Object.assign(evidence.usage.value, {
+        input_total: { state: "reported", count: "5" },
+        output_total: { state: "reported", count: "2" },
+        total: { state: "reported", count: "7" },
+        input_cache_read:
+          subsetState === "reported"
+            ? { state: "reported", count: "4" }
+            : { state: "unreported" },
+        input_cache_write: { state: "unreported" },
+        output_reasoning:
+          subsetState === "reported"
+            ? { state: "reported", count: "1" }
+            : { state: "unreported" },
+      });
+      const decoded = decodeAgentUsageEvidence(
+        Buffer.from(encodeUsageFixture(evidence)),
+      ).evidence;
+      // (5 + 2) / 10 × 3/2 = 1.05 Credits: ceil once for this attempt.
+      expect(priceSealedModelAttempt(decode(snapshot), decoded)).toEqual({
+        state: "actual_priced",
+        outcome: "completed",
+        actualCreditMicros: 2_000_000n,
+      });
+      const legacy = structuredClone(snapshot);
+      Object.assign(legacy.policy, {
+        multiplier: { numerator: "7", denominator: "5" },
+      });
+      Object.assign(legacy, {
+        rates: [
+          ...legacy.rates,
+          { ...assertDefined(legacy.rates[0]), bucket: "input_cache_read" },
+        ],
+      });
+      if (subsetState === "unreported")
+        expect(priceSealedModelAttempt(decode(legacy), decoded)).toEqual({
+          state: "unknown",
+        });
+      expect(canonicalFixture(snapshot)).toBe(raw);
+    },
+  );
   test.each(["completed", "failed", "cancelled"] as const)(
     "known actual is charged on %s",
     (outcome) =>

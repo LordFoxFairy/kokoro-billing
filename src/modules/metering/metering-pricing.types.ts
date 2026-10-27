@@ -58,7 +58,8 @@ export type MeteringPricingResult = Readonly<{
     unit: string;
     quantity: bigint;
   }>[];
-  procurementCostMinor: MeteringRational;
+  /** Published base tariff subtotal, not verified supplier procurement cost. */
+  baseTariffMinor: MeteringRational;
   salesCostMinor: MeteringRational;
   unroundedCreditMicros: MeteringRational;
   creditMicros: bigint;

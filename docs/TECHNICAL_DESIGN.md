@@ -1,3 +1,17 @@
+## CREDIT-1：公布基础 tariff ×3/2 的两桶计价（2026-10-25方案；2026-10-27交付收口）
+
+当前态：正常 policy2/rate2 已于 2026-10-25T11:24:36.174Z 同时生效，真实同 Run 已按两桶基础 tariff ×3/2逐attempt结算。下文“待发布”仅为25日方案时点；本次7路径仅内部命名澄清与回归收口，不重新发布费率、不改旧10预占或历史账。Root独立临时PG44项通过且库存前后相同；供应商实际成本未知仍与客户tariff分开。
+
+按用户当前要求，新报价使用 Billing 公布的客户基础 tariff，而不是未知的供应商实际采购成本：每个实际模型 attempt 的总输入、总输出分别乘其基础单价，合计乘精确3/2，再按冻结换算一次向上取整为整Credit。记输入／输出单价为货币最小单位每token，现计算式为 `ceil((input_total × input_rate + output_total × output_rate) × 3/2 × credit_micros_per_minor / 1000000)`。现边界仍是每attempt一次取整，Run费用为各attempt结果之和，不冒全Run汇总后只取整一次；main、summary、subagent的真实调用均属实际用量。不新增默认每任务100积分或QA名单闸门；产品约束为余额／套餐及用户可选预算，可选预算不因本段成为已实现功能。现 `max_attempt_credits` 仍是必填的单次预占参数，不是总Run上限；旧10积分hold保持。
+
+最短路径复用当前全量rate revision与policy revision：每个本次采用两桶口径的精确模型修订只发布 `input`、`output` 两个 `unit=token`、`applicability.kind=all` 的根桶；缓存及reasoning已含在相应total，不再配置同模型的子桶加价，也不把缺失子桶count补0。全量rate发布保留其他仍有效模型的完整配置，不将局部两行当增量patch；合法商业五元组、精确System修订、币种、费率有理数和换算均显式核实。新policy倍率为3/2；两个发布命令不是原子组合，整对修订核对且生效前不放新准入，不以latest GET代替当前生效判断。
+
+现 `model-settlement-pricing.ts` 按冻结snapshot实际包含的桶建立profile；只有两根桶时不会减缓存／reasoning后漏计或再加一次。仍要求已验证的实际provider／model归属、supported profile和可信已报告总输入／总输出；这些证据unknown继续pending，不因基础tariff已公布而猜usage。供应商实际采购成本另属未核实事实，不用公布tariff冒充、不据此计算已实现毛利；usage证据中的 `actual` 是实际模型归属，不是采购金额。原纯内核返回名 `procurementCostMinor` 未进入HTTP、Schema或snapshot，其数值是所选费率的加权小计；本地候选已最窄重命名为 `baseTariffMinor`，不改变算术、其他返回字段或历史金额。
+
+本片无新价格owner、Schema、API字段或版本；现单套有效费率用于新客户报价即可表达上述口径，`source_ref` 只记录来源，不是机器可判别的价格角色。若以后要同时维护同模型客户基础价与采购成本价，须另行定义显式角色／选择边界，不能靠source_ref文案或复用environment／pricing_account_ref暗分流。本次不实施该扩展。
+
+原admission／snapshot继续冻结各自rate／policy revision、倍率、换算、取整和预算；历史7/5或其他旧报价、旧10预占、pending／unknown及receipt全部按原件恢复，不按新tariff追算。新配置已沿原管理接口按上述2/2生效；此内部命名交付本身不替代独立真实模型结算收据。本地最窄源码候选仅现 `metering-pricing.types.ts`、`metering-pricing.ts` 的内部命名澄清；现 `test/unit/metering-pricing.test.ts`、`test/unit/model-settlement-pricing.test.ts` 与 `test/integration/model-attempt-settlement.test.ts` 覆盖两桶3/2、缓存／reasoning不重复、旧snapshot／倍率／取整与精确回执恢复、unknown保护。正常发布与激活仍归Root后续，不改contract、Schema、正常policy或资金。
+
 ## CREDIT-1：用户更新零售倍率（2026-10-24，待新 policy 发布）
 
 Root ADR-033 已按用户答复将后续新报价倍率从初始7/5更新为精确3/2。沿现Metering版本化policy、同attempt成本聚合/冻结换算/一次整Credit向上取整实施，不新增价格owner、代码默认值、固定按次价或消费者重复加价。历史发布物/已冻结admission仍用原revision，原10积分预占和unknown不改；缺失缓存不补0。现纯内核已接受正有理倍率，无须为1.5添加硬编码分支。本次是决策记录，尚未发布/激活正常新policy，采购依据和真实capture仍待核实。
