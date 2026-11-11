@@ -4,26 +4,10 @@ export type BillingUserContext = Readonly<{
   tenantId: string;
   subjectId: string;
 }>;
-export type BillingInternalContext = Readonly<{
-  tenantId: string;
-  serviceId: string;
-}>;
-export type BillingBffContext = Readonly<{
-  tenantId: string;
-  serviceId: "web-bff";
-  subjectId?: string;
-}>;
 export type BillingAdminContext = Readonly<{
   tenantId: string;
   operatorId: string;
   role: string;
-}>;
-export type BillingAuth = Readonly<{
-  user(request: FastifyRequest): Promise<BillingUserContext | null>;
-  internal(request: FastifyRequest): Promise<BillingInternalContext | null>;
-  bff(request: FastifyRequest): Promise<BillingBffContext | null>;
-  admin(request: FastifyRequest): Promise<BillingAdminContext | null>;
-  webhook(request: FastifyRequest): Promise<boolean>;
 }>;
 export type BillingAuthOptions = Readonly<{
   mode: "internal-header" | "jwks";

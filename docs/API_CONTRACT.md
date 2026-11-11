@@ -323,7 +323,7 @@ publishRate(
 ) -> MeteringPricingPublicationResultV1
 ```
 
-在任何codec/transaction/receipt/SQL之前要求`context.role == billing.admin`、context/command/draft三个tenant完全相等且`context.operatorId == command.actorId`；否则`METERING_PUBLICATION_FORBIDDEN`。context只来自现`createBillingAuth.admin`。provider为module-private，不从`metering.public.ts`导出、无HTTP route/OpenAPI、无新scope/header。
+在任何codec/transaction/receipt/SQL之前要求`context.role == billing.admin`、context/command/draft三个tenant完全相等且`context.operatorId == command.actorId`；否则`METERING_PUBLICATION_FORBIDDEN`。当前正式HTTP的context来自`BillingOperatorGuard`认证后的`billingPersonalContext`，经`meteringAdminContext`映射产生（替代本节首片时的旧总factory）。provider为module-private，不从`metering.public.ts`导出、无HTTP route/OpenAPI、无新scope/header。
 
 `MeteringPricingPublicationResultV1` closed字段：`schemaVersion=1`、`kind=rate`、`tenantId`、positive decimal BIGINT `revision`、canonical lowercase SHA-256 `contentDigest`、DB UTC millisecond `publishedAt`、canonical draft `effectiveFrom`。永久canonical bytes不含replayed、draft、tariff、价格计算、Admission或费用。
 

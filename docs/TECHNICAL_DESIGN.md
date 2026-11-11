@@ -478,7 +478,7 @@ Root 最终验证绑定冻结候选而非当前 main 提交：`/var/folders/gn/w
 
 首片只实现Billing Metering内部rate publication，不实现policy正控、选择/报价、Admission/snapshot、hold、capture/release/settlement或public HTTP。采用三个普通文件：`metering-pricing-publication.service.ts`、`metering-pricing-revision.repository.ts`、`metering-pricing-publication-result-codec.ts`；窄改现`metering.module.ts`和`metering.error.ts`。provider保持module-private，**不从`metering.public.ts`导出**，也不接现admin HTTP。真实系统测试从compiled module取得provider，不冒充正式admin入口已接。
 
-唯一现可信principal是`src/infrastructure/auth/billing-auth.types.ts`的`BillingAdminContext`，由`createBillingAuth(...).admin`产生。本片方法精确为`publishRate(context: BillingAdminContext | null, command: MeteringPublicationCommand<MeteringRateRevisionDraft>)`。进入codec、`runRoot`、receipt、advisory lock或任何SQL前必须依次核：context非null、`role === "billing.admin"`、`context.tenantId === command.tenantId === command.draft.tenantId`、`context.operatorId === command.actorId`；任一失败抛`METERING_PUBLICATION_FORBIDDEN`且零DB调用。本片不新增IAM scope、header、可信标记或第二admin context。
+唯一现可信principal是`src/infrastructure/auth/billing-auth.types.ts`的`BillingAdminContext`，当前正式HTTP由`BillingOperatorGuard`认证后写入`billingPersonalContext`，再由`meteringAdminContext`映射产生（替代本节首片时的旧总factory）。本片方法精确为`publishRate(context: BillingAdminContext | null, command: MeteringPublicationCommand<MeteringRateRevisionDraft>)`。进入codec、`runRoot`、receipt、advisory lock或任何SQL前必须依次核：context非null、`role === "billing.admin"`、`context.tenantId === command.tenantId === command.draft.tenantId`、`context.operatorId === command.actorId`；任一失败抛`METERING_PUBLICATION_FORBIDDEN`且零DB调用。本片不新增IAM scope、header、可信标记或第二admin context。
 
 ### 事务、revision、时间与replay
 
