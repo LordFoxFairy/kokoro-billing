@@ -66,7 +66,7 @@ const required = [
 const approvedImage =
   "node:24.20.0-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e";
 const iamClientName = "@kokoro/iam-client";
-const iamClientArtifact = "file:vendor/iam/kokoro-iam-client-0.7.0.tgz";
+const iamClientArtifact = "file:vendor/iam/kokoro-iam-client-0.17.0.tgz";
 
 function fail(code: string): never {
   throw new Error(code);

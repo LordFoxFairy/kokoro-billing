@@ -188,6 +188,7 @@ export class MeteringPricingPublicationService {
                   publicationIdentity: command.publicationIdentity,
                   revision: result.revision,
                   contentDigest: result.contentDigest,
+                  maxAttemptCredits: draft.maxAttemptCredits,
                 },
               });
               return result;

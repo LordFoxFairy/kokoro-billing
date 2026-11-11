@@ -8,6 +8,7 @@ import { PrismaService } from "../../src/database/prisma.service.js";
 import { TransactionService } from "../../src/database/transaction.service.js";
 import { CreditEffects } from "../../src/modules/credit/credit.service.js";
 import { IamBillingAuthorizationClient } from "../../src/modules/metering/iam-billing-authorization.client.js";
+import { ModelAttemptSettlementService } from "../../src/modules/metering/model-attempt-settlement.service.js";
 import { MeteringModule } from "../../src/modules/metering/metering.module.js";
 import { MeteringRepository } from "../../src/modules/metering/metering.repository.js";
 import { MeteringService } from "../../src/modules/metering/metering.service.js";
@@ -19,10 +20,18 @@ describe("Metering module IAM authorization registration", () => {
         DatabaseModule.register({
           databaseUrl: "postgresql://unused.invalid/r201_never_connected",
         }),
-        MeteringModule.register({
-          baseUrl: "http://127.0.0.1:1",
-          machineBearerToken: "machine-secret-canary",
-          deadlineMs: 25,
+        MeteringModule.registerModelAdmission({
+          agent: {
+            baseUrl: "http://127.0.0.1:1",
+            machineBearerToken: "reader-secret-canary",
+            deadlineMs: 25,
+          },
+          iam: {
+            baseUrl: "http://127.0.0.1:1",
+            serviceCredentialFile: "/private/iam-service-credentials.json",
+            deadlineMs: 25,
+          },
+          requestDeadlineMs: 1000,
         }),
       ],
     })
@@ -42,6 +51,9 @@ describe("Metering module IAM authorization registration", () => {
         MeteringRepository,
       );
       expect(moduleRef.get(MeteringService)).toBeInstanceOf(MeteringService);
+      expect(moduleRef.get(ModelAttemptSettlementService)).toBeInstanceOf(
+        ModelAttemptSettlementService,
+      );
       expect(moduleRef.get(IamBillingAuthorizationClient)).toBeInstanceOf(
         IamBillingAuthorizationClient,
       );
@@ -73,6 +85,7 @@ describe("Metering module IAM authorization registration", () => {
     try {
       expect(moduleRef.get(MeteringService)).toBeInstanceOf(MeteringService);
       expect(() => moduleRef.get(IamBillingAuthorizationClient)).toThrow();
+      expect(() => moduleRef.get(ModelAttemptSettlementService)).toThrow();
     } finally {
       await moduleRef.close();
     }

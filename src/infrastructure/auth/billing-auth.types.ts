@@ -61,12 +61,26 @@ export type BillingCatalogAuth = Readonly<{
 export const BILLING_CATALOG_AUTH = Symbol("BILLING_CATALOG_AUTH");
 export type BillingSchemaValidator = Readonly<{
   names: readonly string[];
+  acceptsRequest(
+    name:
+      | "AdmissionCreateRequest"
+      | "AdmissionSettlementRequest"
+      | "AdminCreditGrantRequest"
+      | "AdminMeteringRatePublishRequest"
+      | "AdminMeteringPolicyPublishRequest",
+    value: unknown,
+  ): boolean;
   assert(
     name:
+      | "AdmissionResponse"
+      | "AdmissionSettlementResponse"
       | "CatalogResponse"
       | "CreditAccountResponse"
       | "CreditLedgerResponse"
-      | "ErrorResponse",
+      | "ErrorResponse"
+      | "AdminCreditGrantResponse"
+      | "AdminMeteringPricingResponse"
+      | "MeteringPublicationResponse",
     value: unknown,
   ): void;
 }>;

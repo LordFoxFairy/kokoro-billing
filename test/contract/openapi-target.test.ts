@@ -1,3 +1,5 @@
+import { meteringManagementBaselineSource } from "../../scripts/metering-management-contract.js";
+import { creditFundingBaselineSource } from "../../scripts/credit-funding-contract.js";
 import { creditAccountBaselineSource } from "../../scripts/credit-account-contract.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -24,7 +26,11 @@ const record = (value: unknown): JsonObject => {
 const readContract = async (): Promise<JsonObject> =>
   record(
     parse(
-      creditAccountBaselineSource(await readFile(target, "utf8")),
+      creditAccountBaselineSource(
+        creditFundingBaselineSource(
+          meteringManagementBaselineSource(await readFile(target, "utf8")),
+        ),
+      ),
     ) as unknown,
   );
 const clone = (value: JsonObject): JsonObject => structuredClone(value);
@@ -1917,7 +1923,7 @@ describe("R67 generated schema semantics and provenance", () => {
       pathToFileURL(join(directory, "schemas.gen.ts")).href
     );
     const schemaExports = record(exports);
-    expect(Object.keys(schemas)).toHaveLength(43);
+    expect(Object.keys(schemas)).toHaveLength(57);
     expect(Object.keys(schemaExports).sort()).toEqual(
       Object.keys(schemas)
         .map((name) => name + "Schema")
@@ -1929,7 +1935,7 @@ describe("R67 generated schema semantics and provenance", () => {
       );
     }
     const provenance = validProvenance();
-    expect(provenance.source.version).toBe("4.0.0-experimental.3");
+    expect(provenance.source.version).toBe("4.0.0-experimental.10");
     expect(provenance.source.sha256).toBe(
       createHash("sha256").update(sourceText).digest("hex"),
     );
@@ -2293,7 +2299,7 @@ describe("R243 Billing-owned metering policy artifact", () => {
       "utf8",
     );
     const joint = source.slice(
-      source.indexOf("async selectActivePricing("),
+      source.indexOf("async #selectPricing<"),
       source.indexOf("async publishPolicy("),
     );
     expect(joint.match(/CURRENT_TIMESTAMP\(3\)/gu)).toHaveLength(1);

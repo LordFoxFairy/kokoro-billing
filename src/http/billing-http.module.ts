@@ -1,6 +1,23 @@
+import { ModelAdmissionController } from "../modules/metering/model-admission.controller.js";
+import {
+  resolveModelAdmissionOptions,
+  MODEL_ADMISSION_DEADLINE,
+  type ModelAdmissionOptions,
+} from "../modules/metering/model-admission.options.js";
+import { MeteringModule } from "../modules/metering/metering.module.js";
+import { MeteringPricingController } from "../modules/metering/metering-pricing.controller.js";
+import { parseMeteringPricingJson } from "../modules/metering/metering-pricing-json.js";
+import { CreditGrantController } from "../modules/credit/credit-grant.controller.js";
+import { BillingOperatorGuard } from "./billing-operator.guard.js";
+import { parseFlatStringCommandJson } from "./flat-string-command-json.js";
 import { CreditAccountController } from "../modules/credit/credit-account.controller.js";
 import { CreditAccountGuard } from "./credit-account.guard.js";
-import { Inject, InternalServerErrorException, Module } from "@nestjs/common";
+import {
+  BadRequestException,
+  Inject,
+  InternalServerErrorException,
+  Module,
+} from "@nestjs/common";
 import type { DynamicModule, NestModule } from "@nestjs/common";
 import { APP_FILTER, HttpAdapterHost } from "@nestjs/core";
 import { FastifyAdapter } from "@nestjs/platform-fastify";
@@ -47,6 +64,43 @@ export class BillingHttpModule implements NestModule {
     if (!(adapter instanceof FastifyAdapter))
       throw new Error("Billing HTTP requires FastifyAdapter");
     const fastify = adapter.getInstance<FastifyInstance>();
+    const json = fastify.getDefaultJsonParser("error", "error");
+    fastify.removeContentTypeParser("application/json");
+    fastify.addContentTypeParser(
+      "application/json",
+      { parseAs: "buffer" },
+      (request, body, done) => {
+        if (
+          request.method === "POST" &&
+          [
+            "/v1/admin/billing/credit-grants",
+            "/v1/internal/billing/admissions",
+            "/v1/internal/billing/admissions/recover",
+            "/v1/internal/billing/admissions/:admission_id/settle",
+          ].includes(request.routeOptions.url ?? "")
+        ) {
+          try {
+            if (!Buffer.isBuffer(body)) throw new BadRequestException();
+            done(null, parseFlatStringCommandJson(body));
+          } catch {
+            done(new BadRequestException());
+          }
+        } else if (
+          request.method === "POST" &&
+          [
+            "/v1/admin/billing/metering/rate-revisions",
+            "/v1/admin/billing/metering/policy-revisions",
+          ].includes(request.routeOptions.url ?? "")
+        ) {
+          try {
+            if (!Buffer.isBuffer(body)) throw new BadRequestException();
+            done(null, parseMeteringPricingJson(body));
+          } catch {
+            done(new BadRequestException());
+          }
+        } else void json(request, body.toString("utf8"), done);
+      },
+    );
     fastify.addHook("onRequest", (request, reply, done) => {
       const supplied = request.headers["x-request-id"];
       request.id =
@@ -81,18 +135,42 @@ export class BillingHttpModule implements NestModule {
       done();
     });
   }
-  static register(options: BillingAuthOptions): DynamicModule {
+  static register(
+    options: BillingAuthOptions,
+    admission?: ModelAdmissionOptions,
+  ): DynamicModule {
+    const model =
+      admission === undefined
+        ? undefined
+        : resolveModelAdmissionOptions(admission);
     const config = validateBillingPersonalHttpOptions(options);
     return {
       module: BillingHttpModule,
-      imports: [CreditModule, CommerceModule],
+      imports: [
+        CreditModule,
+        CommerceModule,
+        model === undefined
+          ? MeteringModule
+          : MeteringModule.registerModelAdmission(model),
+      ],
       controllers: [
+        ...(model === undefined ? [] : [ModelAdmissionController]),
         CreditReadController,
         CreditAccountController,
+        CreditGrantController,
+        MeteringPricingController,
         CatalogReadController,
         ServiceProbesController,
       ],
       providers: [
+        ...(model === undefined
+          ? []
+          : [
+              {
+                provide: MODEL_ADMISSION_DEADLINE,
+                useValue: model.requestDeadlineMs,
+              },
+            ]),
         {
           provide: BILLING_CATALOG_AUTH,
           inject: [BILLING_PERSONAL_HTTP_OPTIONS],
@@ -101,6 +179,7 @@ export class BillingHttpModule implements NestModule {
         },
         CatalogGuard,
         CreditAccountGuard,
+        BillingOperatorGuard,
         { provide: BILLING_PERSONAL_HTTP_OPTIONS, useValue: config },
         {
           provide: BILLING_PERSONAL_AUTH,
@@ -128,7 +207,7 @@ export class BillingHttpModule implements NestModule {
               Object.entries(generatedSchemas),
             );
             if (
-              bindings.length !== 43 ||
+              bindings.length !== 57 ||
               exports.size !== bindings.length ||
               new Set(bindings.map(([, exported]) => exported)).size !==
                 exports.size
@@ -150,6 +229,8 @@ export class BillingHttpModule implements NestModule {
             );
             return Object.freeze({
               names: Object.freeze(bindings.map(([name]) => name)),
+              acceptsRequest: (name, value) =>
+                validators.get(name)?.(value) === true,
               assert: (name, value) => {
                 const validator = validators.get(name);
                 if (validator === undefined || !validator(value))

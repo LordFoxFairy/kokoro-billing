@@ -1,23 +1,26 @@
+import { isAbsolute } from "node:path";
 import { z } from "zod";
 
 export const IAM_BILLING_AUTHORIZATION_OPTIONS = Symbol(
   "IAM_BILLING_AUTHORIZATION_OPTIONS",
 );
 
-export type IamBillingSubject = Readonly<{
-  kind: "user" | "project" | "organization" | "service";
-  ref: string;
-}>;
-
 export type AuthorizeIamBillingInput = Readonly<{
   tenantId: string;
-  billingSubject: IamBillingSubject;
-  consumptionToken: string;
+  payerUserId: string;
+  runId: string;
+  executionSessionId: string;
+  leaseGeneration: string;
+  requestBindingSha256: string;
+  executionProof: string;
   requestId: string;
   signal: AbortSignal;
 }>;
 
-export type IamBillingAuthorization = Readonly<{ payerUserId: string }>;
+export type IamBillingAuthorization = Readonly<{
+  payerUserId: string;
+  expiresAt: string;
+}>;
 
 export const iamBillingAuthorizationOptionsSchema = z
   .object({
@@ -42,7 +45,10 @@ export const iamBillingAuthorizationOptionsSchema = z
         }
         return url.href.replace(/\/$/u, "");
       }),
-    machineBearerToken: z.string().min(1).max(16_384),
+    serviceCredentialFile: z
+      .string()
+      .min(1)
+      .refine(isAbsolute, "Expected absolute credential file path"),
     deadlineMs: z.number().int().positive().max(2_147_483_647),
   })
   .strict();
@@ -53,7 +59,7 @@ export type IamBillingAuthorizationOptions = z.input<
 
 export type ResolvedIamBillingAuthorizationOptions = Readonly<{
   baseUrl: string;
-  machineBearerToken: string;
+  serviceCredentialFile: string;
   deadlineMs: number;
 }>;
 
@@ -64,8 +70,8 @@ export function resolveIamBillingAuthorizationOptions(
   const resolved = Object.create(null) as Record<PropertyKey, unknown>;
   Object.defineProperties(resolved, {
     baseUrl: { value: parsed.baseUrl, enumerable: true },
-    machineBearerToken: {
-      value: parsed.machineBearerToken,
+    serviceCredentialFile: {
+      value: parsed.serviceCredentialFile,
       enumerable: false,
     },
     deadlineMs: { value: parsed.deadlineMs, enumerable: true },

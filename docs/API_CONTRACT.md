@@ -1,3 +1,139 @@
+## CREDIT-1：两桶基础 tariff 的现接口配置边界（2026-10-25方案；2026-10-27交付收口）
+
+当前态：正常 policy2/rate2 已于 2026-10-25T11:24:36.174Z 同时生效，真实同 Run 已按两桶基础 tariff ×3/2逐attempt结算。下文“待发布”仅为25日方案时点；本次7路径仅内部命名澄清与回归收口，不重新发布费率、不改旧10预占或历史账。Root独立临时PG44项通过且库存前后相同；供应商实际成本未知仍与客户tariff分开。
+
+沿现 `POST /v1/admin/billing/metering/rate-revisions` 与 `POST /v1/admin/billing/metering/policy-revisions`，不新增HTTP／DTO／Schema。rate configuration仍是全量 `rates`，每个本次两桶模型的精确 `model_revision` 与原商业五元组配置 `input`／`output`、`unit=token`、`applicability={kind:all}`、币种及精确 `minor_per_unit`；单价含义为客户公布基础价，不是已证供应商实际采购价。保留其余有效模型配置，不把两行发布当增量更新。同模型不再混配cache／reasoning子桶；总输入／总输出包含这些子集，各只按根桶计一次，不加总计total第三桶。
+
+policy现 `multiplier={numerator:"3",denominator:"2"}` 与明确 `credit_micros_per_minor` 可直接表达该算式；`max_attempt_credits` 仍按现wire必填，表示单attempt预占，不是默认每Run100积分或用户可选Run预算。现执行仍每attempt聚合后一次整Credit ceil，Run展示合计各attempt金额，不声称全Run仅一次ceil。用户可选预算、套餐新行为及产品价格展示不由本段新增。
+
+`source_ref` 仍仅为来源追踪，当前rate／policy没有机器可区分的客户tariff／采购成本双角色；不按其自由文案分支、不新增虚构price_basis字段。当前单套有效费率用作新客户报价无需扩wire；若以后需要双价并行选择，先经owner显式设计／版本发布。纯结果内部旧名 `procurementCostMinor` 在本地候选已改为 `baseTariffMinor`，从未外露为本API的供应商成本事实；采购成本unknown不得以新tariff填充。实际模型归属／usage unknown仍沿原pending，不因费率公开而省略证据。
+
+两个POST各保原publication_id／永久key、完整digest、认证、回执和未知恢复，不承诺跨POST原子发布。新整对rate／policy核对并在批准生效前控制新准入；现GET返回latest不保证当前active。新admission仅冻结合法生效的新修订，已存在的snapshot、7/5旧倍率、旧10hold和settle／recover原回执保持原义，不按当前价重算。本次命名/回归交付无正常发布／模型／资金操作，无新机器契约发行；已生效的2/2保持。
+
+## AUTH-1／CREDIT-1：IAM消费认证切换（2026-10-23，消费者验收中）
+
+当前实现固定 IAM `2f881d0` clean SDK0.17.0；认证profile为 `billing-direct-service-v1`，业务wire与Schema不变。原证据JSON解析器的纯解析部分提取到本Metering模块 `strict-metering-json.ts`，原Agent证据规则／错误映射保持，新凭据读取复用拒绝重复成员、严格UTF-8和深度限制；不新增通用SDK／服务。总期限包含文件IO，取消／shutdown先结束调用，迟到句柄按finally释放，禁止迟到HTTP派发。当前仍待完整门禁／组合，非正常激活声明。
+
+Billing对外业务wire、Schema及预算／结算状态机不变。IAM消费的认证profile将由其正规版本替换为专用直接服务凭据；body／response仍沿固定generated SDK，不新增另一HTTP入口。删除旧BILLING_IAM_AUTHORIZATION_TOKEN及未落地的client ID／secret续期入口，不接受别名或JWT fallback；新配置为受限服务凭据文件，由已验证tenant选择精确entry。
+
+必须先收到IAM已提交artifact／SDK再更新固定来源；实际HTTP确认不访问oauth2/token或introspect、无自动业务重试，并保错tenant／错proof／回执串线／取消／期限和unknown资金保护。本段不表示消费者已切换。
+
+## AGENT-1／CREDIT-1：固定 Agent HTTP7.2（2026-10-23）
+
+现 usage2 consumer 固定 Agent `189c8ac74baa8715589cd4e7ab1a5ee79fb51f9e` Git blobs，HTTP SHA256 `4e75244c676e02736867d2f461d18b4d67d93151ff03ffaf6e632685b77ca9db`。相同 Billing 专用 credential／GET 按原 event 读取历史 sealed 修订，Agent 独立核实际 head；Billing 仍严格核原期望身份／revision／digest、原字节和相邻修订。当前 prepared 语义不变，历史财务读取不授原 worker 补派发权。usage2 三件与既有 source 逐字相同，两份 generated envelope 仅来源标注/hash变化；Billing exp10 canonical／Schema／资金接口不变，不增兼容路由或回退。
+
+## CREDIT-1：原预占回执恢复HTTP（2026-10-22，本地已验）
+
+新增POST /v1/internal/billing/admissions/recover；复用现机器／u1 context、AdmissionCreateRequest六事实及永久key，不要求亦不接受proof／旧consumption header。200复用AdmissionResponse且始终原held创建表示／原时间，不变成GET当前状态；404只表示此查询时未找到已提交的匹配回执，可能存在并发在途事务，不能证明未预占或许可新执行。冲突409、损坏500／依赖503沿原安全映射。无新wire schema，exp10共29操作／57schema，原exp9整图精确逆保护，正规生成。原create、settle及GET不改语义；无自动重试、用户token或兼容入口。
+
+## CREDIT-1：正式结算HTTP（2026-10-22，本地已验）
+
+基线796bfce，复用现ModelAdmissionController／CreditAccountGuard与Metering结算应用；
+唯一writer为主方。canonical exp8→9用一个POST admissions/{admission_id}/settle替换未挂载的
+capture/release两个声明，不保旧handler／schema兼容。BFF本人机器身份、internal secret及u1
+租户／主体沿既有认证；不新增用户token、proof／IAM消费许可或服务。请求只有run_id、
+evidence_event_id／evidence_revision／evidence_digest及原Idempotency-Key，禁proof和旧consumption header。
+Core command增加受信Run核对并纳原永久摘要；恢复前原Admission的Run必须相符，结果补原
+run/attempt，资金／同Run锁／先回执后事务外reader不变。已提交回执无需live Agent／IAM。
+
+Response严格data闭集：admission／run／attempt、证据event／revision／digest、status／reason、
+captured_credits／released_credits、usage_event_id／settlement_id、updated_at；整Credit字符串
+含0，不外露evidenceJSON、原价格或凭据。未知／超预算是成功保存的pending回执，不冒扣分；
+旧pending ACK不随GET当前状态变动。raw16KiB flat JSON／重复decoded key／UTF8／canonical URL、
+必需及禁用headers、deadline／中断沿现路径处理；默认未显式启用无新路由。
+
+写区：唯一OpenAPI／正规派生、build/test-only exp9→原exp8整字节逆证明及精确inventory，
+现controller／HTTP parser列表、具名settlement.input／mapper、command/result及Run绑定、
+直接contract/unit／真实Nest+PG／source-dist测试和现文档。无SQL／Prisma／依赖／正常资源修改。
+先wire与HTTP行为RED，再最小实现、正式生成、完整owner门及独立只读审查，随后固定给BFF／Agent；
+HTTP peer可用性不代替真实模型、工具或供应商扣分。沿同一16项TODO继续，无另一个任务中心。
+
+## CREDIT-1：结算应用装配边界（2026-10-22）
+
+本轮局部actual归属profile与Agent文档ec80da5配对：verified.provider_ref／model_ref仅接受具名认证上游证据映射确认的System provider／model目录ID，逐项等于原frozen planned.provider／model，再由原revision ID/digest映射已冻结商业五元组及费率。认证映射必须绑定同attempt／最终请求／冻结revision，不能复制planned、目录存在或单独response.model自证。actual unknown、其他命名空间／raw model名／商业refs或超出该唯一允许模型者进入unknown/pending，不按planned价追认、不另选当前价。通用usage2 schema／decoder／vectors不收窄；真正producer仍待装配，未据此激活模型。
+
+当前新增Metering内部同admission结算应用，仅在既有registerModelAdmission显式选项下装配，不增加独立服务或默认开放。命令绑定原admission、sealed event／revision／digest及永久key；tenant／actor沿受信上下文。内部返回含保留的原evidence JSON用于不可变回执校验，后继正式HTTP必须显式映射闭集，不把此字段暴露给浏览器。本片未修改exp8 canonical、生成SDK或挂载结算HTTP；不冒已可通过现预算HTTP扣分。历史pending ACK保原结果，owner当前head只允许真正相邻单调推进；未知／超预算保hold，不授权新派发。
+
+## CREDIT-1：现Metering内模型结算命令（2026-10-22，实施设计）
+
+本片不改HTTP原件、SDK或权限。包内结算只收可信context与admissionId／eventId／revision／digest／原idempotencyKey，不收usage、actual金额、payer或价格；证据仅从现owner reader取。永久摘要绑定tenant／actor／admission／event／revision／digest，key不在摘要内；scope和payer仍沿原admission校验。精确旧ACK可在owner离线或head推进后恢复；新事件需当前sealed及相邻合法successor。安全返回区分captured／released／pending_reconciliation，保留实际捕获／解除冻结金额、evidence和账本引用；HTTP后继只投影安全结果，不回传原完整evidence。真钱支付不做。
+
+## CREDIT-1：预算结清的过期分配语义（2026-10-22）
+
+本片不新增HTTP或修改现契约。CreditEffects capture/release返回的releasedMicros是hold解除冻结金额；过期分配不会变成可用积分，余额与不可变expiry流水按实际回读。原source与金额重放语义、管理员发放及用户读取边界保持；实际model admission结算接口另按现主线接入，不以此修复冒真实模型扣费整链完成。
+
+## CREDIT-1：Run-proof预算授权HTTP（2026-10-22，已实施）
+
+canonical v1 experimental.8，原29项operation／56schema、POST六字段body及201原held回执／GET本人当前四态不变。唯一POST凭据槽为x-billing-execution-proof（必填、单个header、visible ASCII1..16384），旧x-billing-consumption-token单用／混用一律400，无旧路径alias或默认。proof不属于永久请求摘要；换短时proof不改变同一command恢复，GET仍不需要proof且不触达Agent／IAM。
+
+固定IAM16ee2eb（运行实现67a3c0e，SDK说明修正）／SDK0.16：verifyBillingAuthorization请求为execution_proof＋expected_request_binding_sha256＋固定credit.consume；期望hash从已验证prepared与可信tenant／payer按原model-admit:1 tuple唯一算法生成，并核等永久receipt意图。回包tenant/user/run_id/execution_session_id/lease_generation/request_binding_sha256逐项绑定可信输入，expires_at到达／入账仍有效；旧session_id/client_id回包由正式SDK闭集拒绝，不strip成成功。无重试、现期限／取消／错误信封保持；404当前tenant不存在映射DENIED。BFF与Agent后继必须固定此发行，不能只切IAM或正常服务。
+
+## AGENT-1：正式预算 Admission HTTP（2026-10-22，已实施）
+
+唯一canonical experimental.7原位替换AdmissionCreateRequest与Admission，不保旧execution_bound／caller billing_subject／固定价或三组伪执行状态。POST闭集仅run_id、attempt_id、request_ref、attempt_binding_digest、planned_digest、final_request_digest；Idempotency-Key8..128、x-billing-consumption-token1..16384单独必需。tenant／actor来自完整BFF服务上下文，不从body自报；正式u1 header及三机器能力显式写contract。原create/get operationId／路径保持，其他pathItem保持原字节；共享Admission表示也为后继capture/release返回当前真实状态，不伪装其已挂载。
+
+Admission闭集为admission_id、run_id、attempt_id、request_ref、attempt_binding_digest、planned_digest、final_request_digest、hold_id、budget_credits（1..9223372036854正整数字符串）、pricing_snapshot_digest、status、created_at、updated_at。创建／原命令恢复201＋Location返回原held创建表示；GET200返回当前四态及updated_at，无token／原绑定JSON／价格明细。404隐藏其他tenant／actor，400严格语法／header／query，403身份或消费资格，409永久命令／request_ref冲突，422明确price_unavailable／insufficient_credit／invalid_state，500持久损坏，503依赖／取消／未知。retryable不授权新key/body或新派发，未知只原命令恢复。
+
+正规生成仍56schema／29operation，build/test-only精确逆恢复exp6原始全文SHA7044102dd6e221338348152bb268eaca6516039cc5ca5122d3c42a096f6dc962，之后承接原管理／资金／账户及target保护；旧删除片段只用于逆证明，不进入runtime或SDK兼容路径。当前新schema另覆盖正控及遗漏／旧字段／伪主体／预算自报负控，不以旧target断言决定当前设计。App公开Docs随后随BFF固定新发行物同步，本片内部HTTP不冒Manus私有计费API。
+
+## AGENT-1：预算 Admission 业务边界（2026-10-22，实施门）
+
+本片先实现包内ModelAdmissionService.create，非新增或已挂载HTTP。受信context为tenantId／actorId／requestId／AbortSignal；命令只含runId／attemptId／requestRef／attemptBindingDigest／plannedDigest／finalRequestDigest／idempotencyKey，消费token是单独短命调用参数，不入命令digest／snapshot／日志。原planned bytes中的精确修订与身份是事实源，不收调用方价格／payer／商业tuple／预算或profile版本。
+
+结果为schemaVersion=1、admissionId／tenantId／runId／attemptId／requestRef／holdId／budgetCredits／pricingSnapshotDigest／createdAt；恢复原结果，不生成新价格、时间或额度。后继正式HTTP将原createAdmission／Admission表示原位替换并正规生成，退役execution_bound_ref/digest及固定价字段，不引入兼容wire；在正式契约配对前不挂载或宣称API已交付。资金本地缺口／冲突／拒绝／损坏各稳定包内错误，公开映射归后继正式controller。
+
+恢复先核当前受信服务／人类context及完整命令，旧token过期或Agent租约到期不抹已提交回执；对首次无回执必须实际Agent读取和IAM消费scope验证、payer一致及入账时未过期。读取成功不是预占；只有本地资金事务提交回执才授予后继记录Admission引用的资格，原single-dispatch保持唯一执行边界。
+
+## AGENT-1：正式 prepared 消费（2026-10-22，实施设计）
+
+固定已验 Agent7e1e068／HTTP7.1 原Git对象，保现usage2原schema/vectors/manifest字节；
+唯一HTTP vendor改为http/v7，删旧v6路径，不留alias。沿现同一AgentUsageEvidenceReader增加
+readPrepared，复用origin／专用bearer、总deadline、取消／drain和有界无重试GET，不造第二HTTP client。
+当前用途是首次预算Admission前的可信事实读取，不是许可／预占／费用／实际归属；正常Module不自动启用。
+
+生成器从同一固定OpenAPI正规派生prepared envelope类型和schema。解码原base64url／普通SHA256／
+RFC8785字节，binding按usage2 EvidenceIdentity去event_id的精确投影，planned／authorization沿同一
+usage2定义与原扩展词；不复制新editable模型。首次新准入只收authorization_pending／requested_unknown
+及原request_ref，完整匹配受信tenant/run/attempt／三摘要，过期或错误拒绝。prepared／authorized
+不是新预占资格；既有资金恢复先读Billing原回执，不依赖活prepared读。
+
+原sealed reader/profile/unknown/64KiB／深度／禁止数字等保护不扩；仅新prepared envelope支持其
+正式final_request_binding_version数字1。三个原raw各仍≤65536，总envelope单独有界；不把HTTP数字
+放进usage2。共享现Ajv扩展配置，不削弱原codec。返回深冻结、保存原字节，不持久任何Key或token。
+本片不改Billing public YAML／SQL／资金状态，不新增消费凭据或假成本保证；预占与结算后继沿同owner接。
+
+## 精确模型修订选价绑定（2026-10-22，实施门）
+
+仅将原MeteringRate增加必填model_revision闭集{id: canonical UUID, content_digest: lowercase SHA256}；商业五维仍为管理员核实的显式配置，不从技术名称推导。rate draft/content/request schema2，experimental6；路径、29操作及其他schema语义保持，policy2/回执1不变。旧无绑定rate拒绝，无兼容；GET最新完整回传，同技术pair的五维/币种必须一致。内部选择只消费可信prepared精确修订，返回冻结映射与rate/policy，不接受Agent自报商业价目身份；此内核不自行验证外部owner或给予dispatch许可。原1MiB／12层／64行、三凭据、原命令重放/未知语义保持。发行物及消费者后继逐一固定，正常未激活。
+
+## AGENT-1／CREDIT-1：计价管理三个操作（2026-10-22）
+
+当前canonical目标4.0.0-experimental.5：POST /v1/admin/billing/metering/{rate-revisions,policy-revisions}及GET /v1/admin/billing/metering/pricing，全部internal-owner且管理代理专用；保原26操作逐字不变。外部JSON snake_case，闭集请求publication_id/reason/configuration，无tenant/actor；configuration的协议绑定由owner固定。POST 201 data包含kind/revision/content_digest/published_at/effective_from；GET 200 data含rate_revision/policy_revision，null表示此tenant尚未发布，最新已发布不等同当前生效。GET不收query/body；未来生效时间不得被误记为已生效。
+
+每响应request-id/no-store。POST严格UTF-8、JSON重复decoded键／深度和1MiB上限、JSON MIME、唯一ASCII幂等key；精确日期、BigInt、约分和64条rate由原codec进一步校验，不猜默认。400输入错、403管理能力拒、409永久identity/key完整payload漂移、503原依赖预算失败，其余损坏500；均固定错误不泄露配置／secret／SQL。owner配置读取无provider请求或资金写入。正规派生并用精确逆恢复保护前26操作，不加runtime旧版兼容。
+
+## AGENT-1／CREDIT-1：包内policy content2必填预算（2026-10-22）
+
+本片不改HTTP/OpenAPI、生成HTTP DTO或鉴权。包内MeteringPolicyRevisionDraft改schemaVersion="2"，追加maxAttemptCredits正整数字符串（1..9223372036854）；canonical policy tuple由12扩13，末项为预算，policy command/request schema为2，永久identity/key绑定新完整digest。Rate schema/command1和七字段publication result1保持，不能混作policy content版本；当前拒无预算/旧schema1，未知不回退，旧raw只作负控。不因本片宣称新后台/Admission接口已挂载。
+
+## AGENT-1／CREDIT-1：预算结算裁决（2026-10-22）
+
+用户已确认预算预占→真实用量一次整数结算，替代额外供应商成本上界保证前置。本片仅Metering包内三态决策，不新增HTTP/客户端/DTO：confirmed_not_dispatched释放；已验证priced actual且不超预算capture实际并释放余量；unknown或超预算pending_reconciliation、保留原hold并停止后续派发。输入需来自现正式证据/冻结预算和价格，不接受浏览器自报金额。不是资金许可或已挂载收费API。
+
+## AGENT-1／CREDIT-1：可执行 policy 的 usage2 引用（2026-10-22）
+
+本片没有HTTP、请求DTO、响应、鉴权或生成物变更。Metering包内profileRef保持原version＋artifactDigest结构；当前可执行值配对既有固定Agent usage2 version2.0.0与manifest aggregate 7c5fd0b24d0a691cfcf769a981d8b4a8a689534d9b4ae1b5968342bde591094c。不是schema文件摘要，不接受usage1、版本/digest错配或自动回退；独立Billing failure policy仍为1.0.0。当前publisher/selector仍包内API，未因此暴露为已挂载正式资金接口。
+
+## CREDIT-1：后台发放唯一新增owner操作（2026-10-22）
+
+POST /v1/admin/billing/credit-grants是internal-owner，不是直接给浏览器的公共API；当前web-bff机器身份＋专用operatorProxySecret＋受信u1 tenant/operator全部必需，没有用户分支。canonical OpenAPI定义closed请求/响应、正整积分单位、幂等身份、201/400/403/409/500/503；billing.idempotency_conflict是确定不重试的参数漂移，不把未知ACK改为新funding_id。重放返回原201表示。BFF负责当前管理权限和同tenant接收者资格，Billing不信body的tenant/actor/role，不转发用户token。
+
+只复用当前Ledger/Grant单位与流程；不把新操作挂到旧/v2或admin角色header路径。原25操作/43schema在构建契约负控保完整，新增操作/两组件及版本正规生成，不以同一digest覆盖旧发行物。精确wire与版本以canonical为准；Manus后台发放未观测，作为明确业务差异登记。
+
+## CREDIT-1：内部计价语义（2026-10-22）
+
+HTTP canonical /v1 的25 operations、认证、金额单位和 generated API 不改变；本片不新增route。Metering纯结果及policy draft的内部 `roundingVersion` 固定为 `attempt-credit-ceil-v2`：对同attempt汇总的精确积分成本ceil一次整积分，再乘1,000,000记账。旧 `attempt-ceil-v1` 不能进入当前policy codec；不按旧名称改变历史snapshot含义。不得从纯结果推导已取得消费许可或资金写入成功，正式Admission/Capture仍按其owner证据和持久幂等边界接线。
+
 ## 2026-10-20 PR #2 main pairing
 
 Only the approved SET55 account initialization command moves to the current canonical PUT /v1/billing/me/credit-account; operationId, strict empty object, five-factor machine-only auth, response, disabled error and inherent idempotency remain. Artifact 4.0.0-experimental.3 / 25 operations / 43 schemas; no v2 alias. Exact removal of only the PUT/schema/version restores the complete main experimental.2 source. Consumer auto-initialization is a separate BFF/App slice; no user opening control is required.

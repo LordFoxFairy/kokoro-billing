@@ -1,4 +1,23 @@
-## 2026-10-20 PR #2 integration (current)
+## 2026-10-23 IAM 直接服务认证
+
+- `metering/iam-service-credential.ts`：本owner鲜读受限文件、按可信tenant选直接服务凭据；总deadline/cancel有界、迟到IO释放；无token换发或缓存。
+- `metering/iam-billing-authorization.client.ts`：正式IAM SDK单次调用及原六事实/期限核验，不参与钱包写入。
+- `metering/strict-metering-json.ts`：原usage纯JSON解析器，供证据与凭据两处复用；schema/领域错误归各调用方。
+- `src/config/model-admission-config.ts`：新显式文件配置、旧machine-token入口退役。验收边界见CURRENT。
+
+## 2026-10-22 AGENT-1 预算结算决策
+
+`src/modules/metering/model-attempt-settlement.ts`仅拥有用户已确认的预算内capture／confirmed-not-dispatched release／unknown或超预算pending三态纯决策，真实价格与取整仍归原metering-pricing；不新增模块/服务/Schema/HTTP或重复钱包。现对应unit覆盖整Credit/int64、0/未知/超限、失败取消、结果冻结；工程及仓外compiled证据见docs/CURRENT.md。正式资金/派发消费尚待。
+
+## 2026-10-22 AGENT-1／CREDIT-1 usage2 配对
+
+现 `src/modules/metering/metering-policy-artifact.ts` 原位绑定已固定Agent usage2的version及manifest aggregate，拒旧／错配profile，独立failure-policy1.0.0不变。新unit保护当前正控与历史／schema摘要混淆等负控，原真实PG publication/selection承接并发／幂等／审计／回滚；无新服务、HTTP、Schema或正常收费装配。验证及剩余主链见docs/CURRENT.md。
+
+## 2026-10-22 CREDIT-1 当前主链
+
+新增正式非现金发放owner POST /v1/admin/billing/credit-grants，唯一canonical为4.0.0-experimental.4（26操作/45schema）。现Credit内的guard/input/controller复用原账本/审计/双身份幂等；grant状态与首次入账共用一次DB时点，消除跨生效时点重复入账。完整本地门及相关真实PG/source-dist已验；BFF/Admin产品消费者、Agent授权与实际用量扣分继续，正常资金未动。确切证据与限制见docs/CURRENT.md。
+
+## 2026-10-20 PR #2 integration（历史交付）
 
 Current account initialization uses PUT /v1/billing/me/credit-account and canonical 4.0.0-experimental.3. Reuses SET55 owner implementation; no user-facing opening step, /v2 fallback, schema or financial mutations. Earlier dated SET55 v2 receipts remain historical. Final local verify and affected real PG/source-dist verification passed; final readonly review Approved. See CURRENT for exact evidence and limits.
 

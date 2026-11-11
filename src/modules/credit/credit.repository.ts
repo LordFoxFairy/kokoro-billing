@@ -359,6 +359,14 @@ export class CreditRepository {
     }
     const grantId = randomUUID();
     const journalId = randomUUID();
+    const clock = await client.$queryRaw<
+      Array<{ now: Date }>
+    >`SELECT clock_timestamp() AS now`;
+    const now = clock[0]?.now;
+    if (!now) throw new Error("Database clock unavailable");
+    // INSERT may wait past effective_at. Status and the initial balance must
+    // agree at one instant, or pending activation would credit the grant twice.
+    const active = input.effectiveAt <= now;
     const seq = await this.#nextJournalSeq(input.tenantId, account.id);
     await client.billing_credit_grant.create({
       data: {
@@ -373,16 +381,16 @@ export class CreditRepository {
         effective_at: input.effectiveAt,
         expires_at: input.expiresAt ?? null,
         burn_priority: input.burnPriority ?? 0,
-        status: input.effectiveAt <= new Date() ? "active" : "pending",
+        status: active ? "active" : "pending",
       },
     });
-    if (input.effectiveAt <= new Date())
+    if (active)
       await client.billing_credit_account.update({
         where: { id: account.id },
         data: {
           available_micros: { increment: input.amountMicros },
           generation: { increment: 1 },
-          updated_at: new Date(),
+          updated_at: now,
         },
       });
     await client.billing_credit_journal.create({
@@ -416,7 +424,9 @@ export class CreditRepository {
       if (
         prior.credit_account_id !== input.accountId ||
         prior.requested_micros !== input.requestedMicros ||
-        prior.feature_key !== (input.featureKey ?? null)
+        prior.feature_key !== (input.featureKey ?? null) ||
+        (prior.expires_at?.getTime() ?? null) !==
+          (input.expiresAt?.getTime() ?? null)
       )
         throw new CreditError(
           "CREDIT_IDEMPOTENCY_CONFLICT",
@@ -650,6 +660,16 @@ export class CreditRepository {
     >`SELECT clock_timestamp() AS now`;
     const now = clock[0]?.now;
     if (!now) this.#terminalCorrupt("Database clock unavailable");
+    // Integrity and exact replay checks precede any window changes.
+    await this.#refreshLockedGrantWindows(input.tenantId, account.id, now);
+    const currentAccount = await client.billing_credit_account.findFirst({
+      where: { id: account.id, tenant_id: input.tenantId },
+    });
+    if (!currentAccount) this.#terminalCorrupt("Hold account is missing");
+    const currentGrants = await client.billing_credit_grant.findMany({
+      where: { tenant_id: input.tenantId, credit_account_id: account.id },
+      orderBy: { id: "asc" },
+    });
     const released = hold.requested_micros - input.actualMicros;
     const transition = await client.billing_credit_hold.updateMany({
       where: {
@@ -672,7 +692,7 @@ export class CreditRepository {
     if (transition.count !== 1)
       this.#terminalCorrupt("Hold transition lost its active identity");
     // Grant locks use UUID order; consumption independently uses expiry/burn/issued/id.
-    const grantById = new Map(grants.map((grant) => [grant.id, grant]));
+    const grantById = new Map(currentGrants.map((grant) => [grant.id, grant]));
     allocations.sort((left, right) => {
       const a = grantById.get(left.credit_grant_id);
       const b = grantById.get(right.credit_grant_id);
@@ -687,12 +707,17 @@ export class CreditRepository {
       return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
     });
     let captureLeft = input.actualMicros;
+    let restored = 0n;
     for (const allocation of allocations) {
       const captured =
         allocation.held_micros < captureLeft
           ? allocation.held_micros
           : captureLeft;
       const allocationReleased = allocation.held_micros - captured;
+      const grant = grantById.get(allocation.credit_grant_id);
+      if (!grant) this.#terminalCorrupt("Allocation grant is missing");
+      const expired = grant.status === "expired" ? allocationReleased : 0n;
+      restored += allocationReleased - expired;
       const allocated = await client.billing_credit_hold_allocation.updateMany({
         where: {
           id: allocation.id,
@@ -711,19 +736,33 @@ export class CreditRepository {
       });
       if (allocated.count !== 1)
         this.#terminalCorrupt("Active hold allocation changed");
-      if (captured > 0n) {
+      const consumed = captured + expired;
+      if (consumed > 0n) {
         const debited = await client.billing_credit_grant.updateMany({
           where: {
             id: allocation.credit_grant_id,
             tenant_id: input.tenantId,
             credit_account_id: account.id,
-            remaining_micros: { gte: captured },
+            remaining_micros: { gte: consumed },
           },
-          data: { remaining_micros: { decrement: captured }, updated_at: now },
+          data: { remaining_micros: { decrement: consumed }, updated_at: now },
         });
         if (debited.count !== 1)
           this.#terminalCorrupt("Allocated grant no longer covers capture");
       }
+      if (expired > 0n)
+        await client.billing_credit_journal.create({
+          data: {
+            id: randomUUID(),
+            tenant_id: input.tenantId,
+            credit_account_id: account.id,
+            journal_seq: await this.#nextJournalSeq(input.tenantId, account.id),
+            entry_kind: "expiry",
+            amount_micros: -expired,
+            source_kind: "hold_release_expiry",
+            source_ref: allocation.id,
+          },
+        });
       captureLeft -= captured;
     }
     if (captureLeft !== 0n)
@@ -732,12 +771,12 @@ export class CreditRepository {
       where: {
         id: account.id,
         tenant_id: input.tenantId,
-        generation: account.generation,
+        generation: currentAccount.generation,
         held_micros: { gte: hold.requested_micros },
       },
       data: {
         held_micros: { decrement: hold.requested_micros },
-        available_micros: { increment: released },
+        available_micros: { increment: restored },
         generation: { increment: 1 },
         updated_at: now,
       },
@@ -892,6 +931,19 @@ export class CreditRepository {
     >`SELECT clock_timestamp() AS now`;
     const now = clock[0]?.now;
     if (!now) throw new Error("Database clock unavailable");
+    await this.#refreshLockedGrantWindows(tenantId, accountId, now);
+  }
+
+  /** Account and grants are already locked; use the same DB instant as hold completion. */
+  async #refreshLockedGrantWindows(
+    tenantId: string,
+    accountId: string,
+    now: Date,
+  ): Promise<void> {
+    const client = this.transactions.requireActiveTransaction(
+      tenantId,
+      "write",
+    );
     const grants = await client.billing_credit_grant.findMany({
       where: { tenant_id: tenantId, credit_account_id: accountId },
       orderBy: { id: "asc" },
@@ -909,14 +961,24 @@ export class CreditRepository {
         });
         availableDelta += grant.remaining_micros;
       } else if (
-        (grant.status === "active" || grant.status === "pending") &&
-        grant.expires_at !== null &&
-        grant.expires_at <= now
+        grant.status === "expired" ||
+        ((grant.status === "active" || grant.status === "pending") &&
+          grant.expires_at !== null &&
+          grant.expires_at <= now)
       ) {
         const allocations = await client.$queryRaw<
           Array<{ reserved: bigint }>
         >`SELECT COALESCE(SUM(a.held_micros-a.captured_micros-a.released_micros),0)::bigint AS reserved FROM billing_credit_hold_allocation a JOIN billing_credit_hold h ON h.id=a.credit_hold_id WHERE a.tenant_id=${tenantId} AND a.credit_grant_id=${grant.id}::uuid AND h.status='active'`;
         const reserved = allocations[0]?.reserved ?? 0n;
+        if (
+          reserved < 0n ||
+          reserved > grant.remaining_micros ||
+          (grant.status === "expired" && reserved !== grant.remaining_micros)
+        )
+          this.#terminalCorrupt(
+            "Grant does not cover its outstanding allocations",
+          );
+        if (grant.status === "expired") continue;
         const expiredAvailable =
           grant.status === "active" ? grant.remaining_micros - reserved : 0n;
         availableDelta -= expiredAvailable;

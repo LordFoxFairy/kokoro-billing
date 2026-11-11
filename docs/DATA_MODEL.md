@@ -1,3 +1,82 @@
+## AUTH-1／CREDIT-1：内部认证纠偏（2026-10-23，待实现）
+
+当前实现固定 IAM `2f881d0` clean SDK0.17.0；认证profile为 `billing-direct-service-v1`，业务wire与Schema不变。原证据JSON解析器的纯解析部分提取到本Metering模块 `strict-metering-json.ts`，原Agent证据规则／错误映射保持，新凭据读取复用拒绝重复成员、严格UTF-8和深度限制；不新增通用SDK／服务。总期限包含文件IO，取消／shutdown先结束调用，迟到句柄按finally释放，禁止迟到HTTP派发。当前仍待完整门禁／组合，非正常激活声明。
+
+沿既有SQL canonical，无新表／列／迁移。IAM服务凭据仅为sender私有受限文件，动态读取，不进入余额、流水、预算receipt、Run、日志或公开接口。原IAM授权回执的tenant/user/run/session/fence/hash验证和receipt幂等身份保持；服务调用来源认证不替代资金业务授权。原已验数据配对及余额不变，后继认证切换不以清库作为前置。
+
+## CREDIT-1：仅恢复命令无新资金事实（2026-10-22）
+
+无SQL／Prisma／迁移或新表。原命令identity／digest／receipt及key复用；miss不创建任何receipt、alias、hold、账本或audit，hit原key零写，命中换key只沿原receipt永久绑定别名。原#assertCommitted重核不可变admission／hold／payer／精确价快照，损坏拒绝且新alias回滚，不修复坏数据。恢复得到历史admission ID不修改Agent执行授权／旧lease或授新派发权，Agent须另持久记录金融关联。
+
+## CREDIT-1：正式结算HTTP（2026-10-22，本地已验）
+
+本片不改SQL／Prisma。新model.settle命令首次对外发布前在既有永久摘要中增加run_id，
+恢复前与原admission Run核等，原回执结果明确保run/attempt；正常不存在此候选结算数据，
+不提供旧结果fallback或历史回填。head／资金／usage／audit／receipt仍同一事务，原创建回执不变。
+
+## CREDIT-1：模型结算证据head（2026-10-22，实施设计）
+
+actual归属的本轮局部profile不增列：System目录ID及认证映射观察沿原sealed evidence bytes保存，商业五元组沿原pricing snapshot保存；两者明确不同命名空间，由原System revision/digest连接，不将商业refs反填实际归属，也不改写旧证据。其他／未知归属保head及原hold待核对。
+
+现billing_admission增加nullable TEXT settlement_evidence_json，保存已验证原usage2 sealed bytes；held尚未应用证据时null，pending／captured／released由同一事务写入。原余额／hold／usage event／settlement表继续复用，不另建钱包或事件表；canonical SQL为唯一源，Prisma经fresh正规派生。当前head供相邻successor检查，每个event原JSON及原决定另由现不可变command receipt保留；pending不创建终态usage settlement。原创建receipt仍恢复原held表示，历史结算receipt不随current状态改写，更新失败／audit失败／取消整体回滚。无需旧数据回填／alias／双读。
+
+## CREDIT-1：过期hold余量账务（2026-10-22）
+
+不改Schema。hold.released_micros仍表示解除冻结总额，不等于可用余额增量；过期grant分配的余量不回available，同时从grant.remaining移除。既有grant_expiry按grant注销当时未冻结额度；后续held余量用expiry entry、source_kind=hold_release_expiry、source_ref=allocation UUID单独追加，承接原source唯一性和journal_seq。capture／expiry与hold／allocation／account／audit同事务，重放不追加，历史流水不改写。
+
+## CREDIT-1：Run消费证明不落资金事实（2026-10-22，已实施）
+
+无SQL／Prisma／表／列／默认／迁移变化。永久model-admit:1 digest、request_schema_version=1、receipt/key身份、原snapshot与hold完整性保持；proof/jti/expiry不进入永久command digest，旧消费token退役且不新增凭据存储。现已校验prepared返回attempt/planned摘要供唯一tuple复算，仅内存投影，不新增wire或事实owner。当前Actor/tenant/Run/session/fence/hash逐项核验，身份和资金事务仍分开，不作跨owner原子承诺；未知提交沿原receipt恢复，不以proof到期释放hold。
+
+## AGENT-1：预算 HTTP 与只读当前状态（2026-10-22，实施门）
+
+无SQL／Prisma／正常数据变更。沿现billing_admission、hold、account及永久command两表；GET在READ ONLY RR内核原receipt（namespace/name/attempt完整payload digest/result schema）和原canonical snapshot／raw facts及持有关系后投影当前status／updated_at。GET不调用recover绑定新key、不写鉴权或读取标记，不依赖活Agent／IAMgrant，异租户／付款用户不可见。POST永久创建回执与GET当前表示区分，状态变更不改原创建receipt；消费token不持久化或入cache。正常资源激活与三面核空演进仍待同一主链交付。
+
+## AGENT-1：预算 Admission 数据替换（2026-10-22，实施门）
+
+唯一canonical SQL原billing_admission替换未使用的feature-price／quantity／included目标列：id、tenant_id、run_id、attempt_id、request_ref、actor_ref、payer_ref、call_id、attempt_ordinal、feature_key、attempt_binding_json／digest、planned_json／digest、authorization_json、final_request_digest、prepared_at、observed_at、lease_expires_at、pricing_snapshot_json／digest、budget_credits、hold_id、status、created_at、updated_at。原始canonical bytes按严格UTF8原文TEXT保存而非JSONB重序列化；定价snapshot是严格canonical TEXT＋SHA，包含完整冻结rate／policy与绑定，不放可编辑第二价目或任何token。UNIQUE(tenant_id,attempt_id)、UNIQUE(tenant_id,request_ref)、UNIQUE(tenant_id,hold_id)，status held/captured/released/pending_reconciliation，budget整credits1..9223372036854／ordinal正数／digest hex等CHECK。
+
+账本原Credit hold允许expires_at显式NULL表示仅证据结算／释放，不是未配置默认；普通期限hold仍显式Date。未知和超预算保留hold，禁止TTL自动释放。已存在普通hold不迁移或改时限。剩余amount及terminal约束保留；Prisma只由fresh canonical refresh生成。旧Admission无兼容读取或数据回填；正常演进须锁下再确认原admission为空，保护全部账户／grant／hold／journal／其他owner数据，本片只自有fresh测试资源。receipt仍唯一原command两表，不复制幂等事实。
+
+## AGENT-1：prepared 读取不写资金事实（2026-10-22）
+
+无Schema／Prisma／正常数据变化。新原始prepared bytes及当前lease观察只在当前私有调用内存保存；
+真正Admission才由Billing冻结到其唯一正式snapshot。不得将读成功当hold，授权未知／409不视为零用量。
+消费bearer不进snapshot、Run、outbox、usage或审计；现App还缺独立Billing grant生命周期及后台关联，
+不得用普通IAM登录bearer、管理员发放权限或稳定Run assertion替代付款授权。
+
+## 精确模型修订选价绑定（2026-10-22，实施门）
+
+Billing现billing_metering_rate增加model_revision_id UUID NOT NULL和model_revision_digest CHAR(64) NOT NULL＋小写hex CHECK；现billing_metering_rate_revision.schema_version唯一允许2。映射身份进入同一rate canonical content/digest、业务键摘要v2、command schema2/审计和持久重建，映射版本即rate revision，不新建表/JSON稳定身份/第二事实源。商业五维仍ordinary columns，单一技术pair在同一完整配置不得跨商业tuple/币种；应用codec统一验证，既有unique digest仅缩窄索引而非替代full key校验。Prisma仅由canonical SQL临时库正规refresh派生。fresh-only，无旧无绑定rate回填/兼容；本片不执行正常DDL。正常演进须锁内确认rate两表仍为空并保护既有账户/余额/流水，非零或归属不明即停止该DDL。
+
+## AGENT-1／CREDIT-1：管理HTTP复用现revision（2026-10-22）
+
+本片无SQL/Prisma变化。价格和预算仍只存现Metering不可变revision，POST沿原tenant generation锁、永久command receipt、audit同事务；当前协议绑定服务端固定。GET以原RR readOnlySnapshot复用完整digest重建，只取tenant各自最大revision，并不更改effective_from或运行选价规则；rate/policy可独立为空，损坏明确失败，不合成0／默认预算。不存在新的管理缓存真源或迁移compat入口，正常Schema演进仍待上一片既定核空保护。
+
+## AGENT-1／CREDIT-1：现policy revision冻结单次预算（2026-10-22）
+
+唯一canonical SQL现billing_metering_policy_revision新增max_attempt_credits BIGINT NOT NULL（credits，不是micros），CHECK 1..9223372036854；schema_version CHECK=2，其余rate/credit/账本/receipt结构保持。Prisma由同canonical fresh安装正式refresh，不手改生成物或另写SQL事实源。预算参与policy canonical bytes/digest、audit、replay损坏验证和joint selection冻结值；不在前端/Agent或新表保存第二份可编辑预算。
+
+正常policy表0是此前只读证据，不授权边读边迁移：本片只创建/回收自有测试库，无正常DDL。后继owner具名演进入口必须在锁内再确认policy表为空，保护现1000非现金余额及所有其他owner/账户历史；非空即停，不填默认或重写旧policy。发布新policy后不得部署旧reader/producer重新解释新记录；无双读/迁移兼容分支。
+
+## AGENT-1／CREDIT-1：预算决策不另建资金状态（2026-10-22）
+
+本片无Schema/Prisma/正常数据变化，仅包内纯决策；输出是事务编排的输入，不作为第二份账本或持久授权。预算及actual使用BigInt Credit-micros且必须为整积分；未知/超预算不改变现hold/capture/release事实，后继正式恢复沿同一attempt与原receipt。现正常余额1000未被此实现修改，不迁移历史、兼容旧前置或新增预算服务。
+
+## AGENT-1／CREDIT-1：当前 profile 配对不迁移历史（2026-10-22）
+
+无DDL、Prisma派生或正常数据变更。沿原policy/rate revision不可变存储及profile_version/profile_artifact_digest字段，后继新发布必须绑定已消费usage2正式aggregate；不改历史行、历史receipt、原始canonical bytes/digest或已有余额。当前选择拒旧/错配可执行policy，不把旧记录在读取时补成新profile。真实验证只用自有fresh fixture，正常已发1000非现金积分不受此纯guard修复改写。
+
+## CREDIT-1：管理员发放复用现资金事实（2026-10-22）
+
+grant首次写入的status与余额增量使用同一次数据库时点；即使INSERT等待跨过effective_at，pending不得提前计入余额，后继正式激活仅计一次。无需DDL或另一份余额字段。
+
+无DDL/新表/Prisma变化。复用credit account/grant/journal、command receipt/key binding及audit；funding_id映射source_ref和command_identity，source_kind=admin_credit、program_key=admin_credit_v1，到账金额为amount_credits×1m。原串行subject锁及账户row lock、receipt双身份和原子audit保护；无手工余额UPDATE旁路，不删除或覆写旧流水，原重放精确匹配生效时间和全部业务参数。当前正常零账户/余额不改，待正式服务与消费者验收后才对明确测试额度发放。
+
+## CREDIT-1：整积分取整的数据边界（2026-10-22）
+
+无DDL、Prisma/schema、迁移或正常数据写入。现policy普通列 `rounding_version` 存新策略的 `attempt-credit-ceil-v2`，新内容自然有不同canonical digest；不更新既有revision或snapshot。余额/流水仍以int64 Credit micros保存；新计价结果为1,000,000的整倍数，0有效，超出int64可表示整积分上限拒绝。换算中间有理数不提前取整。旧micro-ceil策略不接受为新policy，不建立旧数据兼容执行路径。
+
 ## 2026-10-20 PR #2 main pairing
 
 The existing zero-account creation shares the grant subject advisory lock and commits the first account plus audit atomically; repeat requests return the actual account without resetting balances. SQL and generated Prisma schema remain byte-identical to both parents. No grants, journals, payment or normal data changes. Wire now uses canonical /v1; historical SET55 /v2 notes below are not the runtime.

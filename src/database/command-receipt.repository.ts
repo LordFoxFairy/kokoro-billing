@@ -15,6 +15,16 @@ export class CommandReceiptRepository {
     this.#transactions = transactions;
   }
 
+  async recover<T>(
+    request: CommandReceiptRequest,
+    codec: ResultCodec<T>,
+  ): Promise<CommandExecution<T> | null> {
+    const active = this.#transactions.requireActive(request.tenantId);
+    return this.#transactions.run(active.scope, () =>
+      this.#recover(request, codec),
+    );
+  }
+
   async execute<T>(
     request: CommandReceiptRequest,
     codec: ResultCodec<T>,
@@ -31,6 +41,49 @@ export class CommandReceiptRepository {
     codec: ResultCodec<T>,
     effect: () => Promise<T>,
   ): Promise<CommandExecution<T>> {
+    const recovered = await this.#recover(request, codec);
+    if (recovered !== null) return recovered;
+    const { client } = this.#transactions.requireActive(request.tenantId);
+    const receiptId = randomUUID();
+    await client.billing_command_receipt.create({
+      data: {
+        id: receiptId,
+        tenant_id: request.tenantId,
+        command_namespace: request.namespace,
+        api_surface: "internal",
+        command_name: request.commandName,
+        command_identity: request.commandIdentity ?? null,
+        request_schema_version: request.requestSchemaVersion,
+        payload_digest: request.payloadDigest,
+        status: "processing",
+      },
+    });
+    await client.billing_command_key_binding.create({
+      data: this.#binding(request, receiptId),
+    });
+    const value = await effect();
+    const encoded = codec.encode(value);
+    const result = await client.billing_command_receipt.updateMany({
+      where: { id: receiptId, status: "processing" },
+      data: {
+        status: "succeeded",
+        result_schema_version: codec.schemaVersion,
+        result_json: toPersistedJson(encoded),
+        updated_at: new Date(),
+      },
+    });
+    if (result.count !== 1)
+      throw new CommandReceiptError(
+        "COMMAND_RECEIPT_INCOMPLETE",
+        "Command receipt completion lost ownership",
+      );
+    return { value, replayed: false, receiptId };
+  }
+
+  async #recover<T>(
+    request: CommandReceiptRequest,
+    codec: ResultCodec<T>,
+  ): Promise<CommandExecution<T> | null> {
     const { client } = this.#transactions.requireActive(request.tenantId);
     this.#validate(request, codec);
     const locks = [
@@ -106,40 +159,7 @@ export class CommandReceiptRepository {
         });
       return { value, replayed: true, receiptId: receipt.id };
     }
-    const receiptId = randomUUID();
-    await client.billing_command_receipt.create({
-      data: {
-        id: receiptId,
-        tenant_id: request.tenantId,
-        command_namespace: request.namespace,
-        api_surface: "internal",
-        command_name: request.commandName,
-        command_identity: request.commandIdentity ?? null,
-        request_schema_version: request.requestSchemaVersion,
-        payload_digest: request.payloadDigest,
-        status: "processing",
-      },
-    });
-    await client.billing_command_key_binding.create({
-      data: this.#binding(request, receiptId),
-    });
-    const value = await effect();
-    const encoded = codec.encode(value);
-    const result = await client.billing_command_receipt.updateMany({
-      where: { id: receiptId, status: "processing" },
-      data: {
-        status: "succeeded",
-        result_schema_version: codec.schemaVersion,
-        result_json: toPersistedJson(encoded),
-        updated_at: new Date(),
-      },
-    });
-    if (result.count !== 1)
-      throw new CommandReceiptError(
-        "COMMAND_RECEIPT_INCOMPLETE",
-        "Command receipt completion lost ownership",
-      );
-    return { value, replayed: false, receiptId };
+    return null;
   }
 
   #binding(request: CommandReceiptRequest, receiptId: string) {

@@ -2,9 +2,9 @@
   "owner": "@kokoro/billing",
   "source": {
     "path": "contract/openapi/v1/openapi.yaml",
-    "version": "4.0.0-experimental.3",
-    "bytes": 116077,
-    "sha256": "f934d6f81842fafaec2e3e64cca6bd4669f86601979bd737941a5695506814fe"
+    "version": "4.0.0-experimental.10",
+    "bytes": 148752,
+    "sha256": "f3d510bbf084d0dddad91d8cfafd13caf19e23c2a97074b363e0687291e14654"
   },
   "generator": {
     "package": "@hey-api/openapi-ts",
@@ -24,11 +24,17 @@
     "typescript_version": "6.0.3"
   },
   "schema_bindings": {
+    "AdminCreditGrantRequest": "AdminCreditGrantRequestSchema",
+    "AdminCreditGrantResponse": "AdminCreditGrantResponseSchema",
+    "AdminMeteringPolicyPublishRequest": "AdminMeteringPolicyPublishRequestSchema",
+    "AdminMeteringPricingResponse": "AdminMeteringPricingResponseSchema",
+    "AdminMeteringRatePublishRequest": "AdminMeteringRatePublishRequestSchema",
     "Admission": "AdmissionSchema",
-    "AdmissionCaptureRequest": "AdmissionCaptureRequestSchema",
     "AdmissionCreateRequest": "AdmissionCreateRequestSchema",
-    "AdmissionReleaseRequest": "AdmissionReleaseRequestSchema",
     "AdmissionResponse": "AdmissionResponseSchema",
+    "AdmissionSettlement": "AdmissionSettlementSchema",
+    "AdmissionSettlementRequest": "AdmissionSettlementRequestSchema",
+    "AdmissionSettlementResponse": "AdmissionSettlementResponseSchema",
     "AlipayWebhookForm": "AlipayWebhookFormSchema",
     "CatalogItem": "CatalogItemSchema",
     "CatalogResponse": "CatalogResponseSchema",
@@ -50,6 +56,14 @@
     "ExpireCreditHoldsResult": "ExpireCreditHoldsResultSchema",
     "HealthResponse": "HealthResponseSchema",
     "LedgerEntry": "LedgerEntrySchema",
+    "MeteringPolicyConfiguration": "MeteringPolicyConfigurationSchema",
+    "MeteringPolicyRevision": "MeteringPolicyRevisionSchema",
+    "MeteringPublication": "MeteringPublicationSchema",
+    "MeteringPublicationResponse": "MeteringPublicationResponseSchema",
+    "MeteringRate": "MeteringRateSchema",
+    "MeteringRateConfiguration": "MeteringRateConfigurationSchema",
+    "MeteringRateRevision": "MeteringRateRevisionSchema",
+    "MeteringRational": "MeteringRationalSchema",
     "NonNegativeCreditMicros": "NonNegativeCreditMicrosSchema",
     "NonNegativeDecimal": "NonNegativeDecimalSchema",
     "OpenCreditAccountRequest": "OpenCreditAccountRequestSchema",
@@ -70,16 +84,16 @@
   },
   "outputs": {
     "index.ts": {
-      "bytes": 4244,
-      "sha256": "3a684aa6aa0b56541387e73e122ee8e68da1f55a9833467aed26b0458c3a00fe"
+      "bytes": 5341,
+      "sha256": "7d3aac74ef47a619d51c30db45aaa23608cb790313c20d20203910e94d76d3c7"
     },
     "types.gen.ts": {
-      "bytes": 30315,
-      "sha256": "9d4e5b5084248ce5d00b154f7fa20d6d13fde0ec7f9f84b2c40db2d3e8752d3f"
+      "bytes": 36924,
+      "sha256": "45cf5d857fc025cdd44c997ecff7e9d469bbf276ed52fcabf44e2557bfa7ef25"
     },
     "schemas.gen.ts": {
-      "bytes": 28177,
-      "sha256": "5afb0eaad1a857d2e3a23ee6f95c80ab9eab4d2d8b1550e6b05bcb15bbf22db8"
+      "bytes": 40901,
+      "sha256": "660dd7494b67ec40691e75c9186d881d1df09354e20f184aa88fba422f0f59eb"
     }
   }
 }

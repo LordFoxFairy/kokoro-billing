@@ -1,3 +1,226 @@
+## 2026-10-24 CREDIT-1：零售倍率改定3/2，未追溯改旧报价
+
+用户已明确1.5倍换算积分，Root ADR-033同步；后续新报价采用现policy的精确3/2，替代初始7/5，不向用户反复索要同一倍率。现内核原生支持该有理数，不在消费者或余额再加倍率。计价仍按已核实同attempt成本×倍率×冻结currency/Credit换算→一次向上取整。此前本人QA1000 Credit/USD保持验收配置身份，不宣称正式销售汇率。
+
+本片仅文档裁决，未发布正常policy、改Schema/进程/原冻结快照、写资金或执行新模型；原缓存缺失仍pending，不猜0，不重算原10积分预占。后续按原正式发布入口创建新revision并回读；采购及完整实际usage/capture仍不是已完成事实。历史段落7/5仅代表当时基线。
+
+## AUTH-1／CREDIT-1：IAM直接服务认证消费者（2026-10-23，本地已验，正常未切换）
+
+IAM owner已提交`2f881d0ad7c97a4226ee217b78fbc1dc9b1cbeab`，clean SDK0.17.0 archive SHA256 `147625e285132fcf0a37edf97b0d27da11804828d5c33176310b550914858c9e`；本仓固定包、provenance、lock与双架构门，删除0.16包。接收端/消费者业务body与response、Billing公开wire及canonical SQL/Prisma不变。
+
+原Client只保IAM origin/期限/本地服务凭据文件路径。每次由已验证tenant选固定caller/surface唯一凭据，调用正式SDK；无machine OAuth mint、exchange、introspection、secret/allow缓存、JWT fallback或自动续期。旧启动token配置在启用时拒绝，原Run proof和响应六事实/严格expiry/取消/账务事务保持。缺失/损坏文件只拒绝，不恢复旧凭据。现Metering严格JSON解析器复用原usage纯算法，保原错误和数字规则，不建共享SDK/新服务。
+
+验证：完整`pnpm verify`自然退出0，70文件1862 PASS、53资源文件628默认SKIP；额外真实PG/Nest/source-dist/SDK四文件115 PASS／0SKIP，临时库清单94→94。compiled Billing Client→实际IAM Nest/PG/Redis八检查通过（Agent signer、BFF绑定明确fixture），观察OAuth请求0；覆盖双方轮换、错tenant、无当前Run绑定、坏receiver文件与恢复，模型/工具调用及正常积分写入0。独立只读复核无新增阻断。
+
+原失败保留：配置/HTTP RED、重复JSON与停滞文件IO六项RED；首次mock export写法仅测试装配失败，修正后才记录真实RED；原fixture字段未更新导致typecheck失败、两处lint失败、架构pin仍0.16失败均修正。一次PG套件dist未重建导致1FAIL/114PASS，未弱化断言，最终完整build后115PASS。审查发现重复成员last-wins与取消等待磁盘的问题，均补回归并修复；迟到文件句柄最终释放、零迟到HTTP。全部原日志/运行收据留Root ignored `var/dev/product-real-chain-20261023/auth-direct`。
+
+下一步仅配对正常IAM/Billing、正规退役旧专属机器注册，然后回到既有真实Agent/用量结算主链。当前未重启正常两端、未PR/merge，不以本地SDK组合冒充产品完整验收。剩余Agent→Platform机器OAuth不是本片已删除事实。
+
+## 2026-10-23 AGENT-1／CREDIT-1：历史 sealed reader 固定消费（本地已验）
+
+固定已提交Agent `189c8ac74baa8715589cd4e7ab1a5ee79fb51f9e` 的Git blobs：HTTP7.2 raw SHA256
+`4e75244c676e02736867d2f461d18b4d67d93151ff03ffaf6e632685b77ca9db`，provenance与usage2三件
+逐字核来源。唯一receipt SHA256 `608ec8dfd26dd49c953e46a23ac20d0b91d0ced78322816ee77b50b05bed550c`。
+原生成器正式生成，两份envelope仅注释及SOURCE_SHA256变化，wire／DTO形状不变；原reader／
+binder／金融事务／整数取整／Billing exp10 canonical／SQL／Prisma／依赖无diff。精确历史读取
+独立核当前head、不授执行权；prepared仍原当前live语义，无兼容reader或新服务。
+
+先新版本消费RED（实际7.1≠7.2），后89项consumer／drift／负控通过。新整图逆证明首轮fixture
+用JS重序列化，因int64精度与整数response key顺序改变失败；现只逆转两个已批准raw编辑，
+仍核同一个完整7.1原SHA，没有放宽hash或舍弃其余字段。早期一次多余tsx eval顶层await及
+仓外wrapper相对路径调用错误均非业务RED，后者未进入门禁；正式CLI／绝对路径后通过。
+
+398非文档输入停写且无漂移，完整pnpm verify全0（格式／lint／typecheck／build／SQL／contract；
+默认1842 PASS／628原资源SKIP），相关真实隔离PG结算42 PASS／0SKIP，正规生成drift检查0。
+此片无Schema或runtime更改，未重跑fresh Prisma／source-dist及不相关真实资源套件；不把默认
+SKIP称真实通过。自有库库存94→94，未改正常资源、资金或发送真实模型／工具调用。
+独立只读审查Approved，原件／wire／原strict pin及取整均核同；当前README旧pin已同步。
+
+后继Agent消费BFF internal1.3、独立金融关联／逐事件持久ACK与崩溃恢复、原唯一派发和同流
+真实usage仍待装配，再正常页面／后台端到端验收及集中PR merge。本片尚未正常激活／PR合并，
+不是实际供应商费用、扣分或整目标完成证明；真钱支付仍后置。
+
+## CREDIT-1：原预算仅恢复HTTP已本地验收（2026-10-22）
+
+沿原ModelAdmissionService将首次短事务receipt恢复提取供create／recover共享；原首次预占仍需live proof与Agent／IAM，recover只核已提交原receipt及#assertCommitted，零peer／价格请求。miss零hold／admission／audit／receipt／alias；命中原key零写、换key仅沿既有receipt绑定alias，损坏／取消全事务回滚。不授旧fence补grant或派发权，不伪造proof；为后继Agent保存历史金融关联提供入口，而非宣称完整崩溃恢复已装配。
+
+canonical exp10／29操作／57schema，raw SHA256 `f3d510bbf084d0dddad91d8cfafd13caf19e23c2a97074b363e0687291e14654`；仅新增POST admissions/recover，复用原六字段request与原AdmissionResponse，机器／u1Guard、strict flat16KiB、canonical URL／唯一key和content-type，禁proof与旧consumption header。200始终原held创建ACK／原时间，含capture后；404只表示此锁定观察点无已提交回执，不证明在途create已取消或可换attempt派发。唯一新增op完整逆回原exp9 SHA7b5335fd，原历史inverse和target保护保持，正规生成，无新editable DTO、SQL／Prisma／依赖或服务。
+
+实际RED：2缺recover方法／28原回归PASS；2缺HTTP路由／32其余PASS。首次service green一项跨actor测试误以原tenant-wide key会miss，实际既有actor-bound payload校验CONFLICT；现明确断言拒绝且零钱／peer，不改生产命名空间。36项actual PG／Nest原预算回归现含外部取证阶段recover miss→原create后提交→唯一hold恢复、原资金事务锁内并发恢复、alias触发器阻塞后取消回滚、坏快照不修复、默认关闭和同帧TCP正控后物理重复header拒绝。原settlement capture案例另实测recover仍原heldACK且11表事实零变化；source/dist两正式进程均验recover404／自报金额400且零额外peer。
+
+主方停写397非文档输入无漂移，最终五阶段exit0：完整verify的格式／lint／typecheck／build／SQL／contract通过，默认1841 PASS／628资源SKIP；相关9文件真实PG289 PASS／0SKIP、source/dist10 PASS／0SKIP、fresh Prisma及正规生成检查通过，库94→94，独立只读Approved。80项定向（含36预算／42结算／2契约）通过。首完整门在新HTTP测试fixture的unknown payload类型失败，原冻结／失败保留；只收窄为原wireCommand推导类型后新冻结完整重验，不改业务／断言／门禁。早期在追加exp10完整逆证明前生成被旧raw保护拒绝亦保留，不跳过原保护。
+
+Root＋12子仓非递归fetch全成功，main无新增；正常配置／服务／余额与资金不动，零实际模型／工具请求。BFF目前仍固定exp9，后继固定本次正式commit，再由Agent仅恢复原预占并独立保金融关联／逐事件ACK；不改历史requested_unknown为granted。相邻sealed revision恢复采用正式历史事实读取及顺序通知的既有owner接缝继续收敛，不借Chat outbox或新服务；运行装配、真实产品整链与集中PR／正常激活仍待，真钱支付不做。
+
+## CREDIT-1：正式结算HTTP（2026-10-22，本地已验）
+
+沿现ModelAdmissionController／CreditAccountGuard发布exp9，一个POST `/v1/internal/billing/admissions/{admission_id}/settle` 替换两个未挂载capture/release声明。只收原Run与sealed事件／修订／digest及永久key；tenant／actor来自现BFF机器上下文，无用户token／proof／新IAM许可。恢复前核原Admission的Run，原ACK带run／attempt；旧pending回执在后继结清后仍原样恢复。未知／超预算保hold，真正确认未派发才释放；不接调用方金额或usage。安全闭集只投影整Credit字符串及资金／证据引用，不暴露原evidence JSON。
+
+canonical exp9／28操作／57schema，raw SHA256 `7b5335fde2be601b2d6256cb9b68b0964d5518cfa053b50f2029358a059a0924`。正规生成；build/test-only精确逆回原exp8全图，旧target oracle及历史保护保持。曾因canonical条件交集产生generated unknown lint失败，现将等价三态约束改为互斥oneOf并正规重生成；未手改产物或放宽lint。mapper额外核状态／金额／引用一致性和整Credit精度，5项业务RED后修复；wire、Run恢复前核对与HTTP缺路由均留实际RED，setup失败另列不冒行为证明。
+
+42项实际Nest／PG结算回归覆盖capture、release、pending相邻推进、离线原ACK、错Run／跨身份、取消回滚、严格flat JSON及禁header、默认关闭／旧路径404。physical重复headers负控先用相同TCP framing成功200作正控，再核拒绝且资金零变化；非全部请求格式错误的伪通过。source／dist原进程10项亦覆盖正式settle而不触达新peer。
+
+主方停写394非文档输入无漂移，最终五阶段exit0：完整pnpm verify的格式／lint／typecheck／build／SQL／contract通过，1839 PASS／620默认资源SKIP；相关9文件真实PG281 PASS／0SKIP、source/dist10 PASS／0SKIP、fresh Prisma及正规contract生成检查通过。独立只读审查Approved，数据库库存94→94。SQL／Prisma／依赖和正常配置／资金未变；Agent／IAM具名fixture及QA价／用量只验证真实HTTP与资金事务，零实际模型／工具调用，不冒正常供应商扣分。后继固定BFF→Agent结算消费者、原唯一派发／同流真实usage与持久恢复，再验正常产品链；本地提交不等于PR合并或正常激活。
+
+## CREDIT-1：同一admission结算应用（2026-10-22，本地应用已验）
+
+沿原Metering装配应用：事务外严格读取Agent sealed evidence，原冻结价格聚合后一次整数ceil；同一receipt→Run锁内应用capture／release／pending、原始证据head、审计及永久回执。旧pending ACK在已知相邻后继结清后仍恢复原决定；terminal ACK逐项核持久hold/source、usage数量／维度及settlement。对当前head缺原receipt拒绝损坏，不自动重建；原创建回执仍保held表示。原Metering结算实现仅提取同事务入口，不复制资金逻辑；canonical SQL仅增加一个nullable head TEXT列，Prisma已fresh正规派生。
+
+当前33项真实隔离PG回归、134项计价／决策／Nest装配定向通过。合法超大用量抛错回held的P2、terminal回执缺来源校验及pending head缺receipt重建均已实际RED后修复；最终金额超过int64明确budget_exceeded待核对，中间算术未知不猜最终价。只读审查Approved。首轮388冻结输入完整门的默认测试1812 PASS／2 FAIL／607资源SKIP，两处失败均是新helper直接导入Prisma生成行类型越过既有边界；已按现CreditRepository模式从TransactionClient派生唯一行类型，原架构断言不改，15项架构回归通过。失败日志保留，随后重冻完整门，尚未据此宣称完成。进一步适价审查发现通用actual=verified不足以证明属于冻结费率：现按Agent文档ec80da5明确的本轮局部System目录ID映射核原planned pair，再沿原revision/digest→商业tuple取冻价；不收窄通用usage2，也不以字符串相近猜命名空间。4单元／4真实PG业务RED后错provider、错model、商业refs及raw模型名均pending，完整保hold且零usage/capture/release。真正认证映射producer仍待装配，不能复制planned自证。归属补强前完整五阶段已全0（388输入无漂移、1814默认PASS／607资源SKIP、268真实PG、source/dist10、fresh Prisma／正规生成、库94→94），该结果不外推新增行为；最终再次停写388非文档输入无漂移，五阶段全部exit0：pnpm verify的format／lint／types／build／SQL／contract全过，默认1818 PASS／611资源SKIP（不计通过），相关9文件真实隔离PG272 PASS／0SKIP、source/dist10 PASS／0SKIP，fresh Prisma及正规contract生成检查通过；数据库库存94→94。独立只读增量审查Approved。原始RED、首完整失败及归属补强前门均保留，本提交只交付应用层，不冒正式HTTP／真实模型验收。具名Agent/IAM端口与合成QA价／usage仅验证Billing事务，不是正常供应商实际调用／扣分；数据库库存94→94，无正常资金／配置／进程变化。正式HTTP/BFF/Agent传输、worker唯一派发及真实usage恢复仍由同一主线后继接线。
+
+## CREDIT-1：实际结算前置——跨有效期预算结清修复（2026-10-22，本地已验）
+
+推进同admission实际结算时发现Credit原语会将过期grant的hold余量回灌available。
+主方真实PG复现8 FAIL／3 PASS：到期刷新前／后、释放／部分capture、混合分配与并发均可暴露。
+本片只修CreditRepository原终态路径：保原account→grants→hold→allocations锁序和完整性校验，
+新终态用同一DB时点刷新窗口；有效余量恢复available，过期余量从remaining注销，并按allocation
+UUID追加hold_release_expiry流水。hold.released总额原义不变；已有实际费用仍capture，
+disabled账户仍可结清且不复活账户；终态原source／金额精确重放在refresh前返回，零新写。
+
+迭代中另实证单hold坏remaining被提前refresh修复的1 FAIL，已将原完整性校验前置保留；
+独审再指出同grant多hold总额不足的P2，真实PG两个负控均FAIL后补总reserved合法性门，
+已expired仅核remaining==reserved、不自动修复。最终专项17 PASS／0SKIP，涵盖两窗口路径、
+混合及多hold分次结清、disabled、并发／原回执零变化和audit失败全事务回滚；不靠TTL拒绝
+长期hold、改断言／skip或新增兼容路径规避。初次Vitest标题%j序列化BigInt的设置错误保留，
+修测试名后才取得业务RED，不把0测试当业务证据。
+
+主方冻结379非文档输入无漂移，Node24.20.0完整pnpm verify全0：1786 PASS／578默认资源SKIP，
+另8文件真实PG239 PASS／0SKIP、source/dist10 PASS／0SKIP、fresh prisma:check与正规生成检查0。
+全部自有数据库库存94→94精确恢复，独审Approved，无遗留确定P0–P2。Schema／Prisma生成物、
+HTTP契约／依赖及正常配置／资金原样；没有模型／工具／正常使用量结算或服务重载。
+
+本片是实际结算必经Credit原语修复，不称model admission结算已实现。已确认现缺严格冻结价格
+snapshot decoder、有限usage2桶／range映射和sealed evidence→计价→同admission事务编排；
+后继复用原价、一次整数ceil、原capture/release／receipt，unknown和超预算保留hold、阻止Run
+后续派发。不能用当前selectActivePricing重选现价、将cache unknown补0或把旧声明接口当运行入口。
+之后再接正式传输、Agent同SDK流usage封口及持久恢复、唯一派发与正常有限真实整链；目标仍进行中。
+
+## CREDIT-1：完整proof头容量修复（2026-10-22，本地已验）
+
+运行修复commit d34502595e2cb1ac12e5b57fb372497ef04c90fd，canonical exp8／contract SHA2c65b64c保持。真实Node TCP发现合法16KiB proof叠加服务身份头会触发默认16KiB parser的431，原source/dist样本两FAIL（期待依赖503）。唯一Fastify composition显式http.maxHeaderSize=32KiB，仍保32KiB body和proof16384边界；原source/dist请求改满长proof且核实际canary脱敏，修后4PASS／6名称过滤（非未执行通过），无资金写。
+
+交付commit干净树378非文档输入冻结，完整五阶段全0：pnpm verify1786 PASS／561默认资源SKIP，另真实PG228、完整source/dist10 PASS／0SKIP，fresh Prisma和生成drift通过；自有库94→94、正常依赖原hash保持。新长行初次格式检查失败已保留，只经原formatter修正后提交／完整重验，未放宽期望或parser边界。独审无确定P0–P2。正常配置、Schema、余额与模型／工具不动；BFF消费者固定此producer，前次d65d709业务与协议不变。
+
+## CREDIT-1：Run-proof预算消费者已本地验收（2026-10-22）
+
+沿f61a5d2原Metering／ModelAdmission原位配对IAM具名Run授权，不新增服务、用户消费grant或App token broker。唯一SDK0.16固定clean来源16ee2eb（实现67a3c0e，16ee仅修SDK README）；archive SHA256 a358795000c022633e187a253e5ef6cb8ae8dc6330eade4f29aa38b932e49a89，76008字节／104项，原contract SHA30cafb75保持。唯一旧0.7包删除，manifest／lock／严格artifact门一致。新proof＋expected hash按已验证Agent prepared与可信payer重新复用唯一model-admit:1 codec；核tenant/user/Run/conversation/fence/hash及expiry，不存用户token或proof。SDK旧Session回包拒绝，safe fence无盲转Number。
+
+canonical experimental.8／29操作／56schema，raw SHA256 2c65b64c896a85cb89e6b8f23ee9802b6e5cf2440d9a8debaa23973f5c199b6e。POST唯一x-billing-execution-proof，旧header单用／混用拒绝、日志仍脱敏；无alias。原永久回执先恢复、GET当前四态只读，预算事务／取消／双expiry／无TTL hold／永久request_ref和SQL／Prisma原样。exp8→exp7全文SHA逆证明及既有逆证明保留，仅build/test使用。
+
+主方停写378非文档输入、前后无漂移。Node24.20.0完整pnpm verify全0（格式／lint／typecheck／build／SQL／contract，1786 PASS／561默认资源SKIP）；另8文件真实PG／HTTP228 PASS／0SKIP、source/dist10 PASS／0SKIP、fresh prisma:check与contract:generated:check全0，自有库库存94→94、正常node_modules原包hash不变。候选依赖由原共享symlink改为本工作树独立安装，不写正常依赖。独立只读终审Approved，无确定P0–P2。
+
+仓外actual Agent HTTP／PG→compiled Billing→actual IAM Nest／PG／Redis共22检查通过：错请求proof拒绝／旧header拒绝，QA100只预占10，可用90／冻结10，唯一hold／admission／发放流水；当前成员撤销拒绝新授权，Agent过期及成员已撤销后原回执仍恢复、资金不变；Agent xmin不变，零usage／capture，自有IAM Redis prefix清理且库库存94→94。Agent签名JWKS与BFF live binding为具名IAM HTTP peer，不冒真实Agent签名供应商／BFF入口已接；显式QA费率不作生产费用证据。
+
+保留初始26FAIL的TDD及safe fence／旧回包／字段错位负控；本轮全门首次verify／真实PG／source-dist均0，但prisma检查P1010失败。诊断确认无用户名管理URL由pg使用OS角色、Prisma使用另一默认角色；仅仓外验收配置明确相同OS角色，独立dbpull0并清自有库，再新冻结完整重跑全0，不改业务／Schema／门禁消绿。正常余额、服务和模型／工具均未触动。Root＋12子仓非递归fetch成功，main无新增；未push／PR／merge。下一步同一主链的Agent→BFF专用内部预算入口／可信已提交Run来源→唯一dispatch→真实usage整数结算，不恢复旧App grant前置。
+
+## 2026-10-22 AGENT-1／CREDIT-1：正式预算 HTTP 已本地验收
+
+基线9cc7af1；沿已裁决预算业务原位挂载BFF专用Admission POST／GET，不新增服务、Schema或认证协议。完整机器bearer＋internal secret＋web-bff标记和u1 tenant／subject，六项prepared绑定闭集、独立消费header及原命令key；严格16KiB flat JSON保留原UTF-8和重复字段防护，原grant parser仅移至共用HTTP边界，无旧导出／fallback。GET拒query、编码别名及正文framing，RR本人范围只读当前四态／updated_at，不要求消费token或触达Agent／IAM，也不绑定新key。POST／原命令回放201＋Location始终原held创建表示，绝不把当前状态改写原回执。
+
+唯一canonical exp7／29操作／56schema，raw SHA256 `cdb09146a767a8a1a6d976e2e7d819961a01518370968f671557ff2df4edccc3`；正规生成三件及provenance，删除未实现旧bound／自报payer／价格与伪复合状态，无运行兼容。预算正整数字符串严格1..9223372036854、UUID／digest小写完整匹配、UTC毫秒时间；旧exp6全图SHA7044102d精确逆证明仅在build/tests使用四段删除原件，原管理／资金／账户／target完整图保护保持。当前BFF／App／Admin尚固定exp6，后继正式消费者再配对，不能与新正常环境混用。
+
+显式 `BILLING_MODEL_ADMISSION_ENABLED=true` 才注册两条路由和既有reader／IAM client；默认图不因凭据存在而开启。两个peer各2秒、零重试，总请求取消默认10秒可显式有界配置；连接／消费凭据不序列化或回传，header日志增加消费token脱敏。控制器只在真正aborted或未完成reply关闭时取消，清timer／监听；正常body完成不触发取消。原业务失败映射成稳定400／403／404／409／422／500／503，不暴露依赖body，unknown仅原命令恢复。
+
+TDD覆盖旧wire3FAIL、HTTP缺路由2FAIL、预算上限／毫秒格式及持久坏run_id边界。独审发现GET正文被Fastify忽略、await miss取消、第二轮并发回执重放取消三处P2，均留干净RED→GREEN：framing曾返回404现400；两纯取消单元原null／UNAVAILABLE现ABORTED；真实PG模拟首轮miss和第二轮实际receipt重放，取消原resolve预算结果现ABORTED，资金和key数量不变。signal-only保护不重新要求旧lease／grant活跃。最终独审无确定遗留P0–P2。
+
+主方最终374非文档输入停写且无漂移。完整 `pnpm verify` 全0：格式／lint／typecheck／build／SQL／contract及1779PASS／560默认资源SKIP；另8文件真实PG／HTTP222PASS／0SKIP、源码／dist进程10PASS／0SKIP（含新显式装配两入口，依赖失败零预占），fresh `prisma:check` 与 `contract:generated:check` 均0，自有库库存94→94。默认skip不冒真实集成通过。文档新增链接无失效；全量链接探测另发现基线已有跨仓相对链接失效，已单列私有记录，不冒称全量链接通过或扩大修复。第一次完整门因新取消fixture的require-await lint失败、第二次因治理表仍写旧两操作权限失败；只修自身fixture和精确两条期望后新冻结完整重跑，保留失败，不删弱保护／改timeout。缺价fixture误写不存在status、仓外验收重名变量及shell只读status错误均保留，仅修验收自身，无生产fallback。
+
+仓外actual Agent HTTP／PG→compiled canonical Billing runtime HTTP／PG 18检查通过：显式QA发放100后唯一预算10（available90／held10），no TTL；Agent xmin保持。原Agent lease过期及IAM peer离线，原命令换key仍原创建结果；无消费token GET成功且无key写入，跨actor404／缺机器context403。唯一hold／admission／原发放journal各1，零usage／capture；IAM为具名严格HTTP peer夹具、价格为显式QA，不冒正常IAM会话或真实供应商费用。所有自有进程／连接退出后正常DROP，同库两owner隔离schema，库存94→94。
+
+Root＋12子仓非递归fetch全部成功，远端main无新增；未checkout／覆写混合候选、未push／PR／merge或正常激活。正常配置／Schema／余额不动，模型／工具／实际用量扣分本片均0。下一步仍同一主链：App合法消费grant生命周期／异步Run关联→同一正式预算API消费者→原single-dispatch→正式usage封口／一次整数结算；不重开MCP或额外成本保证前置。详细私有证据只存Root ignored记录，公开资料不含URL凭据或会话原件。
+
+## 2026-10-22 AGENT-1／CREDIT-1：首次预算预占业务与恢复已本地验收
+
+基线7412c30，沿现Metering／Credit原位实现ModelAdmissionService，不新增Module／服务／钱包／成本保证。先短事务恢复原永久receipt；miss零写，换key成功恢复永久绑定新key。首次才在事务外读取正式Agent prepared与IAM消费授权；个人payer＝prepared user actor/subject＝受信当前actor，IAM原expires_at保持精度供资金提交检查。原command查找／校验共享，无第二幂等表；不持锁HTTP、token不进入digest／DB／审计。
+
+资金事务重新锁原key＋attempt，Run／request_ref有序锁核永久冲突与pending阻断；冻结精确System修订的全部费率行／区间及policy2，不用未知usage提前挑价。原Credit本人账户／预算×1m预占／Admission＋原raw事实＋严格canonical完整价目／审计／receipt同事务；模型hold显式NULL期限，不用假远期时间或TTL释放。canonical原billing_admission删除旧feature-price／quantity目标列，不兼容回填；Prisma经fresh正式refresh。现普通Date hold原义保持，原key还核expiry，拒伪装成NULL模型hold。正式HTTP、Module正常装配及capture/release尚未接，不将内部Service称已挂载API。
+
+TDD：receipt恢复3行为FAIL／3PASS→6PASS（原5回归同跑11）；完整价目freeze正控RED→原46PG通过；IAM expiry返回6行为RED→原18HTTP通过。Admission初始6FAIL／2PASS→8PASS，补实际账户／审计锁下的cancel／双expiry、原auth损坏、request_ref冲突及普通hold身份后20PASS。独审两个P2均实证RED：尾部审计等待后取消／到期仍提交3FAIL，现所有写／audit／receipt／完整性await后仅新Admission最终复核DB时钟＋signal；request_ref永久冲突原误UNAVAILABLE的1FAIL，现具名锁／查询稳定CONFLICT。原回执恢复不套新live lease。最终独审无新增确定P0–P2。
+
+主方363非文档输入停写，Node24.20.0完整pnpm verify全0（格式／lint／types／build／SQL／contract及1762PASS／551默认资源SKIP）；8文件真实PG／HTTP215PASS／0SKIP、source/dist8PASS／0SKIP，fresh prisma:check与正式HTTP生成检查0；363输入前后无漂移，自有库库存94→94。公开YAML／generated HTTP／package／lock与基线原字节保持，不因此要求BFF改pin。
+
+另仓外actual Agent HTTP／PG→compiled-only Billing budget Service／PG 14检查通过：显式QA发放100后仅预占10（可用90／冻结10），唯一hold／admission／原发放journal各1；无TTL，Agent xmin不变；过期Agent及IAM peer不可用时原命令换key恢复仍原结果，余额不变。IAM为具名严格HTTP peer夹具、价格为明确QA，不称正常IAM付款资格或生产费用。两owner同一自建库隔离schema，进程／连接全退出后正常DROP、库存94→94精确恢复，零usage/capture。
+
+初始新测试scope插入错误、期限变量误替换、未约分价格fixture、3个pg row any lint及旧source locator失效均保留诊断，修自身fixture／类型／正确共享选价core定位后新冻结重跑完整门；原clock计数／两个rate-policy查询及旧selector退役断言未删弱。首恢复RED里失败断言早于等待原事务终态造成未处理fixture promise；改始终await两者后取得干净RED，未改生产事务门。两次不完整lint修正／首次scope RED不计业务证明；实际RED日志另保。没有用skip／放宽限制消绿。
+
+正常Schema／配置／服务及资金未动，零模型／工具／真实用量结算；Root＋12子仓已非递归fetch，13成功、远端main无新增，未盲pull混合候选。下一步同主线正式Admission HTTP替换旧未装配target、App消费grant与异步Run关联、Agent原single-dispatch及sealed usage实际结算，集中PR仍待完整链。真钱支付不做。
+
+## 2026-10-22 AGENT-1／CREDIT-1：正式 prepared 消费及真实 owner 配对已验
+
+基线2d3ed0f，固定Agent7e1e068的HTTP7.1原Git对象；唯一vendor升级v7并删除v6，不留alias。usage2 schema／vectors／manifest原字节及原sealed三schema保持。沿现AgentUsageEvidenceReader增加readPrepared，复用专用bearer、总deadline、取消／drain与无重试GET；单独generated envelope，原raw各64KiB／深度／canonical／SHA／base64url严格校验。新首次准入仅收pending／requested_unknown及同request_ref，完整tenant/run/attempt和三摘要绑定、到达时expiry校验；返回原bytes及深冻结事实，不制造预占或dispatch许可。shared Ajv原样提取；原sealed数值域／状态与容量不放宽。
+
+新26例与原88例合计114 PASS；先取得readPrepared缺方法RED，再实现。主方357非文档输入停写，完整Node24.20.0 pnpm verify全0（格式／lint／types／build／SQL／contract及1762 PASS／524默认资源SKIP）；另真实三文件PG61 PASS／0SKIP、source/dist8 PASS／0SKIP，fresh prisma:check及正规生成检查0。原SQL／Prisma／Billing public YAML／依赖及正常配置未变；独立只读审查Approved，无确定P0–P2或多余兼容／抽象。
+
+仓外11项真实配对：actual Agent HTTP＋本owner PG准备事实→compiled-only Billing strict consumer→Billing真实不可变rate／policy发布和精确修订选价；显式QA非生产价格，预算10。覆盖错digest／request_ref／跨tenant／错误BFF bearer拒绝、原bytes深冻结、Agent行xmin不变、租约过期拒绝；10张资金／admission表均0。两owner在同一自建临时库的独立schema，所有自有进程／连接关闭后正常DROP，完整门与pair分别库存94→94精确相等；357输入重核无漂移。
+
+首次pair在仓外cwd读取正式policy资产失败，保留私有日志及不完整六检查／库存恢复收据；仅将验收进程cwd设为Billing正常运行目录后11项通过，未给生产加资产fallback。迭代中的TS泛型深度、requestId漏传、lint与夹具断言问题已修实现／自身设置，未放宽类型、限制或风险断言。证据留Root ignored，不提交真实地址／凭据或机器运行快照。
+
+当前仍是事实读取与选价，不是实际收费。正常Schema／服务／余额及流水未动，零模型／工具／真实结算。下步沿现IAM Billing resource用户grant与在线verify接合法逐attempt首次预算Admission及原回执恢复；App现仅持IAM登录grant，需在其既有服务端加密会话生命周期内持有独立Billing grant，并为异步Run建立无bearer的后台关联。普通Product token、Run assertion、管理员发放权均不替代消费授权；不用新增服务、token-exchange协议、旧成本保证或quantity=1旁路。整链及集中PR尚未完成，真钱支付不做。
+
+## 2026-10-22 AGENT-1／MODEL-1：精确模型修订选价绑定已本地验收
+
+沿现不可变rate行绑定System修订UUID＋content digest和管理员显式商业五维／币种；无新表、服务或映射生命周期。Rate content/command/key升2，SQL追加两普通列，旧无绑定rate1明确拒绝，不回填／默认／兼容读。选择只收可信技术pair，不收调用方商业tuple，在原单次DB时点和active rate快照内冻结绑定与policy；同pair歧义、缺失、错digest、旧修订均拒绝。发布不是System存在性验证或消费许可，正式Admission仍须核Agent可信prepared快照。
+
+正式发行exp6／29操作／56schema，raw SHA256 7044102dd6e221338348152bb268eaca6516039cc5ca5122d3c42a096f6dc962；官方生成和fresh canonical Prisma派生，build-only精确inverse还原exp5全文及其既有保护。最终353非文档输入停写无漂移，Node24.20.0 pnpm verify各门exit0，1736 PASS／524默认资源SKIP；另三文件真实PG61 PASS／0SKIP、源码／dist进程8 PASS／0SKIP、fresh prisma:check和contract:generated:check均0，仓外compiled-only六检查通过，自有库库存精确94→94。独立只读审查Approved，无确定P0–P2。
+
+先取得技术pair缺失／歧义业务RED；精确inverse另新增必填缺失负控，确实RED后修复inverse而非放宽断言。既有codec负控的tuple索引随新版调整，保约分／适用范围原风险。源码／dist会话计数两次被其他fixture池关闭时序干扰（7→8、8→7）；仅测试改用子进程唯一application_name，启动前0、ready后>0、退出后限时精确0，原drain／退出期限／35表零写／秘密防泄断言均保留，无生产关闭语义变更。上述失败日志留ignored；首次新PG夹具失败的原始文件曾被聚焦重跑覆盖，只保会话输出，不伪称原始日志完整保留。
+
+正常Schema／服务／配置／1000余额及流水未动，零模型／工具／真实结算。BFF／App／Admin仍固定旧exp5，下一步按本发行精确升级、表单选择正式模型修订，随后接prepared reader、合法逐attempt授权／预算预占／唯一派发／真实usage一次整数结算；本片不代表正常激活、实际扣分或AGENT-1整项完成。真钱支付不做，集中PR尚未发起。
+
+## 2026-10-22 AGENT-1／CREDIT-1：正式计价管理owner HTTP已验，消费者继续
+
+基线d19f0bc，现有Metering接2 POST不可变rate/policy发布和1 GET当前tenant最新已发布配置；不是有效价格报价，rate/policy独立null，未来生效也如实读取。canonical experimental.5／29操作／56schema，SHA256 8005cff204976ca681653565fb8b6b098bc195cc70049743f70ae85989df35ab；正规生成，精确inverse还原exp4原26操作／45schema全文，再承接旧funding保护，无runtime兼容。协议profile2／failure1／取整由owner固定，body只收价格／来源／生效时间／换算／预算，tenant和actor来自原管理上下文。
+
+原CreditGrantGuard仅具名改名BillingOperatorGuard，三独立凭据及u1校验保持，旧admin/role header不能代替；input用同codec在receipt前拒绝错误日期／约分／预算，非法400、永久identity/key漂移409、依赖503、损坏500。仅两新POST挂1MiB／12层／重复decoded键严格JSON，原grant16KiB和其他parser不放宽。GET经单次RR读取最大revision和原完整digest重建；原writer仍默认write严格模式，不自动回退旧版本／零价／空对象。
+
+契约初始2行为FAIL，HTTP在registry配对后真实16行为404 RED，再实现。最终351非文档输入停写无漂移，Node24.20.0完整pnpm verify全0（格式/lint/types/build/SQL/contract及1728 PASS／520默认资源SKIP）；另真实3文件PG57 PASS／0SKIP（其中新8旅程），source/dist8 PASS／0SKIP，fresh Prisma与正式生成检查0，自有库精确94→94。新旅程覆盖最大预算／原价回读、并发单效果／换key重放／漂移、tenant、未来生效、损坏不fallback、RR并发快照及audit失败全回滚后原命令恢复。独立只读两次审查无确定P0–P2。
+
+初始registry与旧contract/runtime集合oracle造成17FAIL，原负控及精确集合断言配对后保留；首次RR进程内inject实证TRANSACTION_ALREADY_ACTIVE，生产保护未改，测试切真正自有loopback HTTP后通过，临时诊断已删。初始schema注册／lint／空query夹具与路径格式化等失败证据仍留ignored；诊断原日志文件名曾复用，单独记录该证据限制，不伪称保留了原始完整诊断文件。无SQL/Prisma变更、正常服务重载／正常配置／正常资金写入或模型／工具调用。
+
+后继固定本owner发行物接BFF/Admin/App具名三操作，必须为合法64-row／1MiB配置单独配对proxy和恢复容量，不泛扩充值16KiB；未知POST只能原publication_id/key/config/time恢复，GET最新不证明未提交。正常policy列演进和计价配置、合法逐attempt资金授权／预占／唯一dispatch／真实usage结算仍未完成，真钱支付不做；不以此API通过勾整个CREDIT-1／AGENT-1或提前集中PR。
+
+## 2026-10-22 AGENT-1／CREDIT-1：单次预算进入不可变策略，正式管理／资金消费继续
+
+基线4810a4d，按已确认预算预占方案，在现Metering policy content/schema2必填maxAttemptCredits正整数字符串（1..9223372036854）；同一预算进入canonical bytes/digest、policy command/request schema2、数据库、审计、原命令回放完整性及joint selection冻结值。Rate content/command1和七字段publication result1保持；拒旧policy1／缺预算，不注入默认、读取回填或兼容双轨。唯一canonical policy表新增BIGINT列及范围CHECK，Prisma由fresh canonical正式refresh生成。
+
+新unit16例先取得真实5 FAIL／11 PASS再GREEN；current golden与旧raw负控独立重算，预算漂移回放／损坏／最大值／SQL约束进入真实PG。最终341非文档输入停写无漂移，Node24.20.0 pnpm verify全0（格式/lint/types/build/SQL/contract及1681 PASS／512默认资源SKIP）；另现publication/selection真实PG41 PASS／0 SKIP，fresh prisma:check、正式HTTP生成检查均0。自有库库存精确94→94。初次新测试JSON unknown的lint3错及PG大BIGINT literal带引号的精确CHECK oracle失败均保留；只配对类型guard和实际PG表示，不删除／放宽全约束集合断言。独立只读审查未发现确定P0–P2。
+
+本片不是正常DDL、已挂载后台计价或实际扣分证据。未改正常服务／配置／1000非现金余额，零模型／工具／actual settlement。正常计价表空的历史只读证据不授权自动迁移，后继具名演进须锁内再确认、保护现资金与历史；非空不猜默认或重写旧策略。下一步仍在同一主链接正式计价管理、合法逐attempt消费授权与预占／唯一派发／真实usage一次整数结算，真钱支付不做，集中PR尚未完成。
+
+## 2026-10-22 AGENT-1／CREDIT-1：已确认预算方案与明确结算决策
+
+用户已确认退役额外“供应商成本上界保证”前置，采用后台价格及单次整数预算→预占→真实用量统一整数结算。现Metering包内model-attempt-settlement.ts实现三态：confirmed_not_dispatched唯一释放；completed/failed/cancelled的已验证actual<=预算只capture实际并release余量；unknown或超预算pending_reconciliation、保留全预占，不补0／夹金额／额外扣款。预算是业务支出限额，不假称token或成本上界；该函数不认证事实、不产生资金效果或dispatch permit，后继事务仍须消费它并停止同Run后续派发。
+
+先缺模块导入失败（不冒业务RED），再具名stub获得10行为FAIL／9PASS，实际实现后21新风险例通过。停写340非文档输入，完整Node24.20.0 pnpm verify全0（格式/lint/types/build/SQL/contract及1660 PASS／509默认资源SKIP），正规生成检查0；仓外仅携编译单文件的8个边界检查通过，340输入无漂移。独立只读审查无确定P0–P2。此pure切片无资源I/O，未重复运行PG，先前usage2 guard的真实38另属原证据，不混算。
+
+HTTP/Schema/Prisma/normal配置及资金未改，Agent缺正式Billing consumer仍零新派发；不能将pure决策称为真实扣分。正常计价revision均0的事实保持，下一步沿原Metering发布/选择接正式管理与消费授权，随后装配预占/dispatch/usage/结算和完整页面验收。真钱支付不做，集中PR尚未完成。
+
+## 2026-10-22 AGENT-1／CREDIT-1：当前 usage2 可执行 policy 已配对
+
+源码实证发现 Agent producer及Billing reader已固定usage2，而Metering policy guard仍接受usage1 aggregate并拒绝当前profile。新风险测试真实RED为2 FAIL／9 PASS；现仅原位改两个版本／aggregate值，usage2固定owner Git原件核等，不混schema hash，不引入旧版fallback或新服务。failure-policy1.0.0／原generic规则保持，历史manifest只保留原发行关联，不作为当前profile支持集；旧行／receipt／digest不升级、不重解释。原publication和joint selection都调用同一guard，当前新策略可正式发布／选取，旧版明确拒绝。
+
+主方停写338非文档输入，完整Node24.20.0 `pnpm verify` 全0（format/lint/types/build/SQL/contract及1639 PASS／509默认资源SKIP）；focused322 PASS，相关真实PG原publication/selection38 PASS／0 SKIP，`prisma:check`与正式HTTP生成检查0。自有临时库库存94→94精确相同，源码门内无漂移。独立只读审查无确定P0–P2；未削弱原并发、审计、幂等、损坏拒绝与回滚断言。证据只留Root ignored目录。
+
+本片无HTTP／SQL／Prisma schema／normal配置或资金写入，未进行模型／工具调用／actual settlement；正常上一片1000非现金充值不能当本片实际扣分证据。后继仍须完成Agent逐attempt bound／Billing资金授权与唯一派发／真实usage封口／正式计量结算；现旧分层Admission和quantity=1 feature quote不作为模型费用旁路复活，缺正式授权仍零派发。真钱支付不做；整个目标和集中PR尚未完成。
+
+## 2026-10-22 CREDIT-1：正式非现金发放 owner 已验，产品消费者继续
+
+基线b4dda14，新增唯一 POST /v1/admin/billing/credit-grants；复用Credit grant/账本/双身份receipt/audit，不建表或支付流程。canonical 4.0.0-experimental.4，26操作/45schema，SHA256 a09e00a3d6f602fdaff13a50a5a839c8a989b1a26ab28c43eac314738fcfdef2，正规生成且generated drift通过；前25操作/43schema全文逆恢复保护不变。强制web-bff bearer/internal/operator三独立凭据与u1 tenant/operator；金额为正整数字符串、BigInt×1m，来源/program及funding永久身份固定，闭集输入拒tenant/actor/role自报、重复decoded JSON键、重复header与非法字节。
+
+独审P1已真实复现并修复：原grant在INSERT两侧采样时钟，跨effective_at时保存pending却已加余额，后续激活会再加一次。现在锁内一次DB时点同时决定status/首次入账/更新时间；真实PG延迟INSERT跨生效点先RED（期待0实际1m），修后pending余额0、连续两次refresh仅到账1m。8项新真实Nest HTTP+PG验收通过，覆盖多key并发单效果、丢ACK同/换key恢复、完整payload漂移零写、disabled拒绝与旧回执保留、tenant隔离、audit失败全事务回滚后原命令可重试、最大整数精度及累计int64溢出零资金差量。累计超限沿原DB约束返回固定500，不截断/夹上限；没有冒充后台友好业务限额已实现。
+
+主方最终341非文档输入冻结无漂移，Node24.20.0完整pnpm verify exit0（format/lint/types/build/SQL/contract及1628 PASS／509资源SKIP）。独立真实Credit读/计量/新发放三文件133 PASS／0SKIP；原source/dist runtime8 PASS／0SKIP；fresh Prisma canonical/drift检查exit0。每次临时库库存94→94精确恢复，未写正常资金/配置、未重启正常服务或发模型/工具请求。独审最终无确定P0–P2；初次missing test、lint、旧版本和mounted inventory失败日志保留。补齐原治理map的退休路径并覆盖全部26操作，严格集合相等断言不再静默跳过旧键；不是放宽门禁。
+
+本片仅为owner交付证据。BFF当前管理员和收款人tenant资格核验、后台表单及正常充值尚未接线；Agent资金授权、唯一派发、usage封口和实际整数结算继续，不以owner验收宣布CREDIT-1/AGENT-1完成。真钱支付不做；集中PR/merge仍待完整消费者链与自验，不提前改变Root gitlink。
+
+## 2026-10-22 CREDIT-1：整积分计价内核已验，真实结算接线继续
+
+基线158579f，按用户明确整数扣积分裁决，现Metering唯一内核改为同attempt归一化合计→冻结倍率/精确换算→一次ceil整Credit→×1,000,000账本micros；0仍0，正分数不足1积分收1积分，取整越int64拒绝而不clip。新policy/result标识attempt-credit-ceil-v2；旧v1 immutable bytes保为负控且当前codec拒绝，不重解释历史/增加fallback。无SQL/Prisma/HTTP/依赖或正常数据改动，纯函数不冒资金许可或重复结算防护。
+
+真实RED为计价7 FAIL及旧policy1 FAIL，随后focused311 PASS。独审发现取整会掩盖原大数/混合单位断言的P2，已在原suite补精确中间值、跨整积分的大数、混合单位与64桶精确成本，复核无剩余确定P0–P2。最终334非文档输入停写冻结无漂移；Node24.20.0 pnpm verify全0（格式/lint/types/build/SQL/contract及默认1580 PASS／501资源SKIP），另真实PostgreSQL现publication/selection一文件38 PASS／0SKIP，临时数据库库存94→94精确相等。初次隔离checkout缺Prisma派生造成lint失败，原官方prisma:generate后解决，日志保留，未改门禁。前次审查修复前1579PASS不当作最终输入证据。
+
+这是CREDIT-1的计价规则修复，不是正常充值、Admission预占/许可、Agent唯一dispatch或实际用量结算通过；这些沿同一主线继续。没有启动模型、工具、扣分、正常服务或真钱支付。PR/merge待完整需求及消费者接线验收后集中进行。
+
 ## 2026-10-20 PR #2 main integration verified (normal environment unchanged)
 
 Existing colleague zero-account initialization is paired to current canonical PUT /v1/billing/me/credit-account, artifact 4.0.0-experimental.3 / 25 operations / 43 schemas; no /v2 alias. The complete inverse restores main experimental.2 SHA256 9ff84d5f473e2f161f5d0c496db4cee175e2b032e836e97c7e23b9576a0af3e6 and its unchanged validator. SQL, generated Prisma schema, lock, main bootstrap and usage2 reader remain unchanged. No second account implementation, grants, journals, payments or normal rollout.
@@ -586,3 +809,5 @@ Prisma/client/adapter-pg固定7.10.0；SQL仍唯一可编辑Schema，schema/prov
 修正了key UNIQUE被identity约束掩盖、泛P2010冒充超时以及JavaScript barrier早期失败悬挂等测试缺口。
 交付27938824a064893a1d8f201fd3e3c9d8042ce579；Root干净HEAD全套55文件233项、独立integration32文件137项通过，0失败0跳过；catalog与Prisma生成均0差异。
 生产仍Fastify/pg，本轮不声称业务writer/Nest已切换；下一切片B7，精确命令及未运行项见任务板。
+
+本片脱敏验收摘要如上；原始ignored证据位于Root本地 `var/dev/model-settlement-application-20261022`，不进入交付源码。

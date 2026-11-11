@@ -1,3 +1,5 @@
+import { meteringManagementBaselineSource } from "../../scripts/metering-management-contract.js";
+import { creditFundingBaselineSource } from "../../scripts/credit-funding-contract.js";
 import type { OpenMyCreditAccountData } from "../../src/generated/billing-api/types.gen.js";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
@@ -14,7 +16,12 @@ type Document = {
   paths: Record<string, Record<string, unknown>>;
   components: { schemas: Record<string, unknown> };
 };
-const source = () => readFile("contract/openapi/v1/openapi.yaml", "utf8");
+const source = async () =>
+  creditFundingBaselineSource(
+    meteringManagementBaselineSource(
+      await readFile("contract/openapi/v1/openapi.yaml", "utf8"),
+    ),
+  );
 describe("SET55 explicit own account contract", () => {
   it("publishes the machine-only naturally idempotent opening operation", async () => {
     const raw = await source();

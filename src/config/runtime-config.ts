@@ -1,3 +1,5 @@
+import { readModelAdmissionConfig } from "./model-admission-config.js";
+import type { ModelAdmissionOptions } from "../modules/metering/model-admission.options.js";
 export type BillingAuthMode = "internal-header" | "jwks";
 export const BILLING_DATABASE_SCHEMA = "kokoro_billing";
 export const BILLING_DATABASE_SEARCH_PATH = `${BILLING_DATABASE_SCHEMA},pg_catalog`;
@@ -27,6 +29,7 @@ export type DependencyTimeoutConfig = Readonly<{
 
 export type BillingRuntimeConfig = Readonly<{
   databaseUrl: string;
+  modelAdmission?: ModelAdmissionOptions;
   auth: BillingPersonalHttpOptions;
   shutdownDeadlineMs: number;
   host: string;
@@ -71,7 +74,9 @@ const readAuthMode = (env: NodeJS.ProcessEnv): BillingAuthMode => {
 export const readBillingRuntimeConfig = (
   env: NodeJS.ProcessEnv = process.env,
 ): BillingRuntimeConfig => {
+  const modelAdmission = readModelAdmissionConfig(env);
   return Object.freeze({
+    ...(modelAdmission === undefined ? {} : { modelAdmission }),
     databaseUrl: parseBillingDatabaseUrl(
       required(env, "DATABASE_URL"),
     ).toString(),

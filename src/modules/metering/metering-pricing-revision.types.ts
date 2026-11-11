@@ -23,7 +23,14 @@ export type MeteringRateApplicability =
       upperExclusive: string | null;
     }>;
 
+/** Exact immutable System content, not a model alias or a commercial identity. */
+export type MeteringModelRevisionReference = Readonly<{
+  id: string;
+  contentDigest: string;
+}>;
+
 export type MeteringRevisionRate = Readonly<{
+  modelRevision: MeteringModelRevisionReference;
   providerRef: string;
   environment: string;
   pricingAccountRef: string;
@@ -37,7 +44,7 @@ export type MeteringRevisionRate = Readonly<{
 }>;
 
 export type MeteringRateRevisionDraft = Readonly<{
-  schemaVersion: "1";
+  schemaVersion: "2";
   tenantId: string;
   effectiveFrom: string;
   sourceRef: string;
@@ -47,16 +54,18 @@ export type MeteringRateRevisionDraft = Readonly<{
 }>;
 
 export type MeteringPolicyRevisionDraft = Readonly<{
-  schemaVersion: "1";
+  schemaVersion: "2";
   tenantId: string;
   effectiveFrom: string;
   sourceRef: string;
   verifiedAt: string;
   profileRef: MeteringRevisionReference;
+  /** Positive whole Credits; budget, not a provider cost guarantee. */
+  maxAttemptCredits: string;
   currencyCode: string;
   multiplier: MeteringRevisionRational;
   creditMicrosPerMinor: MeteringRevisionRational;
-  roundingVersion: "attempt-ceil-v1";
+  roundingVersion: "attempt-credit-ceil-v2";
   /** Explicitly pending/nonexecutable when null; never an implicit free/charge policy.
    * A non-null reference also requires owner validation before execution.
    */
@@ -86,8 +95,19 @@ export type MeteringPublicationEncoding = Readonly<{
     "metering.publish_rate_revision" | "metering.publish_policy_revision";
   commandIdentity: string;
   idempotencyKey: string;
-  requestSchemaVersion: 1;
+  requestSchemaVersion: 1 | 2;
   canonicalJson: string;
   contentDigest: string;
   payloadDigest: string;
+}>;
+
+export type MeteringPublishedRevision<Draft> = Readonly<{
+  revision: string;
+  contentDigest: string;
+  publishedAt: string;
+  draft: Draft;
+}>;
+export type MeteringLatestPricing = Readonly<{
+  rate: MeteringPublishedRevision<MeteringRateRevisionDraft> | null;
+  policy: MeteringPublishedRevision<MeteringPolicyRevisionDraft> | null;
 }>;

@@ -7,7 +7,9 @@ Reconcile 与 Billing command receipt；不拥有 Tenant、Identity、Agent Run�
 > 表述为生产证据。
 
 当前规范化分支的[任务板](docs/IMPLEMENTATION_PLAN.md)与[ADR-0003](docs/ADR/0003-nestjs-prisma-sql-first-alignment.md)
-记录Nest/Prisma目标与分阶段验收；唯一正常入口现使用 canonical Nest module graph，当前仅个人余额/流水及三项 probe，完整 Billing 业务与收费仍待验收。
+记录Nest/Prisma目标与分阶段验收；唯一入口使用canonical Nest module graph。已交付目录、本人余额/流水、无感零账户初始化及三项probe；本地候选新增正式非现金管理员发放，相关owner验收已过但正常后台消费者尚待。完整Agent资金授权、实际用量结算与收费仍待接线，不以源码候选冒称正常生效。
+
+本地计价候选已完成正式管理三HTTP操作、policy2单次整数预算和rate2精确System修订绑定；exp8以Run执行证明替换额外用户消费token，BFF预算Admission创建／原命令恢复和本人当前状态读取；完整验证与真实PG证据见CURRENT首节。消费者及Agent逐attempt资金接线仍需完成，正常环境未因本片变化。
 
 ## 边界
 
@@ -42,11 +44,34 @@ pnpm dev
 
 `GET /healthz` 为 liveness，`GET /readyz` 只验证 canonical PostgreSQL，`GET /metrics` 为现 Prometheus registry。初始 graph 不装 Redis/provider，不需要支付凭据、赠送、价格或 Redis 配置；健康成功不表示业务或收费成功。
 
-当前只注册 `/v2/billing/me/credit-account` 和 `/v2/billing/me/credit-ledger` 两项本人 GET。账户不存在返回404，不创建或假报零余额。受信 BFF 同时携带 `web-bff`、internal secret、独立 BFF bearer 及 canonical `u1` tenant/subject header；浏览器不持有这些凭据。BFF 对应配置是 `KOKORO_BILLING_BASE_URL`、`KOKORO_INTERNAL_SECRET_BFF`、`KOKORO_BILLING_BFF_SERVICE_TOKEN`。
+当前默认业务图注册 `/v1/commerce/catalog`、本人账户／流水 GET、本人账户初始化 PUT、
+后台 `credit-grants` POST，以及现有计价修订 GET／两项发布 POST；另有三项 probe。
+受信 BFF 使用 `web-bff`、internal secret、独立 BFF bearer 及 canonical `u1` tenant／subject；
+后台维护另外要求独立 operator proxy 身份。浏览器不持有这些机器凭据。
 
-其余19项 v2 operation 尚未接入，旧 v1 transport 已删除；catalog/subscription/支付/结算等路由不代理旧服务、不注册假 handler。worker、seed、收费全链仍为后继。
+支付、provider 执行和实际使用结算仍未在此 API 图挂载；不注册假 handler、不代理旧 transport。
+预算 Admission 的显式装配与接口见下节；创建预算不等于已执行模型或已扣分。
 
 结构验收使用 `pnpm db:verify-schema`，另行提供只供工具使用、可创建本轮参照库的 `SCHEMA_ADMIN_URL`；不进入应用配置。真实源码/dist进程测试见 `test/integration/billing-runtime.test.ts`，由拥有隔离资源的 Root执行；纯测试与健康检查不能替代它。
+
+## 显式预算 Admission HTTP
+
+默认不注册此片两条路由。设置 `BILLING_MODEL_ADMISSION_ENABLED=true` 时，必须同时配置
+`BILLING_AGENT_BASE_URL`／`BILLING_AGENT_READER_TOKEN` 和
+`BILLING_IAM_BASE_URL`／`BILLING_IAM_SERVICE_CREDENTIAL_FILE`；两个地址仅接受 origin。
+IAM 专用服务凭据从受限文件按可信租户逐次读取；不再签发、交换或内省机器 OAuth token，也没有五分钟自动到期。
+旧 `BILLING_IAM_AUTHORIZATION_TOKEN` 在启用准入时明确拒绝，不作 fallback。文件格式与轮换见 [Runbook](docs/RUNBOOK.md#iam-direct-service)。
+peer 单次读取各 2 秒、零重试；`BILLING_MODEL_ADMISSION_DEADLINE_MS` 默认 10000，必须为正整数且不超 2147483647。
+设置错误时启动失败；凭据不写日志或回传。原默认图不因这些变量的存在而隐式启用。
+
+- `POST /v1/internal/billing/admissions`：完整 BFF 机器身份＋u1 tenant／subject，
+  独立短时 Run execution proof header、原命令 key 及六项 prepared 绑定；先正式读 Agent 与 IAM，再原子预占配置的整次预算。
+- `GET /v1/internal/billing/admissions/{admission_id}`：同一 BFF／本人范围的 RR 只读当前状态；
+  不要求 proof、不触达 Agent／IAM、不绑定新 key。
+- POST 的永久回执始终返回原始 `held` 创建结果；当前状态只由 GET 表示。
+  503／ACK 不明只用原命令恢复，不换 body／attempt 自动重发。预算 hold 无 TTL；不猜价、补零或自动派发。
+
+此开关不接入 provider 执行、capture／release 或真实使用扣分。正常环境激活仍需受保护的 Schema 配对、可信 Run 消费绑定与 BFF／Agent 正式消费者；本片只在自有隔离资源验收。
 
 ## 契约
 
@@ -55,13 +80,15 @@ Canonical machine-readable source 是
 [`contract/README.md`](contract/README.md)。Billing 的全部 HTTP operation 都是 `internal-owner`；即使 storefront route
 可由受信 BFF 代调用，也不是 Root Developer API 门户的 `public` Product API。
 
-v2 target artifact `contract/openapi/v2/openapi.yaml` 仍描述24项 operation；当前运行仅注册3 probes与2本人读取。v1 artifact 作为历史契约治理保留，不是可调用的兼容入口；contract检查不再读取已删除旧server做v1 runtime parity。实际路由和源码/dist生命周期单独验收。
+当前唯一可编辑发布源为上述 v1 canonical（29项 operation／56 schema），仅已装配路由可调用。
+`contract/openapi/v2/openapi.yaml` 是既存目标治理材料，不是兼容 transport，也不代表当前可调用操作。
+源码／dist 的实际装配与生命周期另行验收。
 
 ## 运行单元与尚未切换的旧业务工具
 
 | 单元 | 源码入口 | 当前职责 |
 |---|---|---|
-| Billing API | `src/main.ts` | Nest/FastifyAdapter canonical graph、PostgreSQL、两本人GET与三probe |
+| Billing API | `src/main.ts` | Nest/FastifyAdapter canonical graph、PostgreSQL、上述默认业务图与显式预算 Admission |
 | Payment event worker | `scripts/process-payment-events.ts` | 领取 `payment_outbox`，处理 provider event，重试或 dead-letter |
 | Execution event batch | `scripts/process-execution-events.ts` | 处理 `entitlement_execution_event.status=received` |
 | Credit expiry worker | `scripts/expire-credit-holds.ts` | tenant-scoped batch；Redis lease 只协调，PostgreSQL receipt/事务决定结果 |

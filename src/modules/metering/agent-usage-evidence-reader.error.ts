@@ -4,6 +4,7 @@ export type AgentUsageReaderErrorCode =
   | "CONTRACT_INVALID"
   | "DENIED"
   | "NOT_FOUND"
+  | "PREPARATION_UNAVAILABLE"
   | "UNAVAILABLE"
   | "TIMEOUT"
   | "ABORTED"

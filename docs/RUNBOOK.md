@@ -3,6 +3,20 @@
 本文覆盖当前已实现的 API、payment event worker、execution event batch、credit expiry 与 PostgreSQL/Redis 故障。命令中的
 TARGET/HOST/PORT/TOKEN/DATABASE/TENANT 是 fixture 占位符；不得指向未确认环境。
 
+<a id="iam-direct-service"></a>
+
+## Billing → IAM 直接服务凭据（2026-10-23）
+
+消费者固定 IAM SDK 0.17.0、owner `2f881d0ad7c97a4226ee217b78fbc1dc9b1cbeab`。SDK archive/provenance 与 lock 固定同一发布物，禁止 sibling source、手写第二 HTTP client 或 OAuth fallback。
+
+配置 `BILLING_IAM_SERVICE_CREDENTIAL_FILE` 为 Billing 自有绝对路径，文件属于进程用户、regular、0400/0600、单 hardlink、非 symlink、至多64KiB。JSON 闭集为 `version:1` 及1–32个 `entries`；每项 `credential_id`、`caller:"kokoro-billing"`、`surface:"billing_authorization"`、`tenant_id`、`secret`。secret 为32–4096个可见ASCII且不含逗号；ID、tenant、secret均唯一。拒绝重复JSON成员，包括转义同名字段。配置不进Git、数据库、日志或公开页面。
+
+接收端 IAM 用自己的 `IAM_BILLING_SERVICE_CREDENTIAL_FILE` 配对；sender只按已验证的tenant取唯一entry。先在接收端加入新独立凭据ID，再原子替换sender文件，验证后移除接收端旧凭据。sender每租户只保留当前项；receiver可在明确轮换期间保留两个独立ID，没有自动旧值fallback或缓存允许窗口。损坏、缺失、未知tenant拒绝调用，恢复文件即可重试原业务命令；不要改key制造新预占。
+
+服务凭据无自动5分钟TTL，不需要IAM machine client或token endpoint；轮换／撤销由部署配置管理。原Run proof、当前用户权限、预算、receipt、执行取消与有效期独立保留。每次授权的总deadline覆盖文件读取和SDK请求；取消时不等待停滞IO，迟到句柄关闭、迟到读取不发HTTP。文件读取异常只回固定UNAVAILABLE，不回传secret或路径。
+
+切换前备份双方配置，先核receiver已支持该profile，再配对消费者，删除旧 `BILLING_IAM_AUTHORIZATION_TOKEN`，并按IAM正式管理流程退役专属旧machine client/scope；不直接改IAM数据库。没有配对验收前不要仅重载一端；本节不是正常已激活声明。
+
 ## 1. 启动前检查
 
 要求 Node.js 22、`pnpm@11.25.0`、Billing 专用空 database（首次安装）和共享 Redis logical DB `4`。

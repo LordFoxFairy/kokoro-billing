@@ -7,6 +7,15 @@ import type {
 const INT64_MAX = 9_223_372_036_854_775_807n;
 const NUMERIC_MAX = 10n ** 78n - 1n;
 const MAX_BUCKETS = 64;
+const MICROS_PER_CREDIT = 1_000_000n;
+
+/** Exact final rounded cost is known, but cannot be persisted as int64 micros. */
+export class MeteringCreditOverflowError extends RangeError {
+  constructor() {
+    super("Final metered credits exceed int64 storage");
+    this.name = "MeteringCreditOverflowError";
+  }
+}
 
 function shape(value: unknown, keys: readonly string[]): void {
   if (
@@ -188,7 +197,7 @@ export function priceMeteredAttempt(
     unit: string;
     quantity: bigint;
   }[] = [];
-  let procurementCostMinor: MeteringRational = {
+  let baseTariffMinor: MeteringRational = {
     numerator: 0n,
     denominator: 1n,
   };
@@ -202,28 +211,34 @@ export function priceMeteredAttempt(
     const quantity = total - (includedTotals.get(key) ?? 0n);
     nonnegative(quantity, INT64_MAX);
     normalizedUsage.push({ bucket: key, unit: bucket.unit, quantity });
-    procurementCostMinor = add(
-      procurementCostMinor,
+    baseTariffMinor = add(
+      baseTariffMinor,
       multiply({ numerator: quantity, denominator: 1n }, rate),
     );
   }
-  const salesCostMinor = multiply(procurementCostMinor, input.multiplier);
+  const salesCostMinor = multiply(baseTariffMinor, input.multiplier);
   const unroundedCreditMicros = multiply(
     salesCostMinor,
     input.conversion.creditMicrosPerMinor,
   );
   const { numerator, denominator } = unroundedCreditMicros;
+  // Aggregate this attempt's exact tariff first, then ceil once to whole Credits,
+  // not per bucket, streamed chunk or whole Run. Each attempt settles separately.
+  const creditDenominator = denominator * MICROS_PER_CREDIT;
   const creditMicros =
-    numerator / denominator + (numerator % denominator === 0n ? 0n : 1n);
+    (numerator / creditDenominator +
+      (numerator % creditDenominator === 0n ? 0n : 1n)) *
+    MICROS_PER_CREDIT;
+  if (creditMicros > INT64_MAX) throw new MeteringCreditOverflowError();
   nonnegative(creditMicros, INT64_MAX);
   return {
     profileVersion: input.profile.version,
     currencyCode: input.conversion.currencyCode,
     normalizedUsage,
-    procurementCostMinor,
+    baseTariffMinor,
     salesCostMinor,
     unroundedCreditMicros,
     creditMicros,
-    roundingVersion: "attempt-ceil-v1",
+    roundingVersion: "attempt-credit-ceil-v2",
   };
 }

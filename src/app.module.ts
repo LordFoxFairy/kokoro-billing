@@ -10,7 +10,7 @@ export class AppModule {
       module: AppModule,
       imports: [
         DatabaseModule.register({ databaseUrl: config.databaseUrl }),
-        BillingHttpModule.register(config.auth),
+        BillingHttpModule.register(config.auth, config.modelAdmission),
       ],
     };
   }

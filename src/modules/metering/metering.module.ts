@@ -1,3 +1,4 @@
+import { MeteringPricingReadService } from "./metering-pricing-read.service.js";
 import { Module } from "@nestjs/common";
 import type { DynamicModule } from "@nestjs/common";
 import { TransactionService } from "../../database/transaction.service.js";
@@ -11,16 +12,25 @@ import { MeteringPricingPublicationService } from "./metering-pricing-publicatio
 import { MeteringPricingRevisionRepository } from "./metering-pricing-revision.repository.js";
 import { MeteringPricingSelectionService } from "./metering-pricing-selection.service.js";
 import { IamBillingAuthorizationClient } from "./iam-billing-authorization.client.js";
+import { ModelAdmissionService } from "./model-admission.service.js";
+import { ModelAttemptSettlementService } from "./model-attempt-settlement.service.js";
+import { AgentUsageEvidenceReader } from "./agent-usage-evidence-reader.js";
 import {
-  IAM_BILLING_AUTHORIZATION_OPTIONS,
-  resolveIamBillingAuthorizationOptions,
-  type IamBillingAuthorizationOptions,
-  type ResolvedIamBillingAuthorizationOptions,
-} from "./iam-billing-authorization.options.js";
+  resolveModelAdmissionOptions,
+  type ModelAdmissionOptions,
+} from "./model-admission.options.js";
 
 @Module({
   imports: [CreditModule],
   providers: [
+    {
+      provide: MeteringPricingReadService,
+      inject: [TransactionService, MeteringPricingRevisionRepository],
+      useFactory: (
+        transactions: TransactionService,
+        repository: MeteringPricingRevisionRepository,
+      ) => new MeteringPricingReadService(transactions, repository),
+    },
     {
       provide: MeteringRepository,
       inject: [TransactionService],
@@ -70,26 +80,88 @@ import {
         new MeteringPricingSelectionService(repository),
     },
   ],
-  exports: [MeteringService],
+  exports: [
+    MeteringService,
+    MeteringPricingPublicationService,
+    MeteringPricingReadService,
+  ],
 })
 export class MeteringModule {
-  static register(options: IamBillingAuthorizationOptions): DynamicModule {
-    const resolved = resolveIamBillingAuthorizationOptions(options);
+  static registerModelAdmission(options: ModelAdmissionOptions): DynamicModule {
+    const resolved = resolveModelAdmissionOptions(options);
     return {
       module: MeteringModule,
       providers: [
         {
-          provide: IAM_BILLING_AUTHORIZATION_OPTIONS,
-          useValue: resolved,
+          provide: AgentUsageEvidenceReader,
+          useFactory: () => new AgentUsageEvidenceReader(resolved.agent),
         },
         {
           provide: IamBillingAuthorizationClient,
-          inject: [IAM_BILLING_AUTHORIZATION_OPTIONS],
-          useFactory: (value: ResolvedIamBillingAuthorizationOptions) =>
-            new IamBillingAuthorizationClient(value),
+          useFactory: () => new IamBillingAuthorizationClient(resolved.iam),
+        },
+        {
+          provide: ModelAdmissionService,
+          inject: [
+            TransactionService,
+            CommandReceiptRepository,
+            AuditAppender,
+            CreditEffects,
+            MeteringPricingSelectionService,
+            AgentUsageEvidenceReader,
+            IamBillingAuthorizationClient,
+          ],
+          useFactory: (
+            tx: TransactionService,
+            receipts: CommandReceiptRepository,
+            audit: AuditAppender,
+            credit: CreditEffects,
+            pricing: MeteringPricingSelectionService,
+            agent: AgentUsageEvidenceReader,
+            iam: IamBillingAuthorizationClient,
+          ) =>
+            new ModelAdmissionService(
+              tx,
+              receipts,
+              audit,
+              credit,
+              pricing,
+              agent,
+              iam,
+            ),
+        },
+        {
+          provide: ModelAttemptSettlementService,
+          inject: [
+            TransactionService,
+            CommandReceiptRepository,
+            AuditAppender,
+            CreditEffects,
+            MeteringService,
+            ModelAdmissionService,
+            AgentUsageEvidenceReader,
+          ],
+          useFactory: (
+            tx: TransactionService,
+            receipts: CommandReceiptRepository,
+            audit: AuditAppender,
+            credit: CreditEffects,
+            metering: MeteringService,
+            admissions: ModelAdmissionService,
+            agent: AgentUsageEvidenceReader,
+          ) =>
+            new ModelAttemptSettlementService(
+              tx,
+              receipts,
+              audit,
+              credit,
+              metering,
+              admissions,
+              agent,
+            ),
         },
       ],
-      exports: [IamBillingAuthorizationClient],
+      exports: [ModelAdmissionService, ModelAttemptSettlementService],
     };
   }
 }

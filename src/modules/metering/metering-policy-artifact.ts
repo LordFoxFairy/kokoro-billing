@@ -10,7 +10,7 @@ import type {
 const POLICY_SHA256 =
   "8d8dbe5950cfaa7f1383f847ad6e270c62bbd67bf02ea8717ac8d360594cb076";
 const AGENT_USAGE_SHA256 =
-  "ecd30d1908f410eed29181c9f52669f824312bf3a2e3874153d990b95fe58b91";
+  "7c5fd0b24d0a691cfcf769a981d8b4a8a689534d9b4ae1b5968342bde591094c";
 
 export function verifyMeteringPolicyArtifact(
   bytes: Uint8Array,
@@ -39,14 +39,23 @@ export function verifyMeteringPolicyArtifact(
   return Object.freeze({ version: "1.0.0", artifactDigest: POLICY_SHA256 });
 }
 
+export const currentMeteringProfileRef: MeteringRevisionReference =
+  Object.freeze({
+    version: "2.0.0",
+    artifactDigest: AGENT_USAGE_SHA256,
+  });
+export function currentMeteringFailurePolicyRef(): MeteringRevisionReference {
+  return verifyMeteringPolicyArtifact(
+    readFileSync(resolve("contract/metering-policy/v1/policy.json")),
+  );
+}
+
 export function assertExecutableMeteringPolicy(
   draft: MeteringPolicyRevisionDraft,
 ): void {
-  const reference = verifyMeteringPolicyArtifact(
-    readFileSync(resolve("contract/metering-policy/v1/policy.json")),
-  );
+  const reference = currentMeteringFailurePolicyRef();
   if (
-    draft.profileRef.version !== "1.0.0" ||
+    draft.profileRef.version !== currentMeteringProfileRef.version ||
     draft.profileRef.artifactDigest !== AGENT_USAGE_SHA256 ||
     draft.failurePolicyRef?.version !== reference.version ||
     draft.failurePolicyRef.artifactDigest !== reference.artifactDigest ||

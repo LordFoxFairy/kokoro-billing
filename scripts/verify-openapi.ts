@@ -1,3 +1,5 @@
+import { meteringManagementBaselineSource } from "./metering-management-contract.js";
+import { creditFundingBaselineSource } from "./credit-funding-contract.js";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -20,6 +22,8 @@ const readme = await readFile(resolve(root, "contract/README.md"), "utf8");
 const digest = createHash("sha256").update(source).digest("hex");
 if (!readme.includes(digest))
   throw new Error(`contract/README.md provenance digest must be ${digest}`);
-assertCreditAccountContract(source);
+assertCreditAccountContract(
+  creditFundingBaselineSource(meteringManagementBaselineSource(source)),
+);
 await generateAgentUsageArtifacts(root, true);
-process.stdout.write("Billing OpenAPI v1 contract is valid: 25 operations\n");
+process.stdout.write("Billing OpenAPI v1 contract is valid: 29 operations\n");

@@ -1,3 +1,4 @@
+import type { TransactionMode } from "../../database/transaction.types.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { TransactionService } from "../../database/transaction.service.js";
 import { assertExecutableMeteringPolicy } from "./metering-policy-artifact.js";
@@ -7,6 +8,7 @@ import {
   encodeMeteringRateRevisionDraft,
 } from "./metering-pricing-revision-codec.js";
 import type {
+  MeteringLatestPricing,
   MeteringPolicyRevisionDraft,
   MeteringRateApplicability,
   MeteringRateRevisionDraft,
@@ -14,6 +16,8 @@ import type {
 } from "./metering-pricing-revision.types.js";
 import type { MeteringPricingPublicationResultV1 } from "./metering-pricing-publication-result-codec.js";
 import type {
+  MeteringPricingFreezeInput,
+  MeteringFrozenPricing,
   MeteringPricingSelectionInput,
   MeteringPricingSelectionResult,
 } from "./metering-pricing-selection.types.js";
@@ -21,7 +25,8 @@ import { MeteringError } from "./metering.error.js";
 
 const MAX_REVISION = 9_223_372_036_854_775_807n;
 const keyTuple = (rate: MeteringRevisionRate) => [
-  "kokoro.billing.metering.rate.key.v1",
+  "kokoro.billing.metering.rate.key.v2",
+  [rate.modelRevision.id, rate.modelRevision.contentDigest],
   rate.providerRef,
   rate.environment,
   rate.pricingAccountRef,
@@ -52,6 +57,49 @@ export type MeteringPricingPublicationEffect<Kind extends "rate" | "policy"> =
 
 export class MeteringPricingRevisionRepository {
   constructor(private readonly transactions: TransactionService) {}
+
+  /** Latest published configurations, not active-price selection. */
+  async readLatest(tenantId: string): Promise<MeteringLatestPricing> {
+    const client = this.transactions.requireActiveTransaction(
+      tenantId,
+      "readOnlySnapshot",
+    );
+    const rate = await client.billing_metering_rate_revision.findFirst({
+      where: { tenant_id: tenantId },
+      orderBy: { revision: "desc" },
+      select: { revision: true },
+    });
+    const policy = await client.billing_metering_policy_revision.findFirst({
+      where: { tenant_id: tenantId },
+      orderBy: { revision: "desc" },
+      select: { revision: true },
+    });
+    return Object.freeze({
+      rate:
+        rate === null
+          ? null
+          : Object.freeze({
+              ...(await this.#readRateRevision(
+                tenantId,
+                rate.revision,
+                () => this.#selectionCorrupt(),
+                "readOnlySnapshot",
+              )),
+              revision: rate.revision.toString(),
+            }),
+      policy:
+        policy === null
+          ? null
+          : Object.freeze({
+              ...(await this.#readPolicyRevision(
+                tenantId,
+                policy.revision,
+                "readOnlySnapshot",
+              )),
+              revision: policy.revision.toString(),
+            }),
+    });
+  }
 
   async publishRate(
     draft: MeteringRateRevisionDraft,
@@ -94,7 +142,7 @@ export class MeteringPricingRevisionRepository {
         id: revisionId,
         tenant_id: draft.tenantId,
         revision,
-        schema_version: 1,
+        schema_version: 2,
         effective_from: new Date(draft.effectiveFrom),
         source_ref: draft.sourceRef,
         verified_at: new Date(draft.verifiedAt),
@@ -111,6 +159,8 @@ export class MeteringPricingRevisionRepository {
         tenant_id: draft.tenantId,
         revision,
         ordinal,
+        model_revision_id: rate.modelRevision.id,
+        model_revision_digest: rate.modelRevision.contentDigest,
         provider_ref: rate.providerRef,
         environment: rate.environment,
         pricing_account_ref: rate.pricingAccountRef,
@@ -181,9 +231,68 @@ export class MeteringPricingRevisionRepository {
       this.#corrupt();
   }
 
-  async selectActivePricing(
+  selectActivePricing(
     input: MeteringPricingSelectionInput,
   ): Promise<MeteringPricingSelectionResult> {
+    return this.#selectPricing(input, (bindingRates) => {
+      return input.requests.map((request) => {
+        const matches = bindingRates.filter((rate) => {
+          if (rate.bucket !== request.bucket || rate.unit !== request.unit)
+            return false;
+          if (rate.applicability.kind === "all") return true;
+          return (
+            request.applicability.kind === "range" &&
+            rate.applicability.dimension === request.applicability.dimension &&
+            rate.applicability.unit === request.applicability.unit &&
+            BigInt(request.applicability.value) >=
+              BigInt(rate.applicability.lowerInclusive) &&
+            (rate.applicability.upperExclusive === null ||
+              BigInt(request.applicability.value) <
+                BigInt(rate.applicability.upperExclusive))
+          );
+        });
+        if (matches.length === 0)
+          throw new MeteringError(
+            "METERING_RATE_UNAVAILABLE",
+            "Metering rate is unavailable",
+          );
+        if (matches.length > 1)
+          throw new MeteringError(
+            "METERING_RATE_AMBIGUOUS",
+            "Metering rate is ambiguous",
+          );
+        const rate = matches[0];
+        if (!rate) this.#selectionCorrupt();
+        return Object.freeze({ request, rate });
+      });
+    });
+  }
+
+  freezeActivePricing(
+    input: MeteringPricingFreezeInput,
+  ): Promise<MeteringFrozenPricing> {
+    return this.#selectPricing(input, (rates) =>
+      Object.freeze(
+        rates.map((rate) =>
+          Object.freeze({
+            ...rate,
+            modelRevision: Object.freeze({ ...rate.modelRevision }),
+            applicability: Object.freeze({ ...rate.applicability }),
+            minorPerUnit: Object.freeze({ ...rate.minorPerUnit }),
+          }),
+        ),
+      ),
+    );
+  }
+
+  async #selectPricing<T>(
+    input: MeteringPricingFreezeInput,
+    selectRates: (rates: readonly MeteringRevisionRate[]) => readonly T[],
+  ): Promise<
+    Omit<MeteringPricingSelectionResult, "rates"> & {
+      readonly rates: readonly T[];
+    }
+  > {
     const client = this.transactions.requireActiveTransaction(
       input.tenantId,
       "write",
@@ -221,50 +330,19 @@ export class MeteringPricingRevisionRepository {
       );
     const bindingRates = stored.draft.rates.filter(
       (rate) =>
-        rate.providerRef === input.binding.providerRef &&
-        rate.environment === input.binding.environment &&
-        rate.pricingAccountRef === input.binding.pricingAccountRef &&
-        rate.modelRef === input.binding.modelRef &&
-        rate.modelVersion === input.binding.modelVersion,
+        rate.modelRevision.id === input.modelRevision.id &&
+        rate.modelRevision.contentDigest === input.modelRevision.contentDigest,
     );
+    const mapped = bindingRates[0];
+    if (!mapped)
+      throw new MeteringError(
+        "METERING_RATE_UNAVAILABLE",
+        "Metering rate is unavailable",
+      );
     const currencies = new Set(bindingRates.map((rate) => rate.currencyCode));
     if (currencies.size > 1) this.#selectionCorrupt();
-    const rates = input.requests.map((request) => {
-      const matches = bindingRates.filter((rate) => {
-        if (rate.bucket !== request.bucket || rate.unit !== request.unit)
-          return false;
-        if (rate.applicability.kind === "all") return true;
-        return (
-          request.applicability.kind === "range" &&
-          rate.applicability.dimension === request.applicability.dimension &&
-          rate.applicability.unit === request.applicability.unit &&
-          BigInt(request.applicability.value) >=
-            BigInt(rate.applicability.lowerInclusive) &&
-          (rate.applicability.upperExclusive === null ||
-            BigInt(request.applicability.value) <
-              BigInt(rate.applicability.upperExclusive))
-        );
-      });
-      if (matches.length === 0)
-        throw new MeteringError(
-          "METERING_RATE_UNAVAILABLE",
-          "Metering rate is unavailable",
-        );
-      if (matches.length > 1)
-        throw new MeteringError(
-          "METERING_RATE_AMBIGUOUS",
-          "Metering rate is ambiguous",
-        );
-      const rate = matches[0];
-      if (!rate) this.#selectionCorrupt();
-      return Object.freeze({ request, rate });
-    });
-    const currencyCode = rates[0]?.rate.currencyCode;
-    if (
-      !currencyCode ||
-      rates.some((item) => item.rate.currencyCode !== currencyCode)
-    )
-      this.#selectionCorrupt();
+    const currencyCode = mapped.currencyCode;
+    const rates = selectRates(bindingRates);
     const selectedPolicies = await client.$queryRaw<
       readonly { id: string; revision: bigint }[]
     >`
@@ -296,6 +374,14 @@ export class MeteringPricingRevisionRepository {
     if (failurePolicyRef === null) this.#policyCorrupt();
     return Object.freeze({
       tenantId: input.tenantId,
+      modelRevision: Object.freeze({ ...input.modelRevision }),
+      binding: Object.freeze({
+        providerRef: mapped.providerRef,
+        environment: mapped.environment,
+        pricingAccountRef: mapped.pricingAccountRef,
+        modelRef: mapped.modelRef,
+        modelVersion: mapped.modelVersion,
+      }),
       dbNow: dbNow.toISOString(),
       revisionId: stored.revisionId,
       revision: active.revision.toString(),
@@ -313,6 +399,7 @@ export class MeteringPricingRevisionRepository {
         creditMicrosPerMinor: Object.freeze({
           ...policy.draft.creditMicrosPerMinor,
         }),
+        maxAttemptCredits: policy.draft.maxAttemptCredits,
         roundingVersion: policy.draft.roundingVersion,
         failurePolicyRef: Object.freeze({ ...failurePolicyRef }),
       }),
@@ -361,7 +448,7 @@ export class MeteringPricingRevisionRepository {
         id: revisionId,
         tenant_id: draft.tenantId,
         revision,
-        schema_version: 1,
+        schema_version: 2,
         effective_from: new Date(draft.effectiveFrom),
         source_ref: draft.sourceRef,
         verified_at: new Date(draft.verifiedAt),
@@ -373,6 +460,7 @@ export class MeteringPricingRevisionRepository {
         credit_micros_per_minor_numerator: draft.creditMicrosPerMinor.numerator,
         credit_micros_per_minor_denominator:
           draft.creditMicrosPerMinor.denominator,
+        max_attempt_credits: BigInt(draft.maxAttemptCredits),
         rounding_version: draft.roundingVersion,
         failure_policy_version: failurePolicyRef.version,
         failure_policy_artifact_digest: failurePolicyRef.artifactDigest,
@@ -422,6 +510,7 @@ export class MeteringPricingRevisionRepository {
   async #readPolicyRevision(
     tenantId: string,
     revision: bigint,
+    mode: TransactionMode = "write",
   ): Promise<
     Readonly<{
       revisionId: string;
@@ -430,18 +519,15 @@ export class MeteringPricingRevisionRepository {
       draft: MeteringPolicyRevisionDraft;
     }>
   > {
-    const client = this.transactions.requireActiveTransaction(
-      tenantId,
-      "write",
-    );
+    const client = this.transactions.requireActiveTransaction(tenantId, mode);
     const row = await client.billing_metering_policy_revision.findUnique({
       where: { tenant_id_revision: { tenant_id: tenantId, revision } },
     });
-    if (!row || row.schema_version !== 1) this.#policyCorrupt();
+    if (!row || row.schema_version !== 2) this.#policyCorrupt();
     // Database failures are outside this catch: preserve transaction firstCause.
     try {
       const encoded = encodeMeteringPolicyRevisionDraft({
-        schemaVersion: "1",
+        schemaVersion: "2",
         tenantId,
         effectiveFrom: row.effective_from.toISOString(),
         sourceRef: row.source_ref,
@@ -459,6 +545,7 @@ export class MeteringPricingRevisionRepository {
           numerator: row.credit_micros_per_minor_numerator.toFixed(0),
           denominator: row.credit_micros_per_minor_denominator.toFixed(0),
         },
+        maxAttemptCredits: row.max_attempt_credits.toString(),
         roundingVersion: row.rounding_version,
         failurePolicyRef: {
           version: row.failure_policy_version,
@@ -490,6 +577,7 @@ export class MeteringPricingRevisionRepository {
     tenantId: string,
     revision: bigint,
     corrupt: () => never,
+    mode: TransactionMode = "write",
   ): Promise<
     Readonly<{
       revisionId: string;
@@ -498,10 +586,7 @@ export class MeteringPricingRevisionRepository {
       draft: MeteringRateRevisionDraft;
     }>
   > {
-    const client = this.transactions.requireActiveTransaction(
-      tenantId,
-      "write",
-    );
+    const client = this.transactions.requireActiveTransaction(tenantId, mode);
     const header = await client.billing_metering_rate_revision.findUnique({
       where: { tenant_id_revision: { tenant_id: tenantId, revision } },
     });
@@ -512,7 +597,7 @@ export class MeteringPricingRevisionRepository {
     });
     if (
       !header ||
-      header.schema_version !== 1 ||
+      header.schema_version !== 2 ||
       header.rate_count < 1 ||
       header.rate_count > 64 ||
       rows.length !== header.rate_count
@@ -545,6 +630,10 @@ export class MeteringPricingRevisionRepository {
         });
       } else corrupt();
       const rate: MeteringRevisionRate = Object.freeze({
+        modelRevision: Object.freeze({
+          id: row.model_revision_id,
+          contentDigest: row.model_revision_digest,
+        }),
         providerRef: row.provider_ref,
         environment: row.environment,
         pricingAccountRef: row.pricing_account_ref,
@@ -563,7 +652,7 @@ export class MeteringPricingRevisionRepository {
       return rate;
     });
     const draft: MeteringRateRevisionDraft = Object.freeze({
-      schemaVersion: "1",
+      schemaVersion: "2",
       tenantId,
       effectiveFrom: header.effective_from.toISOString(),
       sourceRef: header.source_ref,

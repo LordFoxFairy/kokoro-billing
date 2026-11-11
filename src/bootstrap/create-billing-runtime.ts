@@ -19,6 +19,7 @@ export async function createBillingRuntime(
 ): Promise<BillingRuntime> {
   const adapter = new FastifyAdapter({
     bodyLimit: 32_768,
+    http: { maxHeaderSize: 32_768 },
     logger: {
       level:
         process.env.NODE_ENV === "test"
@@ -29,6 +30,8 @@ export async function createBillingRuntime(
         paths: [
           "req.headers.authorization",
           "req.headers.cookie",
+          'req.headers["x-billing-execution-proof"]',
+          'req.headers["x-billing-consumption-token"]',
           'req.headers["x-kokoro-internal-secret"]',
           'req.headers["x-kokoro-subject"]',
           'req.headers["x-kokoro-tenant-id"]',

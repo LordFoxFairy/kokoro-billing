@@ -1,3 +1,195 @@
+## CREDIT-1：公布基础 tariff ×3/2 的两桶计价（2026-10-25方案；2026-10-27交付收口）
+
+当前态：正常 policy2/rate2 已于 2026-10-25T11:24:36.174Z 同时生效，真实同 Run 已按两桶基础 tariff ×3/2逐attempt结算。下文“待发布”仅为25日方案时点；本次7路径仅内部命名澄清与回归收口，不重新发布费率、不改旧10预占或历史账。Root独立临时PG44项通过且库存前后相同；供应商实际成本未知仍与客户tariff分开。
+
+按用户当前要求，新报价使用 Billing 公布的客户基础 tariff，而不是未知的供应商实际采购成本：每个实际模型 attempt 的总输入、总输出分别乘其基础单价，合计乘精确3/2，再按冻结换算一次向上取整为整Credit。记输入／输出单价为货币最小单位每token，现计算式为 `ceil((input_total × input_rate + output_total × output_rate) × 3/2 × credit_micros_per_minor / 1000000)`。现边界仍是每attempt一次取整，Run费用为各attempt结果之和，不冒全Run汇总后只取整一次；main、summary、subagent的真实调用均属实际用量。不新增默认每任务100积分或QA名单闸门；产品约束为余额／套餐及用户可选预算，可选预算不因本段成为已实现功能。现 `max_attempt_credits` 仍是必填的单次预占参数，不是总Run上限；旧10积分hold保持。
+
+最短路径复用当前全量rate revision与policy revision：每个本次采用两桶口径的精确模型修订只发布 `input`、`output` 两个 `unit=token`、`applicability.kind=all` 的根桶；缓存及reasoning已含在相应total，不再配置同模型的子桶加价，也不把缺失子桶count补0。全量rate发布保留其他仍有效模型的完整配置，不将局部两行当增量patch；合法商业五元组、精确System修订、币种、费率有理数和换算均显式核实。新policy倍率为3/2；两个发布命令不是原子组合，整对修订核对且生效前不放新准入，不以latest GET代替当前生效判断。
+
+现 `model-settlement-pricing.ts` 按冻结snapshot实际包含的桶建立profile；只有两根桶时不会减缓存／reasoning后漏计或再加一次。仍要求已验证的实际provider／model归属、supported profile和可信已报告总输入／总输出；这些证据unknown继续pending，不因基础tariff已公布而猜usage。供应商实际采购成本另属未核实事实，不用公布tariff冒充、不据此计算已实现毛利；usage证据中的 `actual` 是实际模型归属，不是采购金额。原纯内核返回名 `procurementCostMinor` 未进入HTTP、Schema或snapshot，其数值是所选费率的加权小计；本地候选已最窄重命名为 `baseTariffMinor`，不改变算术、其他返回字段或历史金额。
+
+本片无新价格owner、Schema、API字段或版本；现单套有效费率用于新客户报价即可表达上述口径，`source_ref` 只记录来源，不是机器可判别的价格角色。若以后要同时维护同模型客户基础价与采购成本价，须另行定义显式角色／选择边界，不能靠source_ref文案或复用environment／pricing_account_ref暗分流。本次不实施该扩展。
+
+原admission／snapshot继续冻结各自rate／policy revision、倍率、换算、取整和预算；历史7/5或其他旧报价、旧10预占、pending／unknown及receipt全部按原件恢复，不按新tariff追算。新配置已沿原管理接口按上述2/2生效；此内部命名交付本身不替代独立真实模型结算收据。本地最窄源码候选仅现 `metering-pricing.types.ts`、`metering-pricing.ts` 的内部命名澄清；现 `test/unit/metering-pricing.test.ts`、`test/unit/model-settlement-pricing.test.ts` 与 `test/integration/model-attempt-settlement.test.ts` 覆盖两桶3/2、缓存／reasoning不重复、旧snapshot／倍率／取整与精确回执恢复、unknown保护。正常发布与激活仍归Root后续，不改contract、Schema、正常policy或资金。
+
+## CREDIT-1：用户更新零售倍率（2026-10-24，待新 policy 发布）
+
+Root ADR-033 已按用户答复将后续新报价倍率从初始7/5更新为精确3/2。沿现Metering版本化policy、同attempt成本聚合/冻结换算/一次整Credit向上取整实施，不新增价格owner、代码默认值、固定按次价或消费者重复加价。历史发布物/已冻结admission仍用原revision，原10积分预占和unknown不改；缺失缓存不补0。现纯内核已接受正有理倍率，无须为1.5添加硬编码分支。本次是决策记录，尚未发布/激活正常新policy，采购依据和真实capture仍待核实。
+
+## AUTH-1／CREDIT-1：IAM直接服务调用（2026-10-23，消费者验收中）
+
+当前实现固定 IAM `2f881d0` clean SDK0.17.0；认证profile为 `billing-direct-service-v1`，业务wire与Schema不变。原证据JSON解析器的纯解析部分提取到本Metering模块 `strict-metering-json.ts`，原Agent证据规则／错误映射保持，新凭据读取复用拒绝重复成员、严格UTF-8和深度限制；不新增通用SDK／服务。总期限包含文件IO，取消／shutdown先结束调用，迟到句柄按finally释放，禁止迟到HTTP派发。当前仍待完整门禁／组合，非正常激活声明。
+
+撤回未提交的机器token自动续期方案，遵循Root ADR-035。沿现metering/IamBillingAuthorizationClient与原生成SDK，固定接收IAM的直接认证profile后，按已验证的input.tenantId从Billing自有受限credential文件鲜读唯一服务凭据，传入本次调用；不签发／交换／缓存OAuth token，不新增服务、broker或兼容fallback。
+
+接收IAM固定caller=kokoro-billing、surface=billing_authorization、tenant及独立secret；sender/receiver分属各自owner部署配置。沿现文件严检／取消／期限，不把browser header当可信tenant。每次授权仍核IAM回执的六事实、实时期限；原预占／唯一dispatch／实际结算／恢复与未知状态全保持。未发行前不将任意secret塞入旧machineBearerToken，不正常激活未配对协议。
+
+## AGENT-1／CREDIT-1：固定历史 sealed reader（2026-10-23，本地已验）
+
+沿现 usage2 receipt、HTTP v7 原件和唯一生成器更新至已验 Agent HTTP7.2；从提交后的 Git blobs 固定 OpenAPI／provenance，并逐字核 usage2 三件未变。只扩展精确历史 sealed 事件读取的受控 owner 语义，独立当前 head 完整性由 Agent 保证；Billing 原六事实绑定、相邻修订、资金 receipt／预算和一次取整不变。prepared 仍仅当前 live admission，不把历史读取当新执行权。无新增 API／DTO／Schema／依赖或兼容 reader。正规生成仅更新原件来源 hash／注释，原 wire 形状必须逐值相等。验收先固定版本 RED，再 drift／篡改负控、现 evidence reader／settlement 回归及相关 owner 门；真实供应商扣分和 Agent 持久 ACK 尚待后继装配，不以此 pin 冒整链完成。
+
+## CREDIT-1：原预算仅恢复接缝（2026-10-22，本地已验）
+
+基线deab94e，主方唯一writer。为Billing已预占但Agent未存grant／原Run失租的窗口，在现ModelAdmissionService增加recover，复用原modelAdmissionIntent、receipt.recover及#assertCommitted短事务。miss返回null，不读Agent／IAM／现在价格、不创建hold／admission／audit或receipt；hit恢复原创建表示，原key零写，沿现语义换key只追加原命令key binding，不新增资金。未知在途事务尚未提交时允许miss，不把404作为永久未预占证明、不自动新派发；原key／事实后继恢复。冲突／损坏／取消沿现错误和整体回滚；不授旧fence补grant或provider派发权。
+
+正式exp10只新增POST /v1/internal/billing/admissions/recover，仍现Controller／CreditAccountGuard与deadline。原BFF机器身份及u1租户／用户，body复用六事实AdmissionCreateRequest、必需原永久key，明确禁止proof和旧consumption header。200原held ACK，404无已提交原receipt；现create首次proof要求不改。仅抽取原初始恢复代码供create／recover共享，不建第二命令／幂等表；GET已知ID仍原义。默认未显式启用不增加路由，strict flat16KiB／原URL及header cardinality不放宽。
+
+写区：当前service／input／controller／HTTP parser路径、唯一canonical和正规生成、build/test-only exp10→完整exp9逆证明、直接contract与真实PG／HTTP／source-dist及现文档。无SQL／Prisma／依赖／服务／正常配置资金变化；恢复不是真实模型验收。后继BFF／Agent固定正式原件后消费，与逐事件ACK／相邻evidence恢复一起闭合后才装配实际执行。沿Root原16项，不新增任务中心。
+
+## CREDIT-1：正式结算HTTP（2026-10-22，本地已验）
+
+基线796bfce，复用现ModelAdmissionController／CreditAccountGuard与Metering结算应用；
+唯一writer为主方。canonical exp8→9用一个POST admissions/{admission_id}/settle替换未挂载的
+capture/release两个声明，不保旧handler／schema兼容。BFF本人机器身份、internal secret及u1
+租户／主体沿既有认证；不新增用户token、proof／IAM消费许可或服务。请求只有run_id、
+evidence_event_id／evidence_revision／evidence_digest及原Idempotency-Key，禁proof和旧consumption header。
+Core command增加受信Run核对并纳原永久摘要；恢复前原Admission的Run必须相符，结果补原
+run/attempt，资金／同Run锁／先回执后事务外reader不变。已提交回执无需live Agent／IAM。
+
+Response严格data闭集：admission／run／attempt、证据event／revision／digest、status／reason、
+captured_credits／released_credits、usage_event_id／settlement_id、updated_at；整Credit字符串
+含0，不外露evidenceJSON、原价格或凭据。未知／超预算是成功保存的pending回执，不冒扣分；
+旧pending ACK不随GET当前状态变动。raw16KiB flat JSON／重复decoded key／UTF8／canonical URL、
+必需及禁用headers、deadline／中断沿现路径处理；默认未显式启用无新路由。
+
+写区：唯一OpenAPI／正规派生、build/test-only exp9→原exp8整字节逆证明及精确inventory，
+现controller／HTTP parser列表、具名settlement.input／mapper、command/result及Run绑定、
+直接contract/unit／真实Nest+PG／source-dist测试和现文档。无SQL／Prisma／依赖／正常资源修改。
+先wire与HTTP行为RED，再最小实现、正式生成、完整owner门及独立只读审查，随后固定给BFF／Agent；
+HTTP peer可用性不代替真实模型、工具或供应商扣分。沿同一16项TODO继续，无另一个任务中心。
+
+## CREDIT-1：同一模型预算实际结算（2026-10-22，实施设计）
+
+本轮局部actual归属profile与Agent文档ec80da5配对：verified.provider_ref／model_ref仅接受具名认证上游证据映射确认的System provider／model目录ID，逐项等于原frozen planned.provider／model，再由原revision ID/digest映射已冻结商业五元组及费率。认证映射必须绑定同attempt／最终请求／冻结revision，不能复制planned、目录存在或单独response.model自证。actual unknown、其他命名空间／raw model名／商业refs或超出该唯一允许模型者进入unknown/pending，不按planned价追认、不另选当前价。通用usage2 schema／decoder／vectors不收窄；真正producer仍待装配，未据此激活模型。
+
+补强：已知最终整积分金额超过int64上限时，计价内核抛专用终值溢出；该事实足以证明超过任意合法预算，进入pending／budget_exceeded，保留全部hold，不截断金额。若仅精确有界中间算术失败，不推断最终费用，按unknown保留待核对。原内核成功返回仍严格int64，不扩大账本数值范围。ACK恢复／新应用／提交后重核均沿receipt→原Run锁顺序，避免ReadCommitted下head与hold跨并发版本；不在Run锁内另取旧receipt锁。pending后继先直接核head对应原永久receipt的scope／schema／payload／原evidence及时间，缺失或不一致拒绝CORRUPT，不自动重建。terminal回执还核原head／时间、hold金额及terminal source、真实usage source／数量／dimensions及settlement，不凭ID存在即成功。
+
+沿已批准预算方案在现Metering新增同admission结算编排，不新增服务／模块／用户token或成本保证。价格只取预占时完整snapshot；复用revision codec的row／rational／interval规则，严格原字节／hash、tenant／精确模型／商业tuple／profile／policy／预算核对。有限token_usage_v1映射为input、output两个必需根及可选input_cache_read／input_cache_write／output_reasoning子桶，unit=token；range dimension只引用正式count字段，未知桶／维度／所需count不猜。total只核一致性／作range维度，不作额外收费桶。先所有桶精确汇总，再沿唯一priceMeteredAttempt一次整积分ceil。
+
+短事务先恢复永久receipt，miss才事务外现Agent sealed reader取证；原identity/planned外再核prepared_at与granted的request_ref／admission_ref。未派发释放无需actual verified，派发后actual attribution/profile/count不足则pending；已知actual<=预算按原Metering/Credit事务capture实际及解除余量，unknown／超预算保留hold。第一次或后继应用在原Run advisory lock下重读head，核现successor相邻／知识单调，再原子写head、status、资金、audit和receipt；不在锁内HTTP、不重查现在价格。结算不要求活用户token／IAM／Run lease，证据的合法生产仍由Agent负责。
+
+为承接真实sealed unknown→known窗口，原admission仅增nullable settlement_evidence_json作为当前已验证head；每条原永久receipt保原证据与结果，command identity为admission＋event，digest还绑定revision／evidence digest。旧pending ACK精确恢复、不要求等于当前head；新head须owner当前sealed且对已存head紧邻单调，capture/release终态拒新head。当前Agent Run terminal后只准exact replay，不承诺终态后自动补证。正常worker最后再开放；本片只实现owner结算，正式HTTP／BFF／Agent传输另依同一计划固定配对。
+
+## CREDIT-1：跨积分有效期的预算结清（2026-10-22）
+
+实际模型结算复用CreditEffects前，修复无TTL hold跨grant到期时余量复活。沿现account→grants→hold→allocations锁序，首次终态以同一DB时点刷新有效期；只将仍有效分配的未用部分恢复available，过期分配未用部分从grant.remaining注销并写独立expiry流水。已预占的实际费用仍可capture，不因过期免单；account.disabled不阻断已有hold结清、不改变账户状态。原terminal source／金额精确重放零写，审计失败全事务回滚；不加服务／Schema／配置／成本保证或拒绝长期hold。
+
+## CREDIT-1：固定Run-proof授权消费者（2026-10-22，已实施）
+
+承接Root最新主链及用户“Run不持用户token”裁决，主方唯一writer、基线f61a5d2。沿现Metering／ModelAdmission／同一IamBillingAuthorizationClient，固定IAM16ee2eb（运行实现67a3c0e，SDK说明修正）的clean SDK0.16及原provenance／archive hash，删除唯一旧0.7包；不新增服务／broker／认证协议或App grant生命周期。SDK来源与原生登录／其他IAM接口不是本片重新设计对象。
+
+首次无已提交receipt时，原Agent reader完成canonical bytes／三摘要／身份／request_ref／当前lease核验。解码结果保留已核对原bytes的attemptBindingDigest、plannedDigest；Service用这些事实、prepared run/attempt/request_ref/final digest及受信tenant/user重新调用同一modelAdmissionIntent，派生原model-admit:1摘要并与命令永久digest核等，不从未验证body直接给IAM期望值。只接当前direct-user actor=subject；IAM输入携短时execution proof＋可信tenant/user/Run/session/lease generation/hash。SDK回包逐项exact核对六绑定、正safe整数generation和未过期UTC期限；Agent generation为十进制字符串，先证可精确表示才比较，不盲转Number。无重试、同取消／shutdown drain，401/403/404/409拒绝不冒依赖成功。
+
+HTTP唯一canonical v1升experimental.8，仅POST消费header改x-billing-execution-proof（visible ASCII1..16384），删除未引用的旧ConsumptionToken component；拒旧header及混用，不留alias。proof为独立短命参数，不进入command、receipt、snapshot、Run、usage或日志。保完整BFF机器u1身份，不让Agent假冒web-bff；Agent→BFF受限内部接缝在后继BFF owner切片补齐，不将此消费者冒整链。日志新旧敏感header均脱敏：旧header仅作为明确拒绝／日志防泄漏，不作兼容入口。
+
+原receipt先恢复／永久payloadDigest和request identity均不变；已提交结果可在新proof过期或peer离线后恢复。资金事务、当前DB时点双expiry／最终取消、预算hold、pricing冻结、永久唯一request_ref、pending阻派发及single-dispatch未改；不把IAM allowed当dispatch许可，不改Schema、余额或正常服务。写区为固定SDK／lock及其严格artifact门、上述现codec/service/client/input/controller、canonical／正规派生／严格逆证明、相关测试及当前文档。验收：wire／旧凭据拒绝／绑定错位／超safe fence先RED，实际PG资金零写负控／幂等恢复，真实IAM host＋SDK及完整owner门；正常模型／tool／actual结算仍需后继主链。
+
+## AGENT-1：正式预算 Admission HTTP（2026-10-22，已实施）
+
+沿9cc7af1已验业务，在唯一Nest HTTP挂载既有POST /v1/internal/billing/admissions和GET /v1/internal/billing/admissions/{admission_id}，不增服务／表／第二套认证。当前个人钱包路径由web-bff编排：复用CreditAccountGuard的BFF专用bearer＋internal secret＋u1 tenant/subject完整准入，拒普通用户Bearer／部分机器身份fallback；非管理员发放权。POST再将单独消费header交现IAM在线verify，仅首次准入需要活grant；GET只读本人及同tenant。
+
+原MeteringModule.register升级为具名registerModelAdmission({agent,iam,requestDeadlineMs})，移除未使用的仅IAM动态入口，不保alias；静态Metering模块保持可用。唯一启动配置显式BILLING_MODEL_ADMISSION_ENABLED=true才装配两reader与业务／controller；默认false无模型路由和外部读取，true缺完整origin／bearer／期限即启动拒绝。外部reader仍用现专用角色，HTTP drain与provider销毁沿原顺序，不新增常驻进程或后台重试。
+
+POST原命令回放201仍返回原创建表示（status=held、updated_at=created_at），不通过GET新状态重写回执；GET在一份READ ONLY RR读取当前status／updated_at及原不可变授权字段，核同tenant／actor、原receipt与持久snapshot／hold完整性，不绑定活Agent或消费grant。外人／不存在统一404。读取不写key／receipt，不执行模型。当前status held/captured/released/pending_reconciliation，不宣称可由此HTTP直接capture或恢复pending。
+
+请求总deadline与客户端中断合成AbortSignal；只用IncomingMessage aborted／未完成reply的close，不把正常body读完的close当取消。监听finally清理；提交后ACK不明仍只原命令恢复。POST raw16KiB、严格UTF8／decoded duplicate key／闭集平面字符串；从旧grant parser原样提取具名HTTP共用机制，原grant语义不变。GET无query／body，canonical URI与唯一关键header。日志增加消费header脱敏，不回显原始错误／body／Key。
+
+写区为canonical HTTP／正规派生与build-only逆证明、现Module／App/bootstrap/config、具名controller/input/mapper／read projection、ErrorFilter直接错误映射和原flat parser提取、直接unit／真实Nest+PG及source/dist旅程、现三面与任务表。无SQL／Prisma变化；不激活正常配置／Schema／资金，不改同事连接器。先wire和HTTP行为RED，再实现、正式生成／完整门／真实资金恢复及只读审查；随后固定发行物给BFF/App及Agent消费，同一主线继续真实usage结算。
+
+## AGENT-1：首次预算 Admission 与永久回执恢复（2026-10-22，本地业务已验）
+
+沿已确认预算方案，owner为现Metering＋Credit。沿原billing_admission原位替换未装配的feature固定价目标；不建新服务／表／成本保证或第二钱包。此片先交付可由Nest装配的业务Service及真实PG资金效果，HTTP正式挂载和异步App grant消费者随后在同一主链接线，不冒正常开放。
+
+首次流程：冻结受信tenant／actor、run／attempt／request_ref与三摘要及永久idempotency key；先在短本地事务沿原command receipt锁和完整digest恢复已提交结果，成功恢复不要求活Agent快照或新消费token。无回执时离开事务，正式Agent prepared读取及IAM在线消费授权在事务外完成；只接受prepared的user actor＝user subject＝当前受信actor／IAM payer（本轮个人钱包），不扩大project／组织代付。IAM结果只增加原expires_at供入账时检查，不缓存allow；无bearer持久化或摘要。
+
+再开资金事务，原receipt execute重新锁key＋attempt身份；并发先提交则恢复原结果，否则有序持有同Run／request_ref锁，核请求引用永久冲突及已有pending_reconciliation，按同一DB时点检查prepared lease和IAM有效期／取消，再冻结精确System修订的完整当前费率集合＋policy2／整数预算。不能在预占前按未知最终usage挑桶／价格；现选价repository增加完整snapshot读取，与旧具名request选价共享同一次active rate／policy读取，snapshot含同pair所有行（含区间）供后继按真实用量选择，保原missing／歧义／损坏保护。金额仅预算×1m。原Credit auto-init本人账户＋reserve＋admission／snapshot＋audit＋receipt原子提交；异常全回滚，不网络I/O持锁。
+
+恢复沿原command永久identity/key绑定；miss不建receipt，换key恢复成功也永久绑定新key。原execute保效果一次且使用同一查找／校验，不另建幂等表。回执是原始Admission授权事实，不是新的live dispatch lease；Agent仍核当前fence／未sealed和原single-dispatch。所有写／audit／receipt及完整性await完成后，新Admission在根事务callback结束前最终查DB clock／signal；不把此检查冒成原生COMMIT发送后仍保证取消可回滚。进入COMMIT后ACK不明仅原命令恢复，不猜未预占；恢复不套新live bounds。
+
+模型预算hold显式expires_at=null，未知／超预算不因租约或墙钟释放；原有显式到期hold仍保持Date和既有行为，不用远未来时间冒无限。Credit reserve原key完整匹配包含expiry，不重解释原hold。此片不实现capture/release；后继只消费正式sealed usage和已有整数计价／决策，pending阻后续派发。正常Schema／资金／配置不动。
+
+位置：原CommandReceiptRepository具名recover；原Metering pricing selection／revision repository共享完整freeze；新包内model-admission.{service,types,codec,error}职责分开；原Credit expiry类型及reserve匹配；canonical SQL原表／派生Prisma；直接unit／真实PG及现任务文档。不搬公共框架、不恢复旧分层Admission。验收先行为RED，真实PG并发／换key／ACK丢失原命令恢复／expiry／余额不足／审计回滚／tenant和payer错绑零写／不持锁HTTP／未知Run阻断；完整owner门、fresh Schema/Prisma、原消费者保护及独审。
+
+## AGENT-1：正式 prepared 消费（2026-10-22，实施设计）
+
+固定已验 Agent7e1e068／HTTP7.1 原Git对象，保现usage2原schema/vectors/manifest字节；
+唯一HTTP vendor改为http/v7，删旧v6路径，不留alias。沿现同一AgentUsageEvidenceReader增加
+readPrepared，复用origin／专用bearer、总deadline、取消／drain和有界无重试GET，不造第二HTTP client。
+当前用途是首次预算Admission前的可信事实读取，不是许可／预占／费用／实际归属；正常Module不自动启用。
+
+生成器从同一固定OpenAPI正规派生prepared envelope类型和schema。解码原base64url／普通SHA256／
+RFC8785字节，binding按usage2 EvidenceIdentity去event_id的精确投影，planned／authorization沿同一
+usage2定义与原扩展词；不复制新editable模型。首次新准入只收authorization_pending／requested_unknown
+及原request_ref，完整匹配受信tenant/run/attempt／三摘要，过期或错误拒绝。prepared／authorized
+不是新预占资格；既有资金恢复先读Billing原回执，不依赖活prepared读。
+
+原sealed reader/profile/unknown/64KiB／深度／禁止数字等保护不扩；仅新prepared envelope支持其
+正式final_request_binding_version数字1。三个原raw各仍≤65536，总envelope单独有界；不把HTTP数字
+放进usage2。共享现Ajv扩展配置，不削弱原codec。返回深冻结、保存原字节，不持久任何Key或token。
+本片不改Billing public YAML／SQL／资金状态，不新增消费凭据或假成本保证；预占与结算后继沿同owner接。
+
+## AGENT-1／MODEL-1：精确模型修订选价绑定（2026-10-22，本地已验）
+
+状态：本地实现和最终停写验收通过；完整verify1736 PASS／524默认资源SKIP，真实PG61、source/dist8及仓外compiled6通过，fresh Prisma／HTTP生成检查0，353非文档输入零漂移、自有库94→94。独审Approved。正常未激活，后继固定BFF／App／Admin新exp6及Agent实际资金链。详细失败修复和证据限制见CURRENT首节。
+
+承接R201已裁决的Billing本地显式版本化商业映射及用户已确认预算流程。本片主方唯一writer，Billing基线35651fc。System精确不可变revision UUID＋content digest已唯一封装provider/model/connection/request_model；Agent prepare和usage2原样冻结该身份，无commercial environment/account/version。不得从显示名、request_model、Key句柄或部署目录猜五维商业引用，不扩System或usage2闭集。
+
+最小实现沿现不可变rate行追加必填modelRevision{id,contentDigest}，对应SQL两普通列model_revision_id UUID及model_revision_digest CHAR(64)。映射版本就是同一rate revision／content digest，发布、审计、幂等、损坏回放和生效窗口完全沿原rate事务；不新建表、独立映射服务／API／生命周期或商业账号库。同一技术pair在一份完整费率修订只映射一个显式商业五维tuple和币种，input/output等桶可多行；不同精确修订可复用同一商业tuple。发布只记录管理员核实的映射，不声称已验证System存在性；实际Admission仍必须读Agent正式prepared快照并核完整计划身份，价目读取不是执行授权。
+
+rate draft/content/request schema显式升2，canonical rate tuple、business key digest及持久重建包含技术pair；无绑定旧rate1明确拒绝，无默认／alias／双读／历史回填。policy2、publication result1、usage2/failure-policy及原27项不相关wire保持。正式rate wire仅在原MeteringRate增加required model_revision{id,content_digest}；GET原快照完整带回，发布限制仍64行／1MiB／12层。当前experimental发行升6，正规生成；BFF/App/Admin后继原子固定该发行，不能把未配对候选正常激活。
+
+实际选择入口不再收调用方商业tuple，只收可信tenant/profile、精确modelRevision与bucket/适用范围；在原单次db-now／同一active rate读取内解析唯一商业映射，再选桶和policy，结果冻结技术pair及所选商业tuple供后继Admission snapshot。未绑定、错digest／旧修订无回退，歧义拒绝；冻结输入在任何异步读取前完成，发布并发不混用两个rate版本。
+
+写区：现Metering revision types/codec/repository/input/mapper/selection及相关Nest/contract注册与正规生成、canonical SQL与正规Prisma派生、直接unit/HTTP/PG测试和三面/现任务表。先新增技术pair正控与歧义/旧版负控RED，再GREEN；真实PG涵盖exact mismatch、同商业多修订、完整回放/原key漂移、未来生效、损坏和回滚；完整owner门、fresh schema/Prisma/生成drift和compiled检验。正常rate表先前为0，但本片不做正常DDL／重载／模型／工具／资金；正常演进另需锁下再确认空表、保护1000余额与流水。此片不是实际Admission或扣分完成。
+
+## AGENT-1／CREDIT-1：现计价管理正式HTTP接线（2026-10-22）
+
+Owner仍Billing Metering，沿现不可变rate/policy发布、receipt、审计和选择；不建System价格副本或新服务。新增POST /v1/admin/billing/metering/rate-revisions、POST /v1/admin/billing/metering/policy-revisions及GET /v1/admin/billing/metering/pricing。GET是当前租户“最新已发布配置”单体快照（两者可独立null，含未来生效配置），不是有效价格选择／报价／历史列表；用原readOnlySnapshot一次RR读取，原完整digest损坏校验承接，无写和自动修复。运行选价仍由原selectActivePricing按生效时间、精确绑定和bucket负责。
+
+所有三操作沿现具备web-bff bearer/internal/operator三独立能力及u1 tenant/operator的管理准入，BFF后继每次核平台管理资格，不接受body自报tenant/actor/role；不将旧admin任意header鉴权复活。POST包含publication_id v4 UUID、reason、configuration，Idempotency-Key8..128，命令完整原样冻结；新发布201，重放原结果，漂移409。configuration只收业务价格／生效时点／来源、换算及整数预算，当前usage2、policy schema2、failure-policy1和取整规则由owner固定，不让表单选择过时协议或猜版本。已发表不可更新／删除，以新修订替换生效，不提供任意表CRUD。
+
+写区：canonical HTTP/正规生成及直接门；现Metering module/publication/repository、具名pricing controller/input/mapper/json和read service、原管理guard提取具名共用、HTTP module/error filter及相关unit/HTTP/PG。三面不增加SQL/Prisma或正常DDL；只将私有reader按显式事务mode复用到readonly，原writer模式保持。优先正式契约与TDD，再Nest路由、真实PG幂等/权限/回读/损坏/回滚，完整门后给BFF/Admin固定发行物。正常服务与资金不自动重载，模型／工具真实旅程后继。
+
+## AGENT-1／CREDIT-1：单次预算进入现不可变policy（2026-10-22）
+
+采用用户已确认预算方案：在现Metering policy revision增加必填maxAttemptCredits（正整数字符串，最多9223372036854），是每attempt支出预算，不是供应商数学成本界。预算与当前usage2 profile、倍率、换算和取整一起纳入原canonical content digest、幂等payload、审计与immutable policy选择；policy content/schemaVersion显式升2并附预算，当前codec拒旧无预算版本，不默认10、不按读取回填、不双轨执行。Rate content/version1及原七字段publication result1保持原字节；policy command/request schema升2，沿原identity/key永久绑定完整命令。
+
+位置仍现metering-pricing-revision.types/codec/repository/publication、selection types，SQL唯一canonical在现billing_metering_policy_revision追加max_attempt_credits BIGINT NOT NULL，CHECK整credits范围，policy schema_version CHECK改2；Prisma仅正规refresh生成。旧policy无兼容读取/默认，正常owner只读已证policy表0，后继正常演进须再次锁下确认空表并保其余资金/账户事实，本片只自有fresh资源，禁止直接修改正常表或余额。Agent和BFF只消费后继正式预算快照，不自行算金额；不建预算表/服务/规则引擎。
+
+验收先current budget codec正控/缺失和旧版本负控RED，后完整边界与current golden bytes；真实PG发布/回执重放/预算漂移/并发/策略选择/列和CHECK/回滚保护及fresh Prisma drift。数据及生成变化完整相关门通过后才交正式管理/Admission消费，不能用数据底座完成冒实际预占/派发/扣分。
+
+## AGENT-1／CREDIT-1：预算预占与真实结算（2026-10-22，用户已确认）
+
+本节替代旧R252“必须先由供应商发布数学成本上界保证”的资金前置，不删除真实最终请求绑定、token限额、权限、tenant隔离、唯一派发、用量证据或幂等保护。单次预算是后台配置的整数积分支出限额，不是token数或外部成本上界；Billing沿原Credit hold预占，按冻结policy对单attempt真实用量汇总计价并一次ceil整积分。未知用量不补0；已确认未派发才释放预占；completed/failed/cancelled按同一已验证实际费用结算。
+
+已验证实际金额不超过预算时只capture实际值并release余量；actual超过预算、执行结果或用量未知时进入pending_reconciliation，保留预占和原证据，停止后续派发，不夹到预算、自动补差扣款、重发模型、猜价或自动释放。后续原attempt在取得明确新证据/解决结算后才恢复，不因重复回执新建扣分。正常本片只实现Metering包内明确决策函数model-attempt-settlement.ts；它消费上游已验证知识，不证明事实真实性、不授予dispatch、不写余额，也不新增服务/表/HTTP/配置入口。后继在现Admission/settlement事务中使用它，接口/持久状态按同一owner设计继续，不用独立pure通过冒实际收费完成。
+
+验证：TDD覆盖正整数预算和金额边界、0、精确预算/余量、超预算保留、未知保留、not_dispatched唯一释放、failed/cancelled与completed等价、非法/溢出/分数Credit拒绝及重复相同输入决策稳定。原priceMeteredAttempt仍是唯一换算和取整内核，不在该函数重复计算/取整。
+
+## AGENT-1／CREDIT-1：当前 usage2 计价策略绑定修复（2026-10-22）
+
+当前 Agent producer／Billing evidence reader 已唯一使用正式 usage2，但 Metering 可执行 policy guard 仍硬绑 usage1 aggregate，导致真实当前 profile 无法发布／选取，而旧 profile 被当作可执行。沿已批准 MC01 usage2 单轨决定，在现 metering-policy-artifact.ts 原位改为固定已消费 owner usage2 的 version 2.0.0／manifest aggregate 7c5fd0b24d0a691cfcf769a981d8b4a8a689534d9b4ae1b5968342bde591094c，不把 schema hash 当 aggregate，不增加reader／服务／配置或fallback。failure policy独立1.0.0、7/5倍率、一次整积分ceil及已验证风险语义保持。
+
+只修改上述guard及针对性unit、现真实PG publication/selection测试和相关文档；复用当前固定Agent发布物，HTTP契约和SQL不变。旧持久policy不重写、不升级或重新解释；当前执行拒旧profile，正式复用须另发当前profile的新不可变policy。验收先证明当前profile拒绝／旧profile误收的RED，再验当前通过、旧版／交叉digest／schema-vs-aggregate／未知版本拒绝及真实PG原幂等、并发、选择、损坏与回滚门。此修复只是Agent资金接线前置，不声称Admission／模型请求／实际扣分已可用。
+
+## CREDIT-1：管理员非现金积分发放（2026-10-22，主链内实施）
+
+复用CreditService.grant及现receipt/subject锁/余额/流水/audit，不建第二钱包或支付流程。唯一新增owner POST /v1/admin/billing/credit-grants；Web→BFF必须先核当前平台管理权限与接收者属于当前受信tenant，再以现web-bff bearer、internal secret、专用operatorProxySecret及u1 tenant/operator调用。Billing强制全部服务凭据及唯一header，无用户Bearer/旧admin角色header回退；actor来自已认证上下文，body不收tenant/actor/role。此项为Kokoro已批准后台维护业务差异，未观察到Manus后台发放API，不宣称其私有实现等价。
+
+闭集请求为funding_id（本次v4 UUID）、subject_id、amount_credits（正整数字符串且×1m不越int64）、reason、effective_at（固定UTC毫秒生效时间）。BFF首次提交冻结时间/body/key；重放不得重新采样时间。服务端固定sourceKind=admin_credit、programKey=admin_credit_v1、sourceRef/commandIdentity=funding_id，不接受来源/价格/余额自报。沿grant原事务，幂等键与funding_id均绑定完整payload；并发/换key原结果恢复，漂移409，未知结果仅原命令恢复。返回account_id/grant_id/journal_id；新增发放仅append，不允许编辑/删除账本。发放不是充值支付成功，不发送模型或消费积分。
+
+写区为canonical HTTP/正规生成与相关gate、现Credit controller/input/guard、HTTP module/ErrorFilter和受影响测试/文档。Schema不变；正常配置/资金不因源码变化激活。依赖owner发行物停写验证后才给BFF/Admin消费，不新建临时/legacy端点。验收含三凭据和u1边界、body/金额/时间/重复header/畸形JSON、真实PG并发同funding_id/换key/漂移/禁用/回滚、审计actor/来源/金额和响应ACK恢复；然后完整owner门及消费者真实页面闭环，不能以owner成功代替产品充值入口。
+
+独审已复现原grant在INSERT前后重复采样应用时钟，跨effective_at时会pending且入账，后续激活重复入账。扩现CreditRepository.grant写区：持有账户锁后、写grant前取一次数据库clock_timestamp，同一now决定status与首次余额增量并用于更新时间；pending后继只能由原refreshGrantWindows激活一次。真实PG用仅临时库的延迟INSERT触发器跨生效点复现RED，再核同一grant余额/流水/审计/receipt及重复refresh不加第二次；不靠拒绝未来生效时间或降低断言掩盖。
+
+## CREDIT-1：整积分取整（2026-10-22，已确认需求内实施）
+
+Billing 现 Metering 是唯一计价 owner。一个 attempt 的已验证实际类别先归一化合计，保留精确有理数费用，应用冻结倍率及 currency→Credit-micros 换算后，以 `ceil(unrounded_micros / 1_000_000) * 1_000_000` 得到账本应扣值。只在此边界取整一次；0仍0，正分数不足1积分扣1积分，取整后溢出int64即拒绝，不截断、不夹到上限。不按stream chunk或重复回执分别计价；去重与single settlement仍归后继Admission事务，不由纯函数冒充。
+
+固定新语义标识 `attempt-credit-ceil-v2`，替代旧未装配的micro-ceil内核；当前policy codec只接受新标识，旧标识明确拒绝，不把同一个v1名称重新解释或新增fallback。保留原费用精度、included bucket去重、未知用量拒绝及7/5显式倍率。沿现函数、result和policy codec/type、现测试修改，不新建模块/服务/HTTP路由；Ledger继续使用micros，不改变schema。已有持久policy/资金/历史证据不改写或自动迁移，正常资金链尚未装配；后继正式接线必须发布新policy，不能用旧snapshot新语义重算。失败恢复保持原精确幂等身份。
+
+验收：既有计价用例按新已确认输出承接；新整数边界、单次汇总、7/5、显式零与未知、BigInt精度及取整溢出、独立有理数oracle；旧policy标识负控及codec canonical/digest；focused和相关完整门。此片不代表真实充值、Admission或模型结算已成功，不修改正常数据/服务。
+
 ## 2026-10-20 PR #2 main integration
 
 Retain main Nest bootstrap, current /v1 canonical and usage2 reader; merge the existing SET55 machine-only zero-account command without another module, schema, account implementation or compatibility route. Exact current-main contract inverse preserves every unrelated operation. Existing source/dist and HTTP/PG account tests move to /v1; retired /v2 must remain unavailable. BFF will orchestrate hidden initialization after trusted product admission; this owner PR does not claim that consumer path. No normal service restart or financial execution in this merge slice.

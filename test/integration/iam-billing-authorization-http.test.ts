@@ -1,8 +1,18 @@
 import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import { once } from "node:events";
-import { afterEach, describe, expect, it } from "vitest";
+import {
+  iamCredentialEntry,
+  iamServiceCredentialFixture,
+} from "../support/iam-service-credential.fixture.js";
+import * as files from "node:fs/promises";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { IamBillingAuthorizationClient } from "../../src/modules/metering/iam-billing-authorization.client.js";
 import { resolveIamBillingAuthorizationOptions } from "../../src/modules/metering/iam-billing-authorization.options.js";
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const original = await importOriginal<typeof files>();
+  return { ...original, open: vi.fn(original.open) };
+});
 
 type Reply = Readonly<{
   status?: number;
@@ -10,16 +20,18 @@ type Reply = Readonly<{
   delayMs?: number;
 }>;
 
-const machineToken = "machine-secret-canary";
-const userToken = "user-secret-canary";
+const machineToken = "fixture-service-secret-" + "a".repeat(32);
+const executionProof = "run-proof-secret-canary";
 const future = "2099-01-01T00:00:00.000Z";
 const allowed = (overrides: Record<string, unknown> = {}) => ({
   data: {
     allowed: true,
     tenant_id: "tenant-a",
     user_id: "user-a",
-    session_id: "session-a",
-    client_id: "client-a",
+    run_id: "run-a",
+    execution_session_id: "conversation-a",
+    lease_generation: 7,
+    request_binding_sha256: "a".repeat(64),
     expires_at: future,
     decision_ref: "decision-a",
     ...overrides,
@@ -71,14 +83,14 @@ async function peer(reply: Reply): Promise<{
   return { server, baseUrl: `http://127.0.0.1:${address.port}`, requests };
 }
 
-const input = (
-  subject: "user" | "project" | "organization" | "service" = "user",
-  ref = subject === "user" ? "user-a" : `${subject}-a`,
-  signal = new AbortController().signal,
-) => ({
+const input = (signal = new AbortController().signal) => ({
   tenantId: "tenant-a",
-  billingSubject: { kind: subject, ref },
-  consumptionToken: userToken,
+  payerUserId: "user-a",
+  runId: "run-a",
+  executionSessionId: "conversation-a",
+  leaseGeneration: "7",
+  requestBindingSha256: "a".repeat(64),
+  executionProof,
   requestId: "billing-request-a",
   signal,
 });
@@ -86,7 +98,12 @@ const input = (
 describe("IAM Billing authorization through the published SDK HTTP transport", () => {
   const servers: Server[] = [];
   const clients: IamBillingAuthorizationClient[] = [];
+  const credentials: Array<
+    Awaited<ReturnType<typeof iamServiceCredentialFixture>>
+  > = [];
   afterEach(async () => {
+    vi.restoreAllMocks();
+    await Promise.all(credentials.splice(0).map((entry) => entry.close()));
     await Promise.all(
       clients.splice(0).map((client) => client.onModuleDestroy()),
     );
@@ -104,34 +121,139 @@ describe("IAM Billing authorization through the published SDK HTTP transport", (
   const setup = async (reply: Reply, deadlineMs = 250) => {
     const fixture = await peer(reply);
     servers.push(fixture.server);
+    const credential = await iamServiceCredentialFixture();
+    credentials.push(credential);
     const client = new IamBillingAuthorizationClient(
       resolveIamBillingAuthorizationOptions({
         baseUrl: fixture.baseUrl,
-        machineBearerToken: machineToken,
+        serviceCredentialFile: credential.path,
         deadlineMs,
       }),
     );
     clients.push(client);
-    return { ...fixture, client };
+    return { ...fixture, client, credential };
   };
 
-  it.each(["user", "project", "organization", "service"] as const)(
-    "binds %s attribution to the IAM user payer with exactly one request",
-    async (kind) => {
-      const fixture = await setup({ body: allowed() });
-      await expect(fixture.client.authorize(input(kind))).resolves.toEqual({
-        payerUserId: "user-a",
-      });
-      expect(fixture.requests).toHaveLength(1);
-      expect(fixture.requests[0]).toMatchObject({
-        headers: {
-          authorization: `Bearer ${machineToken}`,
-          "x-request-id": "billing-request-a",
-        },
-        body: { access_token: userToken, action: "credit.consume" },
-      });
+  it("binds one exact direct-user Run request through the published SDK, without user tokens", async () => {
+    const fixture = await setup({ body: allowed() });
+    await expect(fixture.client.authorize(input())).resolves.toEqual({
+      payerUserId: "user-a",
+      expiresAt: future,
+    });
+    expect(fixture.requests).toHaveLength(1);
+    expect(fixture.requests[0]).toMatchObject({
+      headers: {
+        authorization: `Bearer ${machineToken}`,
+        "x-request-id": "billing-request-a",
+      },
+      body: {
+        execution_proof: executionProof,
+        expected_request_binding_sha256: "a".repeat(64),
+        action: "credit.consume",
+      },
+    });
+    expect(JSON.stringify(fixture.requests[0]?.body)).not.toContain(
+      "access_token",
+    );
+  });
+  it("rereads tenant-specific credentials on each request and never falls back to cached credentials", async () => {
+    const fixture = await setup({ body: allowed() });
+    await fixture.client.authorize(input());
+    const rotated = "rotated-service-secret-" + "b".repeat(32);
+    await fixture.credential.replace({
+      version: 1,
+      entries: [
+        iamCredentialEntry("tenant-b"),
+        iamCredentialEntry("tenant-a", rotated),
+      ],
+    });
+    await fixture.client.authorize(input());
+    expect(
+      fixture.requests.map((request) => request.headers.authorization),
+    ).toEqual([`Bearer ${machineToken}`, `Bearer ${rotated}`]);
+    await fixture.credential.replace({
+      version: 1,
+      entries: [iamCredentialEntry("tenant-b")],
+    });
+    await expect(fixture.client.authorize(input())).rejects.toMatchObject({
+      code: "UNAVAILABLE",
+    });
+    await fixture.credential.replace({});
+    await expect(fixture.client.authorize(input())).rejects.toMatchObject({
+      code: "UNAVAILABLE",
+    });
+    expect(fixture.requests).toHaveLength(2);
+  });
+
+  it.each(["deadline", "caller", "shutdown"])(
+    "bounds delayed file IO on %s, closes late handles and never sends late requests",
+    async (cause) => {
+      const fixture = await setup(
+        { body: allowed() },
+        cause === "deadline" ? 20 : 1000,
+      );
+      const handle = await files.open(fixture.credential.path, "r");
+      const close = vi.spyOn(handle, "close");
+      let release!: () => void;
+      vi.spyOn(files, "open").mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            release = () => resolve(handle);
+          }),
+      );
+      const controller = new AbortController();
+      const request = fixture.client
+        .authorize(input(controller.signal))
+        .catch((error: unknown) => error);
+      if (cause === "caller") controller.abort();
+      const shutdown =
+        cause === "shutdown" ? fixture.client.onModuleDestroy() : undefined;
+      try {
+        const result = await Promise.race([
+          request,
+          new Promise((resolve) =>
+            setTimeout(() => resolve("deadline missed"), 150),
+          ),
+        ]);
+        expect(result).toMatchObject({
+          code:
+            cause === "deadline"
+              ? "UNAVAILABLE"
+              : cause === "caller"
+                ? "ABORTED"
+                : "SHUTTING_DOWN",
+        });
+        await expect(
+          Promise.race([
+            shutdown ?? fixture.client.onModuleDestroy(),
+            new Promise((resolve) =>
+              setTimeout(() => resolve("shutdown stalled"), 150),
+            ),
+          ]),
+        ).resolves.toBeUndefined();
+      } finally {
+        release();
+        await request;
+        await expect
+          .poll(() => close.mock.calls.length, { timeout: 1000 })
+          .toBe(1);
+      }
+      expect(fixture.requests).toHaveLength(0);
     },
   );
+
+  it("preserves the exact maximum safe lease generation without rounding", async () => {
+    const fixture = await setup({
+      body: allowed({ lease_generation: Number.MAX_SAFE_INTEGER }),
+    });
+    await expect(
+      fixture.client.authorize({
+        ...input(),
+        leaseGeneration: String(Number.MAX_SAFE_INTEGER),
+      }),
+    ).resolves.toEqual({ payerUserId: "user-a", expiresAt: future });
+    expect(fixture.requests).toHaveLength(1);
+  });
 
   it.each(["2099-01-01T00:00:00Z", "2099-01-01T00:00:00.123456Z"])(
     "accepts the IAM contract UTC precision %s",
@@ -139,6 +261,7 @@ describe("IAM Billing authorization through the published SDK HTTP transport", (
       const fixture = await setup({ body: allowed({ expires_at: expiresAt }) });
       await expect(fixture.client.authorize(input())).resolves.toEqual({
         payerUserId: "user-a",
+        expiresAt,
       });
       expect(fixture.requests).toHaveLength(1);
     },
@@ -146,20 +269,40 @@ describe("IAM Billing authorization through the published SDK HTTP transport", (
 
   it.each([
     ["tenant mismatch", allowed({ tenant_id: "tenant-b" }), "BINDING_MISMATCH"],
-    ["user mismatch", allowed(), "BINDING_MISMATCH"],
+    ["user mismatch", allowed({ user_id: "another-user" }), "BINDING_MISMATCH"],
+    ["Run mismatch", allowed({ run_id: "another-run" }), "BINDING_MISMATCH"],
+    [
+      "conversation mismatch",
+      allowed({ execution_session_id: "another-conversation" }),
+      "BINDING_MISMATCH",
+    ],
+    ["lease mismatch", allowed({ lease_generation: 8 }), "BINDING_MISMATCH"],
+    [
+      "request mismatch",
+      allowed({ request_binding_sha256: "b".repeat(64) }),
+      "BINDING_MISMATCH",
+    ],
+    [
+      "legacy Session response",
+      allowed({ session_id: "retired" }),
+      "UNAVAILABLE",
+    ],
+    [
+      "unsafe fence",
+      allowed({ lease_generation: 9007199254740992 }),
+      "UNAVAILABLE",
+    ],
     [
       "expired at arrival",
       allowed({ expires_at: "2020-01-01T00:00:00.000Z" }),
       "EXPIRED",
     ],
     ["malformed expiry", allowed({ expires_at: "2099-01-01" }), "UNAVAILABLE"],
-  ] as const)("rejects %s without retrying", async (name, body, code) => {
+  ] as const)("rejects %s without retrying", async (_name, body, code) => {
     const fixture = await setup({ body });
-    await expect(
-      fixture.client.authorize(
-        name === "user mismatch" ? input("user", "other-user") : input(),
-      ),
-    ).rejects.toMatchObject({ code });
+    await expect(fixture.client.authorize(input())).rejects.toMatchObject({
+      code,
+    });
     expect(fixture.requests).toHaveLength(1);
   });
 
@@ -167,6 +310,7 @@ describe("IAM Billing authorization through the published SDK HTTP transport", (
     [400, "INVALID_ARGUMENT", "AUTHORIZATION_INVALID"],
     [401, "UNAUTHENTICATED", "DENIED"],
     [403, "PERMISSION_DENIED", "DENIED"],
+    [404, "TENANT_NOT_FOUND", "DENIED"],
     [409, "CONFLICT", "DENIED"],
     [429, "RATE_LIMITED", "UNAVAILABLE"],
     [503, "DEPENDENCY_UNAVAILABLE", "UNAVAILABLE"],
@@ -178,7 +322,7 @@ describe("IAM Billing authorization through the published SDK HTTP transport", (
         body: {
           error: {
             code: ownerCode,
-            message: `${machineToken}:${userToken}`,
+            message: `${machineToken}:${executionProof}`,
             retryable: status >= 429,
             details: [],
           },
@@ -192,7 +336,7 @@ describe("IAM Billing authorization through the published SDK HTTP transport", (
       }
       expect(thrown).toMatchObject({ code });
       expect(String(thrown)).not.toContain(machineToken);
-      expect(String(thrown)).not.toContain(userToken);
+      expect(String(thrown)).not.toContain(executionProof);
       expect(fixture.requests).toHaveLength(1);
     },
   );
@@ -206,9 +350,7 @@ describe("IAM Billing authorization through the published SDK HTTP transport", (
 
     const aborted = await setup({ body: allowed(), delayMs: 100 });
     const controller = new AbortController();
-    const pending = aborted.client.authorize(
-      input("user", "user-a", controller.signal),
-    );
+    const pending = aborted.client.authorize(input(controller.signal));
     controller.abort();
     await expect(pending).rejects.toMatchObject({ code: "ABORTED" });
     expect(aborted.requests.length).toBeLessThanOrEqual(1);

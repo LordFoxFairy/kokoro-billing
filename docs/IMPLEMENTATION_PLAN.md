@@ -1,3 +1,116 @@
+## AUTH-1／CREDIT-1：IAM 直接服务调用（2026-10-23）
+
+- [x] IAM已发行0.17.0直接认证profile，固定clean commit、archive与provenance；删除旧0.16包。
+- [x] 原Client/配置改按可信tenant逐次取服务凭据，无机器OAuth/缓存/fallback；原proof和六事实绑定保持。
+- [x] RED→GREEN：轮换／缺失／跨tenant、重复JSON／迟到文件IO；两项独审发现均有回归。
+- [x] 完整owner门1862 PASS/628默认资源SKIP；真实PG/source-dist115 PASS、实际IAM/compiled Client八项配对；独审复核。
+- [ ] 双端正常配对、退役旧注册和真实Agent用量链；本地组件通过不勾整链。
+
+## CREDIT-1：失租后的原预算仅恢复（2026-10-22）
+
+- [x] 现service共享原receipt恢复、miss零写／hit原ACK及冲突／坏数据／取消RED→GREEN。
+- [x] exp10唯一recover HTTP、默认关闭、strict body/headers、整exp9逆保护及正规生成。
+- [x] 真实PG／HTTP／source-dist、停写完整owner门与独立只读审查后提交，供BFF／Agent固定。
+- [ ] 后继金融关联／逐事件ACK和相邻sealed恢复、唯一派发与正常真实产品链，真钱支付不做。
+
+## CREDIT-1：正式结算HTTP（2026-10-22）
+
+- [x] exp9原位发布28操作／57schema，旧capture/release声明退役、整字节逆证明及正规生成。
+- [x] Run及原ACK绑定、strict input/mapper/controller和raw parser的定向RED→GREEN。
+- [x] 真实Nest/PG资金／幂等／历史ACK／跨身份及失败恢复，默认关闭和source/dist验收。
+- [x] 停写完整owner门与只读审查后提交，供BFF／Agent固定消费；不激活正常模型或资金。
+
+## CREDIT-1：同admission结算应用（2026-10-22）
+
+沿现已批准预算与sealed证据方案，不增加服务／模块／用户授权旅程。
+- [x] 固定snapshot严格解码、有限token桶映射、聚合一次整数ceil与超大金额pending。
+- [x] 明确本轮actual System目录ID映射profile，错归属／商业refs／raw名pending，通用usage2合法性不改；真正认证映射producer仍待。
+- [x] 同一资金事务、永久原回执、相邻head、terminal资金／usage来源及异常回滚；33项真实隔离PG回归通过。
+- [x] 原MeteringModule显式预算配置下装配；未配置的正常图不增加依赖／开放接口。
+- [x] 停写388输入、完整owner门、fresh Schema／生成与source-dist核验及本切片提交；1818默认PASS／611资源SKIP、272真实PG／10source-dist PASS，库94→94。
+- [ ] 后继固定正式HTTP／BFF／Agent消费者，worker唯一派发／真实usage封口／崩溃恢复及正常端到端；本地事务fixture不算实际模型扣分。
+
+## CREDIT-1：Run-proof消费者配对（2026-10-22，本地已验）
+
+复用同一Root16项主链；主方唯一writer／Billing f61a5d2基线，相关三面首节已按用户最新裁决收敛。未实施App额外消费grant与BFF回程token broker退出，历史段落中该前置不再执行。
+
+- [x] 固定IAM16ee2eb clean0.16包／provenance与严格artifact门；新proof/hash及可信prepared绑定RED→GREEN。
+- [x] canonical exp8单一proof header、旧／混用拒绝、正规生成及全exp7逆证明；不改资金receipt／Schema。
+- [x] 当前IAM／Agent绑定错位、safe fence、expiry／取消／shutdown、同命令换proof恢复的实际HTTP／PG；真实IAM＋consumer配对。
+- [x] 主方停写全门／source-dist／fresh Prisma／独审，记录正式发行与正常未激活；随后BFF窄入口／Agent唯一dispatch／真实usage整数结算。
+
+- [ ] 后继执行：Agent→BFF独立内部身份及可信已提交Run读取，配对exp8预算API，再接原single-dispatch和真实usage整数结算；不新增App用户token回程。
+
+## AGENT-1／CREDIT-1：正式预算 HTTP（2026-10-22，本地已验）
+
+主方唯一writer，基线9cc7af1，沿前三面已裁决预算业务；完整verify1779PASS／560默认资源SKIP、真实PG／HTTP222、source/dist10、fresh Prisma／正规生成检查全0，374输入无漂移、独审三P2均实证闭合；actual Agent→compiled canonical Billing HTTP／PG18检查通过、库库存94→94。正常配置／资金不动，详细失败及证据限制见CURRENT首节。
+
+- [x] 当前wire正负控RED→exp7原位替换／正规生成及exp6原始全文精确逆证明。
+- [x] 显式配置与Nest装配；BFF本人准入、strict flat JSON／消费header／deadline及现错误映射。
+- [x] 原创建回执HTTP恢复与RR本人当前状态读取，真实Nest／PG／peer授权隔离和故障恢复验收。
+- [x] 主方停写完整门／source-dist／生成与无漂移、独审，记录后固定owner给后继消费者；不以此勾实际扣分完成。
+
+## AGENT-1／CREDIT-1：首次预算预占业务（2026-10-22，本地已验）
+
+主方唯一writer，基线7412c30。沿用户已确认预算方案与三面首节，无新审批／服务或成本上界前置。 主方最终363输入无漂移，verify1762PASS／551默认资源SKIP、相关真实PG／HTTP215、source/dist8、fresh Prisma／生成检查通过；仓外actual Agent→compiled Billing真实预占／离线回执恢复14检查通过，独审两P2已RED→GREEN并复核。正常未激活，价格／IAM peer明确QA；详细失败及证据限制见CURRENT。
+
+- [x] 原receipt recover行为RED→GREEN，miss零写、永久换key绑定、并发／漂移／损坏及回滚。
+- [x] 精确修订完整rate／policy冻结与持有无TTL模型预算的canonical原表替换／正规Prisma。
+- [x] ModelAdmissionService事务外正式prepared／IAM；事务内重新幂等、当前lease／授权／Run阻断核验、账户预占及审计原子落盘。
+- [x] focused和真实PG资金／恢复旅程、完整owner门及独审；记录未装配HTTP／正常服务，不冒实际模型或整链完成。
+
+下一步仍属同一AGENT-1／CREDIT-1：正式HTTP与内部身份＋可信Run消费→原唯一dispatch→真实usage封口／整数结算；不新增MCP验收轮次，不把内部资金Service等同正常产品链。
+
+## AGENT-1／CREDIT-1：正式 prepared 消费（2026-10-22，本地已验）
+
+状态：主方唯一writer，基线2d3ed0f；新26例及原88例114 PASS，完整verify1762 PASS／524默认资源SKIP、相关真实PG61、source/dist8、fresh Prisma／生成检查均0，357非文档输入无漂移。另仓外actual Agent owner HTTP／PG→compiled Billing consumer／PG选价11检查通过，同库两owner隔离schema，自有进程／连接关闭后库库存精确恢复；QA价目不称真实费用，资金表零写。独审Approved，正常未激活；失败及证据边界见CURRENT首节。
+
+- [x] 固定Agent7e1e068／HTTP7.1原件与原usage2三件，正规生成prepared表示；唯一v7 vendor，旧v6删除。
+- [x] 沿现reader共享总deadline／取消／drain／专用身份，新prepared原bytes和完整受信预期校验；旧sealed保护保持。
+- [x] 停写完整owner门、实际两owner配对及独立只读审查。
+- [ ] 同一主链下一步：内部身份及可信Run后台关联→首次预算Admission／永久回执恢复→原single-dispatch→真实usage封口／一次整数结算。沿当前IAM具名Run-proof verify，不新增用户消费grant、服务或token-exchange；proof不入Run／outbox／usage。资金与HTTP变更先通过现三面门，再TDD与隔离真实I/O验收。
+
+本片不改变public HTTP、SQL／Prisma、Module正常装配或资金，不能据此勾AGENT-1／CREDIT-1整项完成。沿唯一原任务表继续，不开MCP新验收周期。
+
+## AGENT-1／MODEL-1：精确模型修订选价绑定（2026-10-22，本地已验）
+
+状态：本地实现和最终停写验收通过；完整verify1736 PASS／524默认资源SKIP，真实PG61、source/dist8及仓外compiled6通过，fresh Prisma／HTTP生成检查0，353非文档输入零漂移、自有库94→94。独审Approved。正常未激活，后继固定BFF／App／Admin新exp6及Agent实际资金链。详细失败修复和证据限制见CURRENT首节。
+
+承接R201已裁决的Billing本地显式版本化商业映射及用户已确认预算流程。本片主方唯一writer，Billing基线35651fc。System精确不可变revision UUID＋content digest已唯一封装provider/model/connection/request_model；Agent prepare和usage2原样冻结该身份，无commercial environment/account/version。不得从显示名、request_model、Key句柄或部署目录猜五维商业引用，不扩System或usage2闭集。
+
+最小实现沿现不可变rate行追加必填modelRevision{id,contentDigest}，对应SQL两普通列model_revision_id UUID及model_revision_digest CHAR(64)。映射版本就是同一rate revision／content digest，发布、审计、幂等、损坏回放和生效窗口完全沿原rate事务；不新建表、独立映射服务／API／生命周期或商业账号库。同一技术pair在一份完整费率修订只映射一个显式商业五维tuple和币种，input/output等桶可多行；不同精确修订可复用同一商业tuple。发布只记录管理员核实的映射，不声称已验证System存在性；实际Admission仍必须读Agent正式prepared快照并核完整计划身份，价目读取不是执行授权。
+
+rate draft/content/request schema显式升2，canonical rate tuple、business key digest及持久重建包含技术pair；无绑定旧rate1明确拒绝，无默认／alias／双读／历史回填。policy2、publication result1、usage2/failure-policy及原27项不相关wire保持。正式rate wire仅在原MeteringRate增加required model_revision{id,content_digest}；GET原快照完整带回，发布限制仍64行／1MiB／12层。当前experimental发行升6，正规生成；BFF/App/Admin后继原子固定该发行，不能把未配对候选正常激活。
+
+实际选择入口不再收调用方商业tuple，只收可信tenant/profile、精确modelRevision与bucket/适用范围；在原单次db-now／同一active rate读取内解析唯一商业映射，再选桶和policy，结果冻结技术pair及所选商业tuple供后继Admission snapshot。未绑定、错digest／旧修订无回退，歧义拒绝；冻结输入在任何异步读取前完成，发布并发不混用两个rate版本。
+
+写区：现Metering revision types/codec/repository/input/mapper/selection及相关Nest/contract注册与正规生成、canonical SQL与正规Prisma派生、直接unit/HTTP/PG测试和三面/现任务表。先新增技术pair正控与歧义/旧版负控RED，再GREEN；真实PG涵盖exact mismatch、同商业多修订、完整回放/原key漂移、未来生效、损坏和回滚；完整owner门、fresh schema/Prisma/生成drift和compiled检验。正常rate表先前为0，但本片不做正常DDL／重载／模型／工具／资金；正常演进另需锁下再确认空表、保护1000余额与流水。此片不是实际Admission或扣分完成。
+
+## AGENT-1／CREDIT-1：计价管理HTTP切片执行（2026-10-22）
+
+主方沿codex/integer-credit-metering、基线d19f0bc唯一writer；先三面和canonical三个操作／正规派生，后具名HTTP TDD→原Metering发布与readonly最新配置→真实PG及完整门→固定发行物接BFF/Admin。当前状态：owner本地实现与验收通过；完整verify1728 PASS／520默认资源SKIP，另真实PG57 PASS／0SKIP、source/dist8 PASS／0SKIP、fresh Prisma／生成检查0，351冻结输入无漂移，自有库94→94，独审无P0–P2。范围与失败恢复见三设计首节，不新增服务／Schema／正常资金操作。Admin配置为Kokoro已批准业务管理能力，没有Manus私有后台API证据，不冒称其内部实现一致。
+
+- [x] 契约3操作与正式生成，原26操作／45schema精确逆恢复保护。
+- [x] 管理准入、严格JSON/input及完整wire映射HTTP风险RED→GREEN。
+- [x] 原publication事务＋RR最新配置读取真实PG，含tenant／并发／重放／损坏／回滚。
+- [x] 主方停写完整owner门与只读审查，给消费者固定SHA；不据此标实际扣分完成。
+
+## AGENT-1／CREDIT-1：已确认预算策略持久化（2026-10-22）
+
+主方沿codex/integer-credit-metering、基线4810a4d唯一writer；写区为现Metering policy types/codec/repository/publication/selection、canonical policy列及正规Prisma派生、直接unit/PG测试和三设计／当前事实。用户已裁决预算方案，不另建服务或重新审批。policy2必填预算固定完整digest并拒无预算旧版，rate与结果wire不变。
+
+状态：本地实施及停写验收通过。新unit16 PASS；完整verify1681 PASS／512默认资源SKIP，真实publication/selection PG41 PASS／0SKIP，fresh Prisma／HTTP生成检查0，341输入无漂移，自有库94→94精确恢复，独审无确定P0–P2。两次失败日志保留，详见CURRENT。本片无正常DDL／资金变化、模型或工具请求；正式管理、消费授权及真实结算仍待同一主链继续，不勾整个CREDIT-1或AGENT-1完成。
+
+## CREDIT-1：正式非现金资金入口（2026-10-22）
+
+当前状态：owner实施与本地验收通过。原grant跨effective_at重复计入的P1已先真实PG RED后修复；同一次DB时点决定状态和余额。最终341非文档输入无漂移，完整verify1628 PASS／509默认资源SKIP；相关真实PG133 PASS／0SKIP、source/dist8 PASS／0SKIP，fresh canonical/Prisma drift与官方HTTP artifact drift通过，临时库库存精确恢复。治理map旧别名已由正式26操作全覆盖集合承接，不用continue漏检。源码/契约/Schema与正常激活分开，后继BFF/Admin及Agent主链仍未完成。
+
+主方单writer续用codex/integer-credit-metering，基线b4dda14。先三面门与canonical新增操作/两schema/版本；现HTTP real-positive及身份/输入/幂等负控RED→沿现Credit grant接线→正规生成/契约消费者保护→真实PG及owner全门；owner发行停写后接BFF/Admin同tenant管理入口与正常回读。没有现金渠道、新owner或手工SQL充值；不先跳过Agent资金许可。正常资金/配置/进程不自动切换。
+
+## CREDIT-1：主链整积分内核（2026-10-22）
+
+主方唯一writer，基线158579f，隔离checkout `codex/integer-credit-metering`。承接Root最新主链与用户整数扣分裁决：先在现pricing suite新增整数边界回归并确认真实RED；再改唯一pricing/type与policy codec/type标识；更新现codec/真实publication fixture，保原负控并补旧版本拒绝；focused→相关format/lint/types/build/contract/default门。只改Metering计价、直接相关测试与这三设计/当前事实，不动旧Admission/Commerce/HTTP/Schema或正常资源。真实模型/资金整链仍由随后逐owner接线，非本纯内核完成条件的替代。
+
 ## 2026-10-20 PR #2 authorized merge closure
 
 User authorizes integrating the existing colleague PR into current main. Main agent sole writer; readonly reviewer examines original account implementation and final diff. Write area: current canonical v1 PUT/request component, original contract wrapper and generated output, new controller/tests route literals, conflicts in owner docs/validation scripts. Preserve all unrelated main changes and old test assertions. Run full local verify plus affected real PG/source-dist and fresh-schema/drift; record existing broader integration failures separately. Push once to the original PR branch after a final fetch, ready/review/merge via PR without waiting CI, no force or protection bypass. No BFF/App initialization, normal DB/config/service or money changes in this slice.

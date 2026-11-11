@@ -1,4 +1,7 @@
-import { request as httpRequest } from "node:http";
+import {
+  request as httpRequest,
+  createServer as createHttpServer,
+} from "node:http";
 import "reflect-metadata";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createConnection, createServer, type Server } from "node:net";
@@ -60,10 +63,11 @@ async function closeServer(server: Server) {
     server.close((error) => (error ? reject(error) : resolve())),
   );
 }
-function failureChild(
+function spawnRuntime(
   entry: "source" | "dist",
   databaseUrl: string,
   port: number,
+  extraEnv: NodeJS.ProcessEnv = {},
 ) {
   const secrets = [randomUUID(), randomUUID(), randomUUID()];
   const child = spawn(
@@ -88,7 +92,9 @@ function failureChild(
         BILLING_PORT: String(port),
         BILLING_SHUTDOWN_DEADLINE_MS: "5000",
         BILLING_ENABLED_PROVIDERS: "",
+        BILLING_MODEL_ADMISSION_ENABLED: "false",
         NODE_ENV: "test",
+        ...extraEnv,
       },
     },
   );
@@ -213,13 +219,22 @@ describe.skipIf(admin === undefined)(
               },
             });
           const before = await facts();
+          // The fixture has its own pools; their PG teardown can lag module.close().
+          // Track this child, not a fluctuating count of every fixture connection.
+          const applicationName = `runtime-drain-${randomUUID()}`;
+          const childDatabaseUrl = new URL(fixture.url);
+          childDatabaseUrl.searchParams.set(
+            "application_name",
+            applicationName,
+          );
           const sessionCount = async () =>
             (
               await fixture.pool.query<{ count: string }>(
-                "SELECT count(*)::text AS count FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid()",
+                "SELECT count(*)::text AS count FROM pg_stat_activity WHERE datname=current_database() AND application_name=$1",
+                [applicationName],
               )
             ).rows[0]?.count;
-          const baselineSessions = await sessionCount();
+          expect(await sessionCount()).toBe("0");
           const port = await availablePort();
           const internal = randomUUID(),
             bearer = randomUUID(),
@@ -235,7 +250,7 @@ describe.skipIf(admin === undefined)(
               stdio: ["ignore", "pipe", "pipe"],
               env: {
                 ...process.env,
-                DATABASE_URL: fixture.url,
+                DATABASE_URL: childDatabaseUrl.toString(),
                 BILLING_AUTH_MODE: "jwks",
                 BILLING_AUTH_JWKS_URL: "https://iam.example.test/iam/jwks",
                 BILLING_AUTH_JWT_ISSUER: "https://iam.example.test/iam",
@@ -250,6 +265,7 @@ describe.skipIf(admin === undefined)(
                 // An inherited legacy dependency must not become an active dependency.
                 REDIS_URL: "redis://127.0.0.1:1/0",
                 BILLING_ENABLED_PROVIDERS: "",
+                BILLING_MODEL_ADMISSION_ENABLED: "false",
                 NODE_ENV: "test",
               },
             },
@@ -281,6 +297,7 @@ describe.skipIf(admin === undefined)(
               throw new Error("Billing fixture readiness deadline");
             await sleep(30);
           }
+          expect(Number(await sessionCount())).toBeGreaterThan(0);
           const encode = (value: string) =>
             "u1." + Buffer.from(value, "utf8").toString("base64url");
           const headers = {
@@ -427,7 +444,12 @@ describe.skipIf(admin === undefined)(
             await once(child.stderr, "end");
           for (const secret of [internal, bearer, operator, fixture.url])
             expect(logs.includes(secret)).toBe(false);
-          expect(await sessionCount()).toBe(baselineSessions);
+          // Process exit closes sockets before PG necessarily removes backend rows.
+          // The runtime drain/exit deadlines above are unchanged; no child backend
+          // may remain once this short observation window closes.
+          await expect
+            .poll(sessionCount, { timeout: 1000, interval: 10 })
+            .toBe("0");
         } finally {
           try {
             if (child) await stop(child);
@@ -437,6 +459,196 @@ describe.skipIf(admin === undefined)(
         }
       },
       60_000,
+    );
+
+    it.each(["source", "dist"] as const)(
+      "activates only explicit model admission in the canonical %s process without dispatch or implicit spend",
+      async (entry) => {
+        if (!admin) throw new Error("Explicit isolated database required");
+        const fixture = await createPrismaDatabaseFixture(admin);
+        let child: ChildProcess | undefined;
+        let calls = 0;
+        const peer = createHttpServer((request, response) => {
+          calls++;
+          request.resume();
+          response.writeHead(503);
+          response.end();
+        });
+        try {
+          peer.listen(0, "127.0.0.1");
+          await once(peer, "listening");
+          const address = peer.address();
+          if (!address || typeof address === "string") throw new Error();
+          const origin = `http://127.0.0.1:${address.port}`,
+            port = await availablePort();
+          const databaseUrl = new URL(fixture.url);
+          databaseUrl.searchParams.set("schema", "kokoro_billing");
+          const run = spawnRuntime(entry, databaseUrl.href, port, {
+            BILLING_MODEL_ADMISSION_ENABLED: "true",
+            BILLING_AGENT_BASE_URL: origin,
+            BILLING_AGENT_READER_TOKEN: "runtime-agent-reader-canary",
+            BILLING_IAM_BASE_URL: origin,
+            BILLING_IAM_SERVICE_CREDENTIAL_FILE:
+              "/private/not-read-without-valid-run.json",
+            BILLING_MODEL_ADMISSION_DEADLINE_MS: "500",
+          });
+          child = run.child;
+          const base = `http://127.0.0.1:${port}`;
+          const until = Date.now() + 15000;
+          while (true) {
+            if (child.exitCode !== null)
+              throw new Error(
+                "Model admission process exited before readiness",
+              );
+            try {
+              if (
+                (
+                  await fetch(base + "/readyz", {
+                    signal: AbortSignal.timeout(500),
+                  })
+                ).status === 200
+              )
+                break;
+            } catch {
+              /* bounded readiness */
+            }
+            if (Date.now() > until)
+              throw new Error("Model admission readiness deadline");
+            await sleep(25);
+          }
+          const [internal, bearer] = run.secrets;
+          if (!internal || !bearer) throw new Error();
+          const identity = (value: string) =>
+            "u1." + Buffer.from(value).toString("base64url");
+          const headers = {
+            authorization: `Bearer ${bearer}`,
+            "x-kokoro-internal-secret": internal,
+            "x-kokoro-service": "web-bff",
+            "x-kokoro-tenant-id": identity("runtime-admission-tenant"),
+            "x-kokoro-subject": identity("runtime-admission-user"),
+            "content-type": "application/json",
+            "idempotency-key": "runtime-admission-command",
+            "x-billing-execution-proof": "runtime-proof-canary".padEnd(
+              16_384,
+              "x",
+            ),
+          };
+          const response = await fetch(
+            base + "/v1/internal/billing/admissions",
+            {
+              method: "POST",
+              headers,
+              body: JSON.stringify({
+                run_id: "runtime-admission-run",
+                attempt_id: randomUUID(),
+                request_ref: "runtime-admission-request",
+                attempt_binding_digest: "a".repeat(64),
+                planned_digest: "b".repeat(64),
+                final_request_digest: "c".repeat(64),
+              }),
+              signal: AbortSignal.timeout(2000),
+            },
+          );
+          expect(response.status).toBe(503);
+          expect(await response.json()).toMatchObject({
+            error: { code: "billing.dependency_unavailable", retryable: true },
+          });
+          expect(calls).toBe(1);
+          const settlementHeaders: Record<string, string> = { ...headers };
+          delete settlementHeaders["x-billing-execution-proof"];
+          const settlementUrl =
+            base + `/v1/internal/billing/admissions/${randomUUID()}/settle`;
+          const settlementBody = {
+            run_id: "runtime-admission-run",
+            evidence_event_id: randomUUID(),
+            evidence_revision: "1",
+            evidence_digest: "a".repeat(64),
+          };
+          const noAdmission = await fetch(settlementUrl, {
+            method: "POST",
+            headers: settlementHeaders,
+            body: JSON.stringify(settlementBody),
+            signal: AbortSignal.timeout(2000),
+          });
+          expect(noAdmission.status).toBe(403);
+          expect(await noAdmission.json()).toMatchObject({
+            error: { code: "billing.forbidden", retryable: false },
+          });
+          const amount = await fetch(settlementUrl, {
+            method: "POST",
+            headers: settlementHeaders,
+            body: JSON.stringify({
+              ...settlementBody,
+              actual_micros: "1000000",
+            }),
+            signal: AbortSignal.timeout(2000),
+          });
+          expect(amount.status).toBe(400);
+          const recovery = {
+            run_id: "runtime-admission-run",
+            attempt_id: randomUUID(),
+            request_ref: "runtime-admission-request",
+            attempt_binding_digest: "a".repeat(64),
+            planned_digest: "b".repeat(64),
+            final_request_digest: "c".repeat(64),
+          };
+          const missing = await fetch(
+            base + "/v1/internal/billing/admissions/recover",
+            {
+              method: "POST",
+              headers: settlementHeaders,
+              body: JSON.stringify(recovery),
+              signal: AbortSignal.timeout(2000),
+            },
+          );
+          expect(missing.status).toBe(404);
+          expect(await missing.json()).toMatchObject({
+            error: { code: "billing.not_found", retryable: false },
+          });
+          const forged = await fetch(
+            base + "/v1/internal/billing/admissions/recover",
+            {
+              method: "POST",
+              headers: settlementHeaders,
+              body: JSON.stringify({ ...recovery, budget_credits: "1" }),
+              signal: AbortSignal.timeout(2000),
+            },
+          );
+          expect(forged.status).toBe(400);
+          expect(calls).toBe(1); // settlement neither reacquires consumption permission nor reads an unknown attempt.
+          for (const table of [
+            "billing_admission",
+            "billing_credit_account",
+            "billing_credit_hold",
+            "billing_command_receipt",
+            "billing_command_key_binding",
+          ]) {
+            const count = await fixture.pool.query<{ n: string }>(
+              `SELECT count(*)::text AS n FROM kokoro_billing.${table}`,
+            );
+            expect(count.rows[0]?.n).toBe("0");
+          }
+          await stop(child);
+          expect(child.exitCode).toBe(0);
+          for (const value of [
+            ...run.secrets,
+            "runtime-agent-reader-canary",
+            "runtime-proof-canary",
+            databaseUrl.href,
+          ])
+            expect(run.logs()).not.toContain(value);
+        } finally {
+          try {
+            if (child) await stop(child);
+          } finally {
+            await new Promise<void>((resolve, reject) =>
+              peer.close((error) => (error ? reject(error) : resolve())),
+            );
+            await fixture.close();
+          }
+        }
+      },
+      60000,
     );
 
     it.each(["source", "dist"] as const)(
@@ -451,7 +663,7 @@ describe.skipIf(admin === undefined)(
         const pgPort = await boundPort(rejectingPg);
         const password = randomUUID();
         const databaseUrl = `postgresql://fixture:${password}@127.0.0.1:${pgPort}/unreachable_fixture?schema=kokoro_billing`;
-        const run = failureChild(entry, databaseUrl, await availablePort());
+        const run = spawnRuntime(entry, databaseUrl, await availablePort());
         try {
           await boundedFailure(run.child);
           expect(accepted).toBeGreaterThan(0);
@@ -487,7 +699,7 @@ describe.skipIf(admin === undefined)(
               )
             ).rows[0]?.count;
           const baseline = await sessions();
-          const run = failureChild(entry, fixture.url, port);
+          const run = spawnRuntime(entry, fixture.url, port);
           child = run.child;
           await boundedFailure(child);
           expect(run.logs()).toContain("category=startup_failed");
@@ -535,7 +747,7 @@ describe.skipIf(admin === undefined)(
         let child: ChildProcess | undefined;
         try {
           const port = await availablePort();
-          const run = failureChild(entry, fixture.url, port);
+          const run = spawnRuntime(entry, fixture.url, port);
           child = run.child;
           const base = `http://127.0.0.1:${port}`;
           const deadline = performance.now() + 20000;

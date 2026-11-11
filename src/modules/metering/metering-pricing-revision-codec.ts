@@ -3,6 +3,7 @@ import type {
   MeteringPolicyRevisionDraft,
   MeteringPublicationEncoding,
   MeteringRateApplicability,
+  MeteringModelRevisionReference,
   MeteringRateRevisionDraft,
   MeteringRevisionEncoding,
   MeteringRevisionRate,
@@ -126,6 +127,21 @@ function reference(value: unknown): MeteringRevisionReference {
   };
 }
 
+/** Shared strict pair parser; it carries no proof of external publication. */
+export function parseMeteringModelRevision(
+  value: unknown,
+): MeteringModelRevisionReference {
+  const fields = object(value, ["id", "contentDigest"]);
+  return Object.freeze({
+    id: matching(
+      fields.id,
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u,
+      36,
+    ),
+    contentDigest: matching(fields.contentDigest, /^[0-9a-f]{64}$/u, 64),
+  });
+}
+
 function instant(value: unknown): string {
   const parsed = matching(
     value,
@@ -151,7 +167,10 @@ function bound(value: unknown): string {
   return parsed;
 }
 
-function rational(value: unknown, positive: boolean): MeteringRevisionRational {
+export function parseMeteringRevisionRational(
+  value: unknown,
+  positive: boolean,
+): MeteringRevisionRational {
   const fields = object(value, ["numerator", "denominator"]);
   const numerator = decimal(fields.numerator);
   const denominator = decimal(fields.denominator);
@@ -200,8 +219,11 @@ function applicability(value: unknown): MeteringRateApplicability {
   };
 }
 
-function rate(value: unknown): MeteringRevisionRate {
+export function parseMeteringRevisionRate(
+  value: unknown,
+): MeteringRevisionRate {
   const fields = object(value, [
+    "modelRevision",
     "providerRef",
     "environment",
     "pricingAccountRef",
@@ -214,6 +236,7 @@ function rate(value: unknown): MeteringRevisionRate {
     "minorPerUnit",
   ]);
   return {
+    modelRevision: parseMeteringModelRevision(fields.modelRevision),
     providerRef: text(fields.providerRef),
     environment: text(fields.environment),
     pricingAccountRef: text(fields.pricingAccountRef),
@@ -223,7 +246,7 @@ function rate(value: unknown): MeteringRevisionRate {
     unit: businessKey(fields.unit),
     applicability: applicability(fields.applicability),
     currencyCode: currency(fields.currencyCode),
-    minorPerUnit: rational(fields.minorPerUnit, false),
+    minorPerUnit: parseMeteringRevisionRational(fields.minorPerUnit, false),
   };
 }
 
@@ -244,13 +267,19 @@ function referenceTuple(value: MeteringRevisionReference) {
 function rationalTuple(value: MeteringRevisionRational) {
   return [value.numerator, value.denominator] as const;
 }
-function bindingTuple(value: MeteringRevisionRate) {
+function commercialTuple(value: MeteringRevisionRate) {
   return [
     value.providerRef,
     value.environment,
     value.pricingAccountRef,
     value.modelRef,
     value.modelVersion,
+  ] as const;
+}
+function bindingTuple(value: MeteringRevisionRate) {
+  return [
+    [value.modelRevision.id, value.modelRevision.contentDigest],
+    ...commercialTuple(value),
   ] as const;
 }
 function rateKeyTuple(value: MeteringRevisionRate) {
@@ -289,12 +318,24 @@ function validateIntervals(
     invalid();
 }
 
-function rateSet(value: unknown): readonly MeteringRevisionRate[] {
-  const rows = array(value, 1, 64).map(rate);
+export function parseMeteringRevisionRates(
+  value: unknown,
+): readonly MeteringRevisionRate[] {
+  const rows = array(value, 1, 64).map(parseMeteringRevisionRate);
   const keys = new Set<string>();
   const currencies = new Map<string, string>();
+  const mappings = new Map<string, string>();
   const intervals = new Map<string, MeteringRateApplicability[]>();
   const entries = rows.map((row) => {
+    const technical = JSON.stringify([
+      row.modelRevision.id,
+      row.modelRevision.contentDigest,
+    ]);
+    const commercial = JSON.stringify(commercialTuple(row));
+    const previousMapping = mappings.get(technical);
+    if (previousMapping !== undefined && previousMapping !== commercial)
+      invalid();
+    mappings.set(technical, commercial);
     const key = JSON.stringify(rateKeyTuple(row));
     if (keys.has(key)) invalid();
     keys.add(key);
@@ -315,9 +356,12 @@ function rateSet(value: unknown): readonly MeteringRevisionRate[] {
   return entries.map((entry) => entry.row);
 }
 
-function common(fields: Readonly<Record<string, unknown>>) {
+function common<V extends "1" | "2">(
+  fields: Readonly<Record<string, unknown>>,
+  version: V,
+) {
   return {
-    schemaVersion: literal(fields.schemaVersion, "1"),
+    schemaVersion: literal(fields.schemaVersion, version),
     tenantId: text(fields.tenantId, 191),
     effectiveFrom: instant(fields.effectiveFrom),
     sourceRef: text(fields.sourceRef),
@@ -327,7 +371,10 @@ function common(fields: Readonly<Record<string, unknown>>) {
 }
 function rateDraft(value: unknown): MeteringRateRevisionDraft {
   const fields = object(value, [...COMMON_FIELDS, "rates"]);
-  return { ...common(fields), rates: rateSet(fields.rates) };
+  return {
+    ...common(fields, "2"),
+    rates: parseMeteringRevisionRates(fields.rates),
+  };
 }
 function policyDraft(value: unknown): MeteringPolicyRevisionDraft {
   const fields = object(value, [
@@ -337,13 +384,21 @@ function policyDraft(value: unknown): MeteringPolicyRevisionDraft {
     "creditMicrosPerMinor",
     "roundingVersion",
     "failurePolicyRef",
+    "maxAttemptCredits",
   ]);
+  const budget = bound(fields.maxAttemptCredits);
+  if (BigInt(budget) === 0n || BigInt(budget) > INT64_MAX / 1_000_000n)
+    invalid();
   return {
-    ...common(fields),
+    ...common(fields, "2"),
+    maxAttemptCredits: budget,
     currencyCode: currency(fields.currencyCode),
-    multiplier: rational(fields.multiplier, true),
-    creditMicrosPerMinor: rational(fields.creditMicrosPerMinor, true),
-    roundingVersion: literal(fields.roundingVersion, "attempt-ceil-v1"),
+    multiplier: parseMeteringRevisionRational(fields.multiplier, true),
+    creditMicrosPerMinor: parseMeteringRevisionRational(
+      fields.creditMicrosPerMinor,
+      true,
+    ),
+    roundingVersion: literal(fields.roundingVersion, "attempt-credit-ceil-v2"),
     failurePolicyRef:
       fields.failurePolicyRef === null
         ? null
@@ -391,6 +446,7 @@ function encodePolicy(
     draft.failurePolicyRef === null
       ? null
       : referenceTuple(draft.failurePolicyRef),
+    draft.maxAttemptCredits,
   ]);
 }
 
@@ -448,18 +504,20 @@ function unpackApplicability(value: unknown) {
   };
 }
 function unpackRate(value: unknown) {
-  const tuple = array(value, 10);
+  const tuple = array(value, 11);
+  const model = array(tuple[0], 2);
   return {
-    providerRef: tuple[0],
-    environment: tuple[1],
-    pricingAccountRef: tuple[2],
-    modelRef: tuple[3],
-    modelVersion: tuple[4],
-    bucket: tuple[5],
-    unit: tuple[6],
-    applicability: unpackApplicability(tuple[7]),
-    currencyCode: tuple[8],
-    minorPerUnit: unpackRational(tuple[9]),
+    modelRevision: { id: model[0], contentDigest: model[1] },
+    providerRef: tuple[1],
+    environment: tuple[2],
+    pricingAccountRef: tuple[3],
+    modelRef: tuple[4],
+    modelVersion: tuple[5],
+    bucket: tuple[6],
+    unit: tuple[7],
+    applicability: unpackApplicability(tuple[8]),
+    currencyCode: tuple[9],
+    minorPerUnit: unpackRational(tuple[10]),
   };
 }
 function unpackCommon(tuple: readonly unknown[]) {
@@ -494,7 +552,7 @@ export function decodeMeteringPolicyRevisionDraft(
   const tuple = canonicalTuple(
     value,
     "kokoro.billing.metering.policy.content",
-    12,
+    13,
   );
   const draft = policyDraft({
     ...unpackCommon(tuple),
@@ -503,6 +561,7 @@ export function decodeMeteringPolicyRevisionDraft(
     creditMicrosPerMinor: unpackRational(tuple[9]),
     roundingVersion: tuple[10],
     failurePolicyRef: tuple[11] === null ? null : unpackReference(tuple[11]),
+    maxAttemptCredits: tuple[12],
   });
   if (encodePolicy(draft).canonicalJson !== value) invalid();
   return draft;
@@ -531,7 +590,7 @@ function publication(
   const content = "rates" in draft ? encodeRate(draft) : encodePolicy(draft);
   const command = encodeTuple([
     `kokoro.billing.metering.${kind}.command`,
-    "1",
+    "2",
     tenantId,
     commandIdentity,
     actorId,
@@ -545,7 +604,7 @@ function publication(
     commandName: `metering.publish_${kind}_revision`,
     commandIdentity,
     idempotencyKey,
-    requestSchemaVersion: 1,
+    requestSchemaVersion: 2,
     canonicalJson: command.canonicalJson,
     contentDigest: content.contentDigest,
     payloadDigest: command.contentDigest,

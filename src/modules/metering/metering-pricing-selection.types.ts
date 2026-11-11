@@ -1,5 +1,6 @@
 import type {
   MeteringPolicyRevisionDraft,
+  MeteringModelRevisionReference,
   MeteringRevisionRate,
   MeteringRevisionReference,
 } from "./metering-pricing-revision.types.js";
@@ -28,7 +29,7 @@ export type MeteringPricingSelectionRequest = Readonly<{
 export type MeteringPricingSelectionInput = Readonly<{
   tenantId: string;
   profileRef: MeteringRevisionReference;
-  binding: MeteringPricingSelectionBinding;
+  modelRevision: MeteringModelRevisionReference;
   requests: readonly MeteringPricingSelectionRequest[];
 }>;
 
@@ -38,6 +39,8 @@ export type MeteringSelectedRate = Readonly<{
 }>;
 
 export type MeteringPricingSelectionResult = Readonly<{
+  modelRevision: MeteringModelRevisionReference;
+  binding: MeteringPricingSelectionBinding;
   tenantId: string;
   dbNow: string;
   revisionId: string;
@@ -54,7 +57,21 @@ export type MeteringPricingSelectionResult = Readonly<{
     effectiveFrom: string;
     multiplier: MeteringPolicyRevisionDraft["multiplier"];
     creditMicrosPerMinor: MeteringPolicyRevisionDraft["creditMicrosPerMinor"];
+    maxAttemptCredits: MeteringPolicyRevisionDraft["maxAttemptCredits"];
     roundingVersion: MeteringPolicyRevisionDraft["roundingVersion"];
     failurePolicyRef: MeteringRevisionReference;
   }>;
 }>;
+
+/** Complete exact-model tariff set frozen before final usage/range is known. */
+export type MeteringPricingFreezeInput = Omit<
+  MeteringPricingSelectionInput,
+  "requests"
+>;
+export type MeteringFrozenPricing = Omit<
+  MeteringPricingSelectionResult,
+  "rates"
+> &
+  Readonly<{
+    rates: readonly MeteringRevisionRate[];
+  }>;

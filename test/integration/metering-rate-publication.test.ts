@@ -25,7 +25,11 @@ import {
 
 const adminUrl = process.env.SCHEMA_ADMIN_URL;
 const integration = describe.skipIf(adminUrl === undefined);
-const DOMAIN = "kokoro.billing.metering.rate.key.v1";
+const DOMAIN = "kokoro.billing.metering.rate.key.v2";
+const modelRevision = {
+  id: "11111111-1111-4111-8111-111111111111",
+  contentDigest: "a".repeat(64),
+};
 const MAX_BIGINT = "9223372036854775807";
 const MAX_NUMERIC_78 = "9".repeat(78);
 const COPRIME_NUMERIC_78 = (BigInt(MAX_NUMERIC_78) - 1n).toString();
@@ -46,6 +50,7 @@ const digest = (tuple: readonly unknown[]) =>
   createHash("sha256").update(JSON.stringify(tuple), "utf8").digest("hex");
 
 const rateKeyDigest = (input: {
+  modelRevision?: typeof modelRevision;
   providerRef: string;
   environment: string;
   pricingAccountRef: string;
@@ -59,6 +64,10 @@ const rateKeyDigest = (input: {
 }) =>
   digest([
     DOMAIN,
+    [
+      input.modelRevision?.id ?? modelRevision.id,
+      input.modelRevision?.contentDigest ?? modelRevision.contentDigest,
+    ],
     input.providerRef,
     input.environment,
     input.pricingAccountRef,
@@ -73,6 +82,7 @@ type RateRow = Readonly<{
   tenantId: string;
   revision: string;
   ordinal: number;
+  modelRevision?: typeof modelRevision;
   providerRef: string;
   environment: string;
   pricingAccountRef: string;
@@ -95,6 +105,7 @@ const ordinaryRate = (tenantId: string, revision = "1"): RateRow => ({
   tenantId,
   revision,
   ordinal: 0,
+  modelRevision,
   providerRef: "provider",
   environment: "test",
   pricingAccountRef: "pricing-account",
@@ -111,6 +122,7 @@ const ordinaryRate = (tenantId: string, revision = "1"): RateRow => ({
   numerator: "7",
   denominator: "5",
   businessKeyDigest: rateKeyDigest({
+    modelRevision,
     providerRef: "provider",
     environment: "test",
     pricingAccountRef: "pricing-account",
@@ -151,7 +163,7 @@ integration("R224 immutable metering rate canonical schema", () => {
       `INSERT INTO billing_metering_rate_revision
        (id,tenant_id,revision,schema_version,effective_from,source_ref,verified_at,
         profile_version,profile_artifact_digest,content_digest,rate_count,published_at)
-       VALUES ($1,$2,$3,1,$4,$5,$6,$7,$8,$9,$10,$11)`,
+       VALUES ($1,$2,$3,2,$4,$5,$6,$7,$8,$9,$10,$11)`,
       [
         randomUUID(),
         tenantId,
@@ -174,8 +186,8 @@ integration("R224 immutable metering rate canonical schema", () => {
        (id,tenant_id,revision,ordinal,provider_ref,environment,pricing_account_ref,
         model_ref,model_version,bucket,unit,applicability_kind,dimension,
         applicability_unit,lower_inclusive,upper_exclusive,currency_code,
-        minor_per_unit_numerator,minor_per_unit_denominator,business_key_digest)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+        minor_per_unit_numerator,minor_per_unit_denominator,business_key_digest,model_revision_id,model_revision_digest)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
       [
         randomUUID(),
         row.tenantId,
@@ -197,6 +209,8 @@ integration("R224 immutable metering rate canonical schema", () => {
         row.numerator,
         row.denominator,
         row.businessKeyDigest,
+        row.modelRevision?.id ?? modelRevision.id,
+        row.modelRevision?.contentDigest ?? modelRevision.contentDigest,
       ],
     );
 
@@ -234,6 +248,24 @@ integration("R224 immutable metering rate canonical schema", () => {
         ],
         ["billing_metering_rate", "revision", "bigint", "NO", null, 64, 0],
         ["billing_metering_rate", "ordinal", "smallint", "NO", null, 16, 0],
+        [
+          "billing_metering_rate",
+          "model_revision_id",
+          "uuid",
+          "NO",
+          null,
+          null,
+          null,
+        ],
+        [
+          "billing_metering_rate",
+          "model_revision_digest",
+          "character",
+          "NO",
+          64,
+          null,
+          null,
+        ],
         [
           "billing_metering_rate",
           "provider_ref",
@@ -566,6 +598,9 @@ integration("R224 immutable metering rate canonical schema", () => {
       "billing_metering_rate.ck_billing_metering_rate_currency": [
         "currency_code~'^[A-Z]{3}$'",
       ],
+      "billing_metering_rate.ck_billing_metering_rate_model_digest": [
+        "model_revision_digest~'^[0-9a-f]{64}$'",
+      ],
       "billing_metering_rate.ck_billing_metering_rate_ordinal": [
         "ordinal>=0",
         "ordinal<=63",
@@ -584,7 +619,7 @@ integration("R224 immutable metering rate canonical schema", () => {
       "billing_metering_rate_revision.ck_billing_metering_rate_revision_profile_digest":
         ["profile_artifact_digest~'^[0-9a-f]{64}$'"],
       "billing_metering_rate_revision.ck_billing_metering_rate_revision_schema":
-        ["schema_version=1"],
+        ["schema_version=2"],
       "billing_metering_rate_revision.ck_billing_metering_rate_revision_text": [
         "char_length(source_ref)>=1",
         "char_length(source_ref)<=255",
@@ -721,7 +756,7 @@ integration("R224 immutable metering rate canonical schema", () => {
     };
     expect(() =>
       encodeMeteringRateRevisionDraft({
-        schemaVersion: "1",
+        schemaVersion: "2",
         tenantId: "tenant-max",
         effectiveFrom: "2026-10-04T12:00:00.000Z",
         sourceRef: "QA synthetic fixture; not a production procurement price",
@@ -732,6 +767,7 @@ integration("R224 immutable metering rate canonical schema", () => {
         },
         rates: [
           {
+            modelRevision,
             providerRef,
             environment,
             pricingAccountRef,
@@ -800,8 +836,8 @@ integration("R224 immutable metering rate canonical schema", () => {
          (id,tenant_id,revision,ordinal,provider_ref,environment,pricing_account_ref,
           model_ref,model_version,bucket,unit,applicability_kind,dimension,
           applicability_unit,lower_inclusive,upper_exclusive,currency_code,
-          minor_per_unit_numerator,minor_per_unit_denominator,business_key_digest)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+          minor_per_unit_numerator,minor_per_unit_denominator,business_key_digest,model_revision_id,model_revision_digest)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
         [
           randomUUID(),
           base.tenantId,
@@ -823,6 +859,8 @@ integration("R224 immutable metering rate canonical schema", () => {
           base.numerator,
           base.denominator,
           base.businessKeyDigest,
+          modelRevision.id,
+          modelRevision.contentDigest,
         ],
       ),
     ).rejects.toMatchObject({
@@ -987,6 +1025,7 @@ integration("R224 immutable metering rate canonical schema", () => {
     await expect(
       insertRate({
         ...first,
+        modelRevision,
         providerRef: "other-provider",
         businessKeyDigest: "c".repeat(64),
       }),
@@ -1045,7 +1084,7 @@ integration("R227 immutable metering rate publication", () => {
     idempotencyKey: "publication-key-1",
     reason: "QA synthetic publication",
     draft: {
-      schemaVersion: "1",
+      schemaVersion: "2",
       tenantId: "tenant-publication",
       effectiveFrom: "2026-10-04T12:00:00.000Z",
       sourceRef: "QA synthetic fixture; not a production procurement price",
@@ -1056,6 +1095,7 @@ integration("R227 immutable metering rate publication", () => {
       },
       rates: [
         {
+          modelRevision,
           providerRef: "Provider-A",
           environment: "Test",
           pricingAccountRef: "Account-A",
@@ -1190,6 +1230,7 @@ integration("R227 immutable metering rate publication", () => {
         },
         rates: [
           {
+            modelRevision,
             providerRef,
             environment,
             pricingAccountRef,
@@ -1337,7 +1378,7 @@ integration("R227 immutable metering rate publication", () => {
       `INSERT INTO billing_metering_rate_revision
        (id,tenant_id,revision,schema_version,effective_from,source_ref,verified_at,
         profile_version,profile_artifact_digest,content_digest,rate_count,published_at)
-       VALUES ($1,$2,$3,1,$4,$5,$6,$7,$8,$9,1,$10)`,
+       VALUES ($1,$2,$3,2,$4,$5,$6,$7,$8,$9,1,$10)`,
       [
         randomUUID(),
         "tenant-exhausted",
@@ -1494,11 +1535,12 @@ integration("R230 active metering rate selection", () => {
   });
 
   const profileRef = {
-    version: "1.0.0",
+    version: "2.0.0",
     artifactDigest:
-      "ecd30d1908f410eed29181c9f52669f824312bf3a2e3874153d990b95fe58b91",
+      "7c5fd0b24d0a691cfcf769a981d8b4a8a689534d9b4ae1b5968342bde591094c",
   } as const;
   const binding = {
+    modelRevision,
     providerRef: "Provider-A",
     environment: "Test",
     pricingAccountRef: "Account-A",
@@ -1510,7 +1552,7 @@ integration("R230 active metering rate selection", () => {
   ): MeteringPricingSelectionInput => ({
     tenantId: "tenant-selection",
     profileRef,
-    binding,
+    modelRevision,
     requests: [
       {
         bucket: "Input.Token",
@@ -1543,7 +1585,7 @@ integration("R230 active metering rate selection", () => {
     idempotencyKey = `key-${identity}`,
   ) => {
     const draft: MeteringRateRevisionDraft = {
-      schemaVersion: "1",
+      schemaVersion: "2",
       tenantId: "tenant-selection",
       effectiveFrom,
       sourceRef: "QA synthetic fixture; not a production procurement price",
@@ -1640,6 +1682,130 @@ integration("R230 active metering rate selection", () => {
     ).toMatchObject({ rows: before.rows });
   });
 
+  test("resolves and freezes explicit commercial mappings for distinct exact revisions in one rate snapshot", async () => {
+    const other = {
+      id: "22222222-2222-4222-8222-222222222222",
+      contentDigest: "b".repeat(64),
+    };
+    const base = {
+      ...binding,
+      bucket: "input_total",
+      unit: "token",
+      applicability: { kind: "all" as const },
+      currencyCode: "USD",
+      minorPerUnit: { numerator: "1", denominator: "10" },
+    };
+    await publish("selection-two-models", "2026-01-01T00:00:00.000Z", "1", [
+      base,
+      {
+        ...base,
+        modelRevision: other,
+        minorPerUnit: { numerator: "1", denominator: "5" },
+      },
+    ]);
+    const requests = [
+      {
+        bucket: "input_total",
+        unit: "token",
+        applicability: { kind: "all" as const },
+      },
+    ];
+    const first = await runSelection(selection({ requests }));
+    const second = await runSelection(
+      selection({ requests, modelRevision: other }),
+    );
+    expect(first.revisionId).toBe(second.revisionId);
+    expect(first.contentDigest).toBe(second.contentDigest);
+    expect(first.modelRevision).toEqual(modelRevision);
+    expect(second.modelRevision).toEqual(other);
+    expect(first.binding).toEqual(second.binding);
+    expect(first.binding).toEqual({
+      providerRef: binding.providerRef,
+      environment: binding.environment,
+      pricingAccountRef: binding.pricingAccountRef,
+      modelRef: binding.modelRef,
+      modelVersion: binding.modelVersion,
+    });
+    expect(Object.isFrozen(first.binding)).toBe(true);
+    expect(Object.isFrozen(first.modelRevision)).toBe(true);
+    expect(first.rates[0]?.rate.minorPerUnit.numerator).toBe("1");
+    expect(second.rates[0]?.rate.minorPerUnit.numerator).toBe("1");
+    expect(second.rates[0]?.rate.minorPerUnit.denominator).toBe("5");
+    await expect(
+      runSelection(
+        selection({
+          requests,
+          modelRevision: {
+            ...other,
+            contentDigest: modelRevision.contentDigest,
+          },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "METERING_RATE_UNAVAILABLE" });
+  });
+
+  test("rejects cross-bucket commercial mapping drift before any rate publication effect", async () => {
+    const before = await assertDefined(fixture).pool.query(
+      "SELECT count(*)::text AS count FROM billing_command_receipt",
+    );
+    const base = {
+      ...binding,
+      bucket: "input_total",
+      unit: "token",
+      applicability: { kind: "all" as const },
+      currencyCode: "USD",
+      minorPerUnit: { numerator: "1", denominator: "10" },
+    };
+    await expect(
+      publish("selection-bad-mapping", "2026-01-01T00:00:00.000Z", "1", [
+        base,
+        {
+          ...base,
+          bucket: "output_total",
+          pricingAccountRef: "different-account",
+        },
+      ]),
+    ).rejects.toThrow();
+    expect(
+      (
+        await assertDefined(fixture).pool.query(
+          "SELECT count(*)::text AS count FROM billing_command_receipt",
+        )
+      ).rows,
+    ).toEqual(before.rows);
+    expect(
+      (
+        await assertDefined(fixture).pool.query(
+          "SELECT count(*)::text AS count FROM billing_metering_rate_revision",
+        )
+      ).rows,
+    ).toEqual([{ count: "0" }]);
+  });
+
+  test.each(["model_revision_id", "model_revision_digest"] as const)(
+    "rejects persisted %s drift instead of returning a new mapping",
+    async (column) => {
+      await publish(
+        "selection-binding-tamper",
+        "2026-01-01T00:00:00.000Z",
+        "1",
+      );
+      // Column comes from this closed test tuple, never caller data.
+      await assertDefined(fixture).pool.query(
+        `UPDATE billing_metering_rate SET ${column}=$1 WHERE tenant_id=$2`,
+        [
+          column === "model_revision_id"
+            ? "22222222-2222-4222-8222-222222222222"
+            : "b".repeat(64),
+          "tenant-selection",
+        ],
+      );
+      await expect(runSelection()).rejects.toMatchObject({
+        code: "METERING_RATE_CORRUPT",
+      });
+    },
+  );
+
   test("fails closed for future-only, tenant, profile, binding, range, and duplicate requests", async () => {
     await publish("selection-future", "2099-01-01T00:00:00.000Z", "1");
     await expect(runSelection()).rejects.toMatchObject({
@@ -1648,17 +1814,15 @@ integration("R230 active metering rate selection", () => {
     await publish("selection-active", "2026-01-01T00:00:00.000Z", "1");
     for (const input of [
       selection({ profileRef: { ...profileRef, version: "other" } }),
-      ...(
-        [
-          "providerRef",
-          "environment",
-          "pricingAccountRef",
-          "modelRef",
-          "modelVersion",
-        ] as const
-      ).map((field) =>
-        selection({ binding: { ...binding, [field]: "Other" } }),
-      ),
+      selection({
+        modelRevision: {
+          ...modelRevision,
+          id: "22222222-2222-4222-8222-222222222222",
+        },
+      }),
+      selection({
+        modelRevision: { ...modelRevision, contentDigest: "b".repeat(64) },
+      }),
       selection({ tenantId: "other-tenant" }),
       selection({
         requests: [
@@ -2009,6 +2173,7 @@ describe.skipIf(adminUrl === undefined)("R241 policy catalog RED", () => {
         0,
         null,
       ],
+      ["max_attempt_credits", "bigint", "NO", null, 64, 0, null],
       ["rounding_version", "character varying", "NO", 64, null, null, null],
       [
         "failure_policy_version",
@@ -2111,7 +2276,8 @@ describe.skipIf(adminUrl === undefined)("R241 policy catalog RED", () => {
       .sort();
     const requiredCheckTerms = [
       "revision>0",
-      "schema_version=1",
+      "schema_version=2",
+      "max_attempt_credits>=1ANDmax_attempt_credits<='9223372036854'",
       "char_length(tenant_id)>=1",
       "char_length(source_ref)>=1",
       "char_length(profile_version)>=1",
@@ -2321,11 +2487,12 @@ integration("R243 joint pricing policy absence", () => {
     const tenantId = "tenant-r243-joint-policy-absence";
     const actorId = "operator-r243-joint-policy-absence";
     const profileRef = {
-      version: "1.0.0",
+      version: "2.0.0",
       artifactDigest:
-        "ecd30d1908f410eed29181c9f52669f824312bf3a2e3874153d990b95fe58b91",
+        "7c5fd0b24d0a691cfcf769a981d8b4a8a689534d9b4ae1b5968342bde591094c",
     } as const;
     const binding = {
+      modelRevision,
       providerRef: "qa-synthetic-provider",
       environment: "test",
       pricingAccountRef: "qa-synthetic-pricing-account",
@@ -2333,7 +2500,7 @@ integration("R243 joint pricing policy absence", () => {
       modelVersion: "qa-v1",
     } as const;
     const draft: MeteringRateRevisionDraft = {
-      schemaVersion: "1",
+      schemaVersion: "2",
       tenantId,
       effectiveFrom: "2026-01-01T00:00:00.000Z",
       sourceRef: "QA synthetic fixture; not a production procurement price",
@@ -2379,7 +2546,7 @@ integration("R243 joint pricing policy absence", () => {
     const input: MeteringPricingSelectionInput = {
       tenantId,
       profileRef,
-      binding,
+      modelRevision,
       requests: [
         { bucket: "input", unit: "token", applicability: { kind: "all" } },
       ],
@@ -2403,20 +2570,21 @@ function syntheticPolicy(
   overrides: Partial<MeteringPolicyRevisionDraft> = {},
 ): MeteringPolicyRevisionDraft {
   return {
-    schemaVersion: "1",
+    schemaVersion: "2",
+    maxAttemptCredits: "10",
     tenantId,
     effectiveFrom: "2026-01-01T00:00:00.000Z",
     sourceRef: "QA synthetic policy; not a production price or conversion",
     verifiedAt: "2026-01-01T00:00:00.000Z",
     profileRef: {
-      version: "1.0.0",
+      version: "2.0.0",
       artifactDigest:
-        "ecd30d1908f410eed29181c9f52669f824312bf3a2e3874153d990b95fe58b91",
+        "7c5fd0b24d0a691cfcf769a981d8b4a8a689534d9b4ae1b5968342bde591094c",
     },
     currencyCode: "USD",
     multiplier: { numerator: "7", denominator: "5" },
     creditMicrosPerMinor: { numerator: "100", denominator: "1" },
-    roundingVersion: "attempt-ceil-v1",
+    roundingVersion: "attempt-credit-ceil-v2",
     failurePolicyRef: {
       version: "1.0.0",
       artifactDigest:
@@ -2466,6 +2634,7 @@ integration("R243 immutable policy publication and joint pricing", () => {
     (SELECT count(*)::text FROM billing_audit_event WHERE action='metering.publish_policy_revision') AS audits`)
     ).rows;
   const binding = {
+    modelRevision,
     providerRef: "provider-qa",
     environment: "test",
     pricingAccountRef: "qa-account",
@@ -2483,7 +2652,7 @@ integration("R243 immutable policy publication and joint pricing", () => {
       idempotencyKey: identity,
       reason: "QA synthetic rate",
       draft: {
-        schemaVersion: "1",
+        schemaVersion: "2",
         tenantId,
         effectiveFrom,
         sourceRef: "QA synthetic rate; not production",
@@ -2504,7 +2673,7 @@ integration("R243 immutable policy publication and joint pricing", () => {
   const input = (): MeteringPricingSelectionInput => ({
     tenantId,
     profileRef: syntheticPolicy(tenantId).profileRef,
-    binding,
+    modelRevision,
     requests: [
       { bucket: "input", unit: "token", applicability: { kind: "all" } },
     ],
@@ -2541,6 +2710,176 @@ integration("R243 immutable policy publication and joint pricing", () => {
       await fixture?.close();
       fixture = undefined;
     }
+  });
+
+  test("freezes the full exact-model tariff set before final usage ranges are known", async () => {
+    const common = {
+      schemaVersion: "2" as const,
+      tenantId,
+      effectiveFrom: "2026-01-01T00:00:00.000Z",
+      verifiedAt: "2026-01-01T00:00:00.000Z",
+      sourceRef: "QA complete tariff",
+      profileRef: syntheticPolicy(tenantId).profileRef,
+    };
+    const rates = [
+      {
+        ...binding,
+        bucket: "input",
+        unit: "token",
+        applicability: { kind: "all" as const },
+        currencyCode: "USD",
+        minorPerUnit: { numerator: "1", denominator: "1000" },
+      },
+      ...["0", "100"].map((lowerInclusive, index) => ({
+        ...binding,
+        bucket: "output",
+        unit: "token",
+        applicability: {
+          kind: "range" as const,
+          dimension: "context",
+          unit: "token",
+          lowerInclusive,
+          upperExclusive: index === 0 ? "100" : null,
+        },
+        currencyCode: "USD",
+        minorPerUnit: { numerator: String(index + 2), denominator: "1" },
+      })),
+      {
+        ...binding,
+        modelRevision: {
+          id: "22222222-2222-4222-8222-222222222222",
+          contentDigest: "b".repeat(64),
+        },
+        bucket: "input",
+        unit: "token",
+        applicability: { kind: "all" as const },
+        currencyCode: "USD",
+        minorPerUnit: { numerator: "9", denominator: "1000" },
+      },
+    ];
+    await publisher.publishRate(context(), {
+      tenantId,
+      actorId,
+      publicationIdentity: "full-tariff",
+      idempotencyKey: "full-tariff",
+      reason: "QA complete tariff",
+      draft: { ...common, rates },
+    });
+    await publisher.publishPolicy(context(), command());
+    const freeze = (pair = modelRevision) =>
+      transactions.runRoot(
+        {
+          tenantId,
+          actorId,
+          operation: "metering.freeze_pricing",
+          mode: "write",
+        },
+        () =>
+          selector.freezeActivePricing({
+            tenantId,
+            profileRef: common.profileRef,
+            modelRevision: pair,
+          }),
+      );
+    const snapshot = await freeze();
+    expect(snapshot.rates).toHaveLength(3);
+    expect(
+      snapshot.rates.every((row) => row.modelRevision.id === modelRevision.id),
+    ).toBe(true);
+    expect(
+      snapshot.rates.filter((row) => row.applicability.kind === "range"),
+    ).toHaveLength(2);
+    expect(snapshot.policy.maxAttemptCredits).toBe("10");
+    expect(Object.isFrozen(snapshot.rates[0]?.minorPerUnit)).toBe(true);
+    await expect(
+      freeze({ ...modelRevision, contentDigest: "f".repeat(64) }),
+    ).rejects.toMatchObject({ code: "METERING_RATE_UNAVAILABLE" });
+    await publishRate("replacement-tariff");
+    expect((await freeze()).rates).toHaveLength(1);
+    expect(snapshot.rates).toHaveLength(3);
+  });
+
+  test("freezes explicit attempt budgets in persisted policy, original replay and joint selection", async () => {
+    await publishRate();
+    const maximum = "9223372036854";
+    const firstCommand = command("budget-original", {
+      maxAttemptCredits: maximum,
+    });
+    const first = await publisher.publishPolicy(context(), firstCommand);
+    expect(await publisher.publishPolicy(context(), firstCommand)).toEqual(
+      first,
+    );
+    expect(
+      await publisher.publishPolicy(
+        context(),
+        command(
+          "budget-original",
+          { maxAttemptCredits: maximum },
+          "budget-recovery-key",
+        ),
+      ),
+    ).toEqual(first);
+    expect((await select()).policy.maxAttemptCredits).toBe(maximum);
+    await expect(
+      publisher.publishPolicy(
+        context(),
+        command(
+          "budget-original",
+          { maxAttemptCredits: "11" },
+          "budget-drift-key",
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "METERING_PUBLICATION_CONFLICT" });
+    const second = await publisher.publishPolicy(
+      context(),
+      command("budget-replacement", { maxAttemptCredits: "20" }),
+    );
+    expect(second.revision).toBe("2");
+    const selection = await select();
+    expect(selection.policy.maxAttemptCredits).toBe("20");
+    expect(Object.isFrozen(selection.policy)).toBe(true);
+    const persisted = await pool().query(
+      "SELECT schema_version,max_attempt_credits::text AS budget FROM billing_metering_policy_revision WHERE tenant_id=$1 ORDER BY revision",
+      [tenantId],
+    );
+    expect(persisted.rows).toEqual([
+      { schema_version: 2, budget: maximum },
+      { schema_version: 2, budget: "20" },
+    ]);
+    expect(await counts()).toEqual([
+      { policies: "2", receipts: "2", keys: "3", audits: "2" },
+    ]);
+  });
+
+  test("canonical database budget and current schema constraints reject invalid states without changing policy", async () => {
+    await publisher.publishPolicy(context(), command("budget-constraints"));
+    for (const invalid of [0n, -1n, 9_223_372_036_855n])
+      await expect(
+        pool().query(
+          "UPDATE billing_metering_policy_revision SET max_attempt_credits=$1 WHERE tenant_id=$2",
+          [invalid.toString(), tenantId],
+        ),
+      ).rejects.toMatchObject({
+        code: "23514",
+        constraint: "ck_billing_metering_policy_revision_budget",
+      });
+    await expect(
+      pool().query(
+        "UPDATE billing_metering_policy_revision SET schema_version=1 WHERE tenant_id=$1",
+        [tenantId],
+      ),
+    ).rejects.toMatchObject({
+      code: "23514",
+      constraint: "ck_billing_metering_policy_revision_schema",
+    });
+    const persisted = await pool().query(
+      "SELECT schema_version,max_attempt_credits::text AS budget FROM billing_metering_policy_revision WHERE tenant_id=$1",
+      [tenantId],
+    );
+    expect(persisted.rows).toEqual([{ schema_version: 2, budget: "10" }]);
+    expect(await counts()).toEqual([
+      { policies: "1", receipts: "1", keys: "1", audits: "1" },
+    ]);
   });
 
   test("publishes exact seven-field policy bytes, replays both keys, audits the actual row, and separates rate identities", async () => {
@@ -2615,6 +2954,13 @@ integration("R243 immutable policy publication and joint pricing", () => {
         failurePolicyRef: { version: "1.0.0", artifactDigest: "a".repeat(64) },
       },
       { profileRef: { version: "other", artifactDigest: "a".repeat(64) } },
+      {
+        profileRef: {
+          version: "1.0.0",
+          artifactDigest:
+            "ecd30d1908f410eed29181c9f52669f824312bf3a2e3874153d990b95fe58b91",
+        },
+      },
       { multiplier: { numerator: "0", denominator: "1" } },
       { multiplier: { numerator: "2", denominator: "2" } },
       { creditMicrosPerMinor: { numerator: "0", denominator: "1" } },
@@ -2649,6 +2995,7 @@ integration("R243 immutable policy publication and joint pricing", () => {
     "multiplier_numerator",
     "failure_policy_artifact_digest",
     "profile_artifact_digest",
+    "max_attempt_credits",
   ] as const)(
     "rejects %s drift on same/new-key replay and joint selection",
     async (field) => {
@@ -2663,6 +3010,8 @@ integration("R243 immutable policy publication and joint pricing", () => {
           "UPDATE billing_metering_policy_revision SET failure_policy_artifact_digest=repeat('b',64)",
         profile_artifact_digest:
           "UPDATE billing_metering_policy_revision SET profile_artifact_digest=repeat('b',64)",
+        max_attempt_credits:
+          "UPDATE billing_metering_policy_revision SET max_attempt_credits=11",
       };
       await pool().query(statements[field]);
       const before = await counts();
@@ -2766,7 +3115,7 @@ integration("R243 immutable policy publication and joint pricing", () => {
         revision: "2",
         multiplier: { numerator: "8", denominator: "5" },
         creditMicrosPerMinor: { numerator: "100", denominator: "1" },
-        roundingVersion: "attempt-ceil-v1",
+        roundingVersion: "attempt-credit-ceil-v2",
         failurePolicyRef: syntheticPolicy(tenantId).failurePolicyRef,
       },
     });
@@ -2776,6 +3125,8 @@ integration("R243 immutable policy publication and joint pricing", () => {
     expect(Object.isFrozen(selected.policy.failurePolicyRef)).toBe(true);
     expect(Object.keys(selected).sort()).toEqual(
       [
+        "modelRevision",
+        "binding",
         "tenantId",
         "dbNow",
         "revisionId",

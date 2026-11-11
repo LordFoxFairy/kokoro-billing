@@ -70,12 +70,28 @@ const openApiSchema = z
 const operationGovernance: Readonly<
   Record<string, Readonly<{ idempotency: string; permission: string }>>
 > = {
+  "get /v1/admin/billing/metering/pricing": {
+    idempotency: "read-only",
+    permission: "web-bff-billing-admin-proxy",
+  },
+  "post /v1/admin/billing/metering/rate-revisions": {
+    idempotency: "required",
+    permission: "web-bff-billing-admin-proxy",
+  },
+  "post /v1/admin/billing/metering/policy-revisions": {
+    idempotency: "required",
+    permission: "web-bff-billing-admin-proxy",
+  },
   "get /healthz": { idempotency: "inherent", permission: "none" },
   "get /readyz": { idempotency: "inherent", permission: "none" },
   "get /metrics": { idempotency: "inherent", permission: "none" },
   "get /v1/commerce/catalog": {
     idempotency: "read-only",
     permission: "authenticated-user-or-web-bff",
+  },
+  "put /v1/billing/me/credit-account": {
+    idempotency: "inherent",
+    permission: "web-bff-delegated-self",
   },
   "get /v1/billing/me/credit-account": {
     idempotency: "read-only",
@@ -85,49 +101,81 @@ const operationGovernance: Readonly<
     idempotency: "read-only",
     permission: "authenticated-user-or-web-bff",
   },
-  "post /v1/internal/entitlement/admissions": {
-    idempotency: "required",
-    permission: "agent-model-studio-service",
+  "get /v1/billing/me/subscriptions": {
+    idempotency: "read-only",
+    permission: "authenticated-user",
   },
-  "post /v1/internal/entitlement/admissions/{admissionId}/capture": {
+  "post /v1/internal/billing/admissions": {
     idempotency: "required",
-    permission: "agent-model-studio-service",
+    permission: "web-bff-model-admission",
   },
-  "post /v1/internal/entitlement/admissions/{admissionId}/release": {
+  "post /v1/internal/billing/admissions/recover": {
     idempotency: "required",
-    permission: "agent-model-studio-service",
+    permission: "web-bff-model-admission",
+  },
+  "get /v1/internal/billing/admissions/{admission_id}": {
+    idempotency: "read-only",
+    permission: "web-bff-model-admission",
+  },
+  "post /v1/internal/billing/admissions/{admission_id}/settle": {
+    idempotency: "required",
+    permission: "web-bff-model-admission",
   },
   "post /v1/internal/billing/execution-events": {
     idempotency: "required",
     permission: "agent-model-studio-service",
   },
-  "post /v1/internal/payment/settlements/accept": {
+  "get /v1/internal/billing/execution-events/{execution_event_id}": {
+    idempotency: "read-only",
+    permission: "agent-model-studio-service",
+  },
+  "post /v1/billing/checkouts": {
+    idempotency: "required",
+    permission: "authenticated-user-or-web-bff",
+  },
+  "get /v1/billing/checkouts/{checkout_id}": {
+    idempotency: "read-only",
+    permission: "authenticated-user-or-web-bff",
+  },
+  "post /v1/internal/payment/settlements": {
     idempotency: "required",
     permission: "payment-worker-or-scheduler",
   },
-  "post /v1/internal/payment/refunds/accept": {
+  "get /v1/internal/payment/settlements/{settlement_id}": {
+    idempotency: "read-only",
+    permission: "payment-worker-or-scheduler",
+  },
+  "post /v1/internal/payment/refunds": {
     idempotency: "required",
     permission: "payment-worker-service",
   },
-  "post /v1/internal/commands/expire-credit-holds": {
-    idempotency: "required",
-    permission: "scheduler-service",
-  },
-  "post /v1/webhooks/payment/{provider}": {
-    idempotency: "provider-event-id",
-    permission: "provider-signature",
-  },
-  "get /v1/billing/me/subscriptions": {
+  "get /v1/internal/payment/refunds/{refund_id}": {
     idempotency: "read-only",
-    permission: "authenticated-user",
+    permission: "payment-worker-or-billing-admin",
   },
-  "post /v1/billing/checkout": {
+  "post /v1/admin/billing/credit-grants": {
     idempotency: "required",
-    permission: "authenticated-user-or-web-bff",
+    permission: "web-bff-billing-admin-proxy",
   },
   "post /v1/admin/billing/refunds": {
     idempotency: "required",
     permission: "billing-admin",
+  },
+  "post /v1/internal/credit-holds/expire": {
+    idempotency: "required",
+    permission: "scheduler-service",
+  },
+  "post /v1/webhooks/payment/stripe": {
+    idempotency: "provider-event-id",
+    permission: "stripe-signature",
+  },
+  "post /v1/webhooks/payment/alipay": {
+    idempotency: "provider-event-id",
+    permission: "alipay-rsa2-form-signature",
+  },
+  "post /v1/webhooks/payment/wechat": {
+    idempotency: "provider-event-id",
+    permission: "wechatpay-signature",
   },
 };
 
@@ -191,7 +239,10 @@ describe("billing ownership architecture", () => {
         ).length,
       0,
     );
-    expect(operationCount).toBe(25);
+    expect([...actualOperations].sort()).toEqual(
+      Object.keys(operationGovernance).sort(),
+    );
+    expect(operationCount).toBe(29);
   });
 
   it("binds contract governance documentation to the current OpenAPI digest", async () => {

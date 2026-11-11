@@ -226,7 +226,7 @@ describe("immutable Agent usage2 consumer", () => {
         recursive: true,
       });
       await readAgentUsageArtifacts(scratch);
-      const http = join(scratch, "vendor/agent/http/v6/openapi.json");
+      const http = join(scratch, "vendor/agent/http/v7/openapi.json");
       const originalHttp = await readFile(http);
       await writeFile(http, "{}");
       await expect(readAgentUsageArtifacts(scratch)).rejects.toThrow(

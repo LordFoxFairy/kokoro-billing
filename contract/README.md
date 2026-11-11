@@ -1,3 +1,31 @@
+## 2026-10-22 原预算仅恢复发行
+
+当前canonical exp10／29操作／57schema，raw SHA256 `f3d510bbf084d0dddad91d8cfafd13caf19e23c2a97074b363e0687291e14654`。唯一新增POST admissions/recover复用AdmissionCreateRequest／AdmissionResponse，不建新wire schema；显式只恢复已提交原命令，不收proof、旧consumption header或自报payer／金额，miss不新预占／回执／alias。200原held创建ACK，404仅当前查询未找到，绝不证明在途create已取消或允许新派发。正式生成及exp10→完整exp9整字节逆证明保持历史全图；BFF／Agent须后继固定正式commit原件，不能与仍固定exp9的正常候选混用。本片不改SQL／Prisma／依赖／正常配置资金。实际门和恢复窗口边界见CURRENT首节。
+
+## CREDIT-1：正式sealed结算（2026-10-22，候选）
+
+唯一canonical为4.0.0-experimental.9，28 operations／57 schemas；SHA256 `7b5335fde2be601b2d6256cb9b68b0964d5518cfa053b50f2029358a059a0924`。
+新增BFF本人机器上下文的POST admissions/{admission_id}/settle，由owner决定capture／release／pending，
+删除未挂载的两个旧capture/release命令和两旧request schema，不保handler／wire alias。
+Run与原Admission先核等；strict原证据引用，原永久ACK以整Credit字符串公开，不外露evidence JSON。
+exp9→8 build/test-only逆证明完整还原原SHA，再沿既有whole-source链核不相关操作；正常尚未激活。
+
+## 当前精确模型选价绑定候选（2026-10-22）
+
+canonical 4.0.0-experimental.8，29操作／56schema；SHA256 `2c65b64c896a85cb89e6b8f23ee9802b6e5cf2440d9a8debaa23973f5c199b6e`。Admission POST/GET 改为真实整次预算资源：BFF 完整 u1 身份、独立消费授权、六项 preparation 绑定；POST 回放原始 held，GET 当前金融状态。移除旧未实现的成本上界与复合伪状态；无运行时兼容。原 MeteringRate 的精确 model_revision、rate2/policy2 保持。选择消费可信prepared精确技术pair，同一次active rate读取得出并冻结商业映射，不接受Agent自报价目身份；无新表／服务／API／默认商业值。正常尚未激活，消费者待固定本发行。
+
+构建/测试的具名inverse逐字恢复整个exp5（SHA8005cff204976ca681653565fb8b6b098bc195cc70049743f70ae85989df35ab），再承接原26操作/45schema inverse。它不是runtime兼容；旧无技术绑定rate1拒绝。下方记录仅历史，不能覆盖本节当前版本。
+
+## 当前计价管理候选（2026-10-22）
+
+canonical 4.0.0-experimental.5，29操作／56schema；SHA256 `8005cff204976ca681653565fb8b6b098bc195cc70049743f70ae85989df35ab`。现Metering发布两POST与最新配置RR单体GET；当前协议绑定owner固定，非生效报价，无资金效果。正式生成与精确逆恢复保护旧26操作/45schema；无runtime旧wire回退。源码候选不等于正常部署。
+
+## CREDIT-1：非现金管理员积分发放（2026-10-22，未正常激活）
+
+canonical `openapi/v1/openapi.yaml` 为4.0.0-experimental.4，26 operations／45 schemas；新增POST /v1/admin/billing/credit-grants及严格请求/响应。web-bff当前管理员代理与同tenant接收者资格由BFF核实，Billing另核service bearer/internal secret/operatorProxySecret与u1 tenant/operator；不接受body tenant/actor/role、用户Bearer或旧admin header分支。正常资金未写入，消费者及实际用量结算仍待完整接线；无现金支付。
+
+SHA256 `a09e00a3d6f602fdaff13a50a5a839c8a989b1a26ab28c43eac314738fcfdef2`。唯一canonical正规生成；构建/测试将新funding profile移除后精确还原此前25操作/43schema全部原字节，历史inverse只作保护性oracle，不是runtime兼容或第二份可编辑契约。
+
 ## 2026-10-20 PR #2 current integration
 
 Canonical `openapi/v1/openapi.yaml` advances to `4.0.0-experimental.3`: 25 operations / 43 schemas. `PUT /v1/billing/me/credit-account` reuses the approved machine-only naturally idempotent zero-account command. No `/v2` alias; no grants, journals, payments or schema changes. The exact inverse restores main experimental.2 bytes and runs its unchanged validator. This is an internal lifecycle operation, not a user-facing account-opening step. BFF/App consumption is separate.
@@ -26,16 +54,13 @@ SHA256 `9ff84d5f473e2f161f5d0c496db4cee175e2b032e836e97c7e23b9576a0af3e6`。消�
 
 ## Current machine artifact
 
-[`openapi/v1/openapi.yaml`](openapi/v1/openapi.yaml) is the only editable Billing HTTP machine source. It defines exactly 25 operations: three unversioned probes and 22 `/v1/**` internal-owner operations. The artifact version is `4.0.0-experimental.3`; package version and HTTP path version are independent. There is no `/v2` alias, fallback, or second editable contract.
+[`openapi/v1/openapi.yaml`](openapi/v1/openapi.yaml) is the only editable Billing HTTP machine source: `4.0.0-experimental.10`, exactly 29 operations / 57 schemas (three probes and 26 `/v1/**` operations). No `/v2` alias or second editable source.
 
 ```text
-openapi/v1/openapi.yaml  9a7048b6afc299ad4a7df8cde2428cb3a471291a764e1161e7d85f77174cb204
-
-openapi/v1/openapi.yaml  fbe34c188cf4a9f08955e4b94ceab40d63a41156a3106fae6ab939a4190612b7
-openapi/v2/openapi.yaml  b413db8965ed60683435adb7f2ce8650a7ca7bf7bee0989e8f83afc3d9f846af
+openapi/v1/openapi.yaml  f3d510bbf084d0dddad91d8cfafd13caf19e23c2a97074b363e0687291e14654
 ```
 
-The probes, canonical Catalog, two personal Credit reads and the machine-only account initialization PUT are mounted by this source candidate. The other 18 contract operations remain unimplemented and unregistered; their presence in the target artifact is not runtime-completion evidence. Historical candidate narratives and old digests remain in Git history and dated owner documentation.
+The existing probes, Catalog, personal Credit lifecycle, non-cash administrator grants and pricing configuration remain mounted. Explicit model-admission configuration adds create/get and owner-decided settle; it is not default activation. The other declared payment/execution targets remain unimplemented and unregistered. Candidate HTTP availability is not normal provider execution or actual usage acceptance evidence.
 
 ## Owner, visibility, and authority
 
@@ -60,7 +85,7 @@ public contract.
 
 ## MC01-B2b exact Agent HTTP consumer
 
-The existing usage2 consumer receipt also fixes the read-only HTTP6 OpenAPI and provenance distributed under `vendor/agent/http/v6/`. They are immutable Agent `2d5ce12` Git blobs, not editable Billing contracts. The existing generator checks both digests and derives the exact final-evidence envelope types/schema into two additional `src/generated/agent-usage-v2` files. Runtime reads only usage2 and bind sealed original bytes to a complete trusted snapshot; historical usage1 in the owner envelope is not a fallback. This adds no Billing route, financial permission, configured credential or model dispatch.
+The usage2 consumer receipt now fixes the read-only HTTP7.2 OpenAPI and provenance under `vendor/agent/http/v7/`, from immutable Agent `189c8ac74baa8715589cd4e7ab1a5ee79fb51f9e` Git blobs. Exact sealed-event reads include historical revisions and retain independent current-head validation; this does not grant execution permission. The old v6 vendor path is removed, not a runtime fallback. The existing generator emits exact sealed/prepared types and separate bounded envelope schemas. Both operations share the existing authenticated reader lifecycle; only pending/current prepared facts can be considered for a new admission. Canonical bytes, ordinary part digests, complete expected binding and arrival-time lease expiry are verified. This read is not a financial permit or hold; existing receipt recovery must not require a live prepared read. Frozen usage2 sources and the original sealed numeric/budget/knowledge semantics remain unchanged.
 
 ## Target per-attempt usage contract
 
@@ -76,7 +101,7 @@ Agent usage schema SHA-256: 552f0d22251837aaf4d83766c7bd91311984f707f9a42950ed53
 
 The read-only release pointer is `agent/usage/v2/consumer-pin.json`, verified by
 `pnpm contract:check` against its accepted immutable digest. It binds Agent
-commit `2d5ce12c0eecdecfcdb44a21b69da707d51eb7c7`, HTTP6, and the usage2
+commit `189c8ac74baa8715589cd4e7ab1a5ee79fb51f9e`, HTTP7.2, and the unchanged usage2
 schema/manifest/vectors. It is not a runtime reader or billing permission.
 Sealed usage1 remains Agent-owned historical evidence; it does not authorize a
 new admission or retroactive billing without an original financial snapshot.

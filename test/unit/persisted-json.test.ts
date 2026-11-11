@@ -37,6 +37,7 @@ describe("persisted JSON invariants", () => {
       switchToHttp: () => ({ getResponse: () => reply }),
     } as ArgumentsHost;
     new ErrorFilter({
+      acceptsRequest: () => false,
       names: ["ErrorResponse"],
       assert: () => undefined,
     }).catch(thrown, host);
