@@ -1,7 +1,9 @@
 import { createServer } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
-import { createBillingAuth } from "../../src/infrastructure/auth/billing-auth.js";
+import { createBillingPersonalAuth } from "../../src/infrastructure/auth/billing-auth.js";
+import { encodeBillingIdentityHeader } from "../../src/infrastructure/auth/billing-identity-header.js";
+import type { FastifyRequest } from "fastify";
 
 const servers: Array<ReturnType<typeof createServer>> = [];
 
@@ -16,7 +18,7 @@ afterEach(async () => {
   );
 });
 
-describe("billing production authentication adapter", () => {
+describe("billing personal authentication adapter", () => {
   it("verifies EdDSA IAM Billing profiles and binds the tenant header to the token", async () => {
     const { privateKey, publicKey } = await generateKeyPair("EdDSA");
     const jwk = await exportJWK(publicKey);
@@ -49,190 +51,34 @@ describe("billing production authentication adapter", () => {
       .setIssuedAt()
       .setExpirationTime("5 minutes")
       .sign(privateKey);
-    const auth = createBillingAuth({
+    const auth = createBillingPersonalAuth({
       mode: "jwks",
-      internalServiceSecret: "service-secret",
-      bffServiceToken: "bff-bearer",
-      operatorProxySecret: "operator-secret",
+      internalServiceSecret: "jwt-fixture-service-secret-000000001",
+      bffServiceToken: "jwt-fixture-bff-bearer-000000000001",
+      operatorProxySecret: "jwt-fixture-operator-secret-00000001",
       jwksUrl: `http://127.0.0.1:${address.port}/.well-known/jwks.json`,
       issuer: "https://iam.example.test/iam",
       audience: "https://kokoro.dev/resources/billing",
     });
 
-    const valid = await auth.user({
-      headers: {
+    const request = (tenantId: string): FastifyRequest => {
+      const headers = {
         authorization: `Bearer ${token}`,
-        "x-kokoro-tenant-id": "site-1",
-      },
-    } as never);
-    expect(valid).toEqual({ tenantId: "site-1", subjectId: "team-1" });
-    const crossSite = await auth.user({
-      headers: {
-        authorization: `Bearer ${token}`,
-        "x-kokoro-tenant-id": "site-2",
-      },
-    } as never);
-    expect(crossSite).toBeNull();
-  });
-
-  it("keeps local internal-header auth separate from production JWT auth", async () => {
-    const auth = createBillingAuth({
-      mode: "internal-header",
-      internalServiceSecret: "service-secret",
-      bffServiceToken: "bff-bearer",
-      operatorProxySecret: "service-secret",
-      issuer: "kokoro-iam",
-    });
-    expect(
-      await auth.user({
-        headers: {
-          "x-kokoro-tenant-id": "site-1",
-          "x-kokoro-subject": "team-1",
-        },
-      } as never),
-    ).toEqual({ tenantId: "site-1", subjectId: "team-1" });
-    expect(
-      await auth.user({
-        headers: {
-          authorization: "Bearer fixture-token",
-          "x-kokoro-tenant-id": "site-1",
-        },
-      } as never),
-    ).toBeNull();
-  });
-
-  it("requires the trusted BFF proxy marker for operator calls", async () => {
-    const auth = createBillingAuth({
-      mode: "internal-header",
-      internalServiceSecret: "service-secret",
-      bffServiceToken: "bff-bearer",
-      operatorProxySecret: "operator-secret",
-      issuer: "kokoro-iam",
-    });
-    const headers = {
-      "x-kokoro-tenant-id": "site-1",
-      "x-kokoro-operator": "op-1",
-      "x-kokoro-role": "finance",
-      "x-kokoro-proxy-secret": "operator-secret",
+        "x-kokoro-tenant-id": encodeBillingIdentityHeader(tenantId, "tenant"),
+      };
+      return {
+        headers,
+        raw: { rawHeaders: Object.entries(headers).flat() },
+      } as unknown as FastifyRequest;
     };
-    expect(await auth.admin({ headers } as never)).toBeNull();
-    expect(
-      await auth.admin({
-        headers: { ...headers, "x-kokoro-service": "admin" },
-      } as never),
-    ).toBeNull();
-    expect(
-      await auth.admin({
-        headers: {
-          ...headers,
-          "x-kokoro-service": "admin",
-          "x-kokoro-role": "billing.admin",
-        },
-      } as never),
-    ).toMatchObject({
-      tenantId: "site-1",
-      operatorId: "op-1",
-      role: "billing.admin",
+    expect(await auth.authenticate(request("site-1"))).toEqual({
+      ok: true,
+      context: { tenantId: "site-1", subjectId: "team-1" },
     });
-  });
-
-  it("accepts only registered internal service identities", async () => {
-    const auth = createBillingAuth({
-      mode: "internal-header",
-      internalServiceSecret: "service-secret",
-      bffServiceToken: "bff-bearer",
-      operatorProxySecret: "service-secret",
-      issuer: "kokoro-iam",
+    expect(await auth.authenticate(request("site-2"))).toEqual({
+      ok: false,
+      status: 403,
     });
-    const headers = {
-      "x-kokoro-tenant-id": "site-1",
-      "x-kokoro-internal-secret": "service-secret",
-    };
-    expect(
-      await auth.internal({
-        headers: { ...headers, "x-kokoro-service": "agent" },
-      } as never),
-    ).toEqual({ tenantId: "site-1", serviceId: "agent" });
-    expect(
-      await auth.internal({
-        headers: { ...headers, "x-kokoro-service": "unregistered-service" },
-      } as never),
-    ).toBeNull();
-  });
-
-  it("requires the registered web BFF, tenant context, internal secret and service bearer", async () => {
-    const auth = createBillingAuth({
-      mode: "internal-header",
-      internalServiceSecret: "service-secret",
-      bffServiceToken: "bff-bearer",
-      operatorProxySecret: "operator-secret",
-      issuer: "kokoro-iam",
-    });
-    const headers = {
-      "x-kokoro-tenant-id": "site-1",
-      "x-kokoro-service": "web-bff",
-      "x-kokoro-internal-secret": "service-secret",
-      authorization: "Bearer bff-bearer",
-      "x-kokoro-subject": "team-1",
-    };
-    expect(await auth.bff({ headers } as never)).toEqual({
-      tenantId: "site-1",
-      serviceId: "web-bff",
-      subjectId: "team-1",
-    });
-    expect(
-      await auth.bff({
-        headers: { ...headers, "x-kokoro-service": "model" },
-      } as never),
-    ).toBeNull();
-    expect(
-      await auth.bff({
-        headers: { ...headers, "x-kokoro-internal-secret": "forged" },
-      } as never),
-    ).toBeNull();
-    expect(
-      await auth.bff({
-        headers: { ...headers, authorization: "Bearer forged" },
-      } as never),
-    ).toBeNull();
-    expect(
-      await auth.bff({
-        headers: { ...headers, "x-kokoro-tenant-id": "" },
-      } as never),
-    ).toBeNull();
-  });
-
-  it("keeps the HTTP tenant boundary aligned with the VARCHAR(191) storage contract", async () => {
-    const auth = createBillingAuth({
-      mode: "internal-header",
-      internalServiceSecret: "service-secret",
-      bffServiceToken: "bff-bearer",
-      operatorProxySecret: "service-secret",
-      issuer: "kokoro-iam",
-    });
-    const accepted = `tenant-${"x".repeat(184)}`;
-    expect(accepted.length).toBe(191);
-    expect(
-      await auth.user({
-        headers: {
-          "x-kokoro-tenant-id": accepted,
-          "x-kokoro-subject": "team-1",
-        },
-      } as never),
-    ).toMatchObject({ tenantId: accepted });
-    expect(
-      await auth.user({
-        headers: {
-          "x-kokoro-tenant-id": `${accepted}x`,
-          "x-kokoro-subject": "team-1",
-        },
-      } as never),
-    ).toBeNull();
-    expect(
-      await auth.user({
-        headers: { "x-kokoro-tenant-id": "", "x-kokoro-subject": "team-1" },
-      } as never),
-    ).toBeNull();
   });
 });
 
@@ -272,21 +118,22 @@ async function withR73VerifiedUser(
   const address = jwksServer.address();
   if (address === null || typeof address === "string")
     throw new Error("R73 JWKS fixture did not bind");
-  const auth = createBillingAuth({
+  const auth = createBillingPersonalAuth({
     mode: "jwks",
-    internalServiceSecret: "r73-fixture-service-secret",
-    bffServiceToken: "r73-fixture-bff-token",
-    operatorProxySecret: "r73-fixture-operator-secret",
+    internalServiceSecret: "r73-fixture-service-secret-000000001",
+    bffServiceToken: "r73-fixture-bff-token-000000000000001",
+    operatorProxySecret: "r73-fixture-operator-secret-00000001",
     issuer: "https://r73-iam.example.test/iam",
     audience: "https://kokoro.dev/resources/billing",
     jwksUrl: `http://127.0.0.1:${address.port}/.well-known/jwks.json`,
   });
   const requestFixture = Fastify({ logger: false });
-  // This unit request route invokes the existing auth.user entry; it is not
-  // a production personal-read route, Guard, or authentication selector.
-  requestFixture.get("/__r73_auth_probe", async (request) => ({
-    context: await auth.user(request),
-  }));
+  // This unit probe exercises the active personal factory and real JWKS verifier,
+  // without a Controller or a business/database provider.
+  requestFixture.get("/__r73_auth_probe", async (request) => {
+    const result = await auth.authenticate(request);
+    return { context: result.ok ? result.context : null };
+  });
   try {
     await check(async (input) => {
       const payload: Record<string, unknown> = {
@@ -316,7 +163,10 @@ async function withR73VerifiedUser(
         url: "/__r73_auth_probe",
         headers: {
           authorization: `Bearer ${token}`,
-          "x-kokoro-tenant-id": "tenant-a",
+          "x-kokoro-tenant-id": encodeBillingIdentityHeader(
+            "tenant-a",
+            "tenant",
+          ),
         },
       });
       expect(response.statusCode).toBe(200);
@@ -327,7 +177,7 @@ async function withR73VerifiedUser(
   }
 }
 
-describe("R73 existing verified JWT subject boundary (not personal HTTP)", () => {
+describe("R73 personal factory verified JWT subject boundary", () => {
   it.each([
     ["255 four-byte code points", "😀".repeat(255)],
     ["leading BOM", "\uFEFFsubject-a"],
@@ -558,6 +408,26 @@ describe("R74 personal auth selection and u1 boundary", () => {
           })
         ).statusCode,
       ).toBe(403);
+    });
+  });
+  it.each([
+    { "x-kokoro-service": "model" },
+    { "x-kokoro-internal-secret": "forged" },
+    { authorization: "Bearer forged" },
+  ])("rejects substituted machine credentials case %#", async (patch) => {
+    await withPersonalProbe(async ({ app, headers }) => {
+      const control = await app.inject({
+        method: "GET",
+        url: "/__r74_personal_auth_probe",
+        headers,
+      });
+      expect(control.statusCode).toBe(200);
+      const rejected = await app.inject({
+        method: "GET",
+        url: "/__r74_personal_auth_probe",
+        headers: { ...headers, ...patch },
+      });
+      expect(rejected.statusCode).toBe(403);
     });
   });
   it("selects matching dedicated Bearer without any machine header", async () => {
