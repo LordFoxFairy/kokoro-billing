@@ -1,3 +1,9 @@
+## 2026-11-15 无预占关闭：不增加Billing schema
+
+`billing_command_receipt`现有admission namespace下新增command_name=model.close-unreserved、command_identity=原attempt；result_json为有界严格非资金关闭凭据，`billing_command_key_binding`保持原request/key绑定，审计归现billing_audit_event。原model.admit identity/key与run/request锁序内检查未创建原receipt/admission/原hold；create最终事务同边界查询close事实，防迟到预占。
+
+不创建credit account/grant/hold/allocation、usage、settlement或credit journal，不将pending/unknown改known_zero。closure_ref不是admission/hold/settlement引用；旧原记录不改。关闭与原admit只一方能生效；close提交后网络ACK丢失按原命令重放。无需正常DB演进或installer。
+
 ## AUTH-1／CREDIT-1：内部认证纠偏（2026-10-23，待实现）
 
 当前实现固定 IAM `2f881d0` clean SDK0.17.0；认证profile为 `billing-direct-service-v1`，业务wire与Schema不变。原证据JSON解析器的纯解析部分提取到本Metering模块 `strict-metering-json.ts`，原Agent证据规则／错误映射保持，新凭据读取复用拒绝重复成员、严格UTF-8和深度限制；不新增通用SDK／服务。总期限包含文件IO，取消／shutdown先结束调用，迟到句柄按finally释放，禁止迟到HTTP派发。当前仍待完整门禁／组合，非正常激活声明。

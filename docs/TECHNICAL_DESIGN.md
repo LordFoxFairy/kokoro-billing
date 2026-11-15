@@ -1,3 +1,11 @@
+## 2026-11-15 原无预占预算命令终局关闭
+
+用户批准仅原两条恢复残留的非资金关闭。现ModelAdmissionService新增closeUnreserved，沿原admit command identity/key锁→run/request锁判定；拒已有receipt/admission及原attempt hold，复用永久command receipt保存model.close-unreserved＋安全审计。首个create快速查关闭，最终receipt事务持原锁再核，故close获胜后迟到或换key的admit不再创建资金事实。Billing无新表/状态/资金接口，不引入reconciler平台。
+
+新增独立close-unreserved HTTP；旧recover仍仅恢复原held ACK或miss，settle仍仅真实资金结算。Billing只裁决原命令未产生预占及不可再创建，不从caller evidence回显推断Agent执行/用量。Agent显式operator独立验证terminal/未派发并记录关闭；BFF只按原durable submitter和现service通道转发，不增OAuth/IAM/proof。
+
+候选源码/测试和正常两条命令执行分列，未执行正常关闭前不称恢复已清。
+
 ## CREDIT-1：公布基础 tariff ×3/2 的两桶计价（2026-10-25方案；2026-10-27交付收口）
 
 当前态：正常 policy2/rate2 已于 2026-10-25T11:24:36.174Z 同时生效，真实同 Run 已按两桶基础 tariff ×3/2逐attempt结算。下文“待发布”仅为25日方案时点；本次7路径仅内部命名澄清与回归收口，不重新发布费率、不改旧10预占或历史账。Root独立临时PG44项通过且库存前后相同；供应商实际成本未知仍与客户tariff分开。

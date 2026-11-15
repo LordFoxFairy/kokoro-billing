@@ -1237,6 +1237,142 @@ export const AdmissionResponseSchema = {
   },
 } as const;
 
+export const AdmissionUnreservedCloseRequestSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "run_id",
+    "attempt_id",
+    "request_ref",
+    "attempt_binding_digest",
+    "planned_digest",
+    "final_request_digest",
+    "evidence_event_id",
+    "evidence_revision",
+    "evidence_digest",
+  ],
+  properties: {
+    run_id: {
+      type: "string",
+      minLength: 1,
+      maxLength: 512,
+    },
+    attempt_id: {
+      type: "string",
+      format: "uuid",
+      pattern:
+        "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])",
+    },
+    request_ref: {
+      type: "string",
+      minLength: 1,
+      maxLength: 512,
+    },
+    attempt_binding_digest: {
+      type: "string",
+      pattern: "^[0-9a-f]{64}$(?![\\s\\S])",
+    },
+    planned_digest: {
+      type: "string",
+      pattern: "^[0-9a-f]{64}$(?![\\s\\S])",
+    },
+    final_request_digest: {
+      type: "string",
+      pattern: "^[0-9a-f]{64}$(?![\\s\\S])",
+    },
+    evidence_event_id: {
+      $ref: "#/components/schemas/Uuid",
+    },
+    evidence_revision: {
+      $ref: "#/components/schemas/PositiveDecimal",
+    },
+    evidence_digest: {
+      type: "string",
+      pattern: "^[0-9a-f]{64}$(?![\\s\\S])",
+    },
+  },
+} as const;
+
+export const AdmissionUnreservedClosureSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "run_id",
+    "attempt_id",
+    "request_ref",
+    "attempt_binding_digest",
+    "planned_digest",
+    "final_request_digest",
+    "evidence_event_id",
+    "evidence_revision",
+    "evidence_digest",
+    "closure_ref",
+    "status",
+    "closed_at",
+  ],
+  properties: {
+    run_id: {
+      type: "string",
+      minLength: 1,
+      maxLength: 512,
+    },
+    attempt_id: {
+      type: "string",
+      format: "uuid",
+      pattern:
+        "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])",
+    },
+    request_ref: {
+      type: "string",
+      minLength: 1,
+      maxLength: 512,
+    },
+    attempt_binding_digest: {
+      type: "string",
+      pattern: "^[0-9a-f]{64}$(?![\\s\\S])",
+    },
+    planned_digest: {
+      type: "string",
+      pattern: "^[0-9a-f]{64}$(?![\\s\\S])",
+    },
+    final_request_digest: {
+      type: "string",
+      pattern: "^[0-9a-f]{64}$(?![\\s\\S])",
+    },
+    evidence_event_id: {
+      $ref: "#/components/schemas/Uuid",
+    },
+    evidence_revision: {
+      $ref: "#/components/schemas/PositiveDecimal",
+    },
+    evidence_digest: {
+      type: "string",
+      pattern: "^[0-9a-f]{64}$(?![\\s\\S])",
+    },
+    closure_ref: {
+      $ref: "#/components/schemas/Uuid",
+    },
+    status: {
+      type: "string",
+      const: "unreserved_closed",
+    },
+    closed_at: {
+      $ref: "#/components/schemas/UtcInstant",
+    },
+  },
+} as const;
+
+export const AdmissionUnreservedCloseResponseSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["data"],
+  properties: {
+    data: {
+      $ref: "#/components/schemas/AdmissionUnreservedClosure",
+    },
+  },
+} as const;
+
 export const ExecutionEventRequestSchema = {
   type: "object",
   additionalProperties: false,

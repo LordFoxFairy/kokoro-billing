@@ -1,3 +1,9 @@
+## 2026-11-15 原无预占命令关闭候选
+
+canonical exp11增加独立close-unreserved，原recover/settle逐字不变；复用永久command receipt阻断迟到admit，无Billing新表、预占或资金写入。BFF沿原submitter/身份转发，Agent对执行资格负责；不是0usage或settlement ACK。新生成组件60，完整30操作；候选不等正常实际两笔验收。
+
+SHA256 `f8807563f4550c3c30126e520ed49736ebe77d4151978de12ef72fe649a3d7ce`。
+
 ## 2026-10-22 原预算仅恢复发行
 
 当前canonical exp10／29操作／57schema，raw SHA256 `f3d510bbf084d0dddad91d8cfafd13caf19e23c2a97074b363e0687291e14654`。唯一新增POST admissions/recover复用AdmissionCreateRequest／AdmissionResponse，不建新wire schema；显式只恢复已提交原命令，不收proof、旧consumption header或自报payer／金额，miss不新预占／回执／alias。200原held创建ACK，404仅当前查询未找到，绝不证明在途create已取消或允许新派发。正式生成及exp10→完整exp9整字节逆证明保持历史全图；BFF／Agent须后继固定正式commit原件，不能与仍固定exp9的正常候选混用。本片不改SQL／Prisma／依赖／正常配置资金。实际门和恢复窗口边界见CURRENT首节。

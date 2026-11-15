@@ -1,3 +1,8 @@
+import {
+  assertUnreservedAdmissionOpen,
+  closeUnreservedAdmission,
+  type UnreservedCloseCommand,
+} from "./model-unreserved-closure.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { TransactionService } from "../../database/transaction.service.js";
 import type { CommandReceiptRepository } from "../../database/command-receipt.repository.js";
@@ -37,6 +42,28 @@ export class ModelAdmissionService {
     private readonly agent: Pick<AgentUsageEvidenceReader, "readPrepared">,
     private readonly iam: Pick<IamBillingAuthorizationClient, "authorize">,
   ) {}
+  async closeUnreserved(
+    context: ModelAdmissionContext,
+    command: UnreservedCloseCommand,
+  ) {
+    try {
+      return await closeUnreservedAdmission(
+        this.transactions,
+        this.receipts,
+        this.audit,
+        context,
+        command,
+      );
+    } catch (error) {
+      if (error instanceof CommandReceiptError)
+        throw new ModelAdmissionError(
+          error.code === "COMMAND_IDEMPOTENCY_CONFLICT"
+            ? "CONFLICT"
+            : "CORRUPT",
+        );
+      throw error;
+    }
+  }
   async create(
     context: ModelAdmissionContext,
     command: ModelAdmissionCommand,
@@ -59,6 +86,10 @@ export class ModelAdmissionService {
       const previous = await this.#recoverCommitted(intent);
       checkCancelled();
       if (previous !== null) return previous;
+      await this.transactions.runRoot(scope, () =>
+        assertUnreservedAdmissionOpen(this.transactions, intent),
+      );
+      checkCancelled();
       // Existing results above survive peer/proof expiry. New reservations require fresh owner checks.
       const prepared = await this.agent.readPrepared({
         expected,
@@ -155,6 +186,7 @@ export class ModelAdmissionService {
               })
             )
               throw new ModelAdmissionError("RUN_BLOCKED");
+            await assertUnreservedAdmissionOpen(this.transactions, intent);
             await checkLiveBounds();
             const pricing = await this.pricing.freezeActivePricing({
               tenantId,

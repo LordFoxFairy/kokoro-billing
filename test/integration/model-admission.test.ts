@@ -449,6 +449,98 @@ describe.skipIf(admin === undefined)(
         journals: await f.client.billing_credit_journal.count(),
       };
     };
+    const closureCommand = (input: ModelAdmissionCommand) => ({
+      ...input,
+      idempotencyKey: input.requestRef,
+      evidenceEventId: randomUUID(),
+      evidenceRevision: "1",
+      evidenceDigest: "e".repeat(64),
+    });
+    test("unreserved close replays without money or peers and fences late original and aliased admission", async () => {
+      const input = command();
+      const close = closureCommand(input);
+      const before = await funds();
+      peerEnabled = false;
+      const [result, duplicate] = await Promise.all([
+        service.closeUnreserved(context(), close),
+        service.closeUnreserved(context(), close),
+      ]);
+      expect(duplicate).toEqual(result);
+      expect(result).toMatchObject({
+        status: "unreserved_closed",
+        attemptId: input.attemptId,
+      });
+      expect(await service.closeUnreserved(context(), close)).toEqual(result);
+      expect(await service.recover(context(), input)).toBeNull();
+      await expect(create(input)).rejects.toMatchObject({ code: "CONFLICT" });
+      await expect(
+        create({ ...input, idempotencyKey: "another-original-key" }),
+      ).rejects.toMatchObject({ code: "CONFLICT" });
+      await expect(
+        service.closeUnreserved(context(), {
+          ...close,
+          evidenceDigest: "f".repeat(64),
+        }),
+      ).rejects.toMatchObject({ code: "CONFLICT" });
+      await expect(
+        service.closeUnreserved({ ...context(), actorId: "other-user" }, close),
+      ).rejects.toMatchObject({ code: "CONFLICT" });
+      expect(await funds()).toEqual(before);
+      expect(agentCalls).toBe(0);
+      expect(iamCalls).toBe(0);
+      expect(
+        await assertDefined(fixture).client.billing_audit_event.count({
+          where: { action: "model.close-unreserved" },
+        }),
+      ).toBe(1);
+    });
+    test("unreserved close wins against an admission paused outside its final funding transaction", async () => {
+      const input = command();
+      let resume: (() => void) | undefined;
+      let entered: (() => void) | undefined;
+      const arrived = new Promise<void>((r) => {
+        entered = r;
+      });
+      pausePrepared = (reply) => {
+        resume = reply;
+        entered?.();
+      };
+      const before = await funds();
+      const pending = create(input).then(
+        (value) => ({ value, error: undefined }),
+        (error: unknown) => ({ value: undefined, error }),
+      );
+      try {
+        await Promise.race([
+          arrived,
+          new Promise((_, reject) =>
+            setTimeout(
+              () => reject(new Error("prepared peer not entered")),
+              1000,
+            ),
+          ),
+        ]);
+        await service.closeUnreserved(context(), closureCommand(input));
+      } finally {
+        resume?.();
+      }
+      expect((await pending).error).toMatchObject({ code: "CONFLICT" });
+      expect(await funds()).toEqual(before);
+    });
+    test("committed admission wins and unreserved close cannot touch its hold", async () => {
+      const input = command();
+      await create(input);
+      const before = await funds();
+      await expect(
+        service.closeUnreserved(context(), closureCommand(input)),
+      ).rejects.toMatchObject({ code: "CONFLICT" });
+      expect(await funds()).toEqual(before);
+      expect(
+        await assertDefined(fixture).client.billing_command_receipt.count({
+          where: { command_name: "model.close-unreserved" },
+        }),
+      ).toBe(0);
+    });
     test("atomically holds the configured integer budget without a wall-clock release and freezes the exact tariff", async () => {
       const input = command();
       const result = await create(input);
@@ -663,6 +755,90 @@ describe.skipIf(admin === undefined)(
       expect(result.error).toMatchObject({ code: "ABORTED" });
       expect(await funds()).toEqual(before);
       expect(await f.client.billing_command_key_binding.count()).toBe(keys);
+    });
+    test("formal unreserved close HTTP preserves original fields and refuses financial or proof input", async () => {
+      const input = command(),
+        close = closureCommand(input),
+        headers = wireHeaders();
+      delete (headers as Record<string, unknown>)["x-billing-execution-proof"];
+      headers["idempotency-key"] = input.requestRef;
+      const payload = {
+        ...wireCommand(input),
+        evidence_event_id: close.evidenceEventId,
+        evidence_revision: close.evidenceRevision,
+        evidence_digest: close.evidenceDigest,
+      };
+      peerEnabled = false;
+      const before = await funds();
+      await withHttp(async (http) => {
+        const url = "/v1/internal/billing/admissions/close-unreserved";
+        expect(
+          (
+            await http.inject({
+              method: "POST",
+              url,
+              headers,
+              payload: { ...payload, captured_credits: "0" },
+            })
+          ).statusCode,
+        ).toBe(400);
+        expect(
+          (
+            await http.inject({
+              method: "POST",
+              url,
+              headers: {
+                ...headers,
+                "x-billing-execution-proof": "unwanted-proof",
+              },
+              payload,
+            })
+          ).statusCode,
+        ).toBe(400);
+        expect(
+          (
+            await http.inject({
+              method: "POST",
+              url,
+              headers: {
+                ...headers,
+                "idempotency-key": "changed-original-key",
+              },
+              payload,
+            })
+          ).statusCode,
+        ).toBe(400);
+        const result = await http.inject({
+          method: "POST",
+          url,
+          headers,
+          payload,
+        });
+        expect(result.statusCode).toBe(200);
+        expect(result.json<{ data: Record<string, unknown> }>()).toMatchObject({
+          data: {
+            ...payload,
+            status: "unreserved_closed",
+            closure_ref: expect.any(String),
+            closed_at: expect.any(String),
+          },
+        });
+        expect(
+          (
+            await http.inject({ method: "POST", url, headers, payload })
+          ).json<unknown>(),
+        ).toEqual(result.json<{ data: Record<string, unknown> }>());
+        expect(
+          result.json<{ data: Record<string, unknown> }>().data,
+        ).not.toHaveProperty("admission_id");
+        expect(
+          result.json<{ data: Record<string, unknown> }>().data,
+        ).not.toHaveProperty("hold_id");
+        expect(result.headers["cache-control"]).toBe("no-store");
+      });
+      expect(await funds()).toEqual(before);
+      expect(agentCalls).toBe(0);
+      expect(iamCalls).toBe(0);
     });
     test("formal recover HTTP is proof-free, never creates a missing reservation and returns the original receipt offline", async () => {
       const input = command();
