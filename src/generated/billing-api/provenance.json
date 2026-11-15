@@ -2,9 +2,9 @@
   "owner": "@kokoro/billing",
   "source": {
     "path": "contract/openapi/v1/openapi.yaml",
-    "version": "4.0.0-experimental.10",
-    "bytes": 148752,
-    "sha256": "f3d510bbf084d0dddad91d8cfafd13caf19e23c2a97074b363e0687291e14654"
+    "version": "4.0.0-experimental.11",
+    "bytes": 157731,
+    "sha256": "02a495b7021293cec43cba77e0e9276799a9b7bab153d0fe4d2f6443b811b90d"
   },
   "generator": {
     "package": "@hey-api/openapi-ts",
@@ -35,6 +35,9 @@
     "AdmissionSettlement": "AdmissionSettlementSchema",
     "AdmissionSettlementRequest": "AdmissionSettlementRequestSchema",
     "AdmissionSettlementResponse": "AdmissionSettlementResponseSchema",
+    "AdmissionUnreservedCloseRequest": "AdmissionUnreservedCloseRequestSchema",
+    "AdmissionUnreservedCloseResponse": "AdmissionUnreservedCloseResponseSchema",
+    "AdmissionUnreservedClosure": "AdmissionUnreservedClosureSchema",
     "AlipayWebhookForm": "AlipayWebhookFormSchema",
     "CatalogItem": "CatalogItemSchema",
     "CatalogResponse": "CatalogResponseSchema",
@@ -84,16 +87,16 @@
   },
   "outputs": {
     "index.ts": {
-      "bytes": 5341,
-      "sha256": "7d3aac74ef47a619d51c30db45aaa23608cb790313c20d20203910e94d76d3c7"
+      "bytes": 5639,
+      "sha256": "8f078e53302c9255f17ff89b11c406ca563fdd2c5bb9c40e8c45958a937e50b6"
     },
     "types.gen.ts": {
-      "bytes": 36924,
-      "sha256": "45cf5d857fc025cdd44c997ecff7e9d469bbf276ed52fcabf44e2557bfa7ef25"
+      "bytes": 38852,
+      "sha256": "9f525c7ea05b847170103f8edc3d629f86e7235bde5cc88dacf008b8977eee6c"
     },
     "schemas.gen.ts": {
-      "bytes": 40901,
-      "sha256": "660dd7494b67ec40691e75c9186d881d1df09354e20f184aa88fba422f0f59eb"
+      "bytes": 44968,
+      "sha256": "4e4d3dc36594fa1fd48138b7a0fb231bdcee8efaceb9614d3dcaed923017ae7f"
     }
   }
 }

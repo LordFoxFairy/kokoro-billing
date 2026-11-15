@@ -1,3 +1,9 @@
+## 2026-11-15 exp11：独立无预占关闭
+
+新增POST `/v1/internal/billing/admissions/close-unreserved`（closeUnreservedModelAdmission），原AdmissionCreateRequest六字段加evidence_event_id/revision/digest，严格闭集；原service/u1身份，Idempotency-Key必须为原request_ref，不带execution proof/consumption token。Billing只关闭无资金效果的原命令，已有授权/hold/不确定receipt拒绝，无provider/Agent网络或IAM调用。
+
+独立AdmissionUnreservedCloseResponse.data回显九字段及closure_ref、unreserved_closed、closed_at，无admission/hold/usage/settlement/金额。复用永久receipt和原命令锁，重复返回同一结果；actor/binding/evidence漂移冲突，当前已有资金不受此接口修改。Billing不声明验证Agentterminal/usage；这由原可信Agent显式入口负责，不放宽prepared reader。旧recover与settle语义/返回值不变，生成产物来自exp11正规命令。
+
 ## CREDIT-1：两桶基础 tariff 的现接口配置边界（2026-10-25方案；2026-10-27交付收口）
 
 当前态：正常 policy2/rate2 已于 2026-10-25T11:24:36.174Z 同时生效，真实同 Run 已按两桶基础 tariff ×3/2逐attempt结算。下文“待发布”仅为25日方案时点；本次7路径仅内部命名澄清与回归收口，不重新发布费率、不改旧10预占或历史账。Root独立临时PG44项通过且库存前后相同；供应商实际成本未知仍与客户tariff分开。

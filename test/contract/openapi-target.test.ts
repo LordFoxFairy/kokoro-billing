@@ -1923,7 +1923,7 @@ describe("R67 generated schema semantics and provenance", () => {
       pathToFileURL(join(directory, "schemas.gen.ts")).href
     );
     const schemaExports = record(exports);
-    expect(Object.keys(schemas)).toHaveLength(57);
+    expect(Object.keys(schemas)).toHaveLength(60);
     expect(Object.keys(schemaExports).sort()).toEqual(
       Object.keys(schemas)
         .map((name) => name + "Schema")
@@ -1935,7 +1935,7 @@ describe("R67 generated schema semantics and provenance", () => {
       );
     }
     const provenance = validProvenance();
-    expect(provenance.source.version).toBe("4.0.0-experimental.10");
+    expect(provenance.source.version).toBe("4.0.0-experimental.11");
     expect(provenance.source.sha256).toBe(
       createHash("sha256").update(sourceText).digest("hex"),
     );

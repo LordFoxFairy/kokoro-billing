@@ -1,6 +1,8 @@
+import { modelUnreservedCloseBaselineSource } from "./model-unreserved-close-contract.js";
 import { createHash } from "node:crypto";
 /** Build/test only: remove the single recover-only publication delta, preserving the complete original exp9. */
 export function modelAdmissionRecoveryBaselineSource(source: string): string {
+  source = modelUnreservedCloseBaselineSource(source);
   if (
     createHash("sha256").update(source).digest("hex") !==
     "f3d510bbf084d0dddad91d8cfafd13caf19e23c2a97074b363e0687291e14654"

@@ -1,3 +1,7 @@
+import {
+  readUnreservedCloseInput,
+  mapUnreservedClosure,
+} from "./model-unreserved-close.input.js";
 import { readModelAdmissionRecoveryInput } from "./model-admission-recovery.input.js";
 import { ModelAttemptSettlementService } from "./model-attempt-settlement.service.js";
 import { readModelSettlementInput } from "./model-settlement.input.js";
@@ -100,6 +104,23 @@ export class ModelAdmissionController {
       if (result === null) throw new NotFoundException();
       const response = mapModelAdmissionCreation(result, command);
       this.schemas.assert("AdmissionResponse", response);
+      return response;
+    });
+  }
+  @Post("close-unreserved")
+  @HttpCode(200)
+  async closeUnreserved(
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    const command = readUnreservedCloseInput(request, this.schemas);
+    return this.scoped(request, reply, async (signal) => {
+      const value = await this.service.closeUnreserved(
+        modelAdmissionContext(request, signal),
+        command,
+      );
+      const response = mapUnreservedClosure(value);
+      this.schemas.assert("AdmissionUnreservedCloseResponse", response);
       return response;
     });
   }
