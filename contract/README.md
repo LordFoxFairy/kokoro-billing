@@ -2,7 +2,7 @@
 
 canonical exp11增加独立close-unreserved，原recover/settle逐字不变；复用永久command receipt阻断迟到admit，无Billing新表、预占或资金写入。BFF沿原submitter/身份转发，Agent对执行资格负责；不是0usage或settlement ACK。新生成组件60，完整30操作；候选不等正常实际两笔验收。
 
-SHA256 `f8807563f4550c3c30126e520ed49736ebe77d4151978de12ef72fe649a3d7ce`。
+SHA256 `02a495b7021293cec43cba77e0e9276799a9b7bab153d0fe4d2f6443b811b90d`。
 
 ## 2026-10-22 原预算仅恢复发行
 

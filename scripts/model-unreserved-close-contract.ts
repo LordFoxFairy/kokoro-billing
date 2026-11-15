@@ -30,7 +30,7 @@ export function modelUnreservedCloseBaselineSource(source: string): string {
     createHash("sha256")
       .update(JSON.stringify(stable(profile)))
       .digest("hex") !==
-    "0f0bc0efcc756032fcf673e3bda86ee874fc727e544be008e757cff8c1443554"
+    "2e3f72d75f0e6bcdf6bcccdc6fb9b4f433b67c42bd1a6c8cb007cb5087fb96bc"
   )
     throw new Error("Invalid unreserved close surface");
   const previous = source

@@ -34,7 +34,10 @@ const schema = z
     plannedDigest: digest,
     finalRequestDigest: digest,
     evidenceEventId: identifier,
-    evidenceRevision: z.string().regex(/^[1-9][0-9]*$/u),
+    evidenceRevision: z
+      .string()
+      .regex(/^[1-9][0-9]{0,18}$(?![\s\S])/u)
+      .refine((v) => BigInt(v) <= 9223372036854775807n),
     evidenceDigest: digest,
     closedAt: z.string().datetime(),
   })

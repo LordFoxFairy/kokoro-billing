@@ -336,7 +336,7 @@ export type AdmissionUnreservedCloseRequest = {
   planned_digest: string;
   final_request_digest: string;
   evidence_event_id: Uuid;
-  evidence_revision: PositiveDecimal;
+  evidence_revision: string;
   evidence_digest: string;
 };
 
@@ -348,7 +348,7 @@ export type AdmissionUnreservedClosure = {
   planned_digest: string;
   final_request_digest: string;
   evidence_event_id: Uuid;
-  evidence_revision: PositiveDecimal;
+  evidence_revision: string;
   evidence_digest: string;
   closure_ref: Uuid;
   status: "unreserved_closed";

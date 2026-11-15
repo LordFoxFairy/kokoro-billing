@@ -3,8 +3,8 @@
   "source": {
     "path": "contract/openapi/v1/openapi.yaml",
     "version": "4.0.0-experimental.11",
-    "bytes": 156727,
-    "sha256": "f8807563f4550c3c30126e520ed49736ebe77d4151978de12ef72fe649a3d7ce"
+    "bytes": 157731,
+    "sha256": "02a495b7021293cec43cba77e0e9276799a9b7bab153d0fe4d2f6443b811b90d"
   },
   "generator": {
     "package": "@hey-api/openapi-ts",
@@ -91,12 +91,12 @@
       "sha256": "8f078e53302c9255f17ff89b11c406ca563fdd2c5bb9c40e8c45958a937e50b6"
     },
     "types.gen.ts": {
-      "bytes": 38870,
-      "sha256": "94bb0546ab0cdfe940d0062275593ffcc21e4181ba032ef570a63dab904ec044"
+      "bytes": 38852,
+      "sha256": "9f525c7ea05b847170103f8edc3d629f86e7235bde5cc88dacf008b8977eee6c"
     },
     "schemas.gen.ts": {
-      "bytes": 43928,
-      "sha256": "2096015c4743d73caaf70bb534f3ce632966e9b80ec31d65f976f246b271060a"
+      "bytes": 44968,
+      "sha256": "4e4d3dc36594fa1fd48138b7a0fb231bdcee8efaceb9614d3dcaed923017ae7f"
     }
   }
 }

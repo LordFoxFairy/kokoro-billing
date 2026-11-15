@@ -808,6 +808,18 @@ describe.skipIf(admin === undefined)(
             })
           ).statusCode,
         ).toBe(400);
+        for (const revision of ["9223372036854775808", "1\n"]) {
+          expect(
+            (
+              await http.inject({
+                method: "POST",
+                url,
+                headers,
+                payload: { ...payload, evidence_revision: revision },
+              })
+            ).statusCode,
+          ).toBe(400);
+        }
         const result = await http.inject({
           method: "POST",
           url,
