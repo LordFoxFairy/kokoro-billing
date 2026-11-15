@@ -819,8 +819,6 @@ describe.skipIf(admin === undefined)(
           data: {
             ...payload,
             status: "unreserved_closed",
-            closure_ref: expect.any(String),
-            closed_at: expect.any(String),
           },
         });
         expect(
@@ -828,6 +826,9 @@ describe.skipIf(admin === undefined)(
             await http.inject({ method: "POST", url, headers, payload })
           ).json<unknown>(),
         ).toEqual(result.json<{ data: Record<string, unknown> }>());
+        const closed = result.json<{ data: Record<string, unknown> }>().data;
+        expect(closed.closure_ref).toMatch(/^[0-9a-f-]{36}$/u);
+        expect(closed.closed_at).toMatch(/^\d{4}-\d{2}-\d{2}T.*Z$/u);
         expect(
           result.json<{ data: Record<string, unknown> }>().data,
         ).not.toHaveProperty("admission_id");
